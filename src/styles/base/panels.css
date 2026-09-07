@@ -1,0 +1,290 @@
+/* Workspace panels */
+.asb-panel {
+  background: var(--asb-content);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-panel);
+  padding: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-panel-title {
+  margin: 0 0 var(--asb-space-3);
+  font: var(--asb-text-title);
+}
+
+.asb-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-panel-heading .asb-panel-title {
+  margin-bottom: 0;
+}
+
+/* Right-aligned heading actions group. */
+.asb-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-panel-heading .asb-tabs {
+  align-self: center;
+  margin-bottom: 0;
+}
+
+.asb-empty {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+/* Client switch row: segmented tabs left, the primary new-provider action
+   right — one row, equal tab touch height (user directive 2026-09-02). */
+.asb-tabs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-tabs-bar .asb-tabs {
+  align-self: center;
+  margin-bottom: 0;
+}
+
+/* Client tabs — segmented pill: active page is a raised white card with a
+   blue ring, inactive segments sit flat in the shared container. */
+.asb-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  align-self: flex-start;
+  margin-bottom: var(--asb-space-3);
+  padding: 3px;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-rail);
+}
+
+.asb-tab {
+  min-height: calc(var(--asb-touch-target) - 8px);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid transparent;
+  border-radius: calc(var(--asb-radius-control) - 4px);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-tab-logo {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.asb-tab.is-on {
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font-weight: 600;
+}
+
+/* Main settings mode switch. It is deliberately separate from the inner
+   client tabs: one chooses the management domain, the other chooses a
+   supported client or its global prompt document. */
+.asb-settings-main-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-4);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-settings-main-tab {
+  min-height: var(--asb-touch-target);
+  padding: 0 var(--asb-space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-settings-main-tab:hover:not(:disabled),
+.asb-settings-main-tab[aria-selected="true"] {
+  color: var(--asb-text);
+}
+
+.asb-settings-main-tab[aria-selected="true"] {
+  border-bottom-color: var(--asb-action);
+}
+
+/* Official settings coverage is an audit surface: compact, solid, and
+   deliberately separate from editable parameter rows. */
+.asb-official-directory {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  margin-bottom: var(--asb-space-4);
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+.asb-official-directory-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+}
+
+.asb-official-directory-title,
+.asb-official-directory-entry h4,
+.asb-official-directory-note,
+.asb-official-directory-paths,
+.asb-official-directory-detail {
+  margin: 0;
+}
+
+.asb-official-directory-title {
+  font: var(--asb-text-body);
+  font-weight: 700;
+}
+
+.asb-official-directory-note,
+.asb-official-directory-detail {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-official-directory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-official-directory-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border-right: 1px solid var(--asb-hairline);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-official-directory-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-official-directory-entry h4 {
+  font: var(--asb-text-label);
+  font-weight: 700;
+}
+
+.asb-official-directory-status {
+  flex: none;
+  padding: 2px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-pill);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-official-directory-status.is-direct {
+  border-color: var(--asb-action);
+  color: var(--asb-action);
+}
+
+.asb-official-directory-status.is-separateModule {
+  border-color: var(--asb-claude);
+  color: var(--asb-claude);
+}
+
+.asb-official-directory-paths {
+  overflow-wrap: anywhere;
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+}
+
+@media (max-width: 680px) {
+  .asb-official-directory-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asb-official-directory-entry {
+    border-right: 0;
+  }
+}
+
+/* Prompt management uses a near-solid work surface rather than another
+   frosted layer, keeping editable Markdown high contrast. */
+.asb-prompt-manager {
+  --asb-prompt-editor-min-height: 20rem;
+  --asb-prompt-editor-max-height: clamp(20rem, 58dvh, 40rem);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-prompt-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-prompt-file-name {
+  font: var(--asb-text-code);
+  color: var(--asb-text);
+}
+
+.asb-prompt-editor {
+  inline-size: 100%;
+  height: var(--asb-prompt-editor-min-height);
+  min-height: var(--asb-prompt-editor-min-height);
+  max-height: var(--asb-prompt-editor-max-height);
+  padding: var(--asb-space-3);
+  border-color: var(--asb-hairline-strong);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  line-height: 1.6;
+  overflow-y: auto;
+  resize: none;
+  scrollbar-gutter: stable;
+  tab-size: 2;
+}
+
+.asb-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+@media (max-width: 680px) {
+  .asb-prompt-manager {
+    --asb-prompt-editor-min-height: 15rem;
+    --asb-prompt-editor-max-height: clamp(15rem, 56dvh, 32rem);
+  }
+
+  .asb-prompt-actions > .asb-btn-primary {
+    flex: 1;
+  }
+}
+

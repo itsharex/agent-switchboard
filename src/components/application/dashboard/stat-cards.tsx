@@ -2,19 +2,17 @@
 
 import { useState, type ComponentType } from "react";
 import {
-  RiArrowDownCircleFill,
-  RiArrowUpCircleFill,
-  RiBox3Line,
-  RiChatSmile2Line,
-  RiCoinsFill,
-  RiGroupFill,
-  RiGroupLine,
-  RiIndeterminateCircleFill,
-  RiInformationFill,
-  RiRefund2Fill,
-  RiShoppingBasket2Fill,
-  RiShoppingBasketLine,
-} from "@remixicon/react";
+  CircleArrowDown,
+  CircleArrowUp,
+  CircleMinus,
+  Coins,
+  Info,
+  MessageCircle,
+  Package,
+  ShoppingBasket,
+  Undo2,
+  Users,
+} from "lucide-react";
 import { Focusable } from "react-aria-components";
 import { Chip } from "@/components/base/badges/chip";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
@@ -62,15 +60,15 @@ export type Stat = {
 };
 
 const DEFAULT_STATS: Stat[] = [
-  { icon: RiGroupLine, label: "Customers", value: "14,592", delta: "+5.3%", deltaColor: "lime" },
-  { icon: RiBox3Line, label: "Unit sold", value: "385", delta: "-2.1%", deltaColor: "rose" },
-  { icon: RiShoppingBasketLine, label: "Orders", value: "1,394", delta: "0.00%", deltaColor: "neutral" },
-  { icon: RiChatSmile2Line, label: "Support tickets", value: "708", delta: "+12.8%", deltaColor: "lime" },
+  { icon: Users, label: "Customers", value: "14,592", delta: "+5.3%", deltaColor: "lime" },
+  { icon: Package, label: "Unit sold", value: "385", delta: "-2.1%", deltaColor: "rose" },
+  { icon: ShoppingBasket, label: "Orders", value: "1,394", delta: "0.00%", deltaColor: "neutral" },
+  { icon: MessageCircle, label: "Support tickets", value: "708", delta: "+12.8%", deltaColor: "lime" },
 ];
 
 const DEFAULT_FOOTER_STATS: Stat[] = [
   {
-    icon: RiCoinsFill,
+    icon: Coins,
     label: "Total revenue",
     value: "$152,313.92",
     delta: "16%",
@@ -79,7 +77,7 @@ const DEFAULT_FOOTER_STATS: Stat[] = [
     hint: "Gross revenue across every channel this month, before refunds. The change is against the same days last month.",
   },
   {
-    icon: RiShoppingBasket2Fill,
+    icon: ShoppingBasket,
     label: "Total orders",
     value: "25,162",
     delta: "20%",
@@ -88,7 +86,7 @@ const DEFAULT_FOOTER_STATS: Stat[] = [
     hint: "Checkouts completed this month, repeat purchases included. The change is against the same days last month.",
   },
   {
-    icon: RiGroupFill,
+    icon: Users,
     label: "New customers",
     value: "3,847",
     delta: "8.1%",
@@ -97,7 +95,7 @@ const DEFAULT_FOOTER_STATS: Stat[] = [
     hint: "People who bought for the first time this month. The change is against the same days last month.",
   },
   {
-    icon: RiRefund2Fill,
+    icon: Undo2,
     label: "Refunds",
     value: "$4,209.44",
     delta: "2.4%",
@@ -122,17 +120,17 @@ const DELTA_STYLES: Record<
   { icon: IconComponent; className: string; pill: string }
 > = {
   lime: {
-    icon: RiArrowUpCircleFill,
+    icon: CircleArrowUp,
     className: "text-status-lime-text",
     pill: "bg-status-lime-background",
   },
   rose: {
-    icon: RiArrowDownCircleFill,
+    icon: CircleArrowDown,
     className: "text-status-rose-text",
     pill: "bg-status-rose-background",
   },
   neutral: {
-    icon: RiIndeterminateCircleFill,
+    icon: CircleMinus,
     className: "text-text-secondary",
     pill: "bg-background-secondary-default",
   },
@@ -166,7 +164,7 @@ function StatHint({ label, hint }: { label: string; hint: string }) {
           onClick={() => setOpen((isOpen) => !isOpen)}
           className="flex shrink-0 cursor-pointer items-center justify-center rounded-full text-foreground-icon-secondary outline-none transition-colors duration-150 ease hover:text-foreground-icon-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring"
         >
-          <RiInformationFill className="size-5" aria-hidden />
+          <Info className="size-5" aria-hidden />
         </button>
       </Focusable>
       <Tooltip size="md">{hint}</Tooltip>

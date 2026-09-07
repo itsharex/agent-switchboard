@@ -1,15 +1,15 @@
 //! The application configuration store: providers, common settings, and
 //! write history under `state/configuration/`.
 //!
-//! Layout (the only persisted shape; the former `profiles.json` exists only
-//! as the one-time migration source):
+//! Layout (the only persisted shape):
 //!
 //! ```text
 //! state/
 //! ├─ configuration/
 //! │  ├─ common/{codex,claude}.json
 //! │  ├─ providers/{codex,claude}/{uuid}.json
-//! │  └─ history/{codex,claude}.json
+//! │  ├─ history/{codex,claude}.json
+//! │  └─ save-journal.json (only while a confirmed active profile is applying)
 //! └─ settings.json (app-runtime preferences, owned elsewhere)
 //! ```
 //!
@@ -20,21 +20,19 @@
 
 pub mod common;
 pub mod history;
-pub mod migration;
 pub mod providers;
 pub mod snapshot;
 
 use asb_core::contracts::AppKind;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
-/// Read-side failures of the configuration store. `Migration` carries the
-/// loud reason a one-time upgrade could not complete.
+/// Read-side failures of the configuration store.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProfileStoreError {
     Unreadable,
     Unsupported,
-    Migration(String),
 }
 
 impl std::fmt::Display for ProfileStoreError {
@@ -43,9 +41,6 @@ impl std::fmt::Display for ProfileStoreError {
             Self::Unreadable => formatter.write_str("配置存储不可读"),
             Self::Unsupported => formatter
                 .write_str("配置存储格式无效或来自已不受支持的旧版本；请重置或重新创建供应商数据"),
-            Self::Migration(reason) => {
-                write!(formatter, "旧版配置数据迁移失败：{reason}；原文件未改动")
-            }
         }
     }
 }
@@ -56,9 +51,56 @@ pub struct ConfigStore {
     state_root: PathBuf,
 }
 
+/// Durable marker for an explicitly confirmed active-profile update. It has
+/// no draft or credential material: the new provider file is the source used
+/// to finish recovery after a process interruption.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PendingProfileSave {
+    pub profile_id: String,
+    pub app: AppKind,
+    pub previous_file_hash: String,
+}
+
 impl ConfigStore {
     pub fn new(state_root: PathBuf) -> Self {
         Self { state_root }
+    }
+
+    fn profile_save_journal_path(&self) -> PathBuf {
+        self.configuration_dir().join("save-journal.json")
+    }
+
+    /// Reads the one pending active-profile save. An unreadable marker blocks
+    /// subsequent writes; silently starting another transaction would make
+    /// the recovery target ambiguous.
+    pub fn pending_profile_save(&self) -> Result<Option<PendingProfileSave>, ProfileStoreError> {
+        self.ensure_layout()?;
+        match read_optional(&self.profile_save_journal_path())? {
+            None => Ok(None),
+            Some(text) => parse_strict(&text).map(Some),
+        }
+    }
+
+    pub fn begin_profile_save(&self, pending: &PendingProfileSave) -> Result<(), String> {
+        if self
+            .pending_profile_save()
+            .map_err(|error| error.to_string())?
+            .is_some()
+        {
+            return Err("存在未完成的供应商保存，必须先完成恢复".to_string());
+        }
+        let json = serde_json::to_string_pretty(pending)
+            .map_err(|_| "供应商保存恢复记录序列化失败".to_string())?;
+        write_json_atomic(&self.profile_save_journal_path(), &json)
+    }
+
+    pub fn clear_profile_save(&self) -> Result<(), String> {
+        match fs::remove_file(self.profile_save_journal_path()) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err("无法清除供应商保存恢复记录".to_string()),
+        }
     }
 
     pub fn configuration_dir(&self) -> PathBuf {
@@ -67,10 +109,6 @@ impl ConfigStore {
 
     pub fn legacy_store_path(&self) -> PathBuf {
         self.state_root.join("profiles.json")
-    }
-
-    pub(crate) fn migration_archive_dir(&self) -> PathBuf {
-        self.state_root.join("migration-archive")
     }
 
     fn client_dir(&self, kind: &str) -> PathBuf {
@@ -91,18 +129,14 @@ impl ConfigStore {
             .join(format!("{}.json", app.dir_name()))
     }
 
-    /// Runs the only supported one-time store migrations, then confirms the
-    /// current layout is usable. Runtime readers accept no legacy shape.
+    /// Confirms that the retired aggregate store is absent. The provider-file
+    /// reader owns the exact immediate authentication-contract upgrade before
+    /// exposing any profile, so normal callers only receive the current shape.
     pub fn ensure_layout(&self) -> Result<(), ProfileStoreError> {
         if self.legacy_store_path().exists() {
-            if self.configuration_dir().exists() {
-                return Err(ProfileStoreError::Unsupported);
-            }
-            migration::run(self).map_err(ProfileStoreError::Migration)?;
+            return Err(ProfileStoreError::Unsupported);
         }
-        migration::migrate_usage_query_interval(self).map_err(ProfileStoreError::Migration)?;
-        migration::migrate_provider_route_mode(self).map_err(ProfileStoreError::Migration)?;
-        migration::migrate_common_settings_semantics(self).map_err(ProfileStoreError::Migration)
+        Ok(())
     }
 
     /// Removes every persisted provider, common setting, and history record.
@@ -116,11 +150,6 @@ impl ConfigStore {
         if let Err(error) = fs::remove_file(self.legacy_store_path()) {
             if error.kind() != std::io::ErrorKind::NotFound {
                 return Err("无法删除旧版配置数据".to_string());
-            }
-        }
-        if let Err(error) = fs::remove_dir_all(self.migration_archive_dir()) {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                return Err("无法删除迁移恢复数据".to_string());
             }
         }
         Ok(())
@@ -190,19 +219,16 @@ mod tests {
     }
 
     #[test]
-    fn reset_removes_layout_and_legacy_file_without_requiring_them() {
+    fn reset_removes_current_layout_and_legacy_file_without_requiring_them() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let store = ConfigStore::new(directory.path().join("state"));
         fs::create_dir_all(store.providers_dir(AppKind::Codex)).expect("provider dir");
         fs::write(store.legacy_store_path(), b"{}").expect("legacy file");
-        fs::create_dir_all(store.migration_archive_dir()).expect("migration archive");
-        fs::write(store.migration_archive_dir().join("source.json"), b"{}").expect("archive file");
 
         store.reset().expect("reset");
 
         assert!(!store.configuration_dir().exists());
         assert!(!store.legacy_store_path().exists());
-        assert!(!store.migration_archive_dir().exists());
         store.reset().expect("reset of an absent layout is fine");
     }
 
@@ -212,7 +238,7 @@ mod tests {
         let store = ConfigStore::new(directory.path().join("state"));
         store
             .ensure_layout()
-            .expect("clean state needs no migration");
+            .expect("clean state is immediately usable");
 
         fs::create_dir_all(store.configuration_dir()).expect("configuration dir");
         fs::write(store.legacy_store_path(), b"{}").expect("legacy file");
@@ -220,5 +246,27 @@ mod tests {
             store.ensure_layout().expect_err("both present must fail"),
             ProfileStoreError::Unsupported
         );
+    }
+
+    #[test]
+    fn pending_profile_save_is_strict_and_can_be_cleared() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let store = ConfigStore::new(directory.path().join("state"));
+        let pending = PendingProfileSave {
+            profile_id: "profile-id".to_string(),
+            app: AppKind::Codex,
+            previous_file_hash: "previous-hash".to_string(),
+        };
+
+        assert_eq!(store.pending_profile_save().unwrap(), None);
+        store.begin_profile_save(&pending).expect("write marker");
+        assert_eq!(store.pending_profile_save().unwrap(), Some(pending.clone()));
+        assert!(store.begin_profile_save(&pending).is_err());
+
+        store.clear_profile_save().expect("clear marker");
+        assert_eq!(store.pending_profile_save().unwrap(), None);
+        store
+            .clear_profile_save()
+            .expect("clearing absence is idempotent");
     }
 }

@@ -208,7 +208,7 @@ interface CcImportSectionProps {
   onImport: () => void;
 }
 
-/** Read-only CC Switch scan with a checkbox selection for import. API keys
+/** Read-only scan with a checkbox selection for import. API keys
  * and non-routing settings never cross this boundary. */
 export function CcImportSection({
   scan,

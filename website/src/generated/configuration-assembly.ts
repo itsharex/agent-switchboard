@@ -56,8 +56,14 @@ export const configurationAssembly = {
       "model_reasoning_effort = \"high\""
     ],
     "preservedPaths": [
+      "hooks",
+      "permissions.<name>"
+    ],
+    "separateModules": [
+      "$CODEX_HOME/AGENTS.md",
+      "model_providers.<id>",
       "mcp_servers.<id>",
-      "hooks"
+      "skills.config"
     ]
   },
   "claude": {
@@ -99,6 +105,10 @@ export const configurationAssembly = {
         "value": "https://bedrock-runtime.us-east-1.amazonaws.com/v1"
       },
       {
+        "key": "env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
+        "value": "1"
+      },
+      {
         "key": "model",
         "value": "Claude Opus 5.1"
       }
@@ -110,7 +120,8 @@ export const configurationAssembly = {
       "  \"model\": \"Claude Opus 5.1\",",
       "  \"env\": {",
       "    \"ANTHROPIC_BASE_URL\": \"https://bedrock-runtime.us-east-1.amazonaws.com/v1\",",
-      "    \"ANTHROPIC_AUTH_TOKEN\": \"••••••••\"",
+      "    \"ANTHROPIC_AUTH_TOKEN\": \"••••••••\",",
+      "    \"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS\": \"1\"",
       "  },",
       "  \"autoCompactEnabled\": true,",
       "  \"effortLevel\": \"high\"",
@@ -119,6 +130,11 @@ export const configurationAssembly = {
     "preservedPaths": [
       "permissions",
       "hooks"
+    ],
+    "separateModules": [
+      "~/.claude/CLAUDE.md",
+      "~/.claude.json",
+      "~/.claude/skills/<name>/"
     ]
   }
 } as const;

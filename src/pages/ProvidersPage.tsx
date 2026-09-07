@@ -37,6 +37,9 @@ interface ProvidersPageProps {
   onCloseEditor: () => void;
   onSave: (draft: ProviderDraft) => Promise<void>;
   onSaveUsageQuery: (profile: ProviderProfile, usageQuery: UsageQuery | null) => Promise<boolean>;
+  /** Persists the official Codex quota panel's auto-refresh interval for the
+   * profile; 0 turns the scheduled query off. */
+  onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   onSelect: (profileId: string) => void;
   onReorder: (orderedIds: string[]) => void;
   /** Persists the flipped usage-panel state for the profile. */
@@ -68,6 +71,7 @@ export function ProvidersPage({
   onCloseEditor,
   onSave,
   onSaveUsageQuery,
+  onSaveQuotaInterval,
   onSelect,
   onReorder,
   onActivate,
@@ -94,6 +98,7 @@ export function ProvidersPage({
             value={usageProfile.usageQuery ?? null}
             apiKey={usageProfile.apiKey}
             baseUrl={usageProfile.baseUrl}
+            upstreamProtocol={usageProfile.upstreamProtocol}
             busy={busy}
             onSave={async (usageQuery) => {
               const saved = await onSaveUsageQuery(usageProfile, usageQuery);
@@ -189,6 +194,7 @@ export function ProvidersPage({
         onSelect={onSelect}
         onReorder={onReorder}
         onToggleUsage={onToggleUsage}
+        onSaveQuotaInterval={onSaveQuotaInterval}
         onActivate={onActivate}
         onPreview={onTogglePreview}
         onEdit={onEdit}

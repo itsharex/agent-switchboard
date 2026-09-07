@@ -22,11 +22,15 @@ pub(crate) fn matches_provider_identity(
     let mode = root.get(AUTH_MODE_KEY).and_then(Value::as_str);
     let key = root.get(API_KEY_KEY).and_then(Value::as_str);
     Ok(match profile.route_mode {
-        RouteMode::Official => mode != Some(API_KEY_MODE)
-            && (mode == Some(CHATGPT_MODE) || key.is_none_or(str::is_empty)),
-        RouteMode::Custom => mode == Some(API_KEY_MODE)
-            && !profile.api_key.is_empty()
-            && key == Some(profile.api_key.as_str()),
+        RouteMode::Official => {
+            mode != Some(API_KEY_MODE)
+                && (mode == Some(CHATGPT_MODE) || key.is_none_or(str::is_empty))
+        }
+        RouteMode::Custom => {
+            mode == Some(API_KEY_MODE)
+                && !profile.api_key.is_empty()
+                && key == Some(profile.api_key.as_str())
+        }
     })
 }
 
@@ -341,12 +345,12 @@ pub fn validate(text: &str) -> Result<(), AdapterError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{AppKind, ProviderProfile};
+    use crate::contracts::{AppKind, ProviderProfile, UpstreamProtocol};
     use crate::ownership::default_common_settings;
 
     fn plan(mode: RouteMode) -> SwitchPlan {
-        SwitchPlan {
-            profile: ProviderProfile {
+        SwitchPlan::direct(
+            ProviderProfile {
                 id: "p".to_string(),
                 app: AppKind::Codex,
                 route_mode: mode,
@@ -357,13 +361,17 @@ mod tests {
                 api_key: (mode == RouteMode::Custom)
                     .then(|| "TEST_API_KEY".to_string())
                     .unwrap_or_default(),
+                upstream_protocol: (mode == RouteMode::Custom)
+                    .then_some(UpstreamProtocol::Responses),
+                max_output_tokens: None.into(),
                 model_options: None,
                 notes: None,
                 website_url: None,
                 usage_query: None,
+                official_quota_refresh_interval_minutes: None,
             },
-            common: default_common_settings(AppKind::Codex),
-        }
+            default_common_settings(AppKind::Codex),
+        )
     }
 
     #[test]

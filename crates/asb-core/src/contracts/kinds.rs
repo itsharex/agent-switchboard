@@ -1,0 +1,120 @@
+use serde::{Deserialize, Serialize};
+
+/// The two supported coding clients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppKind {
+    Codex,
+    Claude,
+}
+
+impl AppKind {
+    /// The display name shared by the interface, tray, and diagnostics.
+    pub fn label(self) -> &'static str {
+        match self {
+            AppKind::Codex => "Codex",
+            AppKind::Claude => "Claude Code",
+        }
+    }
+
+    pub fn config_label(self) -> &'static str {
+        match self {
+            AppKind::Codex => "~/.codex/config.toml",
+            AppKind::Claude => "~/.claude/settings.json",
+        }
+    }
+
+    /// Directory segment owning this client's persisted application files.
+    pub fn dir_name(self) -> &'static str {
+        match self {
+            AppKind::Codex => "codex",
+            AppKind::Claude => "claude",
+        }
+    }
+
+    /// The one user-global instruction document supported for this client.
+    pub fn global_prompt_file_name(self) -> &'static str {
+        match self {
+            AppKind::Codex => "AGENTS.md",
+            AppKind::Claude => "CLAUDE.md",
+        }
+    }
+}
+
+/// One user-global instruction document. The backend owns its absolute target
+/// path; the renderer receives only the stable file name, text, and version
+/// hash needed to edit it without constructing a filesystem path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalPromptDocument {
+    pub app: AppKind,
+    pub file_name: String,
+    pub content: String,
+    pub content_hash: String,
+    pub exists: bool,
+}
+
+/// How a profile routes a client. The mode is explicit; an empty base URL
+/// never implies official routing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RouteMode {
+    /// Use the client's official login and default endpoint.
+    Official,
+    /// Route through a user-declared service endpoint.
+    Custom,
+}
+
+/// The wire protocol spoken by a custom provider's upstream endpoint. This is
+/// deliberately the provider's protocol, not the protocol emitted by Codex or
+/// Claude Code. The gateway owns conversion whenever the two differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UpstreamProtocol {
+    /// OpenAI Responses (`/v1/responses`).
+    Responses,
+    /// OpenAI-compatible Chat Completions (`/v1/chat/completions`).
+    ChatCompletions,
+    /// Anthropic Messages (`/v1/messages`).
+    AnthropicMessages,
+}
+
+impl UpstreamProtocol {
+    /// The only protocol a client can use without this application's local
+    /// conversion gateway.
+    pub fn native_for(app: AppKind) -> Self {
+        match app {
+            AppKind::Codex => Self::Responses,
+            AppKind::Claude => Self::AnthropicMessages,
+        }
+    }
+
+    /// The authorization header format required by this upstream protocol.
+    /// This is the only owner of provider credential delivery.
+    pub fn authentication_scheme(self) -> AuthenticationScheme {
+        match self {
+            Self::AnthropicMessages => AuthenticationScheme::XApiKey,
+            Self::Responses | Self::ChatCompletions => AuthenticationScheme::Bearer,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Responses => "OpenAI Responses",
+            Self::ChatCompletions => "Chat Completions",
+            Self::AnthropicMessages => "Anthropic Messages",
+        }
+    }
+}
+
+/// The authorization header format required by an upstream protocol.
+///
+/// This is derived at execution time and is never a provider-profile field.
+/// The local gateway has its own fixed Bearer capability-token contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AuthenticationScheme {
+    /// `Authorization: Bearer <key>`.
+    Bearer,
+    /// `x-api-key: <key>`.
+    XApiKey,
+}

@@ -1,0 +1,486 @@
+/* Provider rows: avatar tile, name over a link-colored detail line, status
+   pill, icon cluster.
+   The card container is the <li>; the option button and the action cluster
+   are both INSIDE it, so the buttons visually live in the selection box. */
+.asb-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.asb-row-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  width: 100%;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
+  color: var(--asb-text);
+}
+
+/* The horizontal row line inside a card; the card can also carry the
+   unfolded preview block directly below this line. */
+.asb-row-line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  width: 100%;
+  min-height: 52px;
+}
+
+.asb-row-item:hover {
+  background: var(--asb-row-selected);
+}
+
+/* An unfolded preview turns the card into a reading surface: hover stops
+   tinting it (user directive 2026-09-01). :where keeps this exception at
+   the base rule's specificity so the is-live card below still wins. */
+.asb-row-item:where(.is-previewing):hover {
+  background: var(--asb-content);
+}
+
+/* Live-matched rows use a quiet fill and shadow; the status badge carries the
+   state, so module edges remain neutral. */
+.asb-row-item.is-live {
+  background: var(--asb-row-selected);
+  box-shadow: var(--asb-live-shadow);
+}
+
+/* The selectable region: avatar + texts. A reset button, visually flat —
+   the card look belongs to the container above. */
+.asb-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+/* Icon-action cluster — ghost buttons inside the card: no resting fill, so
+   solid-ink icons stay readable on white and on the tinted live card; the
+   surface only appears on hover. */
+.asb-iconcluster {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  flex: none;
+}
+
+.asb-provider-usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-provider-usage-head,
+.asb-provider-usage-actions,
+.asb-provider-usage-title {
+  display: flex;
+  align-items: center;
+}
+
+.asb-provider-usage-head {
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-usage-title {
+  min-width: 0;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-usage-title h3 {
+  margin: 0;
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-provider-usage-actions {
+  flex: none;
+  gap: var(--asb-space-2);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-provider-usage-refresh,
+.asb-provider-usage-configure {
+  min-height: var(--asb-touch-target);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-provider-usage-refresh {
+  color: var(--asb-action);
+}
+
+.asb-provider-usage-configure {
+  color: var(--asb-text-muted);
+}
+
+.asb-provider-usage-refresh:hover:not(:disabled),
+.asb-provider-usage-configure:hover:not(:disabled) {
+  background: var(--asb-row-selected);
+  color: var(--asb-action);
+}
+
+.asb-provider-usage-state {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-provider-usage-state {
+  margin: 0;
+}
+
+.asb-chart-empty {
+  display: grid;
+  min-height: 224px;
+  place-items: center;
+  padding: var(--asb-space-3);
+  margin: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  text-align: center;
+}
+
+.asb-chart-tooltip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--asb-space-1) var(--asb-space-2);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  margin: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-chart-tooltip-bg);
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+}
+
+.asb-chart-tooltip span:nth-child(2),
+.asb-chart-tooltip time {
+  color: var(--asb-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-chart-tooltip span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.asb-usage-ratio-meter-track {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-content-muted);
+}
+
+.asb-usage-ratio-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--asb-action);
+  transition: width var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-usage-ratio-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.asb-usage-ratio-meter-track {
+  flex: none;
+  width: var(--asb-chart-ratio-track-width);
+  height: var(--asb-chart-ratio-track-height);
+}
+
+.asb-usage-ratio-meter-fill {
+  width: var(--asb-usage-ratio-meter-width);
+}
+
+.asb-usage-ratio-meter-value {
+  color: var(--asb-text);
+}
+
+.asb-usage-ratio-meter-empty {
+  display: inline-block;
+}
+
+/* History is an unframed analysis layer inside an existing usage surface.
+   The divider separates a current ledger read from its retained timeline
+   without nesting another card. */
+.asb-usage-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-history h4,
+.asb-usage-history-metric h5,
+.asb-usage-history-unit {
+  margin: 0;
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-usage-history-metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-usage-history-unit {
+  color: var(--asb-text-muted);
+  font-weight: 400;
+}
+
+.asb-usage-history-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+}
+
+/* Official login pending state: the device-code line and the wait line each
+   stay one aligned flex row — text, code chip, and actions share a baseline
+   instead of drifting across loose paragraphs. */
+.asb-official-login {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--asb-space-1);
+}
+
+.asb-official-login-code {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-1);
+}
+
+.asb-official-login-code > code {
+  padding: 2px var(--asb-space-1);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-code-bg);
+  font: var(--asb-text-code);
+}
+
+.asb-official-login-wait {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+/* Official Codex subscription quota is the native read-only panel: its
+   windows render through the shared QuotaWindowsTable and it never inherits
+   a custom provider usage query or its credentials. */
+.asb-official-quota {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3) var(--asb-space-4) var(--asb-space-4);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+@media (max-width: 720px) {
+  .asb-provider-usage-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* The change preview unfolds inside the previewed row's own card, under
+   the row line (user decision 2026-08-28) — no detached side or bottom
+   panel, and no second glass surface inside the panel. */
+.asb-preview-inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+/* Drag handle: the only drag affordance, so pointer drags never compete
+   with the row's click-to-select. touch-action none lets PointerSensor
+   own touch gestures on the handle. */
+.asb-row-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--asb-radius-control) - 6px);
+  background: transparent;
+  color: var(--asb-text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.asb-row-grip:hover {
+  background: var(--asb-canvas);
+  color: var(--asb-text);
+}
+
+.asb-row-grip:active {
+  cursor: grabbing;
+}
+
+/* Lifted row: elevation plus the action border, no scale — the drag
+   translate itself is the motion. */
+.asb-row-item.is-dragging {
+  position: relative;
+  z-index: 1;
+  border-color: var(--asb-action);
+  box-shadow: var(--asb-route-shadow);
+}
+
+/* Row-level action entries (启用 primary, 官方 重新登录 secondary) share
+   .asb-row-activate, and the reveal rule below owns their flex layout.
+   The buttons render on every non-live row but stay hidden until the card
+   is hovered. The primary CTA carries the ported gradient identity
+   (Frosted Relay primary button; white text and glow token-owned); its
+   icon/text spacing lives here. */
+.asb-row-item .asb-btn-primary {
+  min-width: 0;
+}
+
+.asb-row-item .asb-btn-primary:not(:disabled) {
+  background: var(--asb-gradient-button);
+  box-shadow: var(--asb-gradient-button-glow);
+}
+
+.asb-row-item .asb-btn-primary:not(:disabled):hover {
+  box-shadow: var(--asb-gradient-button-glow-hover);
+}
+
+/* The three-dot more trigger anchors a small action menu (delete lives
+   there). The menu reuses the app's floating-surface language. */
+.asb-row-more {
+  position: relative;
+  display: inline-flex;
+}
+
+.asb-row-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 128px;
+  padding: var(--asb-space-1);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-menu);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+}
+
+.asb-row-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-height: 36px;
+  padding: 0 var(--asb-space-2);
+  border: 0;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  color: var(--asb-danger);
+  font: var(--asb-text-label);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.asb-row-menu-item:hover {
+  background: var(--asb-surface-rail);
+}
+
+
+.asb-row-item.is-live .asb-avatar {
+  background: var(--asb-content);
+  color: var(--asb-text);
+}
+
+.asb-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-rail);
+  font: 600 16px/1 var(--asb-font-display);
+  color: var(--asb-text-muted);
+}
+
+.asb-pill-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--asb-space-2);
+  border-radius: 999px;
+  background: var(--asb-row-selected);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.asb-row-name {
+  font: var(--asb-text-body);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-row-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-row-meta-with-usage {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+

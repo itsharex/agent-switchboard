@@ -96,8 +96,8 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
   );
 }
 
-/** Series hues ride the BoardUI chart tokens, which this app re-tints to its
- * own Frosted Relay series colors in boardui.css. */
+/** Series hues ride the 图表组件层 chart tokens, which this app re-tints to its
+ * own Frosted Relay series colors in 样式表. */
 function seriesColor(index: number): string {
   return `var(--color-chart-${(index % SERIES_TONE_COUNT) + 1})`;
 }

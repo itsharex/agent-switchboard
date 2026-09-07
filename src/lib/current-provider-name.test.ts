@@ -34,6 +34,8 @@ describe("currentProviderName", () => {
   const profiles: ProviderProfile[] = [{
     id: "zhipu", app: "claude", name: "Zhipu GLM", routeMode: "custom",
     model: null, baseUrl: "https://open.bigmodel.cn", apiKey: "test-api-key",
+    upstreamProtocol: "anthropicMessages",
+    maxOutputTokens: null,
     modelOptions: null, websiteUrl: null,
   }];
   it("uses the active matching profile name over the custom connection mode", () => {

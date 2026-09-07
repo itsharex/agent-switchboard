@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   testUsageQuery,
   type DeclarativeUsageQuery,
+  type UpstreamProtocol,
   type UsageQuery,
   type UsageSummary,
 } from "../api/client";
@@ -18,6 +19,7 @@ interface Props {
   value: UsageQuery | null;
   apiKey: string;
   baseUrl: string | null;
+  upstreamProtocol: UpstreamProtocol | null;
   busy: boolean;
   onSave: (next: UsageQuery | null) => Promise<boolean> | boolean;
   onClose: () => void;
@@ -68,6 +70,7 @@ export function UsageQueryWorkspace({
   value,
   apiKey,
   baseUrl,
+  upstreamProtocol,
   busy,
   onSave,
   onClose,
@@ -88,11 +91,15 @@ export function UsageQueryWorkspace({
 
   const run = async () => {
     if (!draft || querying || saving) return;
+    if (!upstreamProtocol) {
+      setError("供应商缺少 API 格式，无法查询用量");
+      return;
+    }
     const version = ++queryVersion.current;
     setQuerying(true);
     setError(null);
     try {
-      const next = await testUsageQuery(draft, apiKey, baseUrl);
+      const next = await testUsageQuery(draft, apiKey, baseUrl, upstreamProtocol);
       if (queryVersion.current === version) setSummary(next);
     } catch (caught) {
       if (queryVersion.current === version) {

@@ -19,6 +19,9 @@ interface Props<T> {
   ariaLabel: string;
   /** Module-owned width or scroll hints appended to the table element. */
   className?: string;
+  /** Optional whole-row activation (pointer); keyboard users keep the
+   * in-cell buttons. */
+  onRowClick?: (row: T) => void;
 }
 
 /**
@@ -26,7 +29,7 @@ interface Props<T> {
  * tabular module. Scroll ownership stays with each module's own region;
  * visual values come from styles/tokens.css via the .asb-table rules.
  */
-export function Table<T>({ columns, rows, rowKey, ariaLabel, className }: Props<T>) {
+export function Table<T>({ columns, rows, rowKey, ariaLabel, className, onRowClick }: Props<T>) {
   return (
     <table
       className={cx("asb-table", className)}
@@ -43,7 +46,11 @@ export function Table<T>({ columns, rows, rowKey, ariaLabel, className }: Props<
       </thead>
       <tbody>
         {rows.map((row, index) => (
-          <tr key={rowKey(row, index)}>
+          <tr
+            key={rowKey(row, index)}
+            className={onRowClick ? "asb-table-row-click" : undefined}
+            onClick={onRowClick ? () => onRowClick(row) : undefined}
+          >
             {columns.map((column) => (
               <td key={column.key} className={cx("asb-table-cell", column.cellClassName)}>
                 {column.render(row)}

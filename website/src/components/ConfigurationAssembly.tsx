@@ -197,6 +197,11 @@ export function ConfigurationAssembly() {
               <code>{active.preservedPaths.join(" · ")}</code>
             </div>
             <span>{copy.preservedState}</span>
+            <div>
+              <span>{copy.managedLabel}</span>
+              <code>{active.separateModules.join(" · ")}</code>
+            </div>
+            <span>{copy.managedState}</span>
           </div>
           <pre>
             <code>

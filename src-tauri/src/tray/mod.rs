@@ -92,8 +92,16 @@ pub fn setup(app: &AppHandle) -> Result<(), String> {
 pub async fn tray_snapshot(app: AppHandle) -> Result<snapshot::TraySnapshot, CommandError> {
     let state = LocalState::from_app(&app)
         .map_err(|error| CommandError::new("tray-state-unavailable", error))?;
+    let gateway = app
+        .state::<crate::gateway::GatewayController>()
+        .inner()
+        .clone();
     crate::commands::error::blocking(move || {
-        Ok(snapshot::read(&state, SWITCHING.load(Ordering::Acquire)))
+        Ok(snapshot::read(
+            &state,
+            &gateway,
+            SWITCHING.load(Ordering::Acquire),
+        ))
     })
     .await
 }
@@ -175,9 +183,18 @@ pub async fn tray_switch(app: AppHandle, profile_id: String) -> Result<(), Comma
 }
 
 #[tauri::command]
-pub fn tray_quit(app: AppHandle) {
+pub fn tray_quit(app: AppHandle) -> Result<(), CommandError> {
+    let gateway = app.state::<crate::gateway::GatewayController>();
+    if gateway.has_active_routes() {
+        return Err(CommandError::new(
+            "gateway-route-active",
+            "当前客户端仍使用本机协议网关；请先切换到直连供应商或官方登录后再退出应用",
+        ));
+    }
+    gateway.shutdown();
     request_explicit_exit();
     app.exit(0);
+    Ok(())
 }
 
 #[cfg(test)]

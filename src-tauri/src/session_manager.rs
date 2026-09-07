@@ -182,7 +182,7 @@ fn scan_session_source_roots(
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(_) => issues.push(SessionIssue {
                 app: *app,
-                message: format!("无法读取{}会话目录", client_label(*app)),
+                message: format!("无法读取{}会话目录", (*app).label()),
             }),
         }
     }
@@ -218,13 +218,6 @@ pub(crate) fn collect_session_jsonl_files(root: &Path) -> io::Result<Vec<PathBuf
 
     paths.sort();
     Ok(paths)
-}
-
-fn client_label(app: AppKind) -> &'static str {
-    match app {
-        AppKind::Codex => "Codex",
-        AppKind::Claude => "Claude Code",
-    }
 }
 
 #[cfg(test)]

@@ -31,7 +31,6 @@ pub(crate) fn store_error(error: ProfileStoreError) -> CommandError {
     let code = match error {
         ProfileStoreError::Unreadable => "store-unreadable",
         ProfileStoreError::Unsupported => "profile-store-unsupported",
-        ProfileStoreError::Migration(_) => "config-migration-failed",
     };
     CommandError::new(code, error.to_string())
 }
@@ -56,7 +55,7 @@ pub(crate) fn state(app: &AppHandle) -> Result<LocalState, CommandError> {
 }
 
 /// Runs one blocking unit of command work on the dedicated blocking pool.
-/// Every command that touches files, the CC Switch database, or the network
+/// Every command that touches files, an external database, or the network
 /// goes through here: Tauri runs plain synchronous commands on the main
 /// thread, so inline I/O would freeze the window for the whole operation.
 /// The JoinError branch only triggers when the task panicked.

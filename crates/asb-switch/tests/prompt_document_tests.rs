@@ -148,6 +148,33 @@ impl CorruptOnceIo {
 }
 
 impl SwitchIo for CorruptOnceIo {
+    fn sync_file(&self, path: &Path) -> io::Result<()> {
+        FsIo.sync_file(path)
+    }
+    fn sync_dir(&self, path: &Path) -> io::Result<()> {
+        FsIo.sync_dir(path)
+    }
+    fn read_bytes(&self, path: &Path) -> io::Result<Vec<u8>> {
+        FsIo.read_bytes(path)
+    }
+    fn write_new_bytes(&self, path: &Path, content: &[u8]) -> io::Result<()> {
+        FsIo.write_new_bytes(path, content)
+    }
+    fn set_mode(&self, path: &Path, mode: u32) -> io::Result<()> {
+        FsIo.set_mode(path, mode)
+    }
+    fn write_bytes_replace(&self, path: &Path, content: &[u8]) -> io::Result<()> {
+        FsIo.write_bytes_replace(path, content)
+    }
+    fn path_kind(&self, path: &Path) -> io::Result<asb_switch::io::PathKind> {
+        FsIo.path_kind(path)
+    }
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        FsIo.rename(from, to)
+    }
+    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        FsIo.remove_dir_all(path)
+    }
     fn read_file(&self, path: &Path) -> io::Result<String> {
         let content = fs::read_to_string(path)?;
         if self.replaced.get() && !self.corrupted.replace(true) && Self::is_target(path) {

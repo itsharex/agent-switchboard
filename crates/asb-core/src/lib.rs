@@ -9,6 +9,7 @@ pub mod ccswitch;
 mod claude_model;
 pub mod contracts;
 pub mod discovery;
+pub mod extensions;
 pub mod lock;
 pub mod ownership;
 pub mod redact;
@@ -23,11 +24,12 @@ pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchRow, CcSwitchSkip};
 
 pub use adapter::{preview, render, route_state, validate_syntax, AdapterError};
 pub use contracts::{
-    AppKind, BackupRecord, ChangeKind, ClaudeModelSettings, CodexModelSettings, CommonSettingValue,
-    CommonSettings, CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue, ConfigWriteRecord,
+    AppKind, AuthenticationScheme, BackupRecord, ChangeKind, ClaudeModelSettings,
+    CodexModelSettings, CommonSettingValue, CommonSettings, CommonSettingsPreview,
+    CommonSettingsSnapshot, ConfigValue, ConfigWriteRecord, ExplicitMaxOutputTokens,
     GlobalPromptDocument, KeyChange, MatchStatus, ModelOptions, ProviderDraft, ProviderFile,
     ProviderProfile, ProviderRecord, RouteMode, RouteState, SwitchPlan, SwitchPreview,
-    WriteOperation,
+    UpstreamProtocol, WriteOperation,
 };
 pub use lock::{classify_lock, LockFileData, LockHolder, LockStatus, PidLiveness};
 pub use redact::{redact, REDACTED};

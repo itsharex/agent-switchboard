@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 
-export type MatrixStarlightVariant = "cool" | "violet" | "warm";
+export type MatrixStarlightVariant = "cool" | "violet";
 
 type Rgb = readonly [red: number, green: number, blue: number];
 
@@ -16,7 +16,6 @@ type MatrixStarlightTone = {
 const TONE_OPACITY = {
   cool: { baseOpacity: 0.5, flareOpacity: 0.96 },
   violet: { baseOpacity: 0.5, flareOpacity: 0.96 },
-  warm: { baseOpacity: 0.3, flareOpacity: 0.62 },
 } as const;
 
 const TONE_TOKENS = {
@@ -27,10 +26,6 @@ const TONE_TOKENS = {
   violet: {
     base: "--asb-starlight-violet-base-rgb",
     flare: "--asb-starlight-violet-flare-rgb",
-  },
-  warm: {
-    base: "--asb-starlight-warm-base-rgb",
-    flare: "--asb-starlight-warm-flare-rgb",
   },
 } as const;
 

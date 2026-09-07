@@ -4,6 +4,7 @@ use super::error::{blocking, observe, require_write_confirmation, state, Command
 use crate::cloud_backup::{self, CloudBackupResult};
 use crate::local_state::CloudBackupSettings;
 use crate::runtime_log::RuntimeLogAction;
+use tauri::Manager;
 
 #[tauri::command]
 pub async fn get_cloud_backup_settings(
@@ -85,7 +86,18 @@ pub async fn restore_cloud_backup(
     observe(RuntimeLogAction::CloudBackupRestored, async move {
         require_write_confirmation(confirm_write, "恢复云端备份")?;
         let state = state(&app)?;
+        let gateway = app
+            .state::<crate::gateway::GatewayController>()
+            .inner()
+            .clone();
         blocking(move || {
+            super::switching::ensure_profile_save_recovered(&app)?;
+            if gateway.has_active_routes() {
+                return Err(CommandError::new(
+                    "gateway-route-active",
+                    "本机协议网关正在使用供应商；请先切换到直连或官方登录后再恢复云端备份",
+                ));
+            }
             cloud_backup::restore(&state, &account_password, &backup_password)
                 .map_err(|error| CommandError::new("cloud-backup-restore-failed", error))
         })

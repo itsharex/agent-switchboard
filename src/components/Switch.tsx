@@ -13,7 +13,7 @@ interface Props {
  * the layout reads like a conventional settings toggle. A visually hidden
  * native input (upgraded to `role="switch"`) keeps keyboard and screen-reader
  * behavior while the track is drawn beside it. The checked track carries the
- * ported spiralcoder primary-button gradient; all visual values come from
+ * ported Frosted Relay primary-button gradient; all visual values come from
  * styles/tokens.css and the .asb-switch-* rules in base.css.
  */
 export function Switch({ checked, disabled = false, label, onChange }: Props) {

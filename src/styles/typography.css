@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
- * BoardUI typography
+ * 图表组件层 typography
  *
  * Type ramp from Figma → text styles. Each style registers a Tailwind v4
  * text utility — `text-{name}` applies font-size + line-height + letter-spacing

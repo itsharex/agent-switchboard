@@ -131,8 +131,7 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
                 file_name: Some(LOG_FILE_STEM.to_string()),
             }),
         ])
-        // Keep the current file plus four size-rotated archives, matching the
-        // bounded diagnostic-file behavior used by the public CC Switch code.
+        // Keep the current file plus four size-rotated archives.
         .rotation_strategy(RotationStrategy::KeepSome(4))
         .max_file_size(20 * 1024 * 1024)
         .build()

@@ -8,6 +8,8 @@ import { useSwitchboardModel } from "./app/useSwitchboardModel";
 import { BackupsPage } from "./pages/BackupsPage";
 import { CommonSettingsPage } from "./pages/CommonSettingsPage";
 import { CcImportSection, DiscoveryPage } from "./pages/DiscoveryPage";
+import { ExtensionsPage } from "./pages/ExtensionsPage";
+import { GatewayPage } from "./pages/GatewayPage";
 import { LogsPage } from "./pages/LogsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
@@ -23,7 +25,10 @@ export default function App() {
     setPage,
     appFilter,
     busy,
+    setBusy,
     error,
+    reportError,
+    clearError,
     snapshot,
     activeProfileId,
     switchPreview,
@@ -103,6 +108,7 @@ export default function App() {
                 onCloseEditor={() => setEditorMode(null)}
                 onSave={providers.saveProfile}
                 onSaveUsageQuery={providers.saveProfileUsageQuery}
+                onSaveQuotaInterval={providers.saveOfficialQuotaInterval}
                 onSelect={switchPreview.selectProfile}
                 onReorder={providers.dragReorderProfiles}
                 onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
@@ -152,6 +158,14 @@ export default function App() {
                 }
               />
             )}
+            {page === "扩展" && (
+              <ExtensionsPage
+                busy={busy}
+                setBusy={setBusy}
+                clearError={clearError}
+                onError={reportError}
+              />
+            )}
             {page === "设置" && (
               <SettingsPage
                 settings={appSettingsState.appSettings}
@@ -182,6 +196,9 @@ export default function App() {
               </div>
               <SessionManager active={page === "会话"} />
             </section>
+            <div hidden={page !== "网关"}>
+              <GatewayPage active={page === "网关"} profiles={snapshot.profiles} />
+            </div>
             {page === "日志" && (
               <LogsPage
                 logLevel={appSettingsState.appSettings?.runtimeLogLevel ?? null}

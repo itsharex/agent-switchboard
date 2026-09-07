@@ -1,6 +1,7 @@
 //! Display-only projection: provider credentials never enter the tray snapshot.
 
 use crate::commands::{config_status_report, ConfigFileStatus};
+use crate::gateway::GatewayController;
 use crate::local_state::{AppSettings, LocalState};
 use asb_core::contracts::{AppKind, ProviderProfile, UsageSummary};
 use serde::Serialize;
@@ -50,13 +51,13 @@ fn project(
     }
 }
 
-pub fn read(state: &LocalState, switching: bool) -> TraySnapshot {
+pub fn read(state: &LocalState, gateway: &GatewayController, switching: bool) -> TraySnapshot {
     let mut errors = Vec::new();
     let settings = state
         .get_app_settings()
         .map_err(|error| errors.push(error))
         .ok();
-    let statuses = config_status_report(state)
+    let statuses = config_status_report(state, gateway)
         .map_err(|error| errors.push(error.message))
         .unwrap_or_default();
     errors.extend(
@@ -90,7 +91,7 @@ pub fn read(state: &LocalState, switching: bool) -> TraySnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asb_core::contracts::{ProviderDraft, RouteMode};
+    use asb_core::contracts::{ProviderDraft, RouteMode, UpstreamProtocol};
 
     #[test]
     fn projection_contains_only_display_fields() {
@@ -103,10 +104,13 @@ mod tests {
                 model: Some("model".into()),
                 base_url: Some("https://example.invalid".into()),
                 api_key: "private-test-key".into(),
+                upstream_protocol: Some(UpstreamProtocol::Responses),
+                max_output_tokens: None.into(),
                 model_options: None,
                 notes: None,
                 website_url: None,
                 usage_query: None,
+                official_quota_refresh_interval_minutes: None,
             },
         );
         let value = serde_json::to_value(project(&profile, &[], None)).unwrap();

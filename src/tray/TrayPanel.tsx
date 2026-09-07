@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { RiArrowRightUpLine, RiCheckLine, RiLogoutBoxRLine } from "@remixicon/react";
+import { ArrowUpRight, Check, LogOut } from "lucide-react";
 import { hideTray, openTrayMain, quitTray, resizeTray, switchTrayProvider, trayReady } from "../api/client";
 import { Button } from "@/components/Button";
 import { ClientLogo } from "@/components/ClientLogo";
@@ -86,7 +86,7 @@ export function TrayPanel() {
       <header className="tray-header flex items-center justify-between gap-2 px-4 py-2">
         <span className="text-body-medium">Agent Switchboard</span>
         <Button variant="icon" aria-label="打开主界面" disabled={busy} onClick={() => void act("open", () => openTrayMain(false))}>
-          <RiArrowRightUpLine size={20} aria-hidden="true" />
+          <ArrowUpRight size={20} aria-hidden="true" />
         </Button>
       </header>
       {error && <div role="alert" className="tray-error px-4 py-2 text-caption-1-regular">{error}</div>}
@@ -106,13 +106,13 @@ export function TrayPanel() {
                 aria-describedby={`tray-provider-detail-${provider.id}`}
                 onClick={() => void act(provider.id, async () => { await switchTrayProvider(provider.id); await refresh(); })}
               >
-                <span className="tray-check">{provider.active && <RiCheckLine size={18} aria-hidden="true" />}</span>
+                <span className="tray-check">{provider.active && <Check size={18} aria-hidden="true" />}</span>
                 <span className="tray-provider-text">
-                  <span className="tray-provider-name text-body-2-medium" title={provider.name}>{provider.name}</span>
+                  <span className="tray-provider-name text-body-2-medium">{provider.name}</span>
                   <span id={`tray-provider-detail-${provider.id}`} className="tray-provider-text">
-                  <span className="tray-detail text-caption-1-regular" title={provider.model ?? undefined}>{provider.model ?? "默认模型"}</span>
+                  <span className="tray-detail text-caption-1-regular">{provider.model ?? "默认模型"}</span>
                   {provider.usage && <>
-                    <span className="tray-detail text-caption-1-regular" title={formatUsageSummary(provider.usage)}>{formatUsageSummary(provider.usage)}</span>
+                    <span className="tray-detail text-caption-1-regular">{formatUsageSummary(provider.usage)}</span>
                     <span className="tray-time text-caption-2-regular">缓存 · <Time iso={provider.usage.at} /></span>
                   </>}
                   </span>
@@ -125,7 +125,7 @@ export function TrayPanel() {
       </div>
       <footer className="tray-footer flex items-center justify-between gap-2 px-2 py-2">
         <Button variant="secondary" className="tray-footer-button" disabled={busy} onClick={() => void act("manage", () => openTrayMain(true))}>管理供应商</Button>
-        <Button variant="secondary" className="tray-footer-button" disabled={busy} onClick={() => void act("quit", quitTray)}><RiLogoutBoxRLine size={16} aria-hidden="true" />退出</Button>
+        <Button variant="secondary" className="tray-footer-button" disabled={busy} onClick={() => void act("quit", quitTray)}><LogOut size={16} aria-hidden="true" />退出</Button>
       </footer>
     </div>
   );

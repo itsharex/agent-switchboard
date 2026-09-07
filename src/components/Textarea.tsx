@@ -6,7 +6,7 @@ interface Props extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 }
 
 /**
- * Multi-line sibling of Input, ported from the spiralcoder textarea: native
+ * Multi-line sibling of Input: native
  * attributes pass through; the field look is shared with .asb-input and the
  * multi-line sizing with .asb-textarea in styles/base.css.
  */

@@ -82,6 +82,7 @@ pub fn window_close(app: tauri::AppHandle) {
 /// including hardware acceleration, are recreated from the persisted setting.
 #[tauri::command]
 pub fn restart_application(app: tauri::AppHandle) {
+    app.state::<crate::gateway::GatewayController>().shutdown();
     app.restart();
 }
 

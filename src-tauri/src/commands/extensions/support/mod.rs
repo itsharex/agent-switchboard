@@ -1,0 +1,400 @@
+//! Shared support for the extension commands: process-only caches, identity
+//! helpers, error mapping, and the renderer-facing projections several
+//! command domains share.
+
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+use asb_core::contracts::AppKind;
+use asb_core::extensions::contracts::{
+    DependencyState, DesiredState, ExtensionBinding, ExtensionDefinition, ExtensionPayload,
+    ExtensionTarget, FileState, McpCheckResult, ObservedExtension, SecretValue, SkillDependency,
+    SkillManifest, EXTENSIONS_SCHEMA_VERSION,
+};
+use asb_core::extensions::plan::ExtensionPlan;
+use asb_core::redact::REDACTED;
+use serde::Serialize;
+
+use crate::commands::error::CommandError;
+use crate::extensions::checks::CheckRegistry;
+use crate::extensions::sources::{self, SkillCandidate};
+use crate::extensions::store::ExtensionStore;
+use crate::local_state::LocalState;
+
+// ---------------------------------------------------------------- process state
+
+/// Plans awaiting apply. The plan itself is the only write authorization
+/// and directly carries the post-apply library state; the commit is
+/// pre-staged here and journaled before the executor runs the commit
+/// closure.
+pub(super) struct PendingPlan {
+    pub(super) plan: ExtensionPlan,
+    pub(super) operation_id: String,
+    pub(super) journal_dir: PathBuf,
+    pub(super) commit: crate::extensions::store::LibraryCommit,
+}
+
+static PENDING_PLANS: OnceLock<Mutex<BTreeMap<String, PendingPlan>>> = OnceLock::new();
+
+pub(super) fn pending_plans() -> &'static Mutex<BTreeMap<String, PendingPlan>> {
+    PENDING_PLANS.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// Skill candidates from the most recent scan, keyed by content digest.
+/// File bytes never travel to the frontend.
+static CANDIDATES: OnceLock<Mutex<BTreeMap<String, SkillCandidate>>> = OnceLock::new();
+
+pub(super) fn candidates() -> &'static Mutex<BTreeMap<String, SkillCandidate>> {
+    CANDIDATES.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// Raw discovery facts stay in this process-only cache. The renderer receives
+/// an opaque observation id and a safe summary; it never needs a local source
+/// path merely to import a discovered Skill.
+#[derive(Clone)]
+pub(super) struct CachedDiscoveryObservation {
+    pub(super) observed: ObservedExtension,
+    /// MCP imports verify this digest before parsing, so a click can never
+    /// import a document that changed after the displayed discovery pass.
+    #[allow(dead_code)] // Read by the dynamically dispatched Tauri MCP-import command.
+    pub(super) document_digest: Option<String>,
+}
+
+static DISCOVERED_OBSERVATIONS: OnceLock<Mutex<BTreeMap<String, CachedDiscoveryObservation>>> =
+    OnceLock::new();
+
+pub(super) fn discovered_observations(
+) -> &'static Mutex<BTreeMap<String, CachedDiscoveryObservation>> {
+    DISCOVERED_OBSERVATIONS.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+static CHECK_REGISTRY: OnceLock<CheckRegistry> = OnceLock::new();
+
+pub(super) fn check_registry() -> &'static CheckRegistry {
+    CHECK_REGISTRY.get_or_init(CheckRegistry::new)
+}
+
+static CHECK_RESULTS: OnceLock<Mutex<BTreeMap<String, Result<McpCheckResult, CommandError>>>> =
+    OnceLock::new();
+
+pub(super) fn check_results(
+) -> &'static Mutex<BTreeMap<String, Result<McpCheckResult, CommandError>>> {
+    CHECK_RESULTS.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+/// A placeholder binding row for a restore whose original binding no longer
+/// exists. The library commit owns the real pre-state; this row only carries
+/// the target required by the executor's typed plan.
+pub(super) fn restore_binding_stub(
+    definition_id: &str,
+    target: &ExtensionTarget,
+) -> ExtensionBinding {
+    ExtensionBinding {
+        schema_version: EXTENSIONS_SCHEMA_VERSION,
+        id: new_id("bind"),
+        resource_id: definition_id.to_string(),
+        target: target.clone(),
+        native_key: None,
+        deploy_name: None,
+        desired: DesiredState::Disabled,
+        locked_digest: None,
+        last_applied_revision: None,
+        updated_at: now(),
+    }
+}
+
+pub(super) fn now() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+pub(super) fn new_id(prefix: &str) -> String {
+    format!("{prefix}-{}", uuid::Uuid::new_v4().simple())
+}
+
+pub(super) fn sha_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+pub(super) fn extension_store(state: &LocalState) -> ExtensionStore {
+    ExtensionStore::from_state(state)
+}
+
+pub(super) fn store_error(error: crate::extensions::store::ExtensionStoreError) -> CommandError {
+    match error {
+        crate::extensions::store::ExtensionStoreError::RecoveryRequired(message) => {
+            CommandError::new("recovery-required", message)
+        }
+        other => CommandError::new("extension-store", other.to_string()),
+    }
+}
+
+/// Source transports may include a private repository URL or a local path in
+/// their low-level error text. Renderer-facing errors expose the failure
+/// class only; the full source identity remains inside the source boundary.
+pub(super) fn source_error(error: sources::SourceError) -> CommandError {
+    match error {
+        sources::SourceError::Unreachable(_) => CommandError::new(
+            "source-unreachable",
+            "来源不可达；请检查网络、地址和访问权限",
+        ),
+        sources::SourceError::Rejected(_) => {
+            CommandError::new("source-rejected", "来源内容未通过完整性或安全校验")
+        }
+    }
+}
+
+// ---------------------------------------------------------------- DTOs
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BindingStatusDto {
+    #[serde(flatten)]
+    pub(super) binding: ExtensionBinding,
+    pub(super) file_state: FileState,
+    pub(super) warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyStatusDto {
+    pub(super) name: String,
+    pub(super) resource_id: Option<String>,
+    pub(super) state: DependencyState,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillSourceViewDto {
+    /// Source identities can name private repositories or local paths. The
+    /// renderer only needs to know that provenance was retained and which
+    /// immutable source revision is associated with it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resolved_commit: Option<String>,
+}
+
+/// A renderer-safe value position. Library definitions retain the full
+/// SecretValue internally; no plain value or credential-store handle crosses
+/// the IPC boundary back to the renderer.
+#[derive(Serialize)]
+#[serde(tag = "mode", rename_all = "camelCase")]
+pub enum SecretValueViewDto {
+    EnvRef { name: String },
+    Stored,
+    Redacted,
+}
+
+impl From<SecretValue> for SecretValueViewDto {
+    fn from(value: SecretValue) -> Self {
+        match value {
+            SecretValue::EnvRef { name } => Self::EnvRef { name },
+            SecretValue::SecretRef { .. } => Self::Stored,
+            SecretValue::Plain { .. } => Self::Redacted,
+        }
+    }
+}
+
+pub(super) fn secret_value_views(
+    values: BTreeMap<String, SecretValue>,
+) -> BTreeMap<String, SecretValueViewDto> {
+    values
+        .into_iter()
+        .map(|(name, value)| (name, value.into()))
+        .collect()
+}
+
+/// The read model is deliberately distinct from ExtensionDefinition.
+/// Definitions are persisted with connection details so the executor can
+/// render client files, whereas the renderer may only receive metadata and
+/// redacted operational summaries.
+#[derive(Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ExtensionListItemDto {
+    Skill {
+        schema_version: u8,
+        id: String,
+        name: String,
+        revision: u64,
+        created_at: String,
+        updated_at: String,
+        content_digest: String,
+        manifest: SkillManifest,
+        source: Option<SkillSourceViewDto>,
+        host_scoped: Option<AppKind>,
+        compatibility: Vec<asb_core::extensions::contracts::CompatibilityNote>,
+        dependencies: Vec<SkillDependency>,
+        bindings: Vec<BindingStatusDto>,
+        dependency_states: Vec<DependencyStatusDto>,
+        last_check: Option<McpCheckResult>,
+    },
+    Mcp {
+        schema_version: u8,
+        id: String,
+        name: String,
+        revision: u64,
+        created_at: String,
+        updated_at: String,
+        transport: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        command: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        argument_count: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        env: Option<BTreeMap<String, SecretValueViewDto>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        headers: Option<BTreeMap<String, SecretValueViewDto>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        bearer: Option<SecretValueViewDto>,
+        bindings: Vec<BindingStatusDto>,
+        dependency_states: Vec<DependencyStatusDto>,
+        last_check: Option<McpCheckResult>,
+    },
+}
+
+pub(super) fn extension_list_item(
+    definition: ExtensionDefinition,
+    bindings: Vec<BindingStatusDto>,
+    dependency_states: Vec<DependencyStatusDto>,
+    last_check: Option<McpCheckResult>,
+) -> ExtensionListItemDto {
+    let ExtensionDefinition {
+        schema_version,
+        id,
+        name,
+        revision,
+        created_at,
+        updated_at,
+        payload,
+    } = definition;
+    match payload {
+        ExtensionPayload::Skill(skill) => ExtensionListItemDto::Skill {
+            schema_version,
+            id,
+            name,
+            revision,
+            created_at,
+            updated_at,
+            content_digest: skill.content_digest,
+            manifest: skill.manifest,
+            source: skill.source.map(|source| SkillSourceViewDto {
+                resolved_commit: source.resolved_commit,
+            }),
+            host_scoped: skill.host_scoped,
+            compatibility: skill.compatibility,
+            dependencies: skill.dependencies,
+            bindings,
+            dependency_states,
+            last_check,
+        },
+        ExtensionPayload::Mcp(mcp) => {
+            let (transport, command, argument_count, url, env, headers, bearer) = match mcp {
+                asb_core::extensions::contracts::McpDefinition::Stdio {
+                    command,
+                    args,
+                    env,
+                    ..
+                } => (
+                    "stdio".to_string(),
+                    Some(command),
+                    Some(args.len()),
+                    None,
+                    Some(secret_value_views(env)),
+                    None,
+                    None,
+                ),
+                asb_core::extensions::contracts::McpDefinition::Http {
+                    headers, bearer, ..
+                } => (
+                    "http".to_string(),
+                    None,
+                    None,
+                    Some(REDACTED.to_string()),
+                    None,
+                    Some(secret_value_views(headers)),
+                    bearer.map(Into::into),
+                ),
+                asb_core::extensions::contracts::McpDefinition::ClaudeSse { headers, .. } => (
+                    "claudeSse".to_string(),
+                    None,
+                    None,
+                    Some(REDACTED.to_string()),
+                    None,
+                    Some(secret_value_views(headers)),
+                    None,
+                ),
+                asb_core::extensions::contracts::McpDefinition::ClaudeWs { headers, .. } => (
+                    "claudeWs".to_string(),
+                    None,
+                    None,
+                    Some(REDACTED.to_string()),
+                    None,
+                    Some(secret_value_views(headers)),
+                    None,
+                ),
+            };
+            ExtensionListItemDto::Mcp {
+                schema_version,
+                id,
+                name,
+                revision,
+                created_at,
+                updated_at,
+                transport,
+                command,
+                argument_count,
+                url,
+                env,
+                headers,
+                bearer,
+                bindings,
+                dependency_states,
+                last_check,
+            }
+        }
+    }
+}
+
+/// Mutation responses deliberately contain only the stable identity that the
+/// renderer needs to refresh and select the updated row.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionMutationDto {
+    pub(super) id: String,
+    pub(super) name: String,
+    pub(super) revision: u64,
+}
+
+pub(super) fn extension_mutation(definition: &ExtensionDefinition) -> ExtensionMutationDto {
+    ExtensionMutationDto {
+        id: definition.id.clone(),
+        name: definition.name.clone(),
+        revision: definition.revision,
+    }
+}
+
+#[cfg(test)]
+mod tests;
+
+pub(super) fn projection_error(error: asb_core::extensions::ProjectionError) -> CommandError {
+    let message = match error {
+        asb_core::extensions::ProjectionError::SecretUnavailable(_) => {
+            "扩展所需凭据当前不可用；请在系统凭据存储中补充后重新预览".to_string()
+        }
+        other => other.to_string(),
+    };
+    CommandError::new("extension-projection", message)
+}
+
+pub(super) fn adapter_error(error: asb_core::adapter::AdapterError) -> CommandError {
+    CommandError::new("extension-projection", error.message)
+}

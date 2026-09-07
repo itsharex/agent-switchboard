@@ -1,0 +1,299 @@
+/* Overview status cards — one frosted card per client, echoing the Dual
+   Relay grid rhythm above instead of one flat text slab. */
+.asb-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-3);
+  margin-top: var(--asb-space-3);
+}
+
+.asb-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-status-name {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-unit);
+  margin: 0;
+  font: var(--asb-text-label);
+  font-weight: 700;
+  color: var(--asb-text);
+}
+
+.asb-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-unit);
+  padding: 2px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content);
+  font: var(--asb-text-label);
+  font-weight: 700;
+  color: var(--asb-text-muted);
+}
+
+.asb-status-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--asb-warning);
+}
+
+.asb-status-pill.is-ok .asb-status-pill-dot {
+  background: var(--asb-safe);
+}
+
+.asb-status-rows {
+  margin: 0;
+}
+
+.asb-status-row {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr);
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-1) 0;
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-status-row dt {
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-status-row dd {
+  margin: 0;
+  font: var(--asb-text-body);
+  overflow-wrap: anywhere;
+}
+
+.asb-status-warn {
+  display: block;
+}
+
+/* Runtime overview — application facts remain visually quieter than the
+   configuration and quota surfaces above, while each value stays copyable. */
+.asb-runtime-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+  margin: 0;
+}
+
+.asb-runtime-overview-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-runtime-overview-item dt {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-runtime-overview-item dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: var(--asb-text-body);
+}
+
+.asb-runtime-overview-path {
+  grid-column: span 3;
+}
+
+/* Public reset signals are a two-part reading surface: one current-day answer
+   and a compact source ledger. They remain separate from local configuration. */
+.asb-codex-reset-read-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.asb-codex-reset-read-state.is-cached {
+  background: var(--asb-content-muted);
+}
+
+.asb-codex-reset-read-state.is-live {
+  border-color: var(--asb-safe);
+  color: var(--asb-safe);
+}
+
+.asb-codex-reset-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
+}
+
+.asb-codex-reset-summary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-5);
+  background: var(--asb-content-muted);
+}
+
+.asb-codex-reset-question,
+.asb-codex-reset-summary-title {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 700;
+}
+
+.asb-codex-reset-answer {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-signal);
+  letter-spacing: -0.06em;
+}
+
+.asb-codex-reset-answer.is-confirmed {
+  color: var(--asb-safe);
+}
+
+.asb-codex-reset-facts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+}
+
+.asb-codex-reset-fact {
+  display: grid;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  padding: var(--asb-space-3);
+}
+
+.asb-codex-reset-fact + .asb-codex-reset-fact {
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-codex-reset-fact dt,
+.asb-codex-reset-label {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-codex-reset-fact dd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.asb-codex-reset-detail,
+.asb-codex-reset-source,
+.asb-codex-reset-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
+.asb-codex-reset-post {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.asb-codex-reset-post-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  margin-top: var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-codex-reset-post-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  margin-top: auto;
+}
+
+.asb-codex-reset > .asb-warn-text {
+  margin: var(--asb-space-2) 0 0;
+  font: var(--asb-text-label);
+}
+
+.asb-codex-reset-source {
+  margin-top: var(--asb-space-2);
+}
+
+.asb-codex-reset-note {
+  margin-top: var(--asb-space-unit);
+}
+
+.asb-codex-reset-source-link {
+  color: var(--asb-action);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.asb-codex-reset-source-link:hover {
+  color: var(--asb-text);
+}
+
+.asb-codex-reset-source-link:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+/* The official account-reset summary sources from the machine's own Codex
+   login; its windows render through the shared QuotaWindowsTable. */
+.asb-official-reset-meta,
+.asb-official-reset-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+

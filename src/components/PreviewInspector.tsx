@@ -38,8 +38,8 @@ export function PreviewInspector({
           ))}
         </ul>
       )}
-      {preview.changes.length === 0 && <p className="asb-empty">无变更</p>}
-      <DiffView changes={preview.changes} label="变更键" />
+      {/* Warnings precede the diff: the gateway rewrite is explained before
+          the 127.0.0.1 endpoint change is seen. */}
       {preview.warnings.length > 0 && (
         <ul className="asb-warnings" aria-label="警告">
           {preview.warnings.map((warning) => (
@@ -47,6 +47,8 @@ export function PreviewInspector({
           ))}
         </ul>
       )}
+      {preview.changes.length === 0 && <p className="asb-empty">无变更</p>}
+      <DiffView changes={preview.changes} label="变更键" />
       <CodePreview target={preview.target} content={filePreview.content} />
       <div className="asb-kv">
         <span className="asb-kv-label">备份位置</span>

@@ -1,0 +1,126 @@
+use crate::contracts::AppKind;
+
+use crate::ownership::spec::{ProviderSettingSpec, SettingValueType};
+
+/// The retired custom-provider table written by the preceding routing
+/// contract. Its individual keys remain owned only so the next projection
+/// removes them without touching unrelated host entries in the same table.
+pub const CODEX_LEGACY_PROVIDER_ID: &str = "OpenAi";
+pub const CODEX_LEGACY_PROVIDER_NAME_KEY: &str = "model_providers.OpenAi.name";
+pub const CODEX_LEGACY_PROVIDER_BASE_URL_KEY: &str = "model_providers.OpenAi.base_url";
+pub const CODEX_LEGACY_PROVIDER_WIRE_API_KEY: &str = "model_providers.OpenAi.wire_api";
+pub const CODEX_LEGACY_PROVIDER_TOKEN_KEY: &str =
+    "model_providers.OpenAi.experimental_bearer_token";
+/// Codex's server-side web-search mode. A cross-protocol route cannot carry
+/// this Responses-only server tool, so the Codex adapter derives its effective
+/// value from the selected route at render time.
+pub const CODEX_WEB_SEARCH_KEY: &str = "web_search";
+
+pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model_provider",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "openai_base_url",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "experimental_bearer_token",
+        value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_NAME_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_BASE_URL_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_WIRE_API_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_LEGACY_PROVIDER_TOKEN_KEY,
+        value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: "model_context_window",
+        value_type: SettingValueType::PositiveInteger,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "model",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "availableModels",
+        value_type: SettingValueType::StringArray,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_BASE_URL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_AUTH_TOKEN",
+        value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_API_KEY",
+        value_type: SettingValueType::Secret,
+    },
+    // Claude Code's documented switch for beta-only request fields. A routed
+    // Chat or Responses provider has no target representation for all of
+    // those experimental Anthropic features, so the active provider owns the
+    // setting and removes it again for a native route.
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
+        value_type: SettingValueType::String,
+    },
+    // Deprecated by Claude, but still actively removed by a provider
+    // projection so it cannot survive a switch as a hidden model mapping.
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_SMALL_FAST_MODEL",
+        value_type: SettingValueType::String,
+    },
+];

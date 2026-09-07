@@ -35,6 +35,17 @@ function mockQuotaCommands(quota: CodexOfficialQuota, history = officialHistory)
   });
 }
 
+function baseProps(overrides?: Partial<Parameters<typeof CodexOfficialQuotaPanel>[0]>) {
+  return {
+    id: "codex-official-quota-codex-official",
+    profileId: "codex-official",
+    profileName: "Codex 官方登录",
+    refreshIntervalMinutes: 0,
+    onSaveInterval: vi.fn(() => Promise.resolve(true)),
+    ...overrides,
+  };
+}
+
 describe("CodexOfficialQuotaPanel", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -53,13 +64,7 @@ describe("CodexOfficialQuotaPanel", () => {
       lastReset: null,
     });
 
-    render(
-      <CodexOfficialQuotaPanel
-        id="codex-official-quota-codex-official"
-        profileId="codex-official"
-        profileName="Codex 官方登录"
-      />,
-    );
+    render(<CodexOfficialQuotaPanel {...baseProps()} />);
 
     expect(await screen.findByRole("row", { name: /^5 小时/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /^7 天/ })).toBeInTheDocument();
@@ -91,13 +96,7 @@ describe("CodexOfficialQuotaPanel", () => {
     });
 
     try {
-      render(
-        <CodexOfficialQuotaPanel
-          id="codex-official-quota-codex-official"
-          profileId="codex-official"
-          profileName="Codex 官方登录"
-        />,
-      );
+      render(<CodexOfficialQuotaPanel {...baseProps()} />);
       await act(async () => {
         await Promise.resolve();
       });
@@ -118,13 +117,7 @@ describe("CodexOfficialQuotaPanel", () => {
       lastReset: null,
     });
 
-    render(
-      <CodexOfficialQuotaPanel
-        id="codex-official-quota-codex-official"
-        profileId="codex-official"
-        profileName="Codex 官方登录"
-      />,
-    );
+    render(<CodexOfficialQuotaPanel {...baseProps()} />);
 
     expect((await screen.findAllByText("38 %")).length).toBeGreaterThan(0);
     expect(screen.getByRole("alert")).toHaveTextContent("正在显示上次成功读取的额度");
@@ -140,13 +133,7 @@ describe("CodexOfficialQuotaPanel", () => {
       lastReset: null,
     });
 
-    render(
-      <CodexOfficialQuotaPanel
-        id="codex-official-quota-codex-official"
-        profileId="codex-official"
-        profileName="Codex 官方登录"
-      />,
-    );
+    render(<CodexOfficialQuotaPanel {...baseProps()} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("完成登录后刷新");
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
@@ -172,20 +159,12 @@ describe("CodexOfficialQuotaPanel", () => {
       return Promise.reject(new Error(`unexpected command: ${command}`)) as never;
     });
 
-    const { rerender } = render(
-      <CodexOfficialQuotaPanel
-        id="codex-official-quota-codex-official"
-        profileId="codex-official"
-        profileName="Codex 官方登录"
-      />,
-    );
+    const { rerender } = render(<CodexOfficialQuotaPanel {...baseProps()} />);
     expect(callsFor("query_codex_official_quota")).toHaveLength(1);
 
     rerender(
       <CodexOfficialQuotaPanel
-        id="codex-official-quota-relay"
-        profileId="codex-relay"
-        profileName="Codex 中继"
+        {...baseProps({ profileId: "codex-relay", id: "codex-official-quota-codex-relay" })}
       />,
     );
 
@@ -199,5 +178,83 @@ describe("CodexOfficialQuotaPanel", () => {
 
     resolveFirst({ status: "available", windows: [], at: null, stale: false, lastReset: null });
     await act(async () => {});
+  });
+
+  it("re-queries on the persisted interval and stays manual at zero", async () => {
+    vi.useFakeTimers();
+    mockQuotaCommands({
+      status: "available",
+      windows: [],
+      at: "2026-09-01T03:00:00Z",
+      stale: false,
+      lastReset: null,
+    });
+
+    const { rerender } = render(
+      <CodexOfficialQuotaPanel {...baseProps({ refreshIntervalMinutes: 30 })} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(callsFor("query_codex_official_quota")).toHaveLength(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(29 * 60_000);
+    });
+    expect(callsFor("query_codex_official_quota")).toHaveLength(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1 * 60_000);
+    });
+    expect(callsFor("query_codex_official_quota")).toHaveLength(2);
+
+    // Turning the interval off stops future scheduled reads.
+    rerender(<CodexOfficialQuotaPanel {...baseProps({ refreshIntervalMinutes: 0 })} />);
+    await act(async () => {
+      vi.advanceTimersByTime(60 * 60_000);
+    });
+    expect(callsFor("query_codex_official_quota")).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it("commits a valid interval, reverts out-of-range input, and forwards zero", async () => {
+    const user = userEvent.setup();
+    mockQuotaCommands({
+      status: "available",
+      windows: [],
+      at: "2026-09-01T03:00:00Z",
+      stale: false,
+      lastReset: null,
+    });
+    const onSaveInterval = vi.fn(() => Promise.resolve(true));
+    const { rerender } = render(
+      <CodexOfficialQuotaPanel {...baseProps({ onSaveInterval })} />,
+    );
+
+    const interval = await screen.findByLabelText("自动刷新间隔（分钟，0 为关闭）");
+    await user.clear(interval);
+    await user.type(interval, "15");
+    await user.tab();
+    await waitFor(() => expect(onSaveInterval).toHaveBeenCalledWith(15));
+
+    // Out-of-range input never reaches the save and reverts to the persisted value.
+    const input = () => screen.getByLabelText("自动刷新间隔（分钟，0 为关闭）");
+    await user.clear(input());
+    await user.type(input(), "1441");
+    await user.tab();
+    expect(onSaveInterval).not.toHaveBeenCalledWith(1441);
+    await waitFor(() => expect(input()).toHaveValue(0));
+
+    // A persisted interval syncs into the field, and 0 forwards as "off".
+    rerender(
+      <CodexOfficialQuotaPanel
+        {...baseProps({ onSaveInterval, refreshIntervalMinutes: 15 })}
+      />,
+    );
+    await waitFor(() => expect(input()).toHaveValue(15));
+    await user.clear(input());
+    await user.type(input(), "0");
+    await user.tab();
+    await waitFor(() => expect(onSaveInterval).toHaveBeenCalledWith(0));
   });
 });

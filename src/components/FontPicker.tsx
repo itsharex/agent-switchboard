@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listSystemFonts } from "../api/client";
 import { quotedFontFamily } from "../lib/font-family";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 /** Web fonts bundled with the app: always offered and renderable, even when
  * the system list omits them or enumeration fails. */
@@ -10,47 +11,6 @@ const BUNDLED_FONTS = ["Noto Sans SC"];
  * glyphs the candidate lacks (e.g. a Latin-only family showing the sample). */
 function previewStack(font: string): string {
   return `${quotedFontFamily(font)}, ${quotedFontFamily(BUNDLED_FONTS[0])}, system-ui, sans-serif`;
-}
-
-function ChevronIcon() {
-  return (
-    <span className="asb-select-chevron" aria-hidden="true">
-      <svg viewBox="0 0 16 16" fill="none">
-        <path
-          d="M3.5 6 L8 10.5 L12.5 6"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="7" cy="7" r="4.4" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M10.4 10.4 L13.5 13.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <span className="asb-font-check" aria-hidden="true">
-      <svg viewBox="0 0 12 12" fill="none">
-        <polyline
-          points="2.4 6.4 5 9 9.6 3.4"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
 }
 
 interface Props {
@@ -174,7 +134,9 @@ export function FontPicker({ value, busy, onChange }: Props) {
         <span className="asb-font-name" style={{ fontFamily: previewStack(value) }}>
           {value}
         </span>
-        <ChevronIcon />
+        <span className="asb-select-chevron" aria-hidden="true">
+          <ChevronDownIcon />
+        </span>
       </button>
 
       {open ? (
@@ -212,7 +174,9 @@ export function FontPicker({ value, busy, onChange }: Props) {
                   <span className="asb-font-option-sample" style={{ fontFamily: previewStack(font) }}>
                     中文 Aa 012
                   </span>
-                  {font === value ? <CheckIcon /> : <span className="asb-font-check" aria-hidden="true" />}
+                  <span className="asb-font-check" aria-hidden="true">
+                    {font === value && <CheckIcon />}
+                  </span>
                 </button>
               ))
             ) : (

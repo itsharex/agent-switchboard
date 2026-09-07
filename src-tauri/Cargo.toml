@@ -23,8 +23,18 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Resolves the app-data directory before Tauri creates its first WebView.
 # This is the same platform resolver Tauri uses for `app_data_dir`.
 dirs = "6"
+# GitHub tarball extraction for skill sources (gzip + untar, size-capped).
+flate2 = "1"
 fontdb = "0.23"
 log = "0.4"
+# System credential storage for extension secrets (Windows Credential
+# Manager, macOS Keychain, Linux secret service).
+keyring = { version = "3", features = [
+    "apple-native",
+    "windows-native",
+    "sync-secret-service",
+] }
+tar = "0.4"
 # Outbound HTTP for probe / models / update / quota / OAuth / cloud backup.
 # rustls verifies against the OS root store (native-roots) the way the native
 # stack did, and system-proxy keeps automatic proxy discovery. No compression
@@ -41,6 +51,9 @@ rusqlite = { version = "0.32", features = ["bundled"], default-features = false 
 rquickjs = "0.12.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = "0.10"
+sha1 = "0.10"
 # `common-controls-v6` stays off: it only embeds the manifest into bins, and
 # our build.rs embeds one for every target (tests included) via windres.
 # `devtools` stays off: release builds must not expose the WebView inspector
@@ -56,7 +69,11 @@ tauri = { version = "2", default-features = false, features = [
 tauri-plugin-opener = "2"
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2.11"
+# Rejects additional desktop launches: the duplicate process exits during
+# plugin init and the surviving instance restores its main window instead.
+tauri-plugin-single-instance = "2"
 tiny_http = "0.12"
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-autostart = "2"
 

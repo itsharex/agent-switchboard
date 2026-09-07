@@ -7,7 +7,9 @@ mod config_store;
 #[cfg(debug_assertions)]
 mod dev_api;
 mod distribution;
+mod extensions;
 mod fonts;
+mod gateway;
 mod local_state;
 mod model_usage;
 mod model_usage_cache;
@@ -15,6 +17,8 @@ mod official_login;
 mod probe;
 mod runtime_log;
 mod session_manager;
+#[cfg(test)]
+mod test_client_paths;
 mod tray;
 mod usage_cache;
 mod usage_history;
@@ -84,6 +88,14 @@ pub fn run() {
     configure_hardware_acceleration(&mut context);
 
     tauri::Builder::default()
+        // Registered first so a duplicate launch exits during plugin init,
+        // before the gateway, tray, or any window state is created. The
+        // callback runs in the surviving instance and restores its window.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Err(error) = tray::tray_open_main(app.clone(), false) {
+                log::warn!("重复启动已拦截，恢复主窗口失败: {error}");
+            }
+        }))
         .plugin(runtime_log::plugin())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -92,6 +104,14 @@ pub fn run() {
             None,
         ))
         .setup(|app| {
+            let local =
+                local_state::LocalState::from_app(app.handle()).map_err(std::io::Error::other)?;
+            let gateway =
+                gateway::GatewayController::start(&local).map_err(std::io::Error::other)?;
+            app.manage(gateway);
+            app.manage(commands::switching::ProfileSavePreparations::default());
+            commands::switching::recover_pending_profile_save(app.handle())
+                .map_err(std::io::Error::other)?;
             // A malformed settings file is rejected by the typed settings
             // surface, but must never prevent the tray/window recovery shell
             // from starting. Default native window behavior remains usable.
@@ -104,6 +124,11 @@ pub fn run() {
             if let Err(error) = tray::setup(app.handle()) {
                 tray::recover_main(app.handle(), &error);
             }
+            // The tray panel is a persistent surface; its usage data must
+            // refresh even while the main window is hidden, closed to the
+            // tray, or on another page. The scheduler thread owns that
+            // cadence, so no renderer lifecycle can stop it.
+            usage_query::scheduler::spawn(app.handle().clone());
             runtime_log::record_started();
             #[cfg(debug_assertions)]
             {
@@ -133,6 +158,15 @@ pub fn run() {
                 return;
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window
+                    .app_handle()
+                    .state::<gateway::GatewayController>()
+                    .has_active_routes()
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    return;
+                }
                 if tray::should_absorb(window.app_handle()) {
                     api.prevent_close();
                     // A tray has already been built successfully, so hide is
@@ -157,10 +191,11 @@ pub fn run() {
             tray::tray_quit,
             commands::status::config_status,
             commands::status::runtime_overview,
+            commands::gateway::gateway_status,
             commands::list_profiles,
             commands::reset_profile_store,
-            commands::create_profile,
-            commands::update_profile,
+            commands::switching::prepare_profile_save,
+            commands::switching::commit_profile_save,
             commands::delete_profile,
             commands::reorder_profiles,
             commands::import_discovered_profile,
@@ -187,6 +222,7 @@ pub fn run() {
             commands::probe_endpoint,
             commands::test_usage_query,
             commands::query_profile_usage,
+            commands::read_profile_usage,
             commands::query_codex_official_quota,
             commands::get_cached_codex_official_reset,
             commands::refresh_codex_official_reset,
@@ -217,6 +253,40 @@ pub fn run() {
             commands::set_app_settings,
             commands::repair_app_settings,
             commands::list_system_fonts,
+            commands::extensions::list_extensions,
+            commands::extensions::recover_extension_transactions,
+            commands::extensions::discover_extensions,
+            commands::extensions::save_extension,
+            commands::extensions::get_mcp_edit_view,
+            commands::extensions::update_mcp_definition,
+            commands::extensions::delete_extension,
+            commands::extensions::set_binding_lock,
+            commands::extensions::register_project,
+            commands::extensions::scan_local_skill_source,
+            commands::extensions::resolve_skill_source,
+            commands::extensions::import_skill_candidate,
+            commands::extensions::import_discovered_skill,
+            commands::extensions::import_discovered_mcp,
+            commands::extensions::preview_discovered_takeover,
+            commands::extensions::takeover_discovered_extension,
+            commands::extensions::export_extension_portable,
+            commands::extensions::import_extension_portable,
+            commands::extensions::check_skill_updates,
+            commands::extensions::update_skill_definition,
+            commands::extensions::create_local_skill,
+            commands::extensions::fork_local_skill,
+            commands::extensions::get_skill_editor,
+            commands::extensions::update_skill_files,
+            commands::extensions::list_skill_versions,
+            commands::extensions::update_skill_dependencies,
+            commands::extensions::put_extension_secret,
+            commands::extensions::prepare_extension_plan,
+            commands::extensions::apply_extension_plan,
+            commands::extensions::get_extension_operation,
+            commands::extensions::prepare_extension_restore,
+            commands::extensions::check_mcp_connection,
+            commands::extensions::get_mcp_check,
+            commands::extensions::cancel_mcp_check,
             #[cfg(debug_assertions)]
             commands::window::toggle_devtools,
         ])
@@ -228,6 +298,16 @@ pub fn run() {
                 // close-to-tray path. Tauri uses this dedicated code when it
                 // relaunches the executable.
                 if code == Some(tauri::RESTART_EXIT_CODE) {
+                    return;
+                }
+                if app
+                    .state::<gateway::GatewayController>()
+                    .has_active_routes()
+                {
+                    api.prevent_exit();
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
                     return;
                 }
                 // Explicit quit and the configured close-to-exit action end

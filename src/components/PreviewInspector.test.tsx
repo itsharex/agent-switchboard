@@ -47,6 +47,13 @@ describe("PreviewInspector", () => {
     expect(screen.queryByText(/writeFile/)).toBeNull();
   });
 
+  it("lists the warnings before the changed keys so a rewrite is explained first", () => {
+    render(<PreviewInspector filePreview={preview} userConfigModel={null} userConfigWarnings={[]} />);
+    const warnings = screen.getByRole("list", { name: "警告" });
+    const diff = screen.getByRole("list", { name: "变更键" });
+    expect(warnings.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows the user-level configuration model and its scope warning", () => {
     const { rerender } = render(
       <PreviewInspector

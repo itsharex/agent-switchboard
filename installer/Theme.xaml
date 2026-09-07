@@ -10,6 +10,7 @@
   <SolidColorBrush x:Key="Hover" Color="#E9EDF5" />
   <SolidColorBrush x:Key="Violet" Color="#8B7CFF" />
   <SolidColorBrush x:Key="Error" Color="#B42318" />
+  <SolidColorBrush x:Key="ErrorHover" Color="#961D14" />
   <FontFamily x:Key="InterfaceFont">Segoe UI, Microsoft YaHei UI</FontFamily>
   <sys:Double x:Key="BodySize">14</sys:Double>
   <sys:Double x:Key="TitleSize">28</sys:Double>
@@ -46,6 +47,13 @@
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
       <Border x:Name="Panel" Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" /></Border>
       <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Panel" Property="Background" Value="{StaticResource ActionHover}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Panel" Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="Danger" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+    <Setter Property="Background" Value="{StaticResource Error}" /><Setter Property="Foreground" Value="{StaticResource Content}" /><Setter Property="BorderBrush" Value="{StaticResource Error}" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+      <Border x:Name="Panel" Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" /></Border>
+      <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Panel" Property="Background" Value="{StaticResource ErrorHover}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Panel" Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers>
     </ControlTemplate></Setter.Value></Setter>
   </Style>
   <Style TargetType="TextBox">

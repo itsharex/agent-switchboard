@@ -1,0 +1,112 @@
+/* Buttons. The Button component owns the geometry contract: it always emits
+   .asb-btn plus exactly one variant surface class below; base.css owns the
+   surfaces and the per-variant geometry deltas. */
+button {
+  font: var(--asb-text-body);
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.asb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--asb-touch-target);
+  min-width: 88px;
+  padding: 0 var(--asb-space-3);
+  border-radius: var(--asb-radius-action);
+}
+
+.asb-btn-primary {
+  border: 0;
+  background: var(--asb-action);
+  color: var(--asb-text-on-action);
+  font-weight: 600;
+}
+
+.asb-btn-secondary {
+  border: 1px solid var(--asb-hairline-strong);
+  background: var(--asb-content);
+  color: var(--asb-text);
+}
+
+.asb-btn-secondary:hover:not(:disabled) {
+  background: var(--asb-content-muted);
+}
+
+.asb-btn-danger {
+  border: 1px solid var(--asb-danger);
+  background: var(--asb-danger);
+  color: var(--asb-text-on-action);
+  font-weight: 600;
+}
+
+.asb-btn-danger:hover:not(:disabled) {
+  border-color: var(--asb-danger);
+}
+
+/* Icon-only variant: square touch target. Row cards own the contextual
+   hover/active surfaces on top of this resting state. */
+.asb-btn-icon {
+  min-width: 0;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--asb-radius-control) - 6px);
+  background: transparent;
+  color: var(--asb-text);
+}
+
+.asb-btn-icon:hover {
+  background: var(--asb-surface-rail);
+  color: var(--asb-text);
+}
+
+/* Expanded card actions use a quiet tint; their icon and aria-expanded carry
+   the state, never color alone. */
+.asb-btn-icon.is-active {
+  background: var(--asb-row-selected);
+  color: var(--asb-action);
+}
+
+/* New-provider pill: tab-minus touch height; carbon-black premium surface
+   with the violet energy zone (Frosted Relay premium button; white text and
+   glow token-owned, no drop shadow). */
+.asb-btn-plus {
+  min-height: calc(var(--asb-touch-target) - 8px);
+  border: 0;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-gradient-premium-button);
+  color: var(--asb-text-on-action);
+  font-weight: 600;
+  box-shadow: var(--asb-gradient-premium-button-glow);
+  transition:
+    box-shadow var(--asb-motion-fast) var(--asb-easing),
+    filter var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-btn-plus:not(:disabled):hover {
+  box-shadow: var(--asb-gradient-premium-button-glow-hover);
+  filter: brightness(var(--asb-premium-button-hover-brightness));
+}
+
+/* Page-level back icon button in the provider editor header. */
+.asb-btn-back {
+  min-width: 0;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  padding: 0;
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+

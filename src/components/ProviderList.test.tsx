@@ -9,8 +9,18 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ProviderList as ProviderListComponent } from "./ProviderList";
 import type { ProviderProfile } from "../api/client";
 
+const { trayChangedHandlers } = vi.hoisted(() => ({
+  trayChangedHandlers: [] as Array<() => void>,
+}));
+
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (event: string, handler: () => void) => {
+    if (event === "tray-changed") trayChangedHandlers.push(handler);
+    return () => {};
+  }),
+}));
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -30,6 +40,8 @@ const profiles: ProviderProfile[] = [
     baseUrl: "https://relay-a.internal/v1",
     websiteUrl: "https://relay-a.example",
     apiKey: "ASB_RELAY_A_KEY",
+    upstreamProtocol: "responses",
+    maxOutputTokens: null,
     modelOptions: null,
   },
   {
@@ -41,22 +53,33 @@ const profiles: ProviderProfile[] = [
     baseUrl: "https://api.openai.com/v1",
     websiteUrl: "https://openai.com",
     apiKey: "test-api-key",
+    upstreamProtocol: "responses",
+    maxOutputTokens: null,
     modelOptions: null,
   },
 ];
 
 function ProviderList({
   userConfigModel = null,
+  onSaveQuotaInterval = async () => true,
   ...props
-}: Omit<ComponentProps<typeof ProviderListComponent>, "userConfigModel"> & {
+}: Omit<ComponentProps<typeof ProviderListComponent>, "userConfigModel" | "onSaveQuotaInterval"> & {
   userConfigModel?: string | null;
+  onSaveQuotaInterval?: ComponentProps<typeof ProviderListComponent>["onSaveQuotaInterval"];
 }) {
-  return <ProviderListComponent {...props} userConfigModel={userConfigModel} />;
+  return (
+    <ProviderListComponent
+      {...props}
+      userConfigModel={userConfigModel}
+      onSaveQuotaInterval={onSaveQuotaInterval}
+    />
+  );
 }
 
 describe("ProviderList", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    trayChangedHandlers.length = 0;
   });
 
   it("renders model and website host together on the meta line", () => {
@@ -147,6 +170,8 @@ describe("ProviderList", () => {
             model: null,
             baseUrl: null,
             apiKey: "",
+            upstreamProtocol: null,
+            maxOutputTokens: null,
             modelOptions: null,
             websiteUrl: null,
           },
@@ -172,7 +197,7 @@ describe("ProviderList", () => {
     );
   });
 
-  it("keeps selection semantic without adding a card highlight class", () => {
+  it("keeps selection semantic without a persistent card highlight", () => {
     render(
       <ProviderList
         profiles={profiles}
@@ -185,15 +210,8 @@ describe("ProviderList", () => {
     const selectedRow = screen.getByRole("option", { name: /官方 OpenAI/ });
     expect(selectedRow).toHaveAttribute("aria-selected", "true");
     const selectedCard = selectedRow.closest("li");
-    expect(selectedCard).toHaveClass("is-selected");
-    expect(selectedCard?.querySelector(".asb-starlight")).toHaveAttribute(
-      "data-active",
-      "true",
-    );
-    expect(selectedCard?.querySelector(".asb-starlight")).toHaveAttribute(
-      "data-variant",
-      "warm",
-    );
+    expect(selectedCard).not.toHaveClass("is-selected");
+    expect(selectedCard?.querySelector(".asb-starlight")).toBeNull();
   });
 
   it("swaps the preview eye for a closed-eye toggle when that row's preview is open", async () => {
@@ -334,12 +352,24 @@ describe("ProviderList", () => {
     expect(onToggleUsage).toHaveBeenCalledWith(configured);
   });
 
-  it("keeps one polling schedule across collapse and expansion, and stops on unmount", async () => {
+  it("lets the scheduler own re-query timing and adopts cache updates while collapsed", async () => {
     vi.useFakeTimers();
     let remaining = 75;
-    invokeMock.mockImplementation((command) => Promise.resolve(command === "query_profile_usage"
-      ? { readings: [{ remaining, used: 100 - remaining, total: 100, unit: "CNY" }], at: "2026-09-05T08:00:00Z" }
-      : []) as never);
+    invokeMock.mockImplementation((command) => {
+      if (command === "query_profile_usage") {
+        return Promise.resolve({
+          readings: [{ remaining, used: 100 - remaining, total: 100, unit: "CNY" }],
+          at: "2026-09-05T08:00:00Z",
+        }) as never;
+      }
+      if (command === "read_profile_usage") {
+        return Promise.resolve({
+          readings: [{ remaining, used: 100 - remaining, total: 100, unit: "CNY" }],
+          at: "2026-09-05T09:00:00Z",
+        }) as never;
+      }
+      return Promise.resolve([]) as never;
+    });
     const configured = { ...profiles[0], usageQuery: {
       kind: "declarative" as const, url: "{{baseUrl}}/balance", remainingPath: "balance",
       refreshIntervalMinutes: 2,
@@ -352,44 +382,57 @@ describe("ProviderList", () => {
       const calls = () => invokeMock.mock.calls.filter(([command]) => command === "query_profile_usage").length;
       expect(calls()).toBe(1);
       expect(screen.getByLabelText("中继 A 用量摘要")).toHaveTextContent("剩余 75% · 余额 75 CNY");
-      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
-      rerender(view(false));
+
+      // Passing the configured interval starts no renderer-side query: the
+      // desktop scheduler owns the cadence.
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
       expect(calls()).toBe(1);
+
+      remaining = 50;
+      await act(async () => {
+        trayChangedHandlers.forEach((handler) => handler());
+      });
+      expect(screen.getByLabelText("中继 A 用量摘要")).toHaveTextContent("剩余 50%");
+
+      rerender(view(false));
       expect(screen.queryByLabelText("中继 A 用量摘要")).not.toBeInTheDocument();
       expect(screen.getByRole("table", { name: "中继 A 用量读数" })).toBeInTheDocument();
-      remaining = 50;
-      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
-      expect(calls()).toBe(2);
       rerender(view(true));
       expect(screen.getByLabelText("中继 A 用量摘要")).toHaveTextContent("剩余 50%");
-      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
-      expect(calls()).toBe(3);
       unmount();
-      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
-      expect(calls()).toBe(3);
+      await act(async () => {});
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("marks a collapsed summary as stale when its refresh fails", async () => {
-    vi.useFakeTimers();
+  it("marks a collapsed summary as stale when a manual refresh fails", async () => {
     let fail = false;
     invokeMock.mockImplementation((command) => {
       if (command !== "query_profile_usage") return Promise.resolve([]) as never;
       if (fail) return Promise.reject(new Error("额度接口返回 403")) as never;
       return Promise.resolve({ readings: [{ remaining: 20, used: null, total: null, unit: "USD" }], at: "2026-09-05T08:00:00Z" }) as never;
     });
+    vi.useFakeTimers();
+    const configured = { ...profiles[0], usageQuery: {
+      kind: "declarative" as const, url: "{{baseUrl}}/balance", remainingPath: "balance", refreshIntervalMinutes: 1,
+    } };
+    const view = (collapsed: boolean) => <ProviderList profiles={[configured]} activeProfileId={null}
+      selectedId={null} onSelect={() => {}} collapsedUsageIds={collapsed ? [configured.id] : []} />;
     try {
-      const { unmount } = render(<ProviderList profiles={[{ ...profiles[0], usageQuery: {
-        kind: "declarative", url: "{{baseUrl}}/balance", remainingPath: "balance", refreshIntervalMinutes: 1,
-      } }]} activeProfileId={null} selectedId={null} onSelect={() => {}} collapsedUsageIds={[profiles[0].id]} />);
+      const { rerender } = render(view(false));
+      // Fake timers freeze polling finders; flush the resolved first read as
+      // a microtask and assert synchronously.
       await act(async () => {});
+      expect(screen.getByRole("table", { name: "中继 A 用量读数" })).toBeInTheDocument();
       fail = true;
-      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      await act(async () => {
+        await fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+      });
+      expect(screen.getByRole("alert")).toHaveTextContent("额度接口返回 403");
+      rerender(view(true));
       expect(screen.getByLabelText("中继 A 用量摘要")).toHaveTextContent("余额 20 USD（更新失败，显示上次读数）");
       expect(screen.getByLabelText("中继 A 用量摘要")).toHaveAttribute("title", "额度接口返回 403");
-      unmount();
     } finally {
       vi.useRealTimers();
     }

@@ -126,8 +126,10 @@ export function useCloudBackup({
         await refresh();
         toast({
           kind: "success",
-          title: "已恢复加密云端备份",
-          description: `已恢复 ${result.profileCount} 个供应商档案`,
+          title: result.migrated ? "已恢复并升级加密云端备份" : "已恢复加密云端备份",
+          description: result.migrated
+            ? `已恢复 ${result.profileCount} 个供应商档案，云端备份已更新为当前格式`
+            : `已恢复 ${result.profileCount} 个供应商档案`,
         });
         return true;
       } catch (caught) {

@@ -49,9 +49,9 @@ pub(crate) fn parse_optional_model(
     }
 }
 
-/// Decodes a model field stored by CC Switch.
+/// Decodes an imported model field with a legacy uppercase `[1M]` suffix.
 ///
-/// Older CC Switch rows use an uppercase `[1M]` suffix for its 1M checkbox.
+/// That legacy spelling represents the 1M checkbox.
 /// That spelling never becomes part of an Agent Switchboard profile or a
 /// Claude Code write: it is normalized here to the same semantic flag as the
 /// canonical Claude Code `[1m]` suffix.

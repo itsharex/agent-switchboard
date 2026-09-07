@@ -78,6 +78,7 @@ namespace AgentSwitchboard.Installer
             Grid.SetColumn(minimize, 1);
             header.Children.Add(minimize);
             close = MakeButton("×", false);
+            close.Style = (Style)Resources["Danger"];
             close.MinWidth = 40;
             close.Padding = new Thickness(0);
             close.ToolTip = T("关闭", "Close");

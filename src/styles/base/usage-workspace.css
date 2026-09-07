@@ -1,0 +1,144 @@
+/* Usage query workspace — a dedicated provider subview entered from its card.
+   Its result is the shared UsageReadingsTable under one "本次结果" label. */
+.asb-usage-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+  min-height: 100%;
+}
+
+.asb-usage-workspace-head {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  padding-bottom: var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-workspace-head > div {
+  min-width: 0;
+}
+
+.asb-usage-provider {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-usage-mode {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-canvas);
+}
+
+.asb-usage-mode-tab {
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-1) var(--asb-space-3);
+  border: 1px solid transparent;
+  border-radius: calc(var(--asb-radius-control) - 4px);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-usage-mode-tab[aria-selected="true"] {
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font-weight: 600;
+}
+
+.asb-usage-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
+
+.asb-usage-paths {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-usage-script-contract {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--asb-space-1) var(--asb-space-3);
+  padding: var(--asb-space-3);
+  background: var(--asb-code-bg);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-usage-script-contract code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-usage-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-run {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+}
+
+/* The workspace result surface: a plain labelled column — the framed,
+   rounded table itself is the visual boundary. */
+.asb-usage-readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-usage-readout-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+@media (max-width: 720px) {
+  .asb-usage-paths {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Scope-of-effect notes on overview and backups */
+.asb-scope-note {
+  margin: 0 0 var(--asb-space-2);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+/* Backup row actions and inline diff */
+.asb-backup-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--asb-space-2);
+}
+
+.asb-backup-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 240px;
+}
+

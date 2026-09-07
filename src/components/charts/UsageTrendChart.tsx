@@ -31,7 +31,7 @@ interface Props {
 
 const SERIES_TONE_COUNT = 5;
 const AXIS_TICK = { fontSize: 12, fill: "var(--color-text-tertiary)" };
-/** The BoardUI chart card, fed by real recorded points only. It preserves
+/** The 图表组件层 chart card, fed by real recorded points only. It preserves
  * input point order and never fills missing timestamps with inferred values;
  * series that were read at different times simply leave gaps instead of
  * inventing points. */
@@ -230,7 +230,7 @@ function TrendCard({
   );
 }
 
-/** The BoardUI hover marker: a soft halo behind a solid dot ringed by the
+/** The 图表组件层 hover marker: a soft halo behind a solid dot ringed by the
  * card surface. Recharts clones this element with the active point's
  * coordinates. */
 function ActiveDot({ color, cx, cy }: { color: string; cx?: number; cy?: number }) {
@@ -250,8 +250,8 @@ function ActiveDot({ color, cx, cy }: { color: string; cx?: number; cy?: number 
   );
 }
 
-/** Series hues ride the BoardUI chart tokens, which this app re-tints to its
- * own Frosted Relay series colors in boardui.css. */
+/** Series hues ride the 图表组件层 chart tokens, which this app re-tints to its
+ * own Frosted Relay series colors in 样式表. */
 function seriesColor(index: number): string {
   return `var(--color-chart-${(index % SERIES_TONE_COUNT) + 1})`;
 }

@@ -1,0 +1,211 @@
+/* Runtime log — a single app-owned operational ledger. The renderer sees
+   parsed, closed events only; diagnostics remain solid and easy to scan. */
+.asb-panel.asb-runtime-logs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.asb-runtime-log-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+.asb-runtime-log-level-control {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-runtime-log-level-label {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: nowrap;
+}
+
+.asb-runtime-log-level-control .asb-select-trigger {
+  min-width: 108px;
+}
+
+.asb-runtime-log-notice {
+  margin: 0 0 var(--asb-space-3);
+  padding: var(--asb-space-2);
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+}
+
+.asb-runtime-log-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 180px;
+  padding: var(--asb-space-5);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+.asb-runtime-log-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-runtime-log-table {
+  min-width: 680px;
+}
+
+.asb-runtime-log-action {
+  font-weight: 600;
+}
+
+.asb-runtime-log-level {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-runtime-log-level.is-error {
+  border-color: var(--asb-danger);
+  color: var(--asb-danger);
+}
+
+.asb-runtime-log-level.is-debug {
+  border-color: var(--asb-action);
+  color: var(--asb-action);
+}
+
+.asb-runtime-log-level.is-warn {
+  border-color: var(--asb-warning);
+  color: var(--asb-warning);
+}
+
+/* Model usage is a local-session ledger, not a provider-quota surface. The
+   panel owns its narrow horizontal scroll region so its exact token columns
+   remain legible without widening the application workspace. */
+.asb-panel.asb-model-usage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.asb-model-usage-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+.asb-model-usage-controls .asb-segments {
+  margin: 0;
+}
+
+.asb-model-usage-snapshot {
+  margin: var(--asb-space-1) 0 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-model-usage-notice,
+.asb-model-usage-issues {
+  margin: 0 0 var(--asb-space-3);
+  padding: var(--asb-space-2);
+  font: var(--asb-text-label);
+}
+
+.asb-model-usage-notice {
+  color: var(--asb-danger);
+}
+
+.asb-model-usage-undated {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-model-usage-issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  padding-left: calc(var(--asb-space-2) + var(--asb-space-2));
+}
+
+.asb-model-usage-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  padding: var(--asb-space-5);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+.asb-model-usage-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-model-usage-content,
+.asb-model-usage-summary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.asb-model-usage-content {
+  gap: var(--asb-space-4);
+}
+
+.asb-model-usage-summary {
+  gap: var(--asb-space-2);
+}
+
+.asb-model-usage-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-5);
+  min-width: 0;
+}
+
+.asb-model-usage-trend,
+.asb-model-usage-distribution,
+.asb-model-usage-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+.asb-model-usage-detail h3 {
+  margin: 0;
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-model-usage-detail {
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-panel);
+  background: var(--asb-content-muted);
+}
+
+.asb-model-usage-table {
+  min-width: max-content;
+}
+
+

@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 describe("CloudBackupPanel", () => {
-  it("guides first-time Supabase setup with the required project-only credentials", async () => {
+  it("keeps the first-time Supabase guide collapsed until explicitly expanded", async () => {
     const user = userEvent.setup();
     render(
       <CloudBackupPanel
@@ -49,6 +49,14 @@ describe("CloudBackupPanel", () => {
     );
 
     const guide = screen.getByRole("region", { name: "从零配置 Supabase" });
+    const expand = within(guide).getByRole("button", { name: "展开配置教程" });
+    expect(expand).toHaveAttribute("aria-expanded", "false");
+    expect(expand).toHaveAttribute("aria-controls", "cloud-backup-guide-content");
+    expect(within(guide).queryByRole("list")).not.toBeInTheDocument();
+
+    await user.click(expand);
+    const collapse = within(guide).getByRole("button", { name: "收起配置教程" });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
     expect(within(guide).getAllByRole("listitem")).toHaveLength(6);
     expect(guide).toHaveTextContent("Project URL");
     expect(guide).toHaveTextContent("Publishable key");
@@ -62,8 +70,10 @@ describe("CloudBackupPanel", () => {
     expect(guide).toHaveTextContent("成功后会在当前窗口保留项目 Auth 密码");
     expect(guide).not.toHaveTextContent("成功后会清空项目 Auth 密码");
     expect(guide).toHaveTextContent("恢复必须使用同一条密码");
-    expect(screen.getByText(/完整的供应商档案（包括端点、模型和 API 密钥）/)).toBeInTheDocument();
-    expect(guide).toHaveTextContent("完整的供应商档案、通用配置和切换记录");
+    expect(
+      screen.getByText(/完整的供应商档案（包括端点、模型、API 格式、最大输出 token 和 API 密钥；认证请求头会按 API 格式自动推导）/),
+    ).toBeInTheDocument();
+    expect(guide).toHaveTextContent("完整的供应商档案（含 API 格式和最大输出 token）");
     expect(within(guide).getByRole("link", { name: "项目 Dashboard" })).toHaveAttribute(
       "href",
       "https://supabase.com/dashboard/project/example",
@@ -85,6 +95,13 @@ describe("CloudBackupPanel", () => {
     expect(openUrl).toHaveBeenCalledWith(
       "https://supabase.com/dashboard/project/example/auth/users",
     );
+
+    await user.click(collapse);
+    expect(within(guide).getByRole("button", { name: "展开配置教程" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(within(guide).queryByRole("list")).not.toBeInTheDocument();
   });
 
   it("copies the displayed initialization SQL", async () => {
@@ -212,6 +229,9 @@ describe("CloudBackupPanel", () => {
 
     expect(screen.getByRole("dialog", { name: "确认从云端恢复" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认恢复" })).toHaveClass("asb-btn-danger");
+    expect(screen.getByRole("dialog", { name: "确认从云端恢复" })).toHaveTextContent(
+      "若备份来自三协议升级前的版本，会先升级并重新加密保存到云端。",
+    );
   });
 
   it("leaves cloud actions unavailable until connection settings are saved", () => {

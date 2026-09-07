@@ -8,6 +8,7 @@
 
 mod display;
 pub mod executor;
+pub mod extensions;
 pub mod io;
 pub mod lockfile;
 pub mod pids;
@@ -18,6 +19,10 @@ pub use executor::{
     execute, execute_codex, read_codex_preview, read_preview, restore, restore_codex,
     sha256_digest, sha256_hex, CodexSwitchRequest, FilePreview, RecoveryOutcome, RestoreOutcome,
     SwitchError, SwitchOutcome, SwitchRequest,
+};
+pub use extensions::{
+    apply_extension_plan, journal_lock_targets, recover_pending, ExtensionApplyRequest,
+    ExtensionError, LibraryCommitError, RecoveryReport,
 };
 pub use io::{FsIo, SwitchIo};
 pub use lockfile::{

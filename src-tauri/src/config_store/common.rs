@@ -150,7 +150,7 @@ mod tests {
             store
                 .get_common_settings(AppKind::Claude)
                 .expect_err("partial file must fail"),
-            ProfileStoreError::Migration(_)
+            ProfileStoreError::Unsupported
         ));
 
         std::fs::write(
@@ -162,7 +162,7 @@ mod tests {
             store
                 .get_common_settings(AppKind::Claude)
                 .expect_err("host key must fail"),
-            ProfileStoreError::Migration(_)
+            ProfileStoreError::Unsupported
         ));
     }
 }

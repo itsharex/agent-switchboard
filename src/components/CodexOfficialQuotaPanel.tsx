@@ -1,5 +1,6 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { queryCodexOfficialQuota, type CodexOfficialQuota } from "../api/client";
+import { Input } from "./Input";
 import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
@@ -10,6 +11,11 @@ interface Props {
   id: string;
   profileId: string;
   profileName: string;
+  /** Persisted auto-refresh cadence in minutes; 0 keeps the panel manual-only. */
+  refreshIntervalMinutes: number;
+  /** Persists a committed interval on the owning profile; false restores the
+   * previous value. */
+  onSaveInterval: (minutes: number) => Promise<boolean>;
 }
 
 function statusCopy(quota: CodexOfficialQuota): string | null {
@@ -28,10 +34,15 @@ function statusCopy(quota: CodexOfficialQuota): string | null {
 }
 
 /** The official Codex quota has one native read-only path. It intentionally
- * does not consume provider usage-query settings, API keys, or endpoints. */
-export function CodexOfficialQuotaPanel({ id, profileId, profileName }: Props) {
-  /** The official read has no configurable query, so it stays manual-only:
-   * read on mount, then refresh by hand. */
+ * does not consume provider usage-query settings, API keys, or endpoints; its
+ * auto-refresh cadence is the profile's own quota interval. */
+export function CodexOfficialQuotaPanel({
+  id,
+  profileId,
+  profileName,
+  refreshIntervalMinutes,
+  onSaveInterval,
+}: Props) {
   const history = useUsageHistory({ kind: "official" });
   const query = useCallback(async (nextProfileId: string) => {
     const quota = await queryCodexOfficialQuota(nextProfileId);
@@ -40,10 +51,37 @@ export function CodexOfficialQuotaPanel({ id, profileId, profileName }: Props) {
   }, [history.refresh]);
   const { data: reading, querying, error: requestError, run } = useAutoQuery(
     profileId,
-    0,
+    refreshIntervalMinutes,
     query,
     "订阅额度读取失败",
   );
+
+  const [intervalText, setIntervalText] = useState(() => String(refreshIntervalMinutes));
+  const [savingInterval, setSavingInterval] = useState(false);
+  useEffect(() => {
+    setIntervalText(String(refreshIntervalMinutes));
+  }, [refreshIntervalMinutes]);
+
+  /** Commits the free-form interval; anything outside whole minutes within
+   * 0–1440, or a rejected save, reverts to the persisted value. Zero saves as
+   * the profile's absent interval, the single manual-only representation. */
+  const commitInterval = async () => {
+    const text = intervalText.trim();
+    if (!/^\d+$/.test(text) || Number(text) > 1440) {
+      setIntervalText(String(refreshIntervalMinutes));
+      return;
+    }
+    const minutes = Number(text);
+    if (minutes === refreshIntervalMinutes) return;
+    setSavingInterval(true);
+    try {
+      if (!(await onSaveInterval(minutes))) {
+        setIntervalText(String(refreshIntervalMinutes));
+      }
+    } finally {
+      setSavingInterval(false);
+    }
+  };
 
   const status = reading ? statusCopy(reading) : null;
   const showsWindows = (reading?.windows.length ?? 0) > 0;
@@ -66,6 +104,24 @@ export function CodexOfficialQuotaPanel({ id, profileId, profileName }: Props) {
           </button>
         </div>
       </header>
+
+      <label className="asb-field asb-usage-interval">
+        <span>自动刷新间隔（分钟，0 为关闭）</span>
+        <Input
+          type="number"
+          min={0}
+          max={1440}
+          step={1}
+          aria-label="自动刷新间隔（分钟，0 为关闭）"
+          value={intervalText}
+          disabled={savingInterval}
+          onChange={(event) => setIntervalText(event.target.value)}
+          onBlur={() => void commitInterval()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void commitInterval();
+          }}
+        />
+      </label>
 
       <OfficialQuotaTrend
         series={history.series}

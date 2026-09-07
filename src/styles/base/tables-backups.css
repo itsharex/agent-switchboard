@@ -1,0 +1,193 @@
+/* Data tables — markup is owned by the global Table component (§8); the
+   treatment replicates the Frosted Relay data table (user-directed
+   2026-09-02): a full-width muted label band, then airy borderless rows
+   carried by spacing alone, every column left-aligned. Rows lift on hover.
+   The table carries its own hairline border and control-radius corner frame
+   (2026-09-02 user directive); the band and the last row's hover surface
+   clip to those corners. Separate borders keep the sticky band pinned.
+   Scroll ownership stays with each module's own region (.asb-backups,
+   .asb-runtime-log-table-wrap). */
+.asb-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
+  font: var(--asb-text-body);
+}
+
+.asb-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  background: var(--asb-content-muted);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+  white-space: nowrap;
+}
+
+.asb-table td {
+  padding: var(--asb-space-3);
+  overflow-wrap: anywhere;
+}
+
+.asb-table-cell {
+  text-align: left;
+}
+
+.asb-table tbody tr:hover {
+  background: var(--asb-row-selected);
+}
+
+.asb-table th:first-child {
+  border-top-left-radius: calc(var(--asb-radius-control) - 1px);
+}
+
+.asb-table th:last-child {
+  border-top-right-radius: calc(var(--asb-radius-control) - 1px);
+}
+
+.asb-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: calc(var(--asb-radius-control) - 1px);
+}
+
+.asb-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: calc(var(--asb-radius-control) - 1px);
+}
+
+.asb-table .asb-btn-secondary {
+  min-width: 64px;
+}
+
+/* A data table never shares an edge with the trend block above it (user
+   directive 2026-09-04): the chart card carries no own margin (.bui-scope
+   reset), so the table keeps breathing room whatever spacing model its
+   parent uses — flex gap or plain block flow. */
+.asb-usage-history + .asb-table {
+  margin-top: var(--asb-space-3);
+}
+
+/* The local backup tab owns its scroll region. The page panel fills the
+   workspace, keeping the controls fixed while long backup histories scroll
+   inside the history module instead of extending .asb-main. */
+.asb-panel:has(.asb-backup-local) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.asb-backup-local {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.asb-backup-local > .asb-scope-note {
+  flex: none;
+}
+
+/* Local backup actions stay tied to their tab rather than the cloud flow. */
+.asb-backup-toolbar {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-backups {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+/* The cloud-backup controls fill their own tab and remain a clearly bounded
+   encrypted remote operation, never a second glass card. */
+.asb-cloud-backup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  margin: 0;
+}
+
+/* The setup sequence is documentation for a user-owned remote service, not a
+   second card: its ordered structure stays adjacent to the fields it explains. */
+.asb-cloud-backup-guide {
+  display: grid;
+  gap: var(--asb-space-2);
+  margin: 0;
+  padding: var(--asb-space-3) 0;
+  border-top: 1px solid var(--asb-hairline);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-cloud-backup-guide-title,
+.asb-cloud-backup-guide-list h4,
+.asb-cloud-backup-guide-list p {
+  margin: 0;
+}
+
+.asb-cloud-backup-guide-title {
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+}
+
+.asb-cloud-backup-guide-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-cloud-backup-guide-list {
+  display: grid;
+  gap: var(--asb-space-2);
+  margin: 0;
+  padding-left: var(--asb-space-4);
+}
+
+.asb-cloud-backup-guide-list li {
+  padding-left: var(--asb-space-1);
+}
+
+.asb-cloud-backup-guide-list li + li {
+  padding-top: var(--asb-space-2);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-cloud-backup-guide-list h4 {
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+}
+
+.asb-cloud-backup-guide-list p {
+  margin-top: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-cloud-backup-guide-list code {
+  color: var(--asb-text);
+  overflow-wrap: anywhere;
+}
+
+.asb-cloud-backup-guide-link {
+  color: var(--asb-action);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.asb-cloud-backup-guide-link:hover {
+  color: var(--asb-text);
+}
+
+.asb-cloud-backup-guide-link:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+

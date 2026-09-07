@@ -84,8 +84,8 @@ export function ProbeFeedback({ id, className, result, error }: FeedbackProps) {
   );
 }
 
-/** Manual reachability check for the endpoint being edited, ported from the
- * CC Switch pattern: any HTTP answer proves the address is reachable (graded
+/** Manual reachability check for the endpoint being edited: any HTTP answer
+ * proves the address is reachable (graded
  * slow past the latency threshold), only network-level failures report as
  * unreachable. The probe sends no model request and carries no credential.
  * The button toggles: with the outcome on screen the next click collapses it,

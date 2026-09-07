@@ -1,0 +1,454 @@
+/* Forms */
+.asb-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
+
+.asb-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+}
+
+/* A credential stays masked until the user explicitly reveals it. */
+.asb-secret-control {
+  display: flex;
+  align-items: stretch;
+  gap: var(--asb-space-2);
+}
+
+.asb-secret-control .asb-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.asb-secret-control .asb-btn-secondary {
+  gap: var(--asb-space-1);
+}
+
+/* A model mapping field: the ID input with the quick picker beside it. */
+.asb-input-with-picker {
+  display: flex;
+  align-items: stretch;
+  gap: var(--asb-space-2);
+}
+
+.asb-input-with-picker .asb-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.asb-input-with-picker .asb-model-picker {
+  flex: none;
+}
+
+/* The model field keeps its model ID input on the left with the quick picker
+   and endpoint/model-list actions beside it; probe feedback wraps to a
+   full-width line below. Flex, not grid: definite-row grid items would claim
+   the 1fr track and squeeze every button row after it. */
+.asb-model-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  align-items: stretch;
+}
+
+.asb-model-control > .asb-input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.asb-model-control > .asb-model-picker {
+  flex: none;
+}
+
+/* The inline 1M flag sits beside its model at natural width, vertically
+   centered against the input. */
+.asb-model-control > .asb-checkbox,
+.asb-input-with-picker > .asb-checkbox {
+  flex: none;
+  align-self: center;
+}
+
+.asb-model-actions {
+  display: contents;
+}
+
+.asb-model-actions > button {
+  flex: none;
+}
+
+.asb-input {
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-canvas);
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  transition:
+    border-color var(--asb-motion-press) var(--asb-easing),
+    box-shadow var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-input::placeholder {
+  color: var(--asb-text-muted);
+}
+
+.asb-input:hover:not(:disabled) {
+  border-color: var(--asb-action);
+}
+
+.asb-input:focus-visible {
+  outline: none;
+  border-color: var(--asb-action);
+  box-shadow: var(--asb-focus-ring);
+}
+
+.asb-input:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Generic dropdown picker (Radix portal popover; Frosted Relay structure,
+   Frosted Relay tokens). The trigger shares the asb-input field look. */
+.asb-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-canvas);
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-select-trigger:hover:not(:disabled) {
+  border-color: var(--asb-action);
+}
+
+.asb-select-trigger:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.asb-select-trigger[data-placeholder] {
+  color: var(--asb-text-muted);
+}
+
+.asb-select-trigger[data-placeholder] .asb-select-chevron {
+  color: var(--asb-text);
+}
+
+.asb-select-chevron {
+  display: flex;
+  flex: none;
+  color: var(--asb-text-muted);
+}
+
+.asb-select-chevron svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.asb-select-content {
+  z-index: 60;
+  max-height: min(24rem, var(--radix-select-content-available-height));
+  overflow: hidden;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-menu);
+  color: var(--asb-text);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+}
+
+.asb-select-viewport {
+  display: flex;
+  flex-direction: column;
+  min-width: var(--radix-select-trigger-width);
+  padding: var(--asb-space-1);
+}
+
+.asb-select-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-1) var(--asb-space-4) var(--asb-space-1) var(--asb-space-2);
+  border-radius: var(--asb-radius-action);
+  font: var(--asb-text-body);
+  color: var(--asb-text);
+  cursor: pointer;
+  outline: none;
+}
+
+.asb-select-item[data-highlighted] {
+  background: var(--asb-row-selected);
+}
+
+.asb-select-item[data-disabled] {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.asb-select-check {
+  position: absolute;
+  top: 50%;
+  right: var(--asb-space-1);
+  display: flex;
+  transform: translateY(-50%);
+  color: var(--asb-text);
+}
+
+.asb-select-check svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.asb-select-scroll {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--asb-space-5);
+  color: var(--asb-text-muted);
+  cursor: default;
+}
+
+.asb-select-scroll svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+/* Interface-font picker: select-language trigger plus a searchable menu whose
+   every option previews its own family. Same material as the select menu.
+   The model picker shares this menu material via the combined selectors. */
+.asb-font-picker {
+  position: relative;
+}
+
+.asb-font-trigger {
+  width: 14rem;
+}
+
+.asb-font-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-font-menu,
+.asb-model-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, calc(100vw - 3rem));
+  overflow: hidden;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-menu);
+  color: var(--asb-text);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+}
+
+.asb-font-search,
+.asb-model-search {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-touch-target);
+  margin: var(--asb-space-1);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-canvas);
+  transition: border-color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-font-search:focus-within,
+.asb-model-search:focus-within {
+  border-color: var(--asb-action);
+}
+
+.asb-font-search svg,
+.asb-model-search svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--asb-text-muted);
+}
+
+.asb-font-search input,
+.asb-model-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+  outline: none;
+  /* The wrapping search label draws the focus border via :focus-within;
+     the global :focus-visible ring on the bare input would duplicate it. */
+  box-shadow: none;
+}
+
+.asb-font-search input::placeholder,
+.asb-model-search input::placeholder {
+  color: var(--asb-text-muted);
+}
+
+.asb-font-options,
+.asb-model-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 18rem;
+  margin: 0 var(--asb-space-1) var(--asb-space-1);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-font-option,
+.asb-model-option {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: none;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  color: var(--asb-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.asb-font-option:hover,
+.asb-font-option:focus-visible,
+.asb-model-option:hover,
+.asb-model-option:focus-visible {
+  background: var(--asb-row-selected);
+}
+
+.asb-font-option-name,
+.asb-model-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-font-option-sample {
+  flex: none;
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+/* Fixed trailing slot on every row: samples line up and the current item's
+   check does not shift the sample column. */
+.asb-font-check,
+.asb-model-check {
+  flex: none;
+  display: flex;
+  width: 14px;
+  height: 14px;
+  color: var(--asb-text);
+}
+
+.asb-font-check svg,
+.asb-model-check svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.asb-font-empty,
+.asb-model-empty {
+  padding: var(--asb-space-2);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+/* Quick model picker: the same searchable-menu material as the font picker,
+   fed by the provider's fetched model list and grouped by vendor. */
+.asb-model-picker {
+  position: relative;
+}
+
+.asb-model-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-canvas);
+  color: var(--asb-text-muted);
+  cursor: pointer;
+  transition: background var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-model-trigger:hover:not(:disabled),
+.asb-model-trigger[aria-expanded="true"] {
+  background: var(--asb-content-muted);
+  color: var(--asb-text);
+}
+
+.asb-model-trigger:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.asb-model-group {
+  margin: 0;
+  padding: var(--asb-space-2) var(--asb-space-2) var(--asb-space-1);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+/* Dedicated provider edit view — the editor replaces the page content and a
+   back affordance returns to the list. */
+.asb-edit-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
+
+.asb-edit-header {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+/* The shared panel title's bottom margin would offset the text against the
+   centered back button; the flex header owns the spacing. */
+.asb-edit-header .asb-panel-title {
+  margin-bottom: 0;
+}
+
+.asb-edit-panel {
+  flex: 1;
+}
+

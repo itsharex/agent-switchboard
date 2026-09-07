@@ -1,27 +1,33 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchProviderModels } from "../api/client";
+import { fetchProviderModels, getGatewayStatus } from "../api/client";
 import type {
   AppKind,
-  CodexModelSettings,
-  ClaudeModelSettings,
-  ModelOptions,
   ProviderDraft,
   ProviderModel,
   ProviderProfile,
+  UpstreamProtocol,
 } from "../api/client";
 import { clientName } from "../lib/client-name";
-import { Checkbox } from "./Checkbox";
+import { NATIVE_PROTOCOL, PROTOCOL_LABELS } from "../lib/protocol";
 import { ClientLogo } from "./ClientLogo";
 import { EyeOffIcon, PreviewIcon } from "./icons";
 import { Input } from "./Input";
-import { ModelPicker } from "./ModelPicker";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
-import { ProbePanel } from "./ProbePanel";
 import { RadioOption } from "./RadioOption";
 import { Button } from "./Button";
 import { Select } from "./Select";
 import { Textarea } from "./Textarea";
 import { normalizeUsageQuery } from "../lib/usage-query";
+import { ClaudeModelMapping } from "./provider-editor/ClaudeModelMapping";
+import { MainModelField } from "./provider-editor/MainModelField";
+import {
+  PROTOCOL_AUTHENTICATION_NOTES,
+  PROTOCOL_NOTES,
+  codexOptionsAreEmpty,
+  defaultConnection,
+  draftFrom,
+  optional,
+} from "./provider-editor/draft";
 
 interface Props {
   profile: ProviderProfile | null;
@@ -43,74 +49,6 @@ interface Props {
 // Reasoning effort, summary, and verbosity live on the general-settings
 // page, not on profiles.
 
-const CONTEXT_WINDOW_1M = 1_000_000;
-
-function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): ProviderDraft {
-  if (profile) {
-    return {
-      app: profile.app,
-      routeMode: profile.routeMode,
-      name: profile.name,
-      model: profile.model,
-      baseUrl: profile.baseUrl,
-      apiKey: profile.apiKey,
-      modelOptions: profile.modelOptions,
-      notes: profile.notes ?? null,
-      websiteUrl: profile.websiteUrl,
-      usageQuery: profile.usageQuery ?? null,
-    };
-  }
-  return {
-    app: initialApp,
-    routeMode: "custom",
-    name: "",
-    model: null,
-    baseUrl: null,
-    apiKey: "",
-    modelOptions: null,
-    notes: null,
-    websiteUrl: null,
-    usageQuery: null,
-  };
-}
-
-function optional(value: string): string | null {
-  const normalized = value.trim();
-  return normalized || null;
-}
-
-function codexOptions(
-  current: ModelOptions | null,
-  patch: Partial<CodexModelSettings>,
-): ModelOptions {
-  const base: CodexModelSettings =
-    current?.kind === "codex" ? current : { contextWindow: null };
-  return { kind: "codex", ...base, ...patch };
-}
-
-function claudeOptions(
-  current: ModelOptions | null,
-  patch: Partial<ClaudeModelSettings>,
-): ModelOptions {
-  const base: ClaudeModelSettings =
-    current?.kind === "claude"
-      ? current
-      : {
-          primaryOneM: false,
-          haikuModel: null,
-          sonnetModel: null,
-          sonnetOneM: false,
-          opusModel: null,
-          opusOneM: false,
-          availableModels: null,
-        };
-  return { kind: "claude", ...base, ...patch };
-}
-
-function codexOptionsAreEmpty(options: ModelOptions | null): boolean {
-  return !options || (options.kind === "codex" && options.contextWindow === null);
-}
-
 /** The local profile editor; it never edits client configuration directly. */
 export function ProviderEditor({
   profile,
@@ -127,11 +65,19 @@ export function ProviderEditor({
   const [models, setModels] = useState<ProviderModel[] | null>(null);
   const [modelsBusy, setModelsBusy] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [gatewayBaseUrl, setGatewayBaseUrl] = useState<string | null>(null);
+  const [gatewayAddressError, setGatewayAddressError] = useState(false);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   /** True once the official login panel reported a completed login. */
   const [loginDone, setLoginDone] = useState(false);
   const modelsVersion = useRef(0);
   const baseUrl = draft.baseUrl?.trim() ?? "";
+  const codex = draft.app === "codex";
+  const official = draft.routeMode === "official";
+  const routesThroughGateway =
+    !official &&
+    draft.upstreamProtocol !== null &&
+    draft.upstreamProtocol !== NATIVE_PROTOCOL[draft.app];
 
   useEffect(() => {
     setDraft(draftFrom(profile, initialApp));
@@ -144,15 +90,46 @@ export function ProviderEditor({
     setModels(null);
     setModelsError(null);
     setModelsBusy(false);
-  }, [baseUrl]);
+  }, [baseUrl, draft.upstreamProtocol]);
+
+  useEffect(() => {
+    if (!routesThroughGateway) {
+      setGatewayBaseUrl(null);
+      setGatewayAddressError(false);
+      return;
+    }
+
+    let active = true;
+    setGatewayBaseUrl(null);
+    setGatewayAddressError(false);
+    void (async () => {
+      try {
+        const status = await getGatewayStatus();
+        if (active) setGatewayBaseUrl(status.baseUrl);
+      } catch {
+        if (active) setGatewayAddressError(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [routesThroughGateway]);
 
   const fetchModels = async () => {
-    if (modelsBusy || !baseUrl) return;
+    if (
+      modelsBusy ||
+      !baseUrl ||
+      !draft.upstreamProtocol
+    ) return;
     const version = modelsVersion.current;
     setModelsBusy(true);
     setModelsError(null);
     try {
-      const fetched = await fetchProviderModels(baseUrl, draft.apiKey);
+      const fetched = await fetchProviderModels(
+        baseUrl,
+        draft.apiKey,
+        draft.upstreamProtocol,
+      );
       if (modelsVersion.current === version) setModels(fetched);
     } catch (caught) {
       if (modelsVersion.current === version) {
@@ -163,10 +140,13 @@ export function ProviderEditor({
     }
   };
 
-  const codex = draft.app === "codex";
-  const official = draft.routeMode === "official";
   const codexSettings = draft.modelOptions?.kind === "codex" ? draft.modelOptions : null;
   const claudeSettings = draft.modelOptions?.kind === "claude" ? draft.modelOptions : null;
+  const gatewayRouteWarning = gatewayBaseUrl
+    ? `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：切换到该供应商时，客户端的服务地址会被改写为本机协议网关 ${gatewayBaseUrl}（仅监听本机），请求由网关转换为该协议后转发到所填服务地址；请保持本应用运行，退出前先切换到直连或官方登录。`
+    : gatewayAddressError
+      ? `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：此路径需要本机协议网关转换，但无法读取实际监听地址。请在“网关”页确认网关状态后再切换。`
+      : `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：此路径需要本机协议网关转换，正在读取实际监听地址。`;
 
   return (
     <form
@@ -220,7 +200,11 @@ export function ProviderEditor({
               disabled={busy}
               label="自定义 API 中继"
               onChange={() => {
-                setDraft((current) => ({ ...current, routeMode: "custom" }));
+                setDraft((current) => ({
+                  ...current,
+                  routeMode: "custom",
+                  ...defaultConnection(current.app),
+                }));
                 setLoginDone(false);
               }}
             />
@@ -244,8 +228,11 @@ export function ProviderEditor({
                   model: null,
                   baseUrl: null,
                   apiKey: "",
+                  upstreamProtocol: null,
+                  maxOutputTokens: null,
                   modelOptions: null,
                   usageQuery: null,
+                  officialQuotaRefreshIntervalMinutes: null,
                 }));
                 setLoginDone(false);
               }}
@@ -284,6 +271,80 @@ export function ProviderEditor({
           onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
         />
       </label>
+      {!official && (
+      <label className="asb-field">
+        <span>API 格式</span>
+        <Select
+          ariaLabel="API 格式"
+          value={draft.upstreamProtocol}
+          options={[
+            { value: "anthropicMessages", label: "Anthropic Messages (/v1/messages)" },
+            { value: "chatCompletions", label: "Chat Completions (/v1/chat/completions)" },
+            { value: "responses", label: "Responses (/v1/responses)" },
+          ]}
+          disabled={busy}
+          onChange={(value) => {
+            const upstreamProtocol = value as UpstreamProtocol;
+            setDraft((current) => ({
+              ...current,
+              upstreamProtocol,
+              maxOutputTokens:
+                current.app === "codex" && upstreamProtocol === "anthropicMessages"
+                  ? (current.maxOutputTokens ?? 8192)
+                  : null,
+            }));
+          }}
+        />
+        {draft.upstreamProtocol && (
+          <>
+            <p className="asb-scope-note">{PROTOCOL_NOTES[draft.upstreamProtocol]}</p>
+            <p className="asb-scope-note">
+              {PROTOCOL_AUTHENTICATION_NOTES[draft.upstreamProtocol]}
+            </p>
+          </>
+        )}
+        {draft.upstreamProtocol === NATIVE_PROTOCOL[draft.app] ? (
+          <p className="asb-scope-note">
+            {`与 ${clientName(draft.app)} 原生协议一致，切换后客户端直连所填服务地址。`}
+          </p>
+        ) : (
+          <p className="asb-scope-note asb-warn-text">
+            {gatewayRouteWarning}
+          </p>
+        )}
+        {codex && draft.upstreamProtocol !== "responses" && (
+          <p className="asb-scope-note asb-warn-text">
+            {`此路由下 Codex 的网页搜索会关闭，client_metadata、prompt_cache_key、reasoning.summary=auto 与 reasoning.encrypted_content 也不会转发到上游；需要这些能力请使用 Responses 上游。`}
+          </p>
+        )}
+      </label>
+      )}
+      {!official && draft.app === "codex" && draft.upstreamProtocol === "anthropicMessages" && (
+      <label className="asb-field">
+        <span>最大输出 Token</span>
+        <Input
+          aria-label="最大输出 Token"
+          type="number"
+          min="1"
+          step="1"
+          required
+          value={draft.maxOutputTokens?.toString() ?? ""}
+          disabled={busy}
+          onChange={(event) => {
+            const value = event.target.value.trim();
+            const parsed = Number(value);
+            setDraft((current) => ({
+              ...current,
+              maxOutputTokens:
+                value && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null,
+            }));
+          }}
+        />
+        <p className="asb-scope-note">
+          Codex 未发送单次上限时，网关将使用此值构造 Anthropic 请求。
+        </p>
+      </label>
+      )}
       {!official && (
       <div className="asb-field">
         <span>服务地址</span>
@@ -324,91 +385,21 @@ export function ProviderEditor({
       </div>
       )}
       {!official && (
-      <div className="asb-field">
-        <span>主模型</span>
-        <div className="asb-model-control">
-          <Input
-            aria-label="主模型"
-            value={draft.model ?? ""}
-            disabled={busy}
-            placeholder="（可选）"
-            onChange={(event) =>
-              setDraft((current) => {
-                const model = event.target.value;
-                if (
-                  !codex &&
-                  !model.trim() &&
-                  current.modelOptions?.kind === "claude"
-                ) {
-                  return {
-                    ...current,
-                    model,
-                    modelOptions: { ...current.modelOptions, primaryOneM: false },
-                  };
-                }
-                return { ...current, model };
-              })
-            }
-          />
-          {models && (
-            <ModelPicker
-              models={models}
-              current={draft.model}
-              ariaLabel="选择模型"
-              disabled={busy}
-              onSelect={(model) => setDraft((current) => ({ ...current, model }))}
-            />
-          )}
-          {codex ? (
-            <Checkbox
-              label="1M"
-              ariaLabel="启用 1M 上下文窗口"
-              checked={codexSettings?.contextWindow === CONTEXT_WINDOW_1M}
-              disabled={busy}
-              onChange={(checked) =>
-                setDraft((current) => ({
-                  ...current,
-                  modelOptions: codexOptions(current.modelOptions, {
-                    contextWindow: checked ? CONTEXT_WINDOW_1M : null,
-                  }),
-                }))
-              }
-            />
-          ) : (
-            <Checkbox
-              label="1M"
-              ariaLabel="主模型启用 1M 上下文"
-              checked={claudeSettings?.primaryOneM ?? false}
-              disabled={busy || !draft.model?.trim()}
-              onChange={(enabled) =>
-                setDraft((current) => ({
-                  ...current,
-                  modelOptions: claudeOptions(current.modelOptions, { primaryOneM: enabled }),
-                }))
-              }
-            />
-          )}
-          <div className="asb-model-actions">
-            <ProbePanel url={draft.baseUrl?.trim() || null} />
-            <Button
-              variant="secondary"
-              disabled={busy || modelsBusy || !baseUrl}
-              onClick={() => void fetchModels()}
-            >
-              {modelsBusy ? "获取中…" : "获取模型"}
-            </Button>
-          </div>
-        </div>
-        {userConfigModel && (
-          <p className="asb-scope-note">当前用户级配置模型：{userConfigModel}</p>
-        )}
-        {userConfigWarnings.map((warning) => (
-          <p key={warning} className="asb-scope-note asb-warn-text">
-            {warning}
-          </p>
-        ))}
-        {modelsError && <span className="asb-warn-text">{modelsError}</span>}
-      </div>
+      <MainModelField
+        draft={draft}
+        busy={busy}
+        baseUrl={baseUrl}
+        codex={codex}
+        codexSettings={codexSettings}
+        claudeSettings={claudeSettings}
+        models={models}
+        modelsBusy={modelsBusy}
+        modelsError={modelsError}
+        userConfigModel={userConfigModel}
+        userConfigWarnings={userConfigWarnings}
+        fetchModels={fetchModels}
+        setDraft={setDraft}
+      />
       )}
 
       {official && (
@@ -419,163 +410,12 @@ export function ProviderEditor({
       )}
 
       {!official && !codex && (
-        <fieldset className="asb-fieldset">
-          <legend>模型映射</legend>
-          <div className="asb-field">
-            <span>Haiku 档</span>
-            <div className="asb-input-with-picker">
-              <Input
-                code
-                aria-label="Haiku 档"
-                value={claudeSettings?.haikuModel ?? ""}
-                disabled={busy}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    modelOptions: claudeOptions(current.modelOptions, {
-                      haikuModel: optional(event.target.value),
-                    }),
-                  }))
-                }
-              />
-              {models && (
-                <ModelPicker
-                  models={models}
-                  current={claudeSettings?.haikuModel ?? null}
-                  ariaLabel="选择 Haiku 档模型"
-                  disabled={busy}
-                  onSelect={(haikuModel) =>
-                    setDraft((current) => ({
-                      ...current,
-                      modelOptions: claudeOptions(current.modelOptions, { haikuModel }),
-                    }))
-                  }
-                />
-              )}
-            </div>
-          </div>
-          <div className="asb-field">
-            <span>Sonnet 档</span>
-            <div className="asb-input-with-picker">
-              <Input
-                code
-                aria-label="Sonnet 档"
-                value={claudeSettings?.sonnetModel ?? ""}
-                disabled={busy}
-                onChange={(event) =>
-                  setDraft((current) => {
-                    const sonnetModel = optional(event.target.value);
-                    return {
-                      ...current,
-                      modelOptions: claudeOptions(current.modelOptions, {
-                        sonnetModel,
-                        ...(sonnetModel ? {} : { sonnetOneM: false }),
-                      }),
-                    };
-                  })
-                }
-              />
-              {models && (
-                <ModelPicker
-                  models={models}
-                  current={claudeSettings?.sonnetModel ?? null}
-                  ariaLabel="选择 Sonnet 档模型"
-                  disabled={busy}
-                  onSelect={(sonnetModel) =>
-                    setDraft((current) => ({
-                      ...current,
-                      modelOptions: claudeOptions(current.modelOptions, { sonnetModel }),
-                    }))
-                  }
-                />
-              )}
-              <Checkbox
-                label="1M"
-                ariaLabel="Sonnet 档启用 1M 上下文"
-                checked={claudeSettings?.sonnetOneM ?? false}
-                disabled={busy || !claudeSettings?.sonnetModel?.trim()}
-                onChange={(enabled) =>
-                  setDraft((current) => ({
-                    ...current,
-                    modelOptions: claudeOptions(current.modelOptions, { sonnetOneM: enabled }),
-                  }))
-                }
-              />
-            </div>
-          </div>
-          <div className="asb-field">
-            <span>Opus 档</span>
-            <div className="asb-input-with-picker">
-              <Input
-                code
-                aria-label="Opus 档"
-                value={claudeSettings?.opusModel ?? ""}
-                disabled={busy}
-                onChange={(event) =>
-                  setDraft((current) => {
-                    const opusModel = optional(event.target.value);
-                    return {
-                      ...current,
-                      modelOptions: claudeOptions(current.modelOptions, {
-                        opusModel,
-                        ...(opusModel ? {} : { opusOneM: false }),
-                      }),
-                    };
-                  })
-                }
-              />
-              {models && (
-                <ModelPicker
-                  models={models}
-                  current={claudeSettings?.opusModel ?? null}
-                  ariaLabel="选择 Opus 档模型"
-                  disabled={busy}
-                  onSelect={(opusModel) =>
-                    setDraft((current) => ({
-                      ...current,
-                      modelOptions: claudeOptions(current.modelOptions, { opusModel }),
-                    }))
-                  }
-                />
-              )}
-              <Checkbox
-                label="1M"
-                ariaLabel="Opus 档启用 1M 上下文"
-                checked={claudeSettings?.opusOneM ?? false}
-                disabled={busy || !claudeSettings?.opusModel?.trim()}
-                onChange={(enabled) =>
-                  setDraft((current) => ({
-                    ...current,
-                    modelOptions: claudeOptions(current.modelOptions, { opusOneM: enabled }),
-                  }))
-                }
-              />
-            </div>
-          </div>
-          <label className="asb-field">
-            <span>可选模型列表（每行一个）</span>
-            <Textarea
-              code
-              rows={3}
-              value={(claudeSettings?.availableModels ?? []).join("\n")}
-              disabled={busy}
-              onChange={(event) =>
-                setDraft((current) => {
-                  const lines = event.target.value
-                    .split("\n")
-                    .map((line) => line.trim())
-                    .filter(Boolean);
-                  return {
-                    ...current,
-                    modelOptions: claudeOptions(current.modelOptions, {
-                      availableModels: lines.length > 0 ? lines : null,
-                    }),
-                  };
-                })
-              }
-            />
-          </label>
-        </fieldset>
+        <ClaudeModelMapping
+          busy={busy}
+          models={models}
+          claudeSettings={claudeSettings}
+          setDraft={setDraft}
+        />
       )}
 
       <div className="asb-form-actions">

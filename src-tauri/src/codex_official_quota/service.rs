@@ -1,0 +1,268 @@
+use asb_core::contracts::{CodexOfficialQuota, CodexOfficialQuotaStatus, CodexOfficialQuotaWindow};
+use asb_switch::sha256_hex;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::{Mutex, OnceLock};
+
+const CODEX_USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+#[derive(Clone)]
+pub(super) struct CachedQuota {
+    pub(super) account_marker: String,
+    pub(super) quota: CodexOfficialQuota,
+}
+
+static CACHE: OnceLock<Mutex<HashMap<String, CachedQuota>>> = OnceLock::new();
+
+pub(super) fn cache() -> &'static Mutex<HashMap<String, CachedQuota>> {
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[derive(Deserialize)]
+struct AuthFile {
+    auth_mode: Option<String>,
+    tokens: Option<AuthTokens>,
+}
+
+#[derive(Deserialize)]
+struct AuthTokens {
+    access_token: Option<String>,
+    pub(super) account_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UsageResponse {
+    rate_limit: Option<RateLimit>,
+}
+
+#[derive(Deserialize)]
+struct RateLimit {
+    primary_window: Option<RateLimitWindow>,
+    secondary_window: Option<RateLimitWindow>,
+}
+
+#[derive(Deserialize)]
+struct RateLimitWindow {
+    used_percent: Option<f64>,
+    limit_window_seconds: Option<i64>,
+    reset_at: Option<i64>,
+}
+
+pub(super) struct AuthCredentials {
+    pub(super) access_token: String,
+    pub(super) account_id: Option<String>,
+}
+
+/// Queries the existing Codex login for one official profile and returns the
+/// quota together with the login's account marker. A failed read preserves an
+/// earlier in-process result for the same profile and marks it stale; no
+/// snapshot is ever written to disk.
+pub(crate) fn query(profile_id: &str, auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
+    let (fresh, marker) = fetch(auth_path);
+    if fresh.status == CodexOfficialQuotaStatus::Available {
+        store_last_success(profile_id, marker.as_deref(), &fresh);
+        return (fresh, marker);
+    }
+
+    let previous = cache()
+        .lock()
+        .ok()
+        .and_then(|entries| matching_last_success(&entries, profile_id, marker.as_deref()));
+    (retain_last_success(fresh, previous.as_ref()), marker)
+}
+
+fn store_last_success(profile_id: &str, marker: Option<&str>, quota: &CodexOfficialQuota) {
+    let Some(marker) = marker else {
+        return;
+    };
+    if let Ok(mut entries) = cache().lock() {
+        entries.insert(
+            profile_id.to_string(),
+            CachedQuota {
+                account_marker: marker.to_string(),
+                quota: quota.clone(),
+            },
+        );
+    }
+}
+
+pub(super) fn matching_last_success(
+    entries: &HashMap<String, CachedQuota>,
+    profile_id: &str,
+    marker: Option<&str>,
+) -> Option<CodexOfficialQuota> {
+    let marker = marker?;
+    entries
+        .get(profile_id)
+        .filter(|entry| entry.account_marker == marker)
+        .map(|entry| entry.quota.clone())
+}
+
+/// One direct read of the machine's Codex login for the overview, outside any
+/// profile. The caller owns display and error handling, so failed reads are
+/// returned as statuses instead of being retained in process.
+pub(crate) fn query_login(auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
+    fetch(auth_path)
+}
+
+/// Removes a profile's last successful official-quota result after deletion
+/// or profile reset.
+pub(crate) fn invalidate(profile_id: &str) {
+    if let Ok(mut entries) = cache().lock() {
+        entries.remove(profile_id);
+    }
+}
+
+/// Drops all in-memory official quota reads with the profile store.
+pub(crate) fn clear() {
+    if let Ok(mut entries) = cache().lock() {
+        entries.clear();
+    }
+}
+
+pub(super) fn fetch(auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
+    let credentials = match std::fs::read_to_string(auth_path)
+        .ok()
+        .and_then(|text| parse_credentials(&text))
+    {
+        Some(credentials) => credentials,
+        None => return (empty(CodexOfficialQuotaStatus::SignInRequired), None),
+    };
+
+    let marker = account_marker(credentials.account_id.as_deref());
+    let mut headers = format!(
+        "Authorization: Bearer {}\r\nAccept: application/json\r\n",
+        credentials.access_token
+    );
+    if let Some(account_id) = credentials.account_id {
+        headers.push_str(&format!("ChatGPT-Account-Id: {account_id}\r\n"));
+    }
+
+    let quota = match crate::probe::http_get(CODEX_USAGE_URL, &headers) {
+        Ok((status, body)) => quota_from_http_response(status, &body, utc_now()),
+        Err(_) => empty(CodexOfficialQuotaStatus::Unavailable),
+    };
+    (quota, marker)
+}
+
+pub(super) fn parse_credentials(content: &str) -> Option<AuthCredentials> {
+    let auth: AuthFile = serde_json::from_str(content).ok()?;
+    if auth.auth_mode.as_deref() != Some("chatgpt") {
+        return None;
+    }
+    let tokens = auth.tokens?;
+    let access_token = tokens.access_token?.trim().to_string();
+    if access_token.is_empty() || has_header_control_characters(&access_token) {
+        return None;
+    }
+    let account_id = tokens.account_id.and_then(|value| {
+        let value = value.trim().to_string();
+        (!value.is_empty() && !has_header_control_characters(&value)).then_some(value)
+    });
+    Some(AuthCredentials {
+        access_token,
+        account_id,
+    })
+}
+
+/// A short non-reversible digest identifying the logged-in account. It only
+/// ever lives inside the local baseline file, so a re-login to a different
+/// account can be distinguished from a quota reset.
+pub(super) fn account_marker(account_id: Option<&str>) -> Option<String> {
+    let account_id = account_id?;
+    Some(sha256_hex(account_id)[..16].to_string())
+}
+
+fn has_header_control_characters(value: &str) -> bool {
+    value
+        .chars()
+        .any(|character| character == '\r' || character == '\n' || character == '\0')
+}
+
+pub(super) fn quota_from_http_response(status: u16, body: &str, at: String) -> CodexOfficialQuota {
+    match status {
+        200..=299 => quota_from_body(body, at)
+            .unwrap_or_else(|| empty(CodexOfficialQuotaStatus::Unavailable)),
+        401 | 403 => empty(CodexOfficialQuotaStatus::ReauthenticationRequired),
+        _ => empty(CodexOfficialQuotaStatus::Unavailable),
+    }
+}
+
+fn quota_from_body(body: &str, at: String) -> Option<CodexOfficialQuota> {
+    let response: UsageResponse = serde_json::from_str(body).ok()?;
+    let rate_limit = response.rate_limit?;
+    let windows = [rate_limit.primary_window, rate_limit.secondary_window]
+        .into_iter()
+        .flatten()
+        .filter_map(normalize_window)
+        .collect::<Vec<_>>();
+    (!windows.is_empty()).then_some(CodexOfficialQuota {
+        status: CodexOfficialQuotaStatus::Available,
+        windows,
+        at: Some(at),
+        stale: false,
+        last_reset: None,
+    })
+}
+
+fn normalize_window(window: RateLimitWindow) -> Option<CodexOfficialQuotaWindow> {
+    let used_percent = window.used_percent?;
+    if !used_percent.is_finite() || !(0.0..=100.0).contains(&used_percent) {
+        return None;
+    }
+    let seconds = window.limit_window_seconds?;
+    if seconds <= 0 {
+        return None;
+    }
+    Some(CodexOfficialQuotaWindow {
+        label: quota_window_label(seconds),
+        used_percent,
+        resets_at: window.reset_at.and_then(unix_timestamp_to_rfc3339),
+    })
+}
+
+pub(super) fn quota_window_label(seconds: i64) -> String {
+    match seconds {
+        18_000 => "5 小时".to_string(),
+        604_800 => "7 天".to_string(),
+        2_592_000 => "30 天".to_string(),
+        seconds if seconds % 86_400 == 0 => format!("{} 天", seconds / 86_400),
+        seconds if seconds % 3_600 == 0 => format!("{} 小时", seconds / 3_600),
+        seconds => format!("{} 分钟", seconds / 60),
+    }
+}
+
+fn unix_timestamp_to_rfc3339(timestamp: i64) -> Option<String> {
+    chrono::DateTime::from_timestamp(timestamp, 0)
+        .map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+}
+
+fn utc_now() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+pub(super) fn empty(status: CodexOfficialQuotaStatus) -> CodexOfficialQuota {
+    CodexOfficialQuota {
+        status,
+        windows: Vec::new(),
+        at: None,
+        stale: false,
+        last_reset: None,
+    }
+}
+
+pub(super) fn retain_last_success(
+    failure: CodexOfficialQuota,
+    previous: Option<&CodexOfficialQuota>,
+) -> CodexOfficialQuota {
+    previous
+        .filter(|quota| quota.status == CodexOfficialQuotaStatus::Available)
+        .map(|quota| CodexOfficialQuota {
+            status: failure.status,
+            windows: quota.windows.clone(),
+            at: quota.at.clone(),
+            stale: true,
+            last_reset: None,
+        })
+        .unwrap_or(failure)
+}

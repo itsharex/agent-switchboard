@@ -7,6 +7,20 @@ import { ProviderEditor as ProviderEditorComponent } from "./ProviderEditor";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
+function gatewayStatus(port: number) {
+  return {
+    port,
+    baseUrl: `http://127.0.0.1:${port}`,
+    routes: [],
+    metrics: {
+      startedAtMs: 0,
+      totalRequests: 0,
+      failedRequests: 0,
+      samples: [],
+    },
+  };
+}
+
 function ProviderEditor({
   userConfigWarnings = [],
   onOpenOfficial = vi.fn(),
@@ -123,6 +137,8 @@ describe("ProviderEditor", () => {
           model: null,
           baseUrl: "https://relay.example/v1",
           apiKey: "sk-test",
+          upstreamProtocol: "responses",
+          maxOutputTokens: null,
           modelOptions: null,
           websiteUrl: null,
           usageQuery: {
@@ -186,9 +202,12 @@ describe("ProviderEditor", () => {
       model: "gpt-5.3-codex",
       baseUrl: "https://gateway.example/v1",
       apiKey: "sk-test-codex",
+      upstreamProtocol: "responses",
+      maxOutputTokens: null,
       notes: null,
       websiteUrl: null,
       usageQuery: null,
+      officialQuotaRefreshIntervalMinutes: null,
       modelOptions: null,
     });
   });
@@ -205,6 +224,8 @@ describe("ProviderEditor", () => {
           model: null,
           baseUrl: "https://gateway.example/v1",
           apiKey: "sk-test-secret",
+          upstreamProtocol: "responses",
+          maxOutputTokens: null,
           modelOptions: null,
           websiteUrl: null,
         }}
@@ -235,6 +256,244 @@ describe("ProviderEditor", () => {
     expect(screen.getByRole("button", { name: "查看密钥" })).toHaveAttribute(
       "aria-pressed",
       "false",
+    );
+  });
+
+  it("derives credential delivery from the selected upstream protocol", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        userConfigModel={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/Bearer Token：以 Authorization: Bearer <API 密钥> 请求头发送密钥/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("名称"), "跨协议供应商");
+    await user.type(screen.getByLabelText("服务地址"), "https://relay.example");
+    await user.type(screen.getByLabelText("API 密钥"), "test-key");
+    const protocol = screen.getByRole("combobox", { name: "API 格式" });
+    await user.click(protocol);
+    expect(screen.getByRole("option", { name: /Anthropic Messages/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Chat Completions/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Responses/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Chat Completions/ }));
+    expect(screen.queryByRole("combobox", { name: "认证方式" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Bearer Token：以 Authorization: Bearer <API 密钥> 请求头发送密钥/)).toBeInTheDocument();
+
+    await user.click(protocol);
+    await user.click(screen.getByRole("option", { name: /Anthropic Messages/ }));
+    expect(screen.getByText(/x-api-key：以 x-api-key: <API 密钥> 请求头发送密钥/)).toBeInTheDocument();
+    expect(screen.queryByText(/Bearer Token：以 Authorization: Bearer <API 密钥> 请求头发送密钥/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("最大输出 Token")).toHaveValue(8192);
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        upstreamProtocol: "anthropicMessages",
+        maxOutputTokens: 8192,
+      }),
+    );
+  });
+
+  it("explains the native direct route before a cross-protocol gateway rewrite", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue(gatewayStatus(31817));
+    const user = userEvent.setup();
+    try {
+      render(
+        <ProviderEditor
+          profile={null}
+          initialApp="codex"
+          busy={false}
+          officialTakenApps={[]}
+          userConfigModel={null}
+          onSave={vi.fn()}
+          onCancel={() => {}}
+        />,
+      );
+
+      // Codex defaults to its native Responses protocol: direct connection.
+      expect(
+        screen.getByText("与 Codex 原生协议一致，切换后客户端直连所填服务地址。"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/本机协议网关/)).not.toBeInTheDocument();
+
+      const protocol = screen.getByRole("combobox", { name: "API 格式" });
+      await user.click(protocol);
+      await user.click(screen.getByRole("option", { name: /Anthropic Messages/ }));
+
+      const warning = await screen.findByText(/本机协议网关 http:\/\/127\.0\.0\.1:31817/);
+      expect(warning).not.toHaveTextContent("127.0.0.1:端口");
+      expect(invokeMock).toHaveBeenCalledWith("gateway_status");
+      expect(screen.getByText(/网页搜索会关闭/)).toBeInTheDocument();
+    } finally {
+      invokeMock.mockReset();
+    }
+  });
+
+  it("explains the gateway rewrite for a cross-protocol Claude provider", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue(gatewayStatus(31818));
+    const user = userEvent.setup();
+    try {
+      render(
+        <ProviderEditor
+          profile={null}
+          initialApp="claude"
+          busy={false}
+          officialTakenApps={[]}
+          userConfigModel={null}
+          onSave={vi.fn()}
+          onCancel={() => {}}
+        />,
+      );
+
+      const protocol = screen.getByRole("combobox", { name: "API 格式" });
+      await user.click(protocol);
+      await user.click(screen.getByRole("option", { name: /Chat Completions/ }));
+
+      const warning = await screen.findByText(/本机协议网关 http:\/\/127\.0\.0\.1:31818/);
+      expect(warning).not.toHaveTextContent("127.0.0.1:端口");
+      expect(screen.queryByText(/网页搜索/)).not.toBeInTheDocument();
+    } finally {
+      invokeMock.mockReset();
+    }
+  });
+
+  it("does not display a placeholder port when the gateway status is unavailable", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockRejectedValue(new Error("gateway unavailable"));
+    const user = userEvent.setup();
+    try {
+      render(
+        <ProviderEditor
+          profile={null}
+          initialApp="claude"
+          busy={false}
+          officialTakenApps={[]}
+          userConfigModel={null}
+          onSave={vi.fn()}
+          onCancel={() => {}}
+        />,
+      );
+
+      await user.click(screen.getByRole("combobox", { name: "API 格式" }));
+      await user.click(screen.getByRole("option", { name: /Chat Completions/ }));
+
+      expect(await screen.findByText(/无法读取实际监听地址/)).toBeInTheDocument();
+      expect(screen.queryByText(/127\.0\.0\.1:端口/)).not.toBeInTheDocument();
+    } finally {
+      invokeMock.mockReset();
+    }
+  });
+
+  it("keeps all three protocol choices available when editing a Claude provider", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={{
+          id: "claude-protocol-editor",
+          app: "claude",
+          routeMode: "custom",
+          name: "Claude 中继",
+          model: null,
+          baseUrl: "https://relay.example",
+          apiKey: "test-key",
+          upstreamProtocol: "anthropicMessages",
+          maxOutputTokens: null,
+          modelOptions: null,
+          websiteUrl: null,
+        }}
+        initialApp="claude"
+        busy={false}
+        officialTakenApps={[]}
+        userConfigModel={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    const protocol = screen.getByRole("combobox", { name: "API 格式" });
+    await user.click(protocol);
+    expect(screen.getByRole("option", { name: /Anthropic Messages/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Chat Completions/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Responses/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Chat Completions/ }));
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        upstreamProtocol: "chatCompletions",
+        maxOutputTokens: null,
+      }),
+    );
+  });
+
+  it("requires and persists a positive output limit for an edited Codex-to-Anthropic route", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <ProviderEditor
+        profile={{
+          id: "codex-anthropic-editor",
+          app: "codex",
+          routeMode: "custom",
+          name: "Anthropic 上游",
+          model: "claude-sonnet-4-6",
+          baseUrl: "https://relay.example",
+          apiKey: "test-key",
+          upstreamProtocol: "anthropicMessages",
+          maxOutputTokens: 16_384,
+          modelOptions: null,
+          websiteUrl: null,
+        }}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        userConfigModel={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
+    const limit = screen.getByLabelText("最大输出 Token");
+    expect(limit).toHaveAttribute("required");
+    expect(limit).toHaveValue(16_384);
+
+    await user.clear(limit);
+    expect(limit).toBeInvalid();
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+    expect(onSave).not.toHaveBeenCalled();
+
+    await user.type(limit, "32768");
+    expect(limit).toBeValid();
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+    expect(onSave).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        upstreamProtocol: "anthropicMessages",
+        maxOutputTokens: 32_768,
+      }),
+    );
+
+    const protocol = screen.getByRole("combobox", { name: "API 格式" });
+    await user.click(protocol);
+    await user.click(screen.getByRole("option", { name: /Responses/ }));
+    expect(screen.queryByLabelText("最大输出 Token")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+    expect(onSave).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        upstreamProtocol: "responses",
+        maxOutputTokens: null,
+      }),
     );
   });
 
@@ -345,6 +604,8 @@ describe("ProviderEditor", () => {
           model: "claude-opus-4-1",
           baseUrl: "https://relay.example",
           apiKey: "sk-test-claude",
+          upstreamProtocol: "anthropicMessages",
+          maxOutputTokens: null,
           modelOptions: {
             kind: "claude",
             primaryOneM: true,
@@ -400,9 +661,12 @@ describe("ProviderEditor", () => {
       model: null,
       baseUrl: "https://relay-d.example",
       apiKey: "sk-test-key",
+      upstreamProtocol: "anthropicMessages",
+      maxOutputTokens: null,
       notes: null,
       websiteUrl: null,
       usageQuery: null,
+      officialQuotaRefreshIntervalMinutes: null,
       modelOptions: null,
     });
   });
@@ -436,9 +700,12 @@ describe("ProviderEditor", () => {
       model: null,
       baseUrl: "https://relay.example",
       apiKey: "sk-test-key",
+      upstreamProtocol: "anthropicMessages",
+      maxOutputTokens: null,
       notes: null,
       websiteUrl: null,
       usageQuery: null,
+      officialQuotaRefreshIntervalMinutes: null,
       modelOptions: {
         kind: "claude",
         primaryOneM: false,
@@ -482,6 +749,8 @@ describe("ProviderEditor", () => {
           model: null,
           baseUrl: "https://gateway.example/v1",
           apiKey: "sk-test",
+          upstreamProtocol: "responses",
+          maxOutputTokens: null,
           modelOptions: null,
           websiteUrl: null,
         }}
@@ -621,6 +890,7 @@ describe("ProviderEditor", () => {
           model: null,
           baseUrl: null,
           apiKey: "",
+          upstreamProtocol: null,
           modelOptions: null,
           usageQuery: null,
         }),
@@ -644,6 +914,8 @@ describe("ProviderEditor", () => {
           model: null,
           baseUrl: null,
           apiKey: "",
+          upstreamProtocol: null,
+          maxOutputTokens: null,
           modelOptions: null,
           websiteUrl: null,
         }}
@@ -714,6 +986,8 @@ describe("ProviderEditor", () => {
           model: null,
           baseUrl: "https://relay.example",
           apiKey: "sk-test-key",
+          upstreamProtocol: "anthropicMessages",
+          maxOutputTokens: null,
           modelOptions: null,
           websiteUrl: null,
         }}
@@ -760,10 +1034,14 @@ describe("ProviderEditor", () => {
     await user.click(screen.getByRole("button", { name: "获取模型" }));
 
     const picker = await screen.findByRole("button", { name: "选择模型" });
-    // The invoke keys must match the Rust command signature (`url`, `apiKey`).
+    // The invoke keys must match the Rust command signature and the draft's
+    // explicit protocol contract.
     expect(invokeMock).toHaveBeenCalledWith("fetch_provider_models", {
-      url: "https://gateway.example/v1",
-      apiKey: "sk-test-key",
+      request: {
+        url: "https://gateway.example/v1",
+        apiKey: "sk-test-key",
+        upstreamProtocol: "responses",
+      },
     });
 
     await user.click(picker);
@@ -772,6 +1050,33 @@ describe("ProviderEditor", () => {
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ model: "gpt-5.3-codex", notes: null, websiteUrl: null, usageQuery: null }),
     );
+    invokeMock.mockReset();
+  });
+
+  it("clears fetched models when the selected upstream protocol changes", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue([{ id: "gpt-5.3-codex", ownedBy: "openai" }]);
+    const user = userEvent.setup();
+    render(
+      <ProviderEditor
+        profile={null}
+        initialApp="codex"
+        busy={false}
+        officialTakenApps={[]}
+        userConfigModel={null}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("服务地址"), "https://gateway.example/v1");
+    await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
+    await user.click(screen.getByRole("button", { name: "获取模型" }));
+    expect(await screen.findByRole("button", { name: "选择模型" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "API 格式" }));
+    await user.click(screen.getByRole("option", { name: /Anthropic Messages/ }));
+    expect(screen.queryByRole("button", { name: "选择模型" })).not.toBeInTheDocument();
     invokeMock.mockReset();
   });
 
@@ -799,7 +1104,13 @@ describe("ProviderEditor", () => {
     expect(await screen.findByRole("button", { name: "选择模型" })).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith(
       "fetch_provider_models",
-      expect.objectContaining({ url: "https://gateway.example", apiKey: "sk-entered-key" }),
+      expect.objectContaining({
+        request: {
+          url: "https://gateway.example",
+          apiKey: "sk-entered-key",
+          upstreamProtocol: "responses",
+        },
+      }),
     );
     invokeMock.mockReset();
   });
@@ -904,9 +1215,12 @@ describe("ProviderEditor", () => {
       model: null,
       baseUrl: "https://relay-c.internal",
       apiKey: "sk-test-key",
+      upstreamProtocol: "anthropicMessages",
+      maxOutputTokens: null,
       notes: null,
       websiteUrl: null,
       usageQuery: null,
+      officialQuotaRefreshIntervalMinutes: null,
       modelOptions: {
         kind: "claude",
         primaryOneM: false,

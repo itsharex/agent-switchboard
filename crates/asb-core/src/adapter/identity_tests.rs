@@ -1,5 +1,6 @@
 use super::matches_provider_identity;
-use crate::contracts::{AppKind, ProviderProfile, RouteMode};
+use crate::contracts::{AppKind, ProviderProfile, RouteMode, SwitchPlan, UpstreamProtocol};
+use crate::ownership::default_common_settings;
 
 fn profile(app: AppKind, mode: RouteMode) -> ProviderProfile {
     ProviderProfile {
@@ -14,16 +15,26 @@ fn profile(app: AppKind, mode: RouteMode) -> ProviderProfile {
         } else {
             String::new()
         },
+        upstream_protocol: (mode == RouteMode::Custom).then_some(match app {
+            AppKind::Codex => UpstreamProtocol::Responses,
+            AppKind::Claude => UpstreamProtocol::AnthropicMessages,
+        }),
+        max_output_tokens: None.into(),
         model_options: None,
         notes: None,
         website_url: None,
         usage_query: None,
+        official_quota_refresh_interval_minutes: None,
     }
+}
+
+fn plan(app: AppKind, mode: RouteMode) -> SwitchPlan {
+    SwitchPlan::direct(profile(app, mode), default_common_settings(app))
 }
 
 const CODEX_CUSTOM: &str = "model_provider = 'openai'\nopenai_base_url = 'https://example.test/v1'\nmodel = 'changed-model'\nhide_agent_reasoning = true\n";
 const CODEX_AUTH: &str = r#"{"auth_mode":"apikey","OPENAI_API_KEY":"fixture-key"}"#;
-const CLAUDE_CUSTOM: &str = r#"{"model":"changed-model","env":{"ANTHROPIC_BASE_URL":"https://example.test/v1","ANTHROPIC_AUTH_TOKEN":"fixture-key","ANTHROPIC_DEFAULT_HAIKU_MODEL":"another-model"},"permissions":{"allow":["Read"]}}"#;
+const CLAUDE_CUSTOM: &str = r#"{"model":"changed-model","env":{"ANTHROPIC_BASE_URL":"https://example.test/v1","ANTHROPIC_API_KEY":"fixture-key","ANTHROPIC_DEFAULT_HAIKU_MODEL":"another-model"},"permissions":{"allow":["Read"]}}"#;
 
 #[test]
 fn identity_ignores_models_and_common_settings_for_both_clients() {
@@ -31,7 +42,7 @@ fn identity_ignores_models_and_common_settings_for_both_clients() {
         (AppKind::Codex, CODEX_CUSTOM, Some(CODEX_AUTH)),
         (AppKind::Claude, CLAUDE_CUSTOM, None),
     ] {
-        assert!(matches_provider_identity(text, auth, &profile(app, RouteMode::Custom)).unwrap());
+        assert!(matches_provider_identity(text, auth, &plan(app, RouteMode::Custom)).unwrap());
     }
     for (app, text) in [
         (
@@ -43,7 +54,7 @@ fn identity_ignores_models_and_common_settings_for_both_clients() {
             r#"{"model":"changed-model","env":{"ANTHROPIC_DEFAULT_HAIKU_MODEL":"another-model"}}"#,
         ),
     ] {
-        assert!(matches_provider_identity(text, None, &profile(app, RouteMode::Official)).unwrap());
+        assert!(matches_provider_identity(text, None, &plan(app, RouteMode::Official)).unwrap());
     }
 }
 
@@ -55,19 +66,27 @@ fn custom_identity_requires_exact_endpoint_and_credential() {
     ] {
         let mut candidate = profile(app, RouteMode::Custom);
         candidate.api_key = "different-fixture-key".into();
-        assert!(!matches_provider_identity(text, auth, &candidate).unwrap());
-        candidate.api_key = "fixture-key".into();
+        assert!(!matches_provider_identity(
+            text,
+            auth,
+            &SwitchPlan::direct(candidate, default_common_settings(app))
+        )
+        .unwrap());
+        let mut candidate = profile(app, RouteMode::Custom);
         candidate.base_url = Some("https://other.test/v1".into());
-        assert!(!matches_provider_identity(text, auth, &candidate).unwrap());
-        assert!(
-            !matches_provider_identity(text, auth, &profile(app, RouteMode::Official)).unwrap()
-        );
+        assert!(!matches_provider_identity(
+            text,
+            auth,
+            &SwitchPlan::direct(candidate, default_common_settings(app))
+        )
+        .unwrap());
+        assert!(!matches_provider_identity(text, auth, &plan(app, RouteMode::Official)).unwrap());
     }
 }
 
 #[test]
 fn codex_identity_rejects_missing_custom_auth_and_named_provider_routes() {
-    let custom = profile(AppKind::Codex, RouteMode::Custom);
+    let custom = plan(AppKind::Codex, RouteMode::Custom);
     for auth in [
         None,
         Some("{}"),
@@ -80,7 +99,7 @@ fn codex_identity_rejects_missing_custom_auth_and_named_provider_routes() {
     assert!(!matches_provider_identity(
         "",
         Some(CODEX_AUTH),
-        &profile(AppKind::Codex, RouteMode::Official)
+        &plan(AppKind::Codex, RouteMode::Official)
     )
     .unwrap());
     assert!(matches_provider_identity(CODEX_CUSTOM, Some("invalid-json"), &custom).is_err());
@@ -88,7 +107,7 @@ fn codex_identity_rejects_missing_custom_auth_and_named_provider_routes() {
 
 #[test]
 fn claude_official_identity_rejects_explicit_credentials() {
-    let official = profile(AppKind::Claude, RouteMode::Official);
+    let official = plan(AppKind::Claude, RouteMode::Official);
     for text in [
         r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"fixture-key"}}"#,
         r#"{"env":{"ANTHROPIC_API_KEY":"fixture-key"}}"#,
@@ -99,7 +118,7 @@ fn claude_official_identity_rejects_explicit_credentials() {
     assert!(!matches_provider_identity(
         r#"{"env":{"ANTHROPIC_BASE_URL":"https://example.test/v1"}}"#,
         None,
-        &profile(AppKind::Claude, RouteMode::Custom)
+        &plan(AppKind::Claude, RouteMode::Custom)
     )
     .unwrap());
 }

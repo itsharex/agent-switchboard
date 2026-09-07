@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RiDatabase2Line, RiLoginBoxLine, RiLogoutBoxLine, RiStackLine } from "@remixicon/react";
+import { Database, Layers, LogIn, LogOut } from "lucide-react";
 import {
   type ModelUsageGroup,
   type ModelUsageRange,
@@ -178,10 +178,10 @@ export function UsagePage({ active }: { active: boolean }) {
               <StatCards
                 variant="summary"
                 stats={[
-                  { icon: RiStackLine, label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
-                  { icon: RiLoginBoxLine, label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
-                  { icon: RiDatabase2Line, label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
-                  { icon: RiLogoutBoxLine, label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
+                  { icon: Layers, label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
+                  { icon: LogIn, label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
+                  { icon: Database, label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
+                  { icon: LogOut, label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
                 ]}
                 columns={4}
               />

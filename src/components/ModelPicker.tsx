@@ -1,49 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderModel } from "../api/client";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 /** Group label for models the endpoint did not attribute to a vendor. */
 const OTHER_GROUP = "其他";
-
-function ChevronIcon() {
-  return (
-    <span className="asb-select-chevron" aria-hidden="true">
-      <svg viewBox="0 0 16 16" fill="none">
-        <path
-          d="M3.5 6 L8 10.5 L12.5 6"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="7" cy="7" r="4.4" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M10.4 10.4 L13.5 13.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <span className="asb-model-check" aria-hidden="true">
-      <svg viewBox="0 0 12 12" fill="none">
-        <polyline
-          points="2.4 6.4 5 9 9.6 3.4"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
 
 interface Group {
   vendor: string;
@@ -88,8 +48,7 @@ interface Props {
 }
 
 /**
- * Quick model picker modeled on the CC Switch dropdown: a field-shaped icon
- * trigger opens a searchable menu whose models are grouped by vendor, so a
+ * A field-shaped icon trigger opens a searchable menu whose models are grouped by vendor, so a
  * fetched list stays browsable at aggregate-relay scale. Interaction contract
  * (keyboard, close behavior, material) matches the FontPicker listbox.
  */
@@ -173,7 +132,9 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
         disabled={disabled}
         onClick={() => (open ? close(false) : setOpen(true))}
       >
-        <ChevronIcon />
+        <span className="asb-select-chevron" aria-hidden="true">
+          <ChevronDownIcon />
+        </span>
       </button>
 
       {open ? (
@@ -209,11 +170,9 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
                       onClick={() => selectModel(model.id)}
                     >
                       <span className="asb-model-option-name">{model.id}</span>
-                      {model.id === current ? (
-                        <CheckIcon />
-                      ) : (
-                        <span className="asb-model-check" aria-hidden="true" />
-                      )}
+                      <span className="asb-model-check" aria-hidden="true">
+                        {model.id === current && <CheckIcon />}
+                      </span>
                     </button>
                   ))}
                 </div>

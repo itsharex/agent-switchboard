@@ -7,7 +7,7 @@
 use crate::adapter;
 use crate::contracts::{
     AppKind, CommonSettingValue, CommonSettings, ConfigValue, ProviderProfile, RouteMode,
-    SwitchPlan,
+    SwitchPlan, UpstreamProtocol,
 };
 use crate::ownership::{
     default_common_settings, official_setting_directory, owner_for, setting_spec, ChoiceControl,
@@ -39,6 +39,10 @@ struct WebsiteAssemblyClient {
     file_path: &'static str,
     code_lines: Vec<String>,
     preserved_paths: Vec<String>,
+    /// Paths owned by dedicated modules (global prompts, provider profiles,
+    /// and the extensions workspace). Provider switching preserves them; the
+    /// desktop manages each through its own contract and transaction.
+    separate_modules: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -96,6 +100,19 @@ fn client(app: AppKind) -> WebsiteAssemblyClient {
         AppKind::Claude => ("claude", "claude", "Claude Code", "settings.json"),
     };
 
+    let directory = official_setting_directory(app);
+    let separate_modules: Vec<String> = directory
+        .iter()
+        .filter(|entry| entry.disposition == OfficialSettingDisposition::SeparateModule)
+        .map(|entry| entry.path.to_owned())
+        .collect();
+    let preserved_paths: Vec<String> = directory
+        .into_iter()
+        .filter(|entry| entry.disposition == OfficialSettingDisposition::PreserveOnly)
+        .take(2)
+        .map(|entry| entry.path.to_owned())
+        .collect();
+
     WebsiteAssemblyClient {
         id,
         tone,
@@ -106,12 +123,8 @@ fn client(app: AppKind) -> WebsiteAssemblyClient {
         file_name,
         file_path: app.config_label(),
         code_lines: public_candidate.lines().map(str::to_owned).collect(),
-        preserved_paths: official_setting_directory(app)
-            .into_iter()
-            .filter(|entry| entry.disposition == OfficialSettingDisposition::PreserveOnly)
-            .take(2)
-            .map(|entry| entry.path.to_owned())
-            .collect(),
+        preserved_paths,
+        separate_modules,
     }
 }
 
@@ -171,8 +184,8 @@ fn plan(app: AppKind) -> SwitchPlan {
         AppKind::Codex => ("GPT-6 Astra", "website-codex"),
         AppKind::Claude => ("Claude Opus 5.1", "website-claude"),
     };
-    SwitchPlan {
-        profile: ProviderProfile {
+    SwitchPlan::direct(
+        ProviderProfile {
             id: id.into(),
             app,
             route_mode: RouteMode::Custom,
@@ -180,13 +193,16 @@ fn plan(app: AppKind) -> SwitchPlan {
             model: Some(model.into()),
             base_url: Some(BEDROCK_ENDPOINT.into()),
             api_key: DEMO_API_KEY.into(),
+            upstream_protocol: Some(UpstreamProtocol::Responses),
+            max_output_tokens: None.into(),
             model_options: None,
             notes: None,
             website_url: None,
             usage_query: None,
+            official_quota_refresh_interval_minutes: None,
         },
         common,
-    }
+    )
 }
 
 fn explicit(common: &mut CommonSettings, key: &str, value: ConfigValue) {
@@ -216,7 +232,13 @@ mod tests {
         assert!(generated.contains("\"control\": \"toggle\""));
         assert!(generated.contains("\"control\": \"slider\""));
         assert!(generated.contains("\"preservedPaths\""));
+        // MCP and skills are managed by the extensions workspace now: they
+        // are dedicated modules the provider switch preserves, not
+        // provider-owned or merely preserved fields.
+        assert!(generated.contains("\"separateModules\""));
         assert!(generated.contains("mcp_servers.<id>"));
+        assert!(generated.contains("skills.config"));
+        assert!(generated.contains("~/.claude/skills/<name>/"));
         assert!(generated.contains("\"permissions\""));
         assert!(!generated.contains(DEMO_API_KEY));
     }

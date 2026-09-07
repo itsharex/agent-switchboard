@@ -4,7 +4,7 @@ import { ToastStatusIcon } from "./ToastStatusIcon";
 import { useToast, type Toast } from "./use-toast";
 
 /**
- * Global floating notifications (spiralcoder structure replica, user
+ * Global floating notifications (Frosted Relay structure replica, user
  * directive 2026-08-31): same stacking limit, error-first ordering, kind
  * based auto-dismiss and hover/focus/hidden pause contract; visuals use this
  * system's tokens (DESIGN.md §8 全局通知).

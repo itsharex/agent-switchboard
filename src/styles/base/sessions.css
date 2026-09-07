@@ -1,0 +1,453 @@
+/* Session manager — a restrained master/detail workspace. The list stays
+   compact and operational; transcript text is intentionally near-solid so
+   project paths and past instructions remain easy to audit. The panel fills
+   the main area and every long region scrolls inside the module, never the
+   page (DESIGN.md: 列表保留独立的固定高度滚动区，长记录在详情内滚动). */
+.asb-panel:has(.asb-sessions) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.asb-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.asb-session-toolbar {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) auto auto;
+  gap: var(--asb-space-2);
+  align-items: center;
+}
+
+.asb-session-toolbar .asb-segments {
+  margin: 0;
+}
+
+.asb-session-issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  padding: var(--asb-space-2) var(--asb-space-3);
+  margin: 0;
+  border: 1px solid var(--asb-warning);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+  list-style: none;
+}
+
+.asb-session-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 520px;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  overflow: hidden;
+  background: var(--asb-content-muted);
+}
+
+.asb-session-list,
+.asb-session-detail {
+  min-width: 0;
+  padding: var(--asb-space-3);
+}
+
+.asb-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  border-right: 1px solid var(--asb-hairline);
+}
+
+.asb-session-list-heading,
+.asb-session-item-title,
+.asb-session-detail-head,
+.asb-session-detail-head h3,
+.asb-session-client,
+.asb-session-message header {
+  display: flex;
+  align-items: center;
+}
+
+.asb-session-list-heading {
+  justify-content: space-between;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-session-count {
+  min-width: var(--asb-touch-target);
+  padding: 0 var(--asb-space-1);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-pill);
+  text-align: center;
+  font: var(--asb-text-code);
+}
+
+.asb-session-items {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: var(--asb-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--asb-radius-control);
+  background: transparent;
+  color: var(--asb-text);
+  text-align: left;
+}
+
+.asb-session-item:hover,
+.asb-session-item.is-active {
+  background: var(--asb-row-selected);
+}
+
+.asb-session-item-title {
+  gap: var(--asb-space-1);
+  min-width: 0;
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-session-item-title span,
+.asb-session-item-summary,
+.asb-session-item-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-session-logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.asb-session-item-summary,
+.asb-session-item-time {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-session-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  background: var(--asb-content);
+}
+
+.asb-session-detail-head {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--asb-space-3);
+}
+
+.asb-session-detail-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.asb-session-detail-head h3 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--asb-text-title);
+}
+
+.asb-session-client {
+  gap: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: var(--asb-space-2);
+}
+
+/* One compact fact line replaces the former meta grid so the transcript
+   keeps as much height as possible: id, last-active, directory name. */
+.asb-session-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-1) var(--asb-space-3);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-session-meta-id {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-session-meta-dir {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  cursor: pointer;
+}
+
+.asb-session-meta-dir:hover {
+  color: var(--asb-text);
+  text-decoration: underline;
+}
+
+.asb-session-meta-dir:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+.asb-session-command {
+  display: flex;
+  align-items: center;
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-session-command .asb-code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Conversation column plus the user-message outline; the outline only
+   renders when the window is wide enough for it to fit beside the
+   transcript (1280px), matching the reference master/detail proportions. */
+.asb-session-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--asb-space-3);
+}
+
+.asb-session-conversation {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: var(--asb-space-2);
+}
+
+.asb-session-toc {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .asb-session-toc {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 248px;
+    min-height: 0;
+    border-left: 1px solid var(--asb-hairline);
+    padding-left: var(--asb-space-3);
+  }
+}
+
+.asb-session-toc-heading {
+  padding-bottom: var(--asb-space-2);
+  border-bottom: 1px solid var(--asb-hairline);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-session-toc-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--asb-space-2);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-session-toc-items button {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--asb-space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border: 0;
+  border-radius: var(--asb-radius-control);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.asb-session-toc-items button:hover {
+  background: var(--asb-row-selected);
+  color: var(--asb-text);
+}
+
+.asb-session-toc-items button:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+.asb-session-toc-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--asb-radius-pill);
+  background: color-mix(in srgb, var(--asb-action) 12%, transparent);
+  color: var(--asb-action);
+  font: var(--asb-text-code);
+}
+
+.asb-session-toc-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.asb-session-transcript {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-height: 0;
+  padding-right: var(--asb-space-1);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.asb-session-message {
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-session-message.is-assistant {
+  margin-left: var(--asb-space-5);
+  border-color: color-mix(in srgb, var(--asb-action) 32%, var(--asb-hairline));
+}
+
+.asb-session-message.is-user {
+  margin-right: var(--asb-space-5);
+}
+
+.asb-session-message header {
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-session-message header span {
+  color: var(--asb-text);
+  font-weight: 600;
+}
+
+.asb-session-message-time {
+  margin-left: auto;
+  color: var(--asb-text-muted);
+  font-weight: 400;
+}
+
+/* Per-message copy stays out of sight until hover or keyboard focus. */
+.asb-session-message-copy {
+  min-height: 28px;
+  padding: 0 var(--asb-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-session-message:hover .asb-session-message-copy,
+.asb-session-message-copy:focus-visible {
+  opacity: 1;
+}
+
+.asb-session-message-copy:hover {
+  border-color: var(--asb-hairline);
+  background: var(--asb-content);
+  color: var(--asb-text);
+}
+
+.asb-session-message-copy:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+/* Outline-jump target: the action border plus route shadow reads as the
+   same "you are here" signal the active row uses elsewhere. */
+.asb-session-message.is-target {
+  border-color: var(--asb-action);
+  box-shadow: var(--asb-route-shadow);
+}
+
+.asb-session-message-toggle {
+  min-height: 28px;
+  margin-top: var(--asb-space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  cursor: pointer;
+}
+
+.asb-session-message-toggle:hover {
+  color: var(--asb-text);
+}
+
+.asb-session-message-toggle:focus-visible {
+  outline: var(--asb-focus-ring);
+}
+
+.asb-session-message pre {
+  padding: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: var(--asb-text-body);
+}
+

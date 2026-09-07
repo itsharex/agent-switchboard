@@ -49,7 +49,7 @@ describe("site-content 契约", () => {
     expect(configurationAssembly.codex.codeLines).toContain('model_provider = "openai"');
     expect(configurationAssembly.claude.fileName).toBe("settings.json");
     expect(configurationAssembly.claude.codeLines).toContain('  "autoCompactEnabled": true,');
-    expect(configurationAssembly.claude.codeLines).toContain('    "ANTHROPIC_AUTH_TOKEN": "••••••••"');
+    expect(configurationAssembly.claude.codeLines).toContain('    "ANTHROPIC_AUTH_TOKEN": "••••••••",');
   });
 
   it("通用设置展示由桌面端目录提供控件与档位", () => {
@@ -62,8 +62,22 @@ describe("site-content 契约", () => {
   });
 
   it("官网积木台暴露桌面端目录声明的保留边界", () => {
-    expect(configurationAssembly.codex.preservedPaths).toEqual(["mcp_servers.<id>", "hooks"]);
+    expect(configurationAssembly.codex.preservedPaths).toEqual(["hooks", "permissions.<name>"]);
     expect(configurationAssembly.claude.preservedPaths).toEqual(["permissions", "hooks"]);
+  });
+
+  it("官网积木台把 MCP 与 Skills 表达为切换保留的独立模块", () => {
+    expect(configurationAssembly.codex.separateModules).toEqual([
+      "$CODEX_HOME/AGENTS.md",
+      "model_providers.<id>",
+      "mcp_servers.<id>",
+      "skills.config",
+    ]);
+    expect(configurationAssembly.claude.separateModules).toEqual([
+      "~/.claude/CLAUDE.md",
+      "~/.claude.json",
+      "~/.claude/skills/<name>/",
+    ]);
   });
 
   it("事务复刻只在替换后的校验失败时说明恢复备份", () => {

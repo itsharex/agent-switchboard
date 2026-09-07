@@ -1,0 +1,167 @@
+/* Focus and motion behavior */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--asb-focus-ring);
+  border-radius: var(--asb-radius-control);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-tooltip {
+    animation: none;
+  }
+
+  .asb-slider {
+    --asb-slider-motion-duration: 0ms;
+  }
+
+  .asb-slider-tick,
+  .asb-slider-thumb,
+  .asb-slider-fill,
+  .asb-slider-particles {
+    transition: none;
+  }
+
+  .asb-slider-particle {
+    animation: none;
+  }
+
+  .asb-route-card {
+    animation: none;
+  }
+
+  .asb-sheet {
+    animation: none;
+  }
+
+  .asb-usage-ratio-meter-fill {
+    transition: none;
+  }
+}
+
+/* Responsive layout */
+@media (max-width: 900px) {
+  .asb-topbar {
+    flex-wrap: wrap;
+  }
+
+  .asb-session-toolbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .asb-session-toolbar .asb-segments {
+    grid-column: 1 / -1;
+  }
+
+  .asb-session-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .asb-session-list {
+    max-height: 40vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--asb-hairline);
+  }
+
+  /* Stacked mode trades the fixed detail chrome for a taller list: the whole
+     detail pane scrolls instead of only the transcript, so the header and
+     meta travel with the content instead of starving the transcript. */
+  .asb-session-body {
+    flex: none;
+  }
+
+  .asb-session-detail {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .asb-runtime-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asb-runtime-overview-path {
+    grid-column: span 2;
+  }
+
+  .asb-session-transcript {
+    flex: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .asb-runtime-logs .asb-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asb-runtime-log-controls {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .asb-runtime-log-level-control,
+  .asb-runtime-log-controls .asb-tabs,
+  .asb-runtime-log-controls .asb-btn-secondary {
+    width: 100%;
+  }
+
+  .asb-runtime-log-level-control {
+    justify-content: space-between;
+  }
+
+  .asb-runtime-log-level-control .asb-select-trigger {
+    flex: 1;
+  }
+
+  .asb-runtime-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asb-runtime-overview-path {
+    grid-column: auto;
+  }
+
+  .asb-codex-reset .asb-panel-heading,
+  .asb-codex-reset .asb-panel-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .asb-codex-reset-board {
+    grid-template-columns: 1fr;
+  }
+
+  .asb-codex-reset-summary {
+    padding: var(--asb-space-4);
+  }
+
+  .asb-codex-reset-fact + .asb-codex-reset-fact {
+    border-top: 1px solid var(--asb-hairline);
+    border-left: 0;
+  }
+
+  .asb-session-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .asb-session-toolbar .asb-segments {
+    grid-column: auto;
+  }
+
+  .asb-session-detail-head,
+  .asb-session-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asb-session-message.is-assistant,
+  .asb-session-message.is-user {
+    margin-right: 0;
+    margin-left: 0;
+  }
+}
+

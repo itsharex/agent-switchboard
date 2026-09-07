@@ -17,6 +17,7 @@ function renderWorkspace(initial: UsageQuery | null = null, onSave = vi.fn(async
       value={initial}
       apiKey="sk-live"
       baseUrl="https://relay.example/v1"
+      upstreamProtocol="responses"
       busy={false}
       onSave={onSave}
       onClose={() => {}}
@@ -66,9 +67,12 @@ describe("UsageQueryWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "查询用量" }));
 
     expect(invokeMock).toHaveBeenCalledWith("test_usage_query", {
-      query: expect.objectContaining({ kind: "script" }),
-      apiKey: "sk-live",
-      baseUrl: "https://relay.example/v1",
+      request: {
+        query: expect.objectContaining({ kind: "script" }),
+        apiKey: "sk-live",
+        baseUrl: "https://relay.example/v1",
+        upstreamProtocol: "responses",
+      },
     });
     expect(await screen.findByRole("region", { name: "本次用量结果" })).toHaveTextContent(
       "9.5",

@@ -1,6 +1,7 @@
 import type { FilePreview } from "../api/client";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { DiffView } from "../components/DiffView";
+import { PreviewInspector } from "../components/PreviewInspector";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
 import type { useProviders } from "./useProviders";
@@ -29,14 +30,39 @@ export function OperationConfirmSheets({
           details={[
             `将写入 ${preview.file.preview.target}`,
             `变更 ${preview.file.preview.changes.length} 个键`,
-            ...(preview.file.preview.warnings.length > 0
-              ? [`警告 ${preview.file.preview.warnings.length} 条`]
-              : []),
+            ...preview.file.preview.warnings.map((warning) => (
+              <span key={warning} className="asb-warn-text">
+                {warning}
+              </span>
+            )),
             `备份位置 ${preview.file.preview.backupDir}`,
           ]}
           confirmLabel="确认切换"
           onConfirm={() => void operations.runSwitch()}
           onCancel={() => operations.setConfirmingSwitch(false)}
+        />
+      )}
+      {providers.pendingSave && (
+        <ConfirmSheet
+          title="确认保存并应用"
+          details={[
+            `将写入 ${providers.pendingSave.preview.preview.target}`,
+            `变更 ${providers.pendingSave.preview.preview.changes.length} 个键`,
+            ...providers.pendingSave.preview.preview.warnings.map((warning) => (
+              <span key={warning} className="asb-warn-text">
+                {warning}
+              </span>
+            )),
+            <PreviewInspector
+              filePreview={providers.pendingSave.preview}
+              userConfigModel={null}
+              userConfigWarnings={[]}
+            />,
+            `备份位置 ${providers.pendingSave.preview.preview.backupDir}`,
+          ]}
+          confirmLabel="确认保存并应用"
+          onConfirm={() => void providers.runPendingSave()}
+          onCancel={() => providers.setPendingSave(null)}
         />
       )}
       {providers.resetStorePending && (

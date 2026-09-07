@@ -30,11 +30,7 @@ fn main() {
     let report = discovery::discover(&paths, read);
 
     for file in [&report.codex, &report.claude] {
-        let app = if file.app == asb_core::AppKind::Codex {
-            "Codex"
-        } else {
-            "Claude Code"
-        };
+        let app = file.app.label();
         match &file.state {
             DiscoveredState::Missing => println!("{app}：未找到（{}）", file.path),
             DiscoveredState::ReadError { message } => println!("{app}：读取失败：{message}"),

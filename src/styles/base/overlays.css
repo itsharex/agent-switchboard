@@ -1,0 +1,190 @@
+/* Banners */
+.asb-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--asb-space-3);
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border-radius: var(--asb-radius-control);
+  font: var(--asb-text-body);
+  /* Elevated floating status: near-solid backdrop + modal shadow keep the
+     text readable over scrolling content. */
+  box-shadow: var(--asb-shadow-modal);
+}
+
+.asb-banner-error {
+  background: var(--asb-content);
+  border: 1px solid var(--asb-danger);
+  color: var(--asb-danger);
+}
+
+.asb-banner-warning {
+  background: var(--asb-content);
+  border: 1px solid var(--asb-warning);
+  color: var(--asb-warning);
+}
+
+.asb-banner-ok {
+  background: var(--asb-content);
+  border: 1px solid var(--asb-safe);
+}
+
+.asb-banner-ok .asb-code {
+  color: var(--asb-text-muted);
+}
+
+/* Confirmation sheet */
+.asb-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: var(--asb-surface-sheet);
+}
+
+.asb-sheet {
+  width: min(440px, calc(100% - var(--asb-space-6)));
+  max-height: calc(100% - var(--asb-space-6));
+  min-height: 0;
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-panel);
+  background: var(--asb-content);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
+
+.asb-sheet-details {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  scrollbar-gutter: stable;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  font: var(--asb-text-body);
+  color: var(--asb-text);
+}
+
+.asb-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+}
+
+/* Busy indicator */
+.asb-busy {
+  position: absolute;
+  bottom: var(--asb-space-3);
+  right: var(--asb-space-3);
+  z-index: 20;
+  padding: var(--asb-space-1) var(--asb-space-3);
+  border-radius: 999px;
+  background: var(--asb-surface-menu);
+  border: 1px solid var(--asb-hairline);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+/* Global toast notifications (Frosted Relay replica 2026-08-31). The stack
+   floats above every layer including sheets and tooltips; each surface opts
+   back into pointer events while the stack itself stays click-through. */
+.asb-toast-stack {
+  position: fixed;
+  top: var(--asb-space-2);
+  left: var(--asb-space-2);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  width: min(400px, calc(100vw - 2 * var(--asb-space-3)));
+  max-height: calc(100vh - 3 * var(--asb-space-2));
+  pointer-events: none;
+}
+
+.asb-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: 56px;
+  padding: var(--asb-space-2) var(--asb-space-2) var(--asb-space-2) var(--asb-space-3);
+  pointer-events: auto;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-panel);
+  background: var(--asb-surface-menu);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+  color: var(--asb-text);
+}
+
+.asb-toast-icon {
+  flex-shrink: 0;
+}
+
+.asb-toast-icon--info {
+  color: var(--asb-action);
+}
+
+.asb-toast-icon--success {
+  color: var(--asb-safe);
+}
+
+.asb-toast-icon--warning {
+  color: var(--asb-warning);
+}
+
+.asb-toast-icon--error {
+  color: var(--asb-danger);
+}
+
+.asb-toast-body {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.asb-toast-title {
+  font: var(--asb-text-label);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.asb-toast-description {
+  font: var(--asb-text-label);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* Muted only when a title carries the primary statement; alone it is the
+   statement itself (Frosted Relay contract). */
+.asb-toast-title + .asb-toast-description {
+  color: var(--asb-text-muted);
+}
+
+.asb-toast-close {
+  display: grid;
+  place-items: center;
+  align-self: flex-start;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+  margin: calc(var(--asb-space-1) * -1) calc(var(--asb-space-1) * -1)
+    calc(var(--asb-space-1) * -1) 0;
+  border: 0;
+  border-radius: var(--asb-radius-pill);
+  background: transparent;
+  color: var(--asb-text-muted);
+}
+
+.asb-toast-close:hover:not(:disabled) {
+  background: var(--asb-code-bg);
+  color: var(--asb-text);
+}
+

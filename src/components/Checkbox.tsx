@@ -1,3 +1,5 @@
+import { CheckIcon, DashIcon } from "./icons";
+
 interface Props {
   checked: boolean;
   /** Emits the next state; consumers own what it means for their data. */
@@ -12,7 +14,7 @@ interface Props {
 }
 
 /**
- * Tick-box ported from the spiralcoder reference: a visually hidden native
+ * Tick-box with a visually hidden native
  * input keeps keyboard and screen-reader behavior while the box is drawn
  * beside it. All visual values come from styles/tokens.css.
  */
@@ -30,20 +32,7 @@ export function Checkbox({ checked, disabled = false, indeterminate = false, lab
         onChange={(event) => onChange(event.target.checked)}
       />
       <span className="asb-checkbox-box" data-checked={active ? "true" : "false"} aria-hidden="true">
-        {checked || indeterminate ? (
-          <svg viewBox="0 0 12 12" fill="none">
-            {indeterminate ? (
-              <line x1="2.4" y1="6" x2="9.6" y2="6" strokeWidth="1.8" strokeLinecap="round" />
-            ) : (
-              <polyline
-                points="2.4 6.4 5 9 9.6 3.4"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-          </svg>
-        ) : null}
+        {indeterminate ? <DashIcon /> : checked ? <CheckIcon /> : null}
       </span>
       <span className="asb-checkbox-label">{label}</span>
     </label>

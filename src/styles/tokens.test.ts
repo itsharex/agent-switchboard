@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 const srcRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const tokenOwner = "styles/tokens.css";
 
-// The vendored BoardUI foundation is a quarantined second owner: it defines
-// the upstream design-system primitives the BoardUI components consume. App
+// The vendored 图表组件层 foundation is a quarantined second owner: it defines
+// the upstream design-system primitives the 图表组件层 components consume. App
 // code must never add raw colors outside tokens.css or this file.
 const vendoredFoundationOwners = new Set(["styles/theme.css"]);
 

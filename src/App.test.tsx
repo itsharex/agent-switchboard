@@ -103,6 +103,8 @@ const profiles: ProviderRecord[] = [
       model: "gpt-5.4",
       baseUrl: "https://backup.internal/v1",
       apiKey: "OPENAI_API_KEY",
+      upstreamProtocol: "responses",
+      maxOutputTokens: null,
       modelOptions: null,
       websiteUrl: null,
     },
@@ -251,6 +253,10 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
           recovery: { outcome: "not_needed" },
           finalHash: "hash-after",
         });
+      case "prepare_profile_save":
+        return Promise.resolve({ preparationId: "prepared-save", kind: "saveAndApply", preview: filePreview });
+      case "commit_profile_save":
+        return Promise.resolve(profiles[0]);
       case "discover_local":
         return Promise.resolve({ codex: {}, claude: {}, importProposals: [] });
       case "discover_cached":
@@ -261,6 +267,15 @@ function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         return Promise.resolve("github");
       case "get_cached_codex_official_reset":
         return Promise.resolve(null);
+      case "list_extensions":
+        return Promise.resolve({
+          generation: 1,
+          items: [],
+          projects: [],
+          history: [],
+          capabilities: [],
+          recoveryRequired: [],
+        });
       default:
         return Promise.resolve([]);
     }
@@ -1211,6 +1226,35 @@ describe("App integration with the typed client boundary", () => {
     expect(await screen.findByRole("tablist", { name: "客户端" })).toBeInTheDocument();
   });
 
+  it("confirms an active provider edit in place before applying it", async () => {
+    primeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "供应商" }));
+    await user.click(await screen.getByRole("option", { name: /备用网关/ }));
+    await user.click(screen.getByRole("button", { name: "编辑 备用网关" }));
+    fireEvent.change(screen.getByLabelText("服务地址"), {
+      target: { value: "https://updated.internal/v1" },
+    });
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+
+    expect(await screen.findByRole("dialog", { name: "确认保存并应用" })).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("prepare_profile_save", expect.objectContaining({
+      profileId: "codex-gateway",
+      expectedFileHash: "provider-file-hash",
+    }));
+    expect(invokeMock).not.toHaveBeenCalledWith("commit_profile_save", expect.anything());
+
+    await user.click(screen.getByRole("button", { name: "确认保存并应用" }));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("commit_profile_save", expect.objectContaining({
+        preparationId: "prepared-save",
+        confirmWrite: true,
+      })),
+    );
+  });
+
   it("offers a confirmed reset only for an unsupported profile store", async () => {
     primeBackend();
     let unsupported = true;
@@ -1292,6 +1336,8 @@ describe("App integration with the typed client boundary", () => {
           model: "model-a",
           baseUrl: "https://a.internal/v1",
           apiKey: "KEY_A",
+          upstreamProtocol: "responses",
+          maxOutputTokens: null,
           modelOptions: null,
           websiteUrl: null,
         },
@@ -1306,6 +1352,8 @@ describe("App integration with the typed client boundary", () => {
           model: "model-b",
           baseUrl: "https://b.internal/v1",
           apiKey: "KEY_B",
+          upstreamProtocol: "responses",
+          maxOutputTokens: null,
           modelOptions: null,
           websiteUrl: null,
         },

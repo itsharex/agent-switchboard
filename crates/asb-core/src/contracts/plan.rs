@@ -1,0 +1,225 @@
+use serde::{Deserialize, Serialize};
+
+use crate::contracts::{
+    AppKind, AuthenticationScheme, CodexModelSettings, CommonSettings, ProviderDraft,
+    ProviderProfile, RouteMode, UpstreamProtocol,
+};
+
+/// The full side-effect-free input for one switch.
+///
+/// A direct plan derives its client credential delivery from the provider's
+/// protocol. A gateway projection owns the sole exception: its loopback
+/// capability token always uses Bearer authentication. This execution route
+/// is neither persisted nor accepted from the renderer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwitchPlan {
+    pub profile: ProviderProfile,
+    pub common: CommonSettings,
+    client_route: ClientRoute,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClientRoute {
+    Direct,
+    Gateway,
+}
+
+impl SwitchPlan {
+    /// Builds a direct client plan. Validation still reports an invalid custom
+    /// profile that lacks its required upstream protocol.
+    pub fn direct(profile: ProviderProfile, common: CommonSettings) -> Self {
+        Self {
+            profile,
+            common,
+            client_route: ClientRoute::Direct,
+        }
+    }
+
+    /// Builds the client-facing projection for the application's loopback
+    /// gateway. The gateway alone owns this bearer capability-token contract.
+    pub fn through_gateway(profile: ProviderProfile, common: CommonSettings) -> Self {
+        Self {
+            profile,
+            common,
+            client_route: ClientRoute::Gateway,
+        }
+    }
+
+    /// Credential delivery used by the client configuration written for this
+    /// execution plan. It is absent for official logins.
+    pub fn client_authentication(&self) -> Option<AuthenticationScheme> {
+        if self.profile.route_mode != RouteMode::Custom {
+            return None;
+        }
+        match self.client_route {
+            ClientRoute::Direct => self
+                .profile
+                .upstream_protocol
+                .map(UpstreamProtocol::authentication_scheme),
+            ClientRoute::Gateway => Some(AuthenticationScheme::Bearer),
+        }
+    }
+
+    /// Client selection has one owner: the selected provider profile.
+    pub fn app(&self) -> AppKind {
+        self.profile.app
+    }
+}
+
+/// How one owned key changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChangeKind {
+    Set,
+    Remove,
+}
+
+/// One changed key with redacted before/after values.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct KeyChange {
+    pub key: String,
+    pub kind: ChangeKind,
+    pub before: Option<String>,
+    pub after: Option<String>,
+}
+
+/// The non-mutating result of planning a switch. Every value the UI shows in
+/// a diff is already redacted here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchPreview {
+    pub app: AppKind,
+    /// Adapter label for the target configuration file. The desktop command
+    /// replaces it with the resolved local path before returning it to the UI.
+    pub target: String,
+    pub changes: Vec<KeyChange>,
+    pub warnings: Vec<String>,
+    /// Directory where the pre-switch backup will be written.
+    pub backup_dir: String,
+}
+
+/// Metadata about one backup file.
+fn backup_target_existed() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupRecord {
+    pub id: String,
+    pub app: AppKind,
+    pub target_path: String,
+    pub backup_path: String,
+    /// RFC 3339 UTC timestamp.
+    pub created_at: String,
+    /// SHA-256 hex digest of the backed-up content.
+    pub content_hash: String,
+    /// Whether the target existed when this snapshot was created. Older backup
+    /// metadata always represents an existing target.
+    #[serde(default = "backup_target_existed")]
+    pub target_existed: bool,
+    /// The configuration backup created by the same Codex two-file operation.
+    /// Credential backups carry this link; ordinary backups do not.
+    #[serde(default)]
+    pub linked_backup_id: Option<String>,
+    pub reason: String,
+}
+
+/// The currently active routing facts for one client, derived read-only
+/// from its configuration text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteState {
+    pub app: AppKind,
+    /// Routing mode derived from the file: no custom endpoint means official.
+    pub route_mode: RouteMode,
+    /// Active provider display name, when its table declares one.
+    pub provider_name: Option<String>,
+    pub model: Option<String>,
+    pub base_url: Option<String>,
+    /// Codex custom provider protocol, used to determine whether an import
+    /// can be rendered by the current adapter.
+    pub wire_api: Option<String>,
+    /// Codex run parameters found in the live configuration, when this is a
+    /// Codex route. They are imported into the profile that owns them.
+    pub codex_model_options: Option<CodexModelSettings>,
+    /// Claude model tiers in effect. The Haiku tier falls back to the
+    /// deprecated `ANTHROPIC_SMALL_FAST_MODEL` when that is all the file has.
+    pub haiku_model: Option<String>,
+    pub sonnet_model: Option<String>,
+    pub opus_model: Option<String>,
+    /// Claude `availableModels` list, when set.
+    pub available_models: Option<Vec<String>>,
+    /// Scope-of-effect warnings: facts in this file that may be overridden by
+    /// profiles, project-level configuration, or command-line flags.
+    pub scope_warnings: Vec<String>,
+}
+
+/// What kind of client-file write a persisted history record describes.
+/// A projection may be associated with a provider, or may describe a complete
+/// application projection without one (for example a restore record). There
+/// is no legacy-only runtime operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WriteOperation {
+    Projection,
+    Restore,
+}
+
+/// One recorded completed client-file write. The history is application-owned
+/// metadata and never contains secrets.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConfigWriteRecord {
+    pub app: AppKind,
+    /// Present only for a provider projection.
+    pub profile_id: Option<String>,
+    pub profile_name: Option<String>,
+    /// SHA-256 hex digest of the file content after the operation.
+    pub content_hash: String,
+    /// Backup created by the operation; undo restores it.
+    pub backup_id: String,
+    /// RFC 3339 UTC timestamp.
+    pub at: String,
+    /// The client-file write fact represented by this record.
+    pub operation: WriteOperation,
+}
+
+/// Whether the current file content still matches one current profile, a
+/// restored backup, or the app's last recorded switch.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum MatchStatus {
+    /// Content equals one current profile's expected rendering.
+    #[serde(rename_all = "camelCase")]
+    MatchesProfile {
+        profile_id: String,
+        profile_name: String,
+    },
+    /// Content still equals the last switch output, but the associated profile
+    /// or common settings have since changed or been deleted.
+    #[serde(rename_all = "camelCase")]
+    ProfileChanged { profile_name: String },
+    /// Content still equals a backup restored by the application. A restore is
+    /// not a provider match and must not activate a profile row.
+    #[serde(rename_all = "camelCase")]
+    RestoredBackup { at: String },
+    /// The app switched this file before, but the content now matches neither
+    /// the last switch record nor any profile.
+    #[serde(rename_all = "camelCase")]
+    ExternallyModified { at: String },
+    /// The app never switched this file and no profile matches its content.
+    Unmanaged,
+    /// The file is missing or unparseable; matching is not decidable.
+    Unknown,
+}
+
+/// A suggested Provider profile derived read-only from discovered content.
+/// Importing it is an explicit later user decision.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportProposal {
+    pub app: AppKind,
+    pub draft: ProviderDraft,
+    pub basis: String,
+}

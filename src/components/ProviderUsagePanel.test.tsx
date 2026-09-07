@@ -6,7 +6,17 @@ import { useProviderUsage } from "./use-provider-usage";
 import type { ComponentProps } from "react";
 import type { UsageHistorySeries, UsageSummary } from "../api/client";
 
+const { trayChangedHandlers } = vi.hoisted(() => ({
+  trayChangedHandlers: [] as Array<() => void>,
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (event: string, handler: () => void) => {
+    if (event === "tray-changed") trayChangedHandlers.push(handler);
+    return () => {};
+  }),
+}));
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -35,6 +45,8 @@ const profile = {
   model: null,
   baseUrl: "https://relay.example/v1",
   apiKey: "test-key",
+  upstreamProtocol: "responses" as const,
+  maxOutputTokens: null,
   modelOptions: null,
   websiteUrl: null,
   usageQuery,
@@ -95,6 +107,7 @@ function mockProviderCommands(summary: UsageSummary | Error, history = providerH
 describe("ProviderUsagePanel", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    trayChangedHandlers.length = 0;
   });
 
   it("runs the configured query on expansion and shows every named reading", async () => {
@@ -231,11 +244,14 @@ describe("ProviderUsagePanel", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
-  it("re-queries on the configured auto-refresh interval", async () => {
+  it("keeps automatic re-querying in the backend and adopts cache updates from tray-changed", async () => {
     vi.useFakeTimers();
-    mockProviderCommands({
-      readings: [{ planName: "主套餐", remaining: 1, used: 1, total: 2, unit: "CNY" }],
-      at: "2026-08-31T08:00:00Z",
+    let cached: UsageSummary | null = null;
+    invokeMock.mockImplementation((command) => {
+      if (command === "get_usage_history") return Promise.resolve(providerHistory) as never;
+      if (command === "query_profile_usage") return Promise.resolve(successfulSummary) as never;
+      if (command === "read_profile_usage") return Promise.resolve(cached) as never;
+      return Promise.reject(new Error(`unexpected command: ${command}`)) as never;
     });
     try {
       render(
@@ -244,32 +260,29 @@ describe("ProviderUsagePanel", () => {
           profile={{ ...profile, usageQuery: { ...usageQuery, refreshIntervalMinutes: 2 } }}
         />,
       );
-      expect(callsFor("query_profile_usage")).toHaveLength(1);
+      // Fake timers freeze async waits, so flush the resolved first read as a
+      // microtask instead of awaiting a polling finder.
+      await act(async () => {});
+      expect(screen.getByRole("table", { name: "中继 A 用量读数" })).toBeInTheDocument();
 
+      // The desktop scheduler owns the cadence; passing the configured
+      // interval must never start a second renderer-side query.
       act(() => {
-        vi.advanceTimersByTime(2 * 60_000);
-      });
-      expect(callsFor("query_profile_usage")).toHaveLength(2);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("stays manual when the auto-refresh interval is disabled", async () => {
-    vi.useFakeTimers();
-    mockProviderCommands({ readings: [], at: "2026-08-31T08:00:00Z" });
-    try {
-      render(
-        <ProviderUsagePanel
-          id="provider-usage-relay-a"
-          profile={profile}
-        />,
-      );
-
-      act(() => {
-        vi.advanceTimersByTime(30 * 60_000);
+        vi.advanceTimersByTime(10 * 60_000);
       });
       expect(callsFor("query_profile_usage")).toHaveLength(1);
+      expect(callsFor("read_profile_usage")).toHaveLength(0);
+
+      cached = {
+        readings: [{ planName: "主套餐", remaining: 5, used: 4, total: 9, unit: "CNY" }],
+        at: "2026-08-31T09:00:00Z",
+      };
+      await act(async () => {
+        trayChangedHandlers.forEach((handler) => handler());
+      });
+      const updatedRow = screen.getByRole("row", { name: /主套餐/ });
+      expect(within(updatedRow).getByText("5 CNY")).toBeInTheDocument();
+      expect(callsFor("read_profile_usage")).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }

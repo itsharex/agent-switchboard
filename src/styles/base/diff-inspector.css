@@ -1,0 +1,116 @@
+/* Diff inspector */
+.asb-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+}
+
+.asb-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-diff-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-diff-key {
+  font: var(--asb-text-code);
+  color: var(--asb-text-muted);
+}
+
+.asb-diff-value {
+  font: var(--asb-text-code);
+  color: var(--asb-text);
+  overflow-wrap: anywhere;
+}
+
+/* Red/green diff semantics (user-directed 2026-08-28): the outgoing value
+   reads red on a soft red tint, the incoming value green on a green tint;
+   the arrow and the 移除 word keep the state legible without color alone
+   (DESIGN.md §10). An absent before value stays neutral — nothing is
+   being removed. */
+.asb-diff-old,
+.asb-diff-new,
+.asb-diff-remove {
+  display: inline-block;
+  padding: 0 var(--asb-space-1);
+  border-radius: var(--asb-radius-check);
+  overflow-wrap: anywhere;
+}
+
+.asb-diff-old {
+  color: var(--asb-danger);
+  background: var(--asb-diff-remove-bg);
+}
+
+.asb-diff-none {
+  color: var(--asb-text-muted);
+}
+
+.asb-diff-arrow {
+  padding: 0 var(--asb-space-unit);
+  color: var(--asb-text-muted);
+}
+
+.asb-diff-remove {
+  font-weight: 700;
+  color: var(--asb-danger);
+  background: var(--asb-diff-remove-bg);
+}
+
+.asb-diff-new {
+  font-weight: 600;
+  color: var(--asb-diff-add-text);
+  background: var(--asb-diff-add-bg);
+}
+
+.asb-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  margin: 0;
+  padding: var(--asb-space-2);
+  list-style: none;
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+}
+
+.asb-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--asb-space-2) 0;
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-kv-label {
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-kv-value {
+  font: var(--asb-text-body);
+  overflow-wrap: anywhere;
+}
+
+.asb-kv-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--asb-space-1);
+}
+
+.asb-code {
+  font: var(--asb-text-code);
+}
+

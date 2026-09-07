@@ -56,6 +56,9 @@ mod tests {
             UpdateChannel::MicrosoftStore
         );
         assert_eq!(update_channel_from_package_status(0), UpdateChannel::GitHub);
-        assert_eq!(update_channel_from_package_status(15_700), UpdateChannel::GitHub);
+        assert_eq!(
+            update_channel_from_package_status(15_700),
+            UpdateChannel::GitHub
+        );
     }
 }

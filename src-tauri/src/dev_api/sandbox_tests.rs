@@ -4,7 +4,7 @@
 //! No external provider is contacted.
 
 use super::*;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -112,17 +112,66 @@ impl Api {
         )
     }
 
-    fn create(&self, app: &str, name: &str, official: bool, secret: &str) -> Value {
-        self.ok("create_profile", json!({ "draft": {
+    fn create(
+        &self,
+        app: &str,
+        name: &str,
+        official: bool,
+        secret: &str,
+        upstream_protocol: &str,
+    ) -> Value {
+        let prepared = self.ok("prepare_profile_save", json!({
+            "profileId": null,
+            "expectedFileHash": null,
+            "draft": {
             "app": app, "routeMode": if official { "official" } else { "custom" },
             "name": name, "apiKey": if official { "" } else { secret },
             "baseUrl": if official { Value::Null } else { json!(format!("https://{name}.example.com/v1")) },
+            "upstreamProtocol": if official { Value::Null } else { json!(upstream_protocol) },
+            "maxOutputTokens": if app == "codex" && upstream_protocol == "anthropicMessages" { json!(8192) } else { Value::Null },
             "model": if official { Value::Null } else { json!(format!("{app}-{name}")) }, "websiteUrl": null
-        }}))["profile"].clone()
+        }}));
+        assert_eq!(prepared["kind"], "create");
+        self.ok(
+            "commit_profile_save",
+            json!({"preparationId": prepared["preparationId"], "confirmWrite": false}),
+        )["profile"]
+            .clone()
     }
 
     fn preview(&self, profile: &Value) -> Value {
         self.ok("preview_switch", json!({ "profileId": profile["id"] }))
+    }
+
+    fn provider_record(&self, profile: &Value) -> Value {
+        self.ok("list_profiles", json!({}))
+            .as_array()
+            .expect("provider records")
+            .iter()
+            .find(|record| record["profile"]["id"] == profile["id"])
+            .expect("created profile record")
+            .clone()
+    }
+
+    fn prepare_edit(&self, record: &Value, draft: Value) -> Value {
+        self.ok(
+            "prepare_profile_save",
+            json!({
+                "profileId": record["profile"]["id"],
+                "draft": draft,
+                "expectedFileHash": record["fileHash"],
+            }),
+        )
+    }
+
+    fn commit_profile_save(&self, prepared: &Value, confirm_write: bool) -> Value {
+        self.ok(
+            "commit_profile_save",
+            json!({
+                "preparationId": prepared["preparationId"],
+                "confirmWrite": confirm_write,
+            }),
+        )
     }
 
     fn switch_args(profile: &Value, preview: &Value, confirm: bool) -> Value {
@@ -152,6 +201,15 @@ fn write(path: &Path, text: &str) {
 
 fn read(path: &Path) -> String {
     fs::read_to_string(path).unwrap()
+}
+
+fn draft_from_profile(profile: &Value) -> Value {
+    let mut draft = profile.clone();
+    draft
+        .as_object_mut()
+        .expect("provider profile object")
+        .remove("id");
+    draft
 }
 
 fn run_workflow(root: &Path) {
@@ -196,6 +254,9 @@ fn run_workflow(root: &Path) {
         .build(context)
         .unwrap();
     assert_eq!(app.path().app_data_dir().unwrap(), root.join("app-data"));
+    let state = crate::local_state::LocalState::from_app(app.handle()).unwrap();
+    app.manage(crate::gateway::GatewayController::start(&state).unwrap());
+    app.manage(crate::commands::switching::ProfileSavePreparations::default());
     let server = Server::http("127.0.0.1:0").unwrap();
     let url = format!("http://{}/invoke", server.server_addr());
     let handle = app.handle().clone();
@@ -209,18 +270,99 @@ fn run_workflow(root: &Path) {
             .unwrap(),
     };
 
+    // Authentication is derived by `upstreamProtocol`; obsolete manual
+    // authentication input must fail at the public command boundary before
+    // either command can contact a provider.
+    api.rejected(
+        "fetch_provider_models",
+        json!({
+            "request": {
+                "url": "https://provider.example/v1",
+                "apiKey": &secret,
+                "upstreamProtocol": "responses",
+                "authScheme": "bearer"
+            }
+        }),
+        "web-argument-invalid",
+    );
+    api.rejected(
+        "test_usage_query",
+        json!({
+            "request": {
+                "query": {
+                    "kind": "declarative",
+                    "url": "https://provider.example/usage",
+                    "remainingPath": "balance",
+                    "refreshIntervalMinutes": 0
+                },
+                "apiKey": &secret,
+                "baseUrl": "https://provider.example/v1",
+                "upstreamProtocol": "responses",
+                "authScheme": "bearer"
+            }
+        }),
+        "web-argument-invalid",
+    );
+
     // First save general settings, then create providers through the real public commands.
-    api.save_common("codex", "model_reasoning_effort", json!("high"));
+    let codex_common = api.save_common("codex", "model_reasoning_effort", json!("high"));
+    assert_eq!(
+        codex_common["settings"]["settings"]["model_reasoning_effort"]["value"],
+        "high"
+    );
+    let codex_common = api.save_common("codex", "web_search", json!("live"));
+    assert_eq!(
+        codex_common["settings"]["settings"]["model_reasoning_effort"]["value"],
+        "high"
+    );
+    assert_eq!(
+        codex_common["settings"]["settings"]["web_search"]["value"],
+        "live"
+    );
     api.save_common("claude", "effortLevel", json!("high"));
-    let codex_a = api.create("codex", "a", false, &secret);
-    let codex_b = api.create("codex", "b", false, &secret_b);
-    let claude_a = api.create("claude", "a", false, &secret);
-    let claude_b = api.create("claude", "b", false, &secret_b);
+    let codex_a = api.create("codex", "a", false, &secret, "responses");
+    let codex_b = api.create("codex", "b", false, &secret_b, "responses");
+    let claude_a = api.create("claude", "a", false, &secret, "anthropicMessages");
+    let claude_b = api.create("claude", "b", false, &secret_b, "anthropicMessages");
+
+    // Every save path starts with the same preparation. A new profile and an
+    // unchanged edit write neither client config nor a switch backup.
+    let codex_a_record = api.provider_record(&codex_a);
+    let no_change = api.prepare_edit(&codex_a_record, draft_from_profile(&codex_a));
+    assert_eq!(no_change["kind"], "noChange");
+    assert!(no_change["preview"].is_null());
+    api.commit_profile_save(&no_change, false);
+
+    // Editing an inactive provider's effective field persists only its own
+    // profile. Restoring the original draft uses the same path again.
+    let codex_b_record = api.provider_record(&codex_b);
+    let mut inactive_draft = draft_from_profile(&codex_b);
+    inactive_draft["model"] = json!("codex-b-temporary");
+    let inactive_save = api.prepare_edit(&codex_b_record, inactive_draft);
+    assert_eq!(inactive_save["kind"], "saveOnly");
+    assert!(inactive_save["preview"].is_null());
+    let inactive_saved = api.commit_profile_save(&inactive_save, false);
+    assert_eq!(inactive_saved["profile"]["model"], "codex-b-temporary");
+    let inactive_restore = api.prepare_edit(&inactive_saved, draft_from_profile(&codex_b));
+    assert_eq!(inactive_restore["kind"], "saveOnly");
+    api.commit_profile_save(&inactive_restore, false);
     assert_eq!(read(&config), initial_codex);
     assert_eq!(read(&settings), initial_claude);
     assert!(read(&auth) == initial_auth);
     let before = api.preview(&codex_a);
     assert!(!before.to_string().contains(&oauth));
+    assert!(
+        before["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("model_reasoning_effort = \"high\"")),
+        "Codex preview must project the saved common reasoning preference"
+    );
+    assert!(
+        before["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("web_search = \"live\"")),
+        "Codex preview must project the saved common web-search preference"
+    );
     assert_eq!(read(&config), initial_codex);
     assert!(read(&auth) == initial_auth);
     api.rejected(
@@ -229,17 +371,145 @@ fn run_workflow(root: &Path) {
         "write-not-confirmed",
     );
     assert_eq!(read(&config), initial_codex);
-    api.switch(&codex_a, &secret);
-    check_codex(&config, &auth, "a", &secret, &oauth);
+    let codex_a_outcome = api.switch(&codex_a, &secret);
+    assert!(
+        codex_a_outcome["preview"]["changes"]
+            .as_array()
+            .is_some_and(|changes| changes.iter().any(|change| {
+                change["key"] == "model_reasoning_effort" && change["after"] == "high"
+            })),
+        "the committed Codex projection must retain the previewed reasoning value"
+    );
+    assert_eq!(
+        codex_a_outcome["finalHash"],
+        asb_switch::sha256_hex(&read(&config)),
+        "the Codex file must still equal the executor's committed candidate"
+    );
+    check_codex(&config, &auth, "a", &secret, &oauth, "high");
+
+    // An active effective edit requires the explicit confirmation and is
+    // applied atomically with the provider file. A rejected confirmation
+    // leaves both client files untouched and consumes the old preparation.
+    let active_record = api.provider_record(&codex_a);
+    let mut active_draft = draft_from_profile(&codex_a);
+    active_draft["model"] = json!("codex-a-temporary");
+    let active_save = api.prepare_edit(&active_record, active_draft.clone());
+    assert_eq!(active_save["kind"], "saveAndApply");
+    assert!(active_save["preview"].is_object());
+    let before_confirmed_save = read(&config);
+    let before_confirmed_auth = read(&auth);
+    api.rejected(
+        "commit_profile_save",
+        json!({"preparationId": active_save["preparationId"], "confirmWrite": false}),
+        "write-not-confirmed",
+    );
+    api.rejected(
+        "commit_profile_save",
+        json!({"preparationId": active_save["preparationId"], "confirmWrite": true}),
+        "profile-save-stale",
+    );
+    assert_eq!(read(&config), before_confirmed_save);
+    assert_eq!(read(&auth), before_confirmed_auth);
+    let active_save = api.prepare_edit(&active_record, active_draft);
+    let active_saved = api.commit_profile_save(&active_save, true);
+    assert_eq!(active_saved["profile"]["model"], "codex-a-temporary");
+    assert!(read(&config).contains("model = \"codex-a-temporary\""));
+    check_active_profile(&api, "codex", &codex_a);
+    let active_restore = api.prepare_edit(&active_saved, draft_from_profile(&codex_a));
+    assert_eq!(active_restore["kind"], "saveAndApply");
+    api.commit_profile_save(&active_restore, true);
+    check_codex(&config, &auth, "a", &secret, &oauth, "high");
+
+    // Metadata on an active provider is persisted without re-projecting the
+    // client files.
+    let metadata_record = api.provider_record(&codex_a);
+    let mut metadata_draft = draft_from_profile(&codex_a);
+    metadata_draft["notes"] = json!("metadata only");
+    let metadata_save = api.prepare_edit(&metadata_record, metadata_draft);
+    assert_eq!(metadata_save["kind"], "saveOnly");
+    let before_metadata_config = read(&config);
+    let before_metadata_auth = read(&auth);
+    api.commit_profile_save(&metadata_save, false);
+    assert_eq!(read(&config), before_metadata_config);
+    assert_eq!(read(&auth), before_metadata_auth);
+
+    // The durable marker is discarded when a process stopped before the
+    // provider file changed, and otherwise deterministically finishes the
+    // already confirmed provider update on the next startup/write boundary.
+    let recovery_record = api.provider_record(&codex_a);
+    state
+        .configuration()
+        .begin_profile_save(&crate::config_store::PendingProfileSave {
+            profile_id: codex_a["id"].as_str().unwrap().to_string(),
+            app: asb_core::contracts::AppKind::Codex,
+            previous_file_hash: recovery_record["fileHash"].as_str().unwrap().to_string(),
+        })
+        .unwrap();
+    api.save_common("codex", "web_search", json!("live"));
+    assert!(state
+        .configuration()
+        .pending_profile_save()
+        .unwrap()
+        .is_none());
+    assert_eq!(read(&config), before_metadata_config);
+
+    let mut interrupted_draft = draft_from_profile(&codex_a);
+    interrupted_draft["model"] = json!("codex-a-recovered");
+    state
+        .configuration()
+        .begin_profile_save(&crate::config_store::PendingProfileSave {
+            profile_id: codex_a["id"].as_str().unwrap().to_string(),
+            app: asb_core::contracts::AppKind::Codex,
+            previous_file_hash: recovery_record["fileHash"].as_str().unwrap().to_string(),
+        })
+        .unwrap();
+    state
+        .configuration()
+        .update_provider(
+            codex_a["id"].as_str().unwrap(),
+            serde_json::from_value(interrupted_draft).unwrap(),
+            recovery_record["fileHash"].as_str().unwrap(),
+        )
+        .unwrap();
+    api.save_common("codex", "web_search", json!("live"));
+    assert!(state
+        .configuration()
+        .pending_profile_save()
+        .unwrap()
+        .is_none());
+    assert!(read(&config).contains("model = \"codex-a-recovered\""));
+    let recovered_record = api.provider_record(&codex_a);
+    let recovered_restore = api.prepare_edit(&recovered_record, draft_from_profile(&codex_a));
+    assert_eq!(recovered_restore["kind"], "saveAndApply");
+    api.commit_profile_save(&recovered_restore, true);
+    check_codex(&config, &auth, "a", &secret, &oauth, "high");
     assert_eq!(read(&settings), initial_claude);
     api.switch(&claude_a, &secret);
+    check_claude(&settings, "a", &secret);
+
+    // Claude follows the same active save-and-apply transaction and restores
+    // its original draft before the wider switch workflow continues.
+    let claude_record = api.provider_record(&claude_a);
+    let mut claude_draft = draft_from_profile(&claude_a);
+    claude_draft["model"] = json!("claude-a-temporary");
+    let claude_save = api.prepare_edit(&claude_record, claude_draft);
+    assert_eq!(claude_save["kind"], "saveAndApply");
+    let claude_saved = api.commit_profile_save(&claude_save, true);
+    assert_eq!(claude_saved["profile"]["model"], "claude-a-temporary");
+    assert_eq!(
+        serde_json::from_str::<Value>(&read(&settings)).unwrap()["model"],
+        "claude-a-temporary"
+    );
+    let claude_restore = api.prepare_edit(&claude_saved, draft_from_profile(&claude_a));
+    assert_eq!(claude_restore["kind"], "saveAndApply");
+    api.commit_profile_save(&claude_restore, true);
     check_claude(&settings, "a", &secret);
     let a_config = read(&config);
     let a_auth = read(&auth);
     let a_settings = read(&settings);
     api.switch(&codex_b, &secret_b);
     api.switch(&claude_b, &secret_b);
-    check_codex(&config, &auth, "b", &secret_b, &oauth);
+    check_codex(&config, &auth, "b", &secret_b, &oauth, "high");
     check_claude(&settings, "b", &secret_b);
     assert!(!read(&auth).contains(&secret));
     assert!(!read(&settings).contains(&secret));
@@ -284,9 +554,79 @@ fn run_workflow(root: &Path) {
     );
     assert!(read(&settings) == changed);
 
+    // Every client can select each non-native upstream protocol. The real
+    // command dispatcher must install a loopback-only endpoint and a distinct
+    // local capability token; the configured upstream endpoint and credential
+    // must never reach the client files or status projection.
+    let codex_chat_secret = uuid::Uuid::new_v4().to_string();
+    let codex_anthropic_secret = uuid::Uuid::new_v4().to_string();
+    let claude_chat_secret = uuid::Uuid::new_v4().to_string();
+    let claude_responses_secret = uuid::Uuid::new_v4().to_string();
+    let codex_chat = api.create(
+        "codex",
+        "codex-chat",
+        false,
+        &codex_chat_secret,
+        "chatCompletions",
+    );
+    let codex_anthropic = api.create(
+        "codex",
+        "codex-anthropic",
+        false,
+        &codex_anthropic_secret,
+        "anthropicMessages",
+    );
+    let claude_chat = api.create(
+        "claude",
+        "claude-chat",
+        false,
+        &claude_chat_secret,
+        "chatCompletions",
+    );
+    let claude_responses = api.create(
+        "claude",
+        "claude-responses",
+        false,
+        &claude_responses_secret,
+        "responses",
+    );
+    for (profile, secret) in [
+        (&codex_chat, &codex_chat_secret),
+        (&codex_anthropic, &codex_anthropic_secret),
+    ] {
+        api.switch(profile, secret);
+        check_routed_codex(&config, &auth, secret);
+        check_active_profile(&api, "codex", profile);
+    }
+    for (profile, secret) in [
+        (&claude_chat, &claude_chat_secret),
+        (&claude_responses, &claude_responses_secret),
+    ] {
+        api.switch(profile, secret);
+        check_routed_claude(&settings, secret);
+        check_active_profile(&api, "claude", profile);
+    }
+    // The stored common preference returns as soon as the Codex route no
+    // longer needs cross-protocol conversion.
+    api.switch(&codex_a, &secret);
+    check_codex(&config, &auth, "a", &secret, &oauth, "xhigh");
+    check_active_profile(&api, "codex", &codex_a);
+    // Cloud restore replaces the whole profile store. It must not invalidate
+    // the fingerprints of either active local route before their clients have
+    // been switched away from the gateway.
+    api.rejected(
+        "restore_cloud_backup",
+        json!({
+            "accountPassword": "unused-in-sandbox",
+            "backupPassword": "unused-in-sandbox",
+            "confirmWrite": true,
+        }),
+        "gateway-route-active",
+    );
+
     // Official routes remove custom endpoints/keys while retaining host data and OAuth.
-    let official_codex = api.create("codex", "official", true, &secret);
-    let official_claude = api.create("claude", "official", true, &secret);
+    let official_codex = api.create("codex", "official", true, &secret, "responses");
+    let official_claude = api.create("claude", "official", true, &secret, "anthropicMessages");
     api.switch(&official_codex, &secret);
     api.switch(&official_claude, &secret);
     assert!(!read(&config).contains("openai_base_url"));
@@ -327,14 +667,30 @@ fn run_workflow(root: &Path) {
     }
 }
 
-fn check_codex(config: &Path, auth: &Path, name: &str, secret: &str, oauth: &str) {
+fn check_codex(
+    config: &Path,
+    auth: &Path,
+    name: &str,
+    secret: &str,
+    oauth: &str,
+    reasoning_effort: &str,
+) {
     let text = read(config);
     assert!(text.contains("model_provider = \"openai\""));
     assert!(text.contains(&format!(
         "openai_base_url = \"https://{name}.example.com/v1\""
     )));
     assert!(text.contains(&format!("model = \"codex-{name}\"")));
-    assert!(text.contains("model_reasoning_effort = \"high\""));
+    assert!(
+        text.contains(&format!("model_reasoning_effort = \"{reasoning_effort}\"")),
+        "Codex config for {name} did not retain the projected reasoning setting; rendered keys: {:?}; reasoning line: {:?}",
+        text.lines()
+            .filter_map(|line| line.split_once('=').map(|(key, _)| key.trim()))
+            .collect::<Vec<_>>(),
+        text.lines()
+            .find(|line| line.trim_start().starts_with("model_reasoning_effort"))
+    );
+    assert!(text.contains("web_search = \"live\""));
     assert!(text.contains("[mcp_servers.audit]\ncommand = \"host-only\" # retain bytes"));
     assert!(!text.contains(secret));
     let value: Value = serde_json::from_str(&read(auth)).unwrap();
@@ -351,7 +707,43 @@ fn check_claude(path: &Path, name: &str, secret: &str) {
         value["env"]["ANTHROPIC_BASE_URL"],
         format!("https://{name}.example.com/v1")
     );
-    assert!(value["env"]["ANTHROPIC_AUTH_TOKEN"] == secret);
+    assert!(value["env"]["ANTHROPIC_API_KEY"] == secret);
+    assert!(value["env"].get("ANTHROPIC_AUTH_TOKEN").is_none());
     assert_eq!(value["env"]["HOST_SETTING"], "keep");
     assert_eq!(value["permissions"]["deny"], json!(["Read(.env)"]));
+}
+
+fn check_routed_codex(config: &Path, auth: &Path, upstream_secret: &str) {
+    let text = read(config);
+    assert!(text.contains("openai_base_url = \"http://127.0.0.1:"));
+    assert!(text.contains("/v1\""));
+    assert!(text.contains("web_search = \"disabled\""));
+    assert!(!text.contains(upstream_secret));
+    let value: Value = serde_json::from_str(&read(auth)).unwrap();
+    let token = value["OPENAI_API_KEY"].as_str().unwrap();
+    assert!(token.starts_with("asb_local_"));
+    assert_ne!(token, upstream_secret);
+}
+
+fn check_routed_claude(path: &Path, upstream_secret: &str) {
+    let value: Value = serde_json::from_str(&read(path)).unwrap();
+    let endpoint = value["env"]["ANTHROPIC_BASE_URL"].as_str().unwrap();
+    assert!(endpoint.starts_with("http://127.0.0.1:"));
+    assert!(!endpoint.contains("example.com"));
+    let token = value["env"]["ANTHROPIC_AUTH_TOKEN"].as_str().unwrap();
+    assert!(token.starts_with("asb_local_"));
+    assert_ne!(token, upstream_secret);
+    assert!(value["env"].get("ANTHROPIC_API_KEY").is_none());
+}
+
+fn check_active_profile(api: &Api, client: &str, profile: &Value) {
+    let status = api.ok("config_status", json!({}));
+    let active = status
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["app"] == client)
+        .unwrap();
+    assert_eq!(active["activeProfileId"], profile["id"]);
+    assert_eq!(active["syntaxOk"], true);
 }

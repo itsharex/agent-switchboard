@@ -158,17 +158,17 @@ pub fn route_state(app: AppKind, text: &str) -> crate::contracts::RouteState {
 pub fn matches_provider_identity(
     current: &str,
     codex_auth: Option<&str>,
-    profile: &crate::contracts::ProviderProfile,
+    plan: &SwitchPlan,
 ) -> Result<bool, AdapterError> {
-    validate_syntax(profile.app, current)?;
-    let route = route_state(profile.app, current);
-    if route.route_mode != profile.route_mode || route.base_url != profile.base_url {
+    validate_syntax(plan.profile.app, current)?;
+    let route = route_state(plan.profile.app, current);
+    if route.route_mode != plan.profile.route_mode || route.base_url != plan.profile.base_url {
         return Ok(false);
     }
-    match profile.app {
+    match plan.profile.app {
         AppKind::Codex => Ok(codex::uses_builtin_provider(current)?
-            && self::codex_auth::matches_provider_identity(codex_auth, profile)?),
-        AppKind::Claude => claude::matches_provider_credentials(current, profile),
+            && self::codex_auth::matches_provider_identity(codex_auth, &plan.profile)?),
+        AppKind::Claude => claude::matches_provider_credentials(current, plan),
     }
 }
 

@@ -1,0 +1,68 @@
+use serde::{Deserialize, Serialize};
+
+use crate::extensions::contracts::{
+    DesiredState, ExtensionKind, ExtensionTarget, McpDefinition, SkillDefinition,
+};
+
+/// The discriminated payload of an [`ExtensionDefinition`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum ExtensionPayload {
+    Skill(SkillDefinition),
+    Mcp(McpDefinition),
+}
+
+/// One library definition, persisted as `extensions/definitions/<id>.json`.
+/// The outer envelope cannot combine `deny_unknown_fields` with the
+/// flattened payload union; strictness lives at the payload variants, and
+/// an unknown `kind` still fails the union.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionDefinition {
+    pub schema_version: u8,
+    pub id: String,
+    /// Display name; never an identity. Skill display names come from the
+    /// manifest, MCP names are free-form labels for the native key.
+    pub name: String,
+    /// Monotonic per-definition revision for optimistic concurrency.
+    pub revision: u64,
+    /// RFC 3339 UTC timestamps.
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(flatten)]
+    pub payload: ExtensionPayload,
+}
+
+impl ExtensionDefinition {
+    pub fn kind(&self) -> ExtensionKind {
+        match self.payload {
+            ExtensionPayload::Skill(_) => ExtensionKind::Skill,
+            ExtensionPayload::Mcp(_) => ExtensionKind::Mcp,
+        }
+    }
+}
+
+/// One deployment intent persisted as `extensions/bindings/<id>.json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExtensionBinding {
+    pub schema_version: u8,
+    pub id: String,
+    pub resource_id: String,
+    pub target: ExtensionTarget,
+    /// Native MCP server key; MCP bindings only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_key: Option<String>,
+    /// Deployed directory name under the client's skill root; skill only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deploy_name: Option<String>,
+    pub desired: DesiredState,
+    /// Pin the binding to one content version; absent means the binding
+    /// follows the definition's current digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked_digest: Option<String>,
+    /// Definition revision covered by the last successful apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_applied_revision: Option<u64>,
+    pub updated_at: String,
+}

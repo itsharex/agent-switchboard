@@ -1,0 +1,312 @@
+use super::*;
+
+use crate::contracts::{ModelOptions, RouteMode, UpstreamProtocol, UsageQuery};
+
+// Mapping keeps credentials in the backend-only proposal so import can
+// persist them; the scan-response boundary is tested at the scan layer.
+const TOKEN: &str = "<placeholder>";
+
+fn row(app_type: &str, id: &str, name: &str, settings_config: &str) -> CcSwitchRow {
+    CcSwitchRow {
+        id: id.to_string(),
+        app_type: app_type.to_string(),
+        name: name.to_string(),
+        settings_config: settings_config.to_string(),
+        website_url: None,
+        notes: None,
+        meta: None,
+    }
+}
+
+fn claude_custom() -> String {
+    format!(
+        r#"{{
+                "env": {{
+                    "ANTHROPIC_BASE_URL": "https://relay.internal",
+                    "ANTHROPIC_AUTH_TOKEN": "{TOKEN}",
+                    "ANTHROPIC_MODEL": "claude-x",
+                    "ANTHROPIC_DEFAULT_OPUS_MODEL": "opus-x",
+                    "ANTHROPIC_DEFAULT_SONNET_MODEL": "sonnet-x",
+                    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "haiku-x",
+                    "CLAUDE_CODE_SUBAGENT_MODEL": "sub-x"
+                }},
+                "permissions": {{"defaultMode": "auto"}}
+            }}"#
+    )
+}
+
+fn enabled_script_meta(source: &str) -> String {
+    serde_json::json!({
+        "usage_script": {
+            "enabled": true,
+            "language": "javascript",
+            "code": source
+        }
+    })
+    .to_string()
+}
+
+#[test]
+fn claude_custom_imports_its_api_key_and_routing() {
+    let outcome = map_row(&row("claude", "id-1", "中继 A", &claude_custom())).unwrap();
+    assert_eq!(outcome.key, "claude:id-1");
+    assert_eq!(outcome.draft.api_key, TOKEN);
+    assert_eq!(
+        outcome.draft.base_url.as_deref(),
+        Some("https://relay.internal")
+    );
+    assert!(outcome
+        .warnings
+        .contains(&"未导入: permissions".to_string()));
+    assert!(!outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("ANTHROPIC_AUTH_TOKEN")));
+}
+
+#[test]
+fn claude_api_key_alias_imports_without_an_unimported_warning() {
+    let config = format!(
+        r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_API_KEY":"{TOKEN}"}}}}"#
+    );
+    let outcome = map_row(&row("claude", "id-api-key", "兼容中继", &config)).unwrap();
+
+    assert_eq!(outcome.draft.api_key, TOKEN);
+    assert!(!outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("ANTHROPIC_API_KEY")));
+}
+
+#[test]
+fn custom_usage_script_becomes_the_native_script_contract() {
+    let mut source = row("claude", "usage-1", "带用量", &claude_custom());
+    source.meta = Some(enabled_script_meta(
+        r#"({
+                request: {
+                    url: "{{baseUrl}}/usage",
+                    method: "GET",
+                    headers: { Authorization: "Bearer {{apiKey}}" }
+                },
+                extractor: function(response) {
+                    return [
+                        { isValid: true, planName: "主套餐", remaining: response.main, unit: "USD" },
+                        { isValid: true, planName: "副套餐", remaining: response.extra, unit: "USD" }
+                    ];
+                }
+            })"#,
+    ));
+
+    let outcome = map_row(&source).expect("custom provider should map");
+    let Some(UsageQuery::Script { source, .. }) = outcome.draft.usage_query else {
+        panic!("usage script should be imported");
+    };
+    assert!(source.contains("const cc = ("));
+    assert!(source.contains("cc.extractor(input.body)"));
+    assert!(source.contains("planName"));
+    assert!(!outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("usage_script")));
+}
+
+#[test]
+fn disabled_or_template_usage_scripts_are_not_activated_on_import() {
+    let mut disabled = row("claude", "usage-2", "禁用脚本", &claude_custom());
+    disabled.meta = Some(
+        serde_json::json!({
+            "usage_script": {
+                "enabled": false,
+                "language": "javascript",
+                "code": "({ request: {}, extractor: function() {} })"
+            }
+        })
+        .to_string(),
+    );
+    let disabled = map_row(&disabled).expect("provider should still map");
+    assert!(disabled.draft.usage_query.is_none());
+    assert!(disabled
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("脚本已禁用")));
+
+    let mut template = row("claude", "usage-3", "内建模板", &claude_custom());
+    template.meta = Some(
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": "",
+                "templateType": "balance"
+            }
+        })
+        .to_string(),
+    );
+    let template = map_row(&template).expect("provider should still map");
+    assert!(template.draft.usage_query.is_none());
+    assert!(template
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("templateType")));
+}
+
+#[test]
+fn independent_usage_script_inputs_are_not_mixed_into_the_provider() {
+    let mut source = row("claude", "usage-4", "独立凭据", &claude_custom());
+    source.meta = Some(
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": "({ request: {}, extractor: function() {} })",
+                "accessToken": "<placeholder>"
+            }
+        })
+        .to_string(),
+    );
+
+    let outcome = map_row(&source).expect("provider should still map");
+    assert!(outcome.draft.usage_query.is_none());
+    assert!(outcome
+        .warnings
+        .contains(&"未导入: meta.usage_script.accessToken".to_string()));
+}
+
+#[test]
+fn claude_import_decodes_lowercase_one_m_model_markers_into_semantic_state() {
+    let config = format!(
+        r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"{TOKEN}","ANTHROPIC_MODEL":"claude-opus-4-1[1m]","ANTHROPIC_DEFAULT_SONNET_MODEL":"claude-sonnet-4-6[1m]","ANTHROPIC_DEFAULT_OPUS_MODEL":"claude-opus-4-1[1m]"}}}}"#
+    );
+    let outcome = map_row(&row("claude", "id-1m", "百万上下文", &config)).unwrap();
+
+    assert_eq!(outcome.draft.model.as_deref(), Some("claude-opus-4-1"));
+    let Some(ModelOptions::Claude(settings)) = outcome.draft.model_options.as_ref() else {
+        panic!("Claude model settings should be imported");
+    };
+    assert!(settings.primary_one_m);
+    assert_eq!(settings.sonnet_model.as_deref(), Some("claude-sonnet-4-6"));
+    assert!(settings.sonnet_one_m);
+    assert_eq!(settings.opus_model.as_deref(), Some("claude-opus-4-1"));
+    assert!(settings.opus_one_m);
+    assert!(outcome.draft.validate().is_ok());
+}
+
+#[test]
+fn claude_import_normalizes_ccswitch_uppercase_one_m_model_markers() {
+    let config = format!(
+        r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"{TOKEN}","ANTHROPIC_MODEL":"claude-opus-4-1[1M]"}}}}"#
+    );
+    let outcome = map_row(&row("claude", "id-1m", "百万上下文", &config)).unwrap();
+    assert_eq!(outcome.draft.model.as_deref(), Some("claude-opus-4-1"));
+    let Some(ModelOptions::Claude(settings)) = outcome.draft.model_options else {
+        panic!("Claude model settings should be imported");
+    };
+    assert!(settings.primary_one_m);
+}
+
+#[test]
+fn claude_official_rows_become_credential_free_routes() {
+    let config = format!(r#"{{"env": {{"ANTHROPIC_AUTH_TOKEN": "{TOKEN}"}}}}"#);
+    let outcome = map_row(&row("claude", "id-2", "官方", &config)).unwrap();
+    assert_eq!(outcome.draft.route_mode, RouteMode::Official);
+    assert!(outcome.draft.api_key.is_empty());
+    assert!(!format!("{outcome:?}").contains(TOKEN));
+}
+
+#[test]
+fn claude_malformed_json_skips() {
+    let outcome = map_row(&row("claude", "id-3", "坏档", "{oops")).unwrap_err();
+    assert!(outcome.reason.contains("无法解析"));
+}
+
+#[test]
+fn codex_oauth_rows_become_credential_free_routes() {
+    let config = format!(
+        r#"{{"auth": {{"OPENAI_API_KEY": null, "tokens": {{"refresh_token": "{TOKEN}"}}}}, "config": ""}}"#
+    );
+    let outcome = map_row(&row("codex", "id-4", "订阅", &config)).unwrap();
+    assert_eq!(outcome.draft.route_mode, RouteMode::Official);
+    assert!(outcome.draft.api_key.is_empty());
+    assert!(!format!("{outcome:?}").contains(TOKEN));
+}
+
+#[test]
+fn codex_custom_imports_api_key_from_auth() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
+            "config": "[model_providers.relay]\nname = \"Relay\"\nbase_url = \"https://api.relay.internal\"\nenv_key = \"RELAY_KEY\"\nwire_api = \"responses\"\n"}"#;
+    let outcome = map_row(&row("codex", "id-5", "中继 B", config)).unwrap();
+    assert_eq!(outcome.draft.api_key, TOKEN);
+    assert_eq!(
+        outcome.draft.base_url.as_deref(),
+        Some("https://api.relay.internal")
+    );
+}
+
+#[test]
+fn codex_custom_without_wire_api_defaults_to_responses() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
+            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\n"}"#;
+    let outcome = map_row(&row("codex", "id-6", "缺省", config)).unwrap();
+    assert_eq!(outcome.draft.api_key, TOKEN);
+    assert_eq!(
+        outcome.draft.base_url.as_deref(),
+        Some("https://x.internal")
+    );
+}
+
+#[test]
+fn codex_chat_completion_wire_api_maps_to_the_explicit_protocol() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
+            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\nwire_api = \"chat\"\n"}"#;
+    let outcome = map_row(&row("codex", "id-7", "聊天式", config)).unwrap();
+    assert_eq!(
+        outcome.draft.upstream_protocol,
+        Some(UpstreamProtocol::ChatCompletions)
+    );
+}
+
+#[test]
+fn codex_anthropic_wire_api_skips_without_inventing_an_output_limit() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
+            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\nwire_api = \"anthropic\"\n"}"#;
+    let outcome = map_row(&row("codex", "id-7a", "Anthropic", config)).unwrap_err();
+    assert!(outcome.reason.contains("最大输出 token"));
+}
+
+#[test]
+fn codex_extra_table_key_skips_because_activation_would_lose_it() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
+            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\nhttp_headers = {\"X-Up\" = \"1\"}\n"}"#;
+    let outcome = map_row(&row("codex", "id-8", "带头", config)).unwrap_err();
+    assert!(outcome.reason.contains("http_headers"));
+}
+
+#[test]
+fn codex_multiple_provider_tables_skips() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
+            "config": "[model_providers.a]\nbase_url = \"https://a.internal\"\n[model_providers.b]\nbase_url = \"https://b.internal\"\n"}"#;
+    let outcome = map_row(&row("codex", "id-9", "多表", config)).unwrap_err();
+    assert!(outcome.reason.contains("2 个表"));
+}
+
+#[test]
+fn codex_broken_toml_skips() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"}, "config": "[oops"}"#;
+    let outcome = map_row(&row("codex", "id-10", "坏档", config)).unwrap_err();
+    assert!(outcome.reason.contains("TOML"));
+}
+
+#[test]
+fn codex_custom_without_base_url_skips() {
+    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"}, "config": "[model_providers.r]\nname = \"R\"\n"}"#;
+    let outcome = map_row(&row("codex", "id-11", "无地址", config)).unwrap_err();
+    assert!(outcome.reason.contains("base_url"));
+}
+
+#[test]
+fn unsupported_client_skips() {
+    let outcome = map_row(&row("gemini", "id-12", "双子", "{}")).unwrap_err();
+    assert!(outcome.reason.contains("gemini"));
+    let outcome = map_row(&row("claude-desktop", "id-13", "桌面", "{}")).unwrap_err();
+    assert!(outcome.reason.contains("claude-desktop"));
+}

@@ -1,9 +1,10 @@
 //! Application-owned common-settings commands.
 //!
-//! These commands never read, lock, back up, or write a Codex or Claude Code
-//! configuration file. They expose the typed ownership catalog, persist plain
-//! parameter values in `configuration/common/{client}.json`, and can render a
-//! read-only common-settings fragment. Applying those values remains the
+//! These commands expose the typed ownership catalog, persist plain parameter
+//! values in `configuration/common/{client}.json`, and render a read-only
+//! common-settings fragment. Their own setting save never projects to a client
+//! file; a pending, previously confirmed profile transaction is recovered
+//! before every configuration write. Applying a new common value remains the
 //! selected supplier's switch transaction.
 
 use super::error::{blocking, state, store_error, CommandError};
@@ -157,8 +158,9 @@ pub async fn get_common_settings_editor(
 }
 
 /// Replaces one client's common settings after an optimistic revision check.
-/// Saving here cannot modify either real client config file; the supplier
-/// switch path is the only projection writer.
+/// Saving here does not itself modify either real client config file; the
+/// supplier switch path remains the only projection writer. A previously
+/// confirmed interrupted profile save is recovered before this write.
 #[tauri::command]
 pub async fn save_common_settings(
     app: AppHandle,
@@ -168,6 +170,7 @@ pub async fn save_common_settings(
 ) -> Result<CommonSettingsSnapshot, CommandError> {
     let state = state(&app)?;
     blocking(move || {
+        super::switching::ensure_profile_save_recovered(&app)?;
         state
             .configuration()
             .save_common_settings(target, settings, &expected_settings_hash)

@@ -33,7 +33,6 @@ import { ProbeFeedback, useEndpointProbe } from "./ProbePanel";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
-import { StarlightLayer } from "./experience/StarlightLayer";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
 import { formatUsageSummary } from "../lib/usage-format";
@@ -57,6 +56,8 @@ interface Props {
   onReorder?: (orderedIds: string[]) => void;
   /** Persists the flipped usage-panel state for the profile. */
   onToggleUsage?: (profile: ProviderProfile) => void;
+  /** Persists the official Codex quota panel's auto-refresh interval. */
+  onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   /** Opens the preview panel for the profile; the write itself still needs
    * the explicit confirm step (user decision 2026-08-28). */
   onActivate?: (profile: ProviderProfile) => void;
@@ -91,6 +92,8 @@ interface RowProps {
   sortable: boolean;
   onSelect: (id: string) => void;
   onToggleUsage: (profile: ProviderProfile) => void;
+  /** Persists the official Codex quota panel's auto-refresh interval. */
+  onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   onActivate?: (profile: ProviderProfile) => void;
   onPreview?: (profile: ProviderProfile) => void;
   onEdit?: (profile: ProviderProfile) => void;
@@ -118,6 +121,7 @@ function ProviderRow({
   sortable,
   onSelect,
   onToggleUsage,
+  onSaveQuotaInterval,
   onActivate,
   onPreview,
   onEdit,
@@ -188,10 +192,9 @@ function ProviderRow({
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`asb-row-item${active ? " is-live" : ""}${selected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}${previewOpen ? " is-previewing" : ""}`}
+      className={`asb-row-item${active ? " is-live" : ""}${isDragging ? " is-dragging" : ""}${previewOpen ? " is-previewing" : ""}`}
     >
       <div className="asb-row-line">
-      <StarlightLayer active={selected} variant="warm" />
       {sortable && (
         <Tooltip label={`拖动调整 ${profile.name} 的顺序`}>
           <button
@@ -437,6 +440,8 @@ function ProviderRow({
           id={`codex-official-quota-${profile.id}`}
           profileId={profile.id}
           profileName={profile.name}
+          refreshIntervalMinutes={profile.officialQuotaRefreshIntervalMinutes ?? 0}
+          onSaveInterval={(minutes) => onSaveQuotaInterval(profile, minutes)}
         />
       )}
       {previewOpen && renderPreview && renderPreview(profile)}
@@ -454,6 +459,7 @@ export function ProviderList({
   onSelect,
   onReorder,
   onToggleUsage,
+  onSaveQuotaInterval,
   onActivate,
   onPreview,
   onEdit,
@@ -499,6 +505,7 @@ export function ProviderList({
               sortable={Boolean(onReorder)}
               onSelect={onSelect}
               onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
+              onSaveQuotaInterval={onSaveQuotaInterval}
               onActivate={onActivate}
               onPreview={onPreview}
               onEdit={onEdit}

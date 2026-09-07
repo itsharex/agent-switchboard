@@ -12,6 +12,8 @@ const profile: ProviderProfile = {
   model: null,
   baseUrl: "https://relay.example/v1",
   apiKey: "test-key",
+  upstreamProtocol: "responses",
+  maxOutputTokens: null,
   modelOptions: null,
   websiteUrl: null,
   usageQuery: null,
@@ -51,6 +53,7 @@ function renderPage(overrides: Partial<PageProps> = {}) {
       onCloseEditor={() => {}}
       onSave={async () => {}}
       onSaveUsageQuery={async () => true}
+      onSaveQuotaInterval={async () => true}
       onSelect={() => {}}
       onReorder={() => {}}
       onToggleUsage={() => {}}
@@ -129,6 +132,8 @@ describe("ProvidersPage", () => {
       model: null,
       baseUrl: null,
       apiKey: "",
+      upstreamProtocol: null,
+      maxOutputTokens: null,
       modelOptions: null,
       websiteUrl: null,
       usageQuery: null,
