@@ -22,6 +22,35 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             }
             "config_status" => command!(commands::status::config_status(app.clone())),
             "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
+            "gateway_status" => command!(commands::gateway::gateway_status(app.clone())),
+            "gateway_retry_bind" => {
+                command!(commands::gateway::gateway_retry_bind(app.clone()))
+            }
+            "gateway_prepare_port_change" => {
+                command!(commands::gateway::gateway_prepare_port_change(
+                    app.clone(),
+                    argument(&request.args, "newPort")?,
+                ))
+            }
+            "gateway_commit_port_change" => {
+                command!(commands::gateway::gateway_commit_port_change(
+                    app.clone(),
+                    argument(&request.args, "preparationId")?,
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
+            "gateway_cancel_port_change" => {
+                command!(commands::gateway::gateway_cancel_port_change(
+                    app.clone(),
+                    argument(&request.args, "preparationId")?,
+                ))
+            }
+            "gateway_discard_port_change" => {
+                command!(commands::gateway::gateway_discard_port_change(
+                    app.clone(),
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
             "list_profiles" => command!(commands::list_profiles(app.clone())),
             "reset_profile_store" => command!(commands::reset_profile_store(
                 app.clone(),
@@ -372,6 +401,12 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 app.clone(),
                 argument::<commands::extensions::PlanRequest>(&request.args, "request")?,
             )),
+            "prepare_extension_repair" => {
+                command!(commands::extensions::prepare_extension_repair(
+                    app.clone(),
+                    argument::<commands::extensions::RepairRequest>(&request.args, "request")?,
+                ))
+            }
             "apply_extension_plan" => command!(commands::extensions::apply_extension_plan(
                 app.clone(),
                 argument(&request.args, "planId")?,

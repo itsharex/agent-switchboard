@@ -296,7 +296,7 @@ fn run_cross_protocol_case(app: AppKind, upstream_protocol: UpstreamProtocol) {
             official_quota_refresh_interval_minutes: None,
         })
         .expect("create provider");
-    let gateway = GatewayController::start(&state).expect("start gateway");
+    let gateway = GatewayController::start(&state);
     let projection = gateway
         .project(&SwitchPlan::direct(
             record.profile,
@@ -308,8 +308,8 @@ fn run_cross_protocol_case(app: AppKind, upstream_protocol: UpstreamProtocol) {
         .expect("commit route");
     let client = Client::builder().no_proxy().build().expect("client");
     let gateway_url = match app {
-        AppKind::Codex => format!("{}/v1/responses", gateway.inner.base_url),
-        AppKind::Claude => format!("{}/v1/messages", gateway.inner.base_url),
+        AppKind::Codex => format!("{}/v1/responses", gateway.configured_base_url()),
+        AppKind::Claude => format!("{}/v1/messages", gateway.configured_base_url()),
     };
     let response = client
         .post(gateway_url)
@@ -479,7 +479,7 @@ data: [DONE]
             official_quota_refresh_interval_minutes: None,
         })
         .expect("create provider");
-    let gateway = GatewayController::start(&state).expect("start gateway");
+    let gateway = GatewayController::start(&state);
     let projection = gateway
         .project(&SwitchPlan::direct(
             record.profile,
@@ -490,7 +490,7 @@ data: [DONE]
         .commit(&projection, || Ok(()))
         .expect("commit route");
 
-    let gateway_url = format!("{}/v1/responses", gateway.inner.base_url);
+    let gateway_url = format!("{}/v1/responses", gateway.configured_base_url());
     let local_token = projection.plan.profile.api_key;
     let (first_sender, first_receiver) = mpsc::channel();
     let client_worker = thread::spawn(move || {
@@ -597,7 +597,7 @@ fn codex_websocket_replays_visible_context_and_keeps_upstream_credentials_privat
             official_quota_refresh_interval_minutes: None,
         })
         .expect("create provider");
-    let gateway = GatewayController::start(&state).expect("start gateway");
+    let gateway = GatewayController::start(&state);
     let mut common = default_common_settings(AppKind::Codex);
     common.settings.insert(
         "web_search".to_string(),
@@ -612,8 +612,7 @@ fn codex_websocket_replays_visible_context_and_keeps_upstream_credentials_privat
         .commit(&projection, || Ok(()))
         .expect("activate routed gateway");
     let address = gateway
-        .inner
-        .base_url
+        .configured_base_url()
         .strip_prefix("http://")
         .expect("loopback HTTP address")
         .to_string();
@@ -748,7 +747,7 @@ fn actual_codex_cli_completes_through_the_isolated_websocket_gateway() {
             official_quota_refresh_interval_minutes: None,
         })
         .expect("create provider");
-    let gateway = GatewayController::start(&state).expect("start gateway");
+    let gateway = GatewayController::start(&state);
     let mut common = default_common_settings(AppKind::Codex);
     common.settings.insert(
         "web_search".to_string(),
@@ -954,7 +953,7 @@ fn actual_claude_code_completes_through_the_isolated_gateway() {
             official_quota_refresh_interval_minutes: None,
         })
         .expect("create provider");
-    let gateway = GatewayController::start(&state).expect("start gateway");
+    let gateway = GatewayController::start(&state);
     let projection = gateway
         .project(&SwitchPlan::direct(
             record.profile,
@@ -1149,14 +1148,14 @@ fn loopback_gateway_converts_and_isolates_anthropic_upstream_credentials() {
             official_quota_refresh_interval_minutes: None,
         })
         .expect("create provider");
-    let gateway = GatewayController::start(&state).expect("start gateway");
+    let gateway = GatewayController::start(&state);
     let plan = SwitchPlan::direct(record.profile, default_common_settings(AppKind::Codex));
     let projection = gateway.project(&plan).expect("project route");
     gateway
         .commit(&projection, || Ok(()))
         .expect("commit route");
     let client = Client::builder().no_proxy().build().expect("client");
-    let gateway_url = format!("{}/v1/responses", gateway.inner.base_url);
+    let gateway_url = format!("{}/v1/responses", gateway.configured_base_url());
     let request_body = serde_json::to_vec(&json!({
         "model": "sandbox-model",
         "input": "hello",

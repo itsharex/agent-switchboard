@@ -42,8 +42,11 @@ pub(crate) fn validate_write_record(
             .is_some_and(|name| !name.trim().is_empty());
     let has_any_profile = record.profile_id.is_some() || record.profile_name.is_some();
     match record.operation {
+        WriteOperation::GatewayPortChange if !has_profile => {
+            Err("网关端口修改记录必须关联完整的供应商标识和名称".to_string())
+        }
         WriteOperation::Projection if has_any_profile && !has_profile => {
-            Err("投影记录的供应商标识和名称必须同时存在且非空".to_string())
+            Err("供应商关联写入的标识和名称必须同时存在且非空".to_string())
         }
         WriteOperation::Restore if has_any_profile => {
             Err("非供应商投影记录不能包含供应商信息".to_string())
@@ -81,6 +84,31 @@ impl ConfigStore {
         let json = serde_json::to_string_pretty(&HistoryFile { records })
             .map_err(|_| "写入历史序列化失败".to_string())?;
         write_json_atomic(&self.history_path(app), &json)
+    }
+
+    /// Removes one transaction-owned write fact only when it is still the
+    /// latest fact for that client. Port-change recovery uses this after it
+    /// has restored the matching client file; refusing to remove a newer
+    /// record prevents it from corrupting undo history after another write.
+    pub(crate) fn remove_config_write_if_last(
+        &self,
+        entry: &ConfigWriteRecord,
+    ) -> Result<bool, String> {
+        validate_write_record(entry.app, entry)?;
+        let mut records = self
+            .load_history(entry.app)
+            .map_err(|error| error.to_string())?;
+        let Some(last) = records.last() else {
+            return Ok(false);
+        };
+        if last != entry {
+            return Err("配置写入历史已被后续操作更新，拒绝删除恢复记录".to_string());
+        }
+        records.pop();
+        let json = serde_json::to_string_pretty(&HistoryFile { records })
+            .map_err(|_| "写入历史序列化失败".to_string())?;
+        write_json_atomic(&self.history_path(entry.app), &json)?;
+        Ok(true)
     }
 
     /// The most recent client-file write for one client, if one exists.
@@ -149,6 +177,10 @@ mod tests {
         assert!(store.record_config_write(short_hash).is_err());
         assert!(!store.history_path(AppKind::Codex).exists());
 
+        let mut unowned_gateway_change = record(AppKind::Codex, None, "2026-09-01T08:00:00Z");
+        unowned_gateway_change.operation = WriteOperation::GatewayPortChange;
+        assert!(store.record_config_write(unowned_gateway_change).is_err());
+
         std::fs::create_dir_all(
             store
                 .history_path(AppKind::Codex)
@@ -180,5 +212,22 @@ mod tests {
                 .expect_err("unknown record members must fail"),
             ProfileStoreError::Unsupported
         );
+    }
+
+    #[test]
+    fn removes_only_the_matching_latest_record() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let store = ConfigStore::new(directory.path().join("state"));
+        let first = record(AppKind::Claude, Some("p1"), "2026-09-01T08:00:00Z");
+        let second = record(AppKind::Claude, Some("p2"), "2026-09-01T09:00:00Z");
+        store.record_config_write(first.clone()).unwrap();
+        store.record_config_write(second.clone()).unwrap();
+
+        assert!(store.remove_config_write_if_last(&second).unwrap());
+        assert_eq!(
+            store.latest_config_write(AppKind::Claude).unwrap(),
+            Some(first)
+        );
+        assert!(store.remove_config_write_if_last(&second).is_err());
     }
 }

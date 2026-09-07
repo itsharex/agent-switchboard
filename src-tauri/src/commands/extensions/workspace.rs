@@ -9,6 +9,7 @@ use asb_core::extensions::contracts::{
     ClientCapabilityReport, DependencyState, ExtensionKind, ExtensionOperationRecord,
     ExtensionPayload, ObservedExtension, ObservedOrigin, ProjectRegistration,
 };
+use asb_core::extensions::diagnostics::ExtensionDiagnostic;
 use asb_core::extensions::CapabilityEnvironment;
 use serde::Serialize;
 use tauri::AppHandle;
@@ -283,17 +284,49 @@ pub async fn discover_extensions(app: AppHandle) -> Result<ExtensionDiscoveryDto
         let projects = store.list_projects().map_err(store_error)?;
         let paths = DiscoveredPaths::from_env()
             .map_err(|error| CommandError::new("app-state-unavailable", error))?;
-        let result = discovery::discover(&paths, &projects);
+        let mut result = discovery::discover(&paths, &projects);
         let bindings = store.list_bindings().map_err(store_error)?;
+        // Managed-binding consistency joins the same diagnostic collection:
+        // only scanning surviving directories would miss missing objects.
+        for binding in &bindings {
+            let Some(definition) = store
+                .get_definition(&binding.resource_id)
+                .map_err(store_error)?
+            else {
+                continue;
+            };
+            let baseline = store.get_baseline_file(&binding.id).map_err(store_error)?;
+            if let Some(seed) = discovery::managed_binding_diagnostic(
+                binding,
+                &definition,
+                baseline.as_ref(),
+                &projects,
+            ) {
+                result.diagnostics.push(seed);
+            }
+        }
         let observations =
             discovery::attach_bindings(result.observed, &bindings, &paths, &projects);
+        let observation_ids: Vec<String> = observations.iter().map(|_| new_id("obs")).collect();
+        let diagnostics =
+            discovery::finalize_diagnostics(result.diagnostics, &observation_ids, &mut new_id);
+        let scan_id = new_id("scan");
+        let scanned_at = now();
+        cache_latest_scan(&scan_id, &diagnostics);
+        let observation_rows: Vec<ObservedExtensionDto> = observations
+            .iter()
+            .zip(observation_ids.iter())
+            .map(|(observed, id)| {
+                let actions = super::actions::observation_actions(&store, observed, &paths);
+                observation_view(id.clone(), observed, actions, &projects)
+            })
+            .collect();
+        cache_discovery_observations(observations, observation_ids);
         Ok(ExtensionDiscoveryDto {
-            observations: cache_discovery_observations(observations),
-            diagnostics: result
-                .diagnostics
-                .iter()
-                .map(discovery_diagnostic_view)
-                .collect(),
+            scan_id,
+            scanned_at,
+            observations: observation_rows,
+            diagnostics,
         })
     })
     .await
@@ -302,8 +335,11 @@ pub async fn discover_extensions(app: AppHandle) -> Result<ExtensionDiscoveryDto
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtensionDiscoveryDto {
+    scan_id: String,
+    /// RFC 3339 UTC time of this scan.
+    scanned_at: String,
     observations: Vec<ObservedExtensionDto>,
-    diagnostics: Vec<DiscoveryDiagnosticDto>,
+    diagnostics: Vec<ExtensionDiagnostic>,
 }
 
 /// Renderer-safe discovery view. Absolute skill/document paths, source
@@ -324,30 +360,37 @@ pub struct ObservedExtensionDto {
     content_digest: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     transport: Option<String>,
-    diagnostics: Vec<String>,
+    actions: super::actions::ObservationActionsDto,
 }
 
 #[derive(Serialize)]
-#[serde(tag = "origin", rename_all = "camelCase")]
+#[serde(
+    tag = "origin",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub(super) enum ObservedOriginViewDto {
     UserRoot,
     LegacyRoot,
-    ProjectRoot,
+    ProjectRoot { project_id: String },
     Managed,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscoveryDiagnosticDto {
-    client: AppKind,
-    message: String,
-}
-
-pub(super) fn origin_view(origin: &ObservedOrigin) -> ObservedOriginViewDto {
+pub(super) fn origin_view(
+    origin: &ObservedOrigin,
+    projects: &[ProjectRegistration],
+) -> ObservedOriginViewDto {
     match origin {
         ObservedOrigin::UserRoot => ObservedOriginViewDto::UserRoot,
         ObservedOrigin::LegacyRoot { .. } => ObservedOriginViewDto::LegacyRoot,
-        ObservedOrigin::ProjectRoot { .. } => ObservedOriginViewDto::ProjectRoot,
+        ObservedOrigin::ProjectRoot { project_path } => ObservedOriginViewDto::ProjectRoot {
+            project_id: projects
+                .iter()
+                .find(|project| project.root == *project_path)
+                .expect("project-root observations always come from registered projects")
+                .id
+                .clone(),
+        },
         ObservedOrigin::Managed { .. } => ObservedOriginViewDto::Managed,
     }
 }
@@ -355,6 +398,8 @@ pub(super) fn origin_view(origin: &ObservedOrigin) -> ObservedOriginViewDto {
 pub(super) fn observation_view(
     observation_id: String,
     observed: &ObservedExtension,
+    actions: super::actions::ObservationActionsDto,
+    projects: &[ProjectRegistration],
 ) -> ObservedExtensionDto {
     ObservedExtensionDto {
         observation_id,
@@ -362,44 +407,56 @@ pub(super) fn observation_view(
         client: observed.client,
         name: observed.name.clone(),
         description: observed.description.clone(),
-        origin: origin_view(&observed.origin),
+        origin: origin_view(&observed.origin, projects),
         managed: !observed.managed_binding_ids.is_empty(),
         content_digest: observed.content_digest.clone(),
         transport: observed.transport.clone(),
-        diagnostics: observed.diagnostics.clone(),
+        actions,
     }
 }
 
-pub(super) fn cache_discovery_observations(
+fn cache_discovery_observations(
     observations: Vec<ObservedExtension>,
-) -> Vec<ObservedExtensionDto> {
+    observation_ids: Vec<String>,
+) {
     let mut cache = discovered_observations().lock().expect("observations");
     cache.clear();
-    observations
-        .into_iter()
-        .map(|observed| {
-            let observation_id = new_id("obs");
-            let view = observation_view(observation_id.clone(), &observed);
-            let document_digest = (observed.kind == ExtensionKind::Mcp)
-                .then(|| fs::read(&observed.path).ok().map(|bytes| sha_hex(&bytes)))
-                .flatten();
-            cache.insert(
-                observation_id,
-                CachedDiscoveryObservation {
-                    observed,
-                    document_digest,
-                },
-            );
-            view
-        })
-        .collect()
+    for (observed, observation_id) in observations.into_iter().zip(observation_ids) {
+        let document_digest = (observed.kind == ExtensionKind::Mcp)
+            .then(|| fs::read(&observed.path).ok().map(|bytes| sha_hex(&bytes)))
+            .flatten();
+        cache.insert(
+            observation_id,
+            CachedDiscoveryObservation {
+                observed,
+                document_digest,
+            },
+        );
+    }
 }
 
-pub(super) fn discovery_diagnostic_view(
-    diagnostic: &discovery::DiscoveryDiagnostic,
-) -> DiscoveryDiagnosticDto {
-    DiscoveryDiagnosticDto {
-        client: diagnostic.client,
-        message: diagnostic.message.clone(),
-    }
+fn cache_latest_scan(scan_id: &str, diagnostics: &[ExtensionDiagnostic]) {
+    let cache = latest_discovery_scan();
+    let mut latest = cache.lock().expect("scan");
+    *latest = Some(CachedDiscoveryScan {
+        scan_id: scan_id.to_string(),
+        diagnostics: diagnostics
+            .iter()
+            .map(|diagnostic| {
+                let binding_id = match &diagnostic.subject {
+                    asb_core::extensions::diagnostics::DiagnosticSubject::ManagedBinding {
+                        binding_id,
+                    } => Some(binding_id.clone()),
+                    _ => None,
+                };
+                (
+                    diagnostic.id.clone(),
+                    CachedDiagnostic {
+                        remediation: diagnostic.remediation.clone(),
+                        binding_id,
+                    },
+                )
+            })
+            .collect(),
+    });
 }

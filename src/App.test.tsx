@@ -157,6 +157,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+/** Overflow nav pages live behind the 更多 disclosure (DESIGN.md §3). */
+async function openOverflowPage(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(await screen.findByRole("button", { name: "更多" }));
+  await user.click(screen.getByRole("button", { name }));
+}
+
 const runtimeOverview = {
   appVersion: "0.1.5",
   buildMode: "debug",
@@ -406,7 +415,7 @@ describe("App integration with the typed client boundary", () => {
     render(<App />);
 
     await screen.findByText("本机网关");
-    await user.click(screen.getByRole("button", { name: "日志" }));
+    await openOverflowPage(user, "日志");
 
     expect(await screen.findByText("已切换配置")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("list_runtime_logs");
@@ -417,7 +426,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "日志" }));
+    await openOverflowPage(user, "日志");
     await screen.findByText("暂无应用运行日志");
     const levelControl = screen.getByRole("combobox", { name: "记录级别" });
     await waitFor(() => expect(levelControl).not.toBeDisabled());
@@ -481,7 +490,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "备份" }));
+    await openOverflowPage(user, "备份");
     await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
     const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
     const diff = await screen.findByLabelText("撤回后写入的差异");
@@ -511,7 +520,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "备份" }));
+    await openOverflowPage(user, "备份");
     await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
     const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
     expect(within(dialog).getByRole("button", { name: "确认撤回" })).toBeDisabled();
@@ -532,7 +541,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "备份" }));
+    await openOverflowPage(user, "备份");
     invokeMock.mockClear();
     await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
     const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
@@ -548,7 +557,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "备份" }));
+    await openOverflowPage(user, "备份");
     await user.click(await screen.findByRole("button", { name: "打开备份文件夹" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("open_backup_dir"));
@@ -1000,7 +1009,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "发现" }));
+    await openOverflowPage(user, "发现");
     await user.click(screen.getByRole("button", { name: "扫描配置" }));
     expect(await screen.findByText("无法读取配置文件")).toBeInTheDocument();
   });
@@ -1069,7 +1078,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "发现" }));
+    await openOverflowPage(user, "发现");
     await user.click(screen.getByRole("button", { name: "扫描配置" }));
 
     const codexCard = await screen.findByLabelText("Codex 扫描结果");
@@ -1155,7 +1164,7 @@ describe("App integration with the typed client boundary", () => {
     render(<App />);
     expect(invokeMock).toHaveBeenCalledWith("discover_cached");
 
-    await user.click(await screen.findByRole("button", { name: "发现" }));
+    await openOverflowPage(user, "发现");
     // The cached scan renders without any user scan in this session.
     const codexCard = await screen.findByLabelText("Codex 扫描结果");
     expect(within(codexCard).getByText("配置正常")).toBeInTheDocument();
@@ -1185,7 +1194,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "发现" }));
+    await openOverflowPage(user, "发现");
     await user.click(screen.getByRole("button", { name: "扫描 CC Switch（只读）" }));
 
     expect(await screen.findByText("中继 A")).toBeInTheDocument();

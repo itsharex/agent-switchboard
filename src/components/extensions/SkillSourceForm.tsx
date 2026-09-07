@@ -1,8 +1,13 @@
 import { useState } from "react";
-import type { AppKind, ExtensionMutation, SkillCandidateDto } from "../../api/client";
+import type {
+  AppKind,
+  ExtensionMutation,
+  SkillCandidateDto,
+} from "../../api/client";
 import { Button } from "../Button";
 import { Input } from "../Input";
 import { Select } from "../Select";
+import { Table, type TableColumn } from "../Table";
 
 type SourceKind = "local" | "github";
 
@@ -81,6 +86,52 @@ export function SkillSourceForm({
     );
     if (result) setCandidates(null);
   };
+
+  const candidateColumns: Array<TableColumn<SkillCandidateDto>> = [
+    {
+      key: "name",
+      header: "名称",
+      render: (candidate) => (
+        <>
+          <strong>{candidate.name}</strong>
+          {candidate.description && (
+            <div className="asb-scope-note">{candidate.description}</div>
+          )}
+        </>
+      ),
+    },
+    { key: "files", header: "文件数", render: (candidate) => `${candidate.fileCount} 个` },
+    {
+      key: "digest",
+      header: "内容摘要",
+      render: (candidate) => <span className="asb-code">{candidate.digest.slice(0, 12)}</span>,
+    },
+    {
+      key: "status",
+      header: "状态",
+      render: (candidate) =>
+        candidate.diagnostics.length > 0 ? (
+          <>
+            {candidate.diagnostics.map((diagnostic) => (
+              <div key={diagnostic} className="asb-warn-text">
+                {diagnostic}
+              </div>
+            ))}
+          </>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      render: (candidate) => (
+        <Button variant="secondary" disabled={busy} onClick={() => void importCandidate(candidate)}>
+          加入扩展库
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <section className="asb-form" aria-label="添加 Skill 来源">
@@ -167,32 +218,12 @@ export function SkillSourceForm({
           {candidates.length === 0 ? (
             <p className="asb-empty">来源中未发现可导入的 Skill</p>
           ) : (
-            <ul className="asb-ext-discover-list">
-              {candidates.map((candidate) => (
-                <li key={candidate.digest} className="asb-ext-discover-item">
-                  <div className="asb-ext-history-head">
-                    <strong>{candidate.name}</strong>
-                    <span className="asb-pill-status">{candidate.fileCount} 个文件</span>
-                    <Button
-                      variant="secondary"
-                      disabled={busy}
-                      onClick={() => void importCandidate(candidate)}
-                    >
-                      加入扩展库
-                    </Button>
-                  </div>
-                  {candidate.description && <p className="asb-scope-note">{candidate.description}</p>}
-                  <p className="asb-discovery-basis">
-                    内容摘要 <span className="asb-code">{candidate.digest.slice(0, 12)}</span>
-                  </p>
-                  {candidate.diagnostics.map((diagnostic) => (
-                    <p key={diagnostic} className="asb-warn-text">
-                      {diagnostic}
-                    </p>
-                  ))}
-                </li>
-              ))}
-            </ul>
+            <Table
+              columns={candidateColumns}
+              rows={candidates}
+              rowKey={(candidate) => candidate.digest}
+              ariaLabel="Skill 来源候选"
+            />
           )}
         </div>
       )}

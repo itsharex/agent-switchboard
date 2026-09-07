@@ -119,7 +119,9 @@ fn start_api(root: &Path) -> Api {
         .unwrap();
     assert_eq!(app.path().app_data_dir().unwrap(), root.join("app-data"));
     let state = crate::local_state::LocalState::from_app(app.handle()).unwrap();
-    app.manage(crate::gateway::GatewayController::start(&state).unwrap());
+    app.manage(crate::gateway::GatewayController::start(&state));
+    app.manage(crate::gateway::PortChangePreparations::default());
+    app.manage(crate::commands::ConfigWriteGate::default());
     app.manage(crate::commands::switching::ProfileSavePreparations::default());
     let server = Server::http("127.0.0.1:0").unwrap();
     let url = format!("http://{}/invoke", server.server_addr());
@@ -149,8 +151,10 @@ fn editor_file<'a>(editor: &'a Value, path: &str) -> &'a Value {
 
 // ------------------------------------------------------------ authoring flow
 
+mod actions;
 mod authoring;
 mod deployment;
 mod migration;
 mod portable;
+mod repair;
 mod takeover;

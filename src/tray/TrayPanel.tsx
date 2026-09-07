@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, LogOut } from "lucide-react";
 import { hideTray, openTrayMain, quitTray, resizeTray, switchTrayProvider, trayReady } from "../api/client";
+import appIcon from "../assets/app-icon.png";
 import { Button } from "@/components/Button";
 import { ClientLogo } from "@/components/ClientLogo";
 import { Time } from "@/components/Time";
@@ -84,9 +85,10 @@ export function TrayPanel() {
   return (
     <div ref={panel} className="tray-panel bui-scope" aria-label="Agent Switchboard 托盘">
       <header className="tray-header flex items-center justify-between gap-2 px-4 py-2">
-        <span className="text-body-medium">Agent Switchboard</span>
-        <Button variant="icon" aria-label="打开主界面" disabled={busy} onClick={() => void act("open", () => openTrayMain(false))}>
-          <ArrowUpRight size={20} aria-hidden="true" />
+        <img src={appIcon} alt="" className="tray-app-logo" aria-hidden="true" />
+        <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("open", () => openTrayMain(false))}>
+          <ArrowUpRight size={16} aria-hidden="true" />
+          打开主界面
         </Button>
       </header>
       {error && <div role="alert" className="tray-error px-4 py-2 text-caption-1-regular">{error}</div>}
@@ -124,8 +126,8 @@ export function TrayPanel() {
         </div>
       </div>
       <footer className="tray-footer flex items-center justify-between gap-2 px-2 py-2">
-        <Button variant="secondary" className="tray-footer-button" disabled={busy} onClick={() => void act("manage", () => openTrayMain(true))}>管理供应商</Button>
-        <Button variant="secondary" className="tray-footer-button" disabled={busy} onClick={() => void act("quit", quitTray)}><LogOut size={16} aria-hidden="true" />退出</Button>
+        <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("manage", () => openTrayMain(true))}>管理供应商</Button>
+        <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("quit", quitTray)}><LogOut size={16} aria-hidden="true" />退出</Button>
       </footer>
     </div>
   );

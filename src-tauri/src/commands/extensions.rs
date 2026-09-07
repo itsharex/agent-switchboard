@@ -3,11 +3,13 @@
 //! client-file write goes through `asb_switch::extensions`, and every plan
 //! must be prepared, previewed, and confirmed before it can be applied.
 
+mod actions;
 mod apply;
 mod checks;
 mod definitions;
 mod planner;
 mod portable;
+mod repair;
 mod skills;
 mod sources;
 mod support;
@@ -47,6 +49,12 @@ pub use portable::{
     __cmd__export_extension_portable, __cmd__import_extension_portable,
     __tauri_command_name_export_extension_portable, __tauri_command_name_import_extension_portable,
     export_extension_portable, import_extension_portable,
+};
+#[cfg(debug_assertions)]
+pub use repair::RepairRequest;
+pub use repair::{
+    __cmd__prepare_extension_repair, __tauri_command_name_prepare_extension_repair,
+    prepare_extension_repair,
 };
 pub use skills::{
     __cmd__check_skill_updates, __cmd__create_local_skill, __cmd__fork_local_skill,

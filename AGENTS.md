@@ -2,24 +2,18 @@
 
 ## 项目定位
 
-- 面向 Codex 与 Claude Code 的本地配置控制台，由 React/Vite 前端、Tauri 桌面壳和 Rust workspace 组成。
-- 它管理供应商档案、切换预览和恢复；协议转换只服务本机回环，并非公共代理或多客户端产品。
+- Agent Switchboard 是面向 Codex 与 Claude Code 的本地配置控制台：管理供应商档案、预览差异、执行可恢复切换并展示本机使用状态。
+- 不新增其他客户端、云同步、遥测、账户体系、自动代理、提供商故障转移、渲染器注入或安装器补丁，除非产品范围明确改变。
+- 产品与设计事实分别由 `README.md`、`DESIGN.md` 和 `progress.md` 拥有。
 
-## 工作路由
+## 工作路由与契约
 
-- `src/`：React 页面、组件和客户端 API；变更界面契约时同步检查 `src-tauri/` 命令及关联 `*.test.tsx`。
-- `src-tauri/`：Tauri 命令、窗口和本机运行时；`tauri.conf.json` 拥有桌面打包配置。
-- `crates/asb-core/`：共享核心、适配器和网站装配生成逻辑；`crates/asb-switch/`：配置切换、备份和恢复事务。
-- `website/`：独立静态站，拥有自己的 `AGENTS.md`；仅在站点或生成产物相关改动时进入该目录。
+- React 前端位于 `src/`；Tauri 边界位于 `src-tauri/`；共享 Rust 逻辑位于 `crates/asb-core/` 和 `crates/asb-switch/`。
+- UI 只能请求类型化预览或切换操作；真实 Codex/Claude Code 配置写入只能由切换执行器完成。
+- 切换保留不归该档案所有的键，只变更被选中覆盖层拥有的字段。真实写入必须可观察、备份、校验并可恢复。
+- UI 改动读取相关 `src/components/`、`src/styles/` 与 `DESIGN.md`；配置行为改动检查受影响适配器、执行器、契约和测试。
 
-## 本地约束
+## 验证
 
-- 只支持 Codex 与 Claude Code；未经明确需求不得扩展为账户、云同步、遥测或通用代理。
-- 对真实客户端配置的变更必须先展示脱敏预览并经确认；测试使用隔离路径，日志、文档和差异不得含密钥或私有端点。
-- 协议转换仅监听 `127.0.0.1`；客户端配置只能得到本地端点和能力令牌。
-
-## 验证与交付
-
-- 前端改动运行 `npm run typecheck` 和 `npm test`；安装器发布脚本改动运行 `npm run test:updater-release`。
-- 改动 Rust workspace、配置事务或 Tauri 命令时运行 `cargo test --workspace`。
-- 需启动桌面应用时使用 `npm run dev:desktop`；Windows 打包只在明确的发布任务中运行 `npm run tauri:build:windows`。
+- 前端或共享行为改动运行 `npm run typecheck` 和相应的 `npm run test` 切片。
+- 写配置的测试只使用隔离临时目录；不得触碰用户真实配置、凭据缓存或环境。

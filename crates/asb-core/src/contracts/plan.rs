@@ -163,6 +163,9 @@ pub struct RouteState {
 #[serde(rename_all = "camelCase")]
 pub enum WriteOperation {
     Projection,
+    /// One client endpoint update that belongs to a gateway-wide port
+    /// transaction. It cannot be undone as an isolated client restore.
+    GatewayPortChange,
     Restore,
 }
 
@@ -172,7 +175,7 @@ pub enum WriteOperation {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConfigWriteRecord {
     pub app: AppKind,
-    /// Present only for a provider projection.
+    /// Present for a provider projection or its gateway endpoint update.
     pub profile_id: Option<String>,
     pub profile_name: Option<String>,
     /// SHA-256 hex digest of the file content after the operation.

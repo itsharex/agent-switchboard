@@ -4,8 +4,14 @@
 //! A provider profile remains the sole owner of its endpoint and API key. The
 //! persisted gateway state stores only a listener identity plus a profile id
 //! and fingerprint, so a restart never duplicates an upstream credential.
+//!
+//! The controller always exists once the application is running; the listener
+//! behind it may be listening, failed, or awaiting repair. A failed bind is a
+//! visible, recoverable runtime state — never a reason to refuse the window.
 
 mod metrics;
+pub(crate) mod port_change;
+mod port_probe;
 mod server;
 mod transform;
 
@@ -20,14 +26,16 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
+use std::time::Duration;
 use tiny_http::Server;
 use uuid::Uuid;
 
 mod controller;
 mod identity;
+mod lifecycle;
 mod routing;
 mod state;
 
@@ -36,6 +44,33 @@ mod tests;
 
 use identity::*;
 use state::*;
+
+pub(crate) use port_change::{
+    GatewayPortChangePlan, GatewayPortChangeResult, PortChangePreparations,
+};
+
+/// The product default listener port for new installations. It is not
+/// reserved by any system; the actual binding result stays the only truth.
+/// Existing installations keep their persisted port across upgrades.
+pub(crate) const DEFAULT_GATEWAY_PORT: u16 = 47821;
+
+/// Custom listener ports must be explicit user choices in the unprivileged
+/// registered range; port `0` is never accepted as user input.
+pub(crate) const MIN_CUSTOM_PORT: u16 = 1024;
+
+pub(crate) const MAX_CUSTOM_PORT: u16 = 65535;
+
+pub(crate) const CUSTOM_PORT_RANGE_MESSAGE: &str = "监听端口必须是 1024–65535 之间的整数";
+
+pub(crate) fn validate_custom_port(port: u16) -> Result<(), String> {
+    if !(MIN_CUSTOM_PORT..=MAX_CUSTOM_PORT).contains(&port) {
+        return Err(CUSTOM_PORT_RANGE_MESSAGE.to_string());
+    }
+    Ok(())
+}
+
+/// How long a port change waits for in-flight requests before cancelling.
+pub(crate) const PORT_CHANGE_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The result of resolving a selected provider into the exact client-facing
 /// plan. Direct plans retain the provider endpoint; routed plans replace it
@@ -84,14 +119,97 @@ pub(crate) struct ActiveRoute {
     pub(crate) api_key: String,
 }
 
-struct GatewayInner {
-    state_path: PathBuf,
-    state: Mutex<GatewayStateFile>,
-    routes: RwLock<BTreeMap<AppKind, ActiveRoute>>,
-    activation_lock: Mutex<()>,
-    stopping: AtomicBool,
-    base_url: String,
-    metrics: Arc<GatewayMetrics>,
+/// One process-owned loopback listener. Its stop signal belongs to this
+/// socket alone so a port handoff cannot accidentally stop the replacement.
+#[derive(Clone)]
+pub(crate) struct BoundListener {
+    server: Arc<Server>,
+    stop: Arc<AtomicBool>,
+    port: u16,
+}
+
+impl BoundListener {
+    pub(crate) fn from_server(server: Server) -> Self {
+        let port = server
+            .server_addr()
+            .to_ip()
+            .expect("the loopback gateway always owns a TCP listener")
+            .port();
+        Self {
+            server: Arc::new(server),
+            stop: Arc::new(AtomicBool::new(false)),
+            port,
+        }
+    }
+
+    pub(crate) fn server(&self) -> Arc<Server> {
+        Arc::clone(&self.server)
+    }
+
+    pub(crate) fn stop_signal(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.stop)
+    }
+
+    pub(crate) fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub(crate) fn stop(&self) {
+        self.stop.store(true, Ordering::Release);
+        self.server.unblock();
+    }
+}
+
+/// One bound or failed listener behind the always-present controller.
+pub(crate) enum ListenerState {
+    Listening { listener: BoundListener },
+    Failed(Box<GatewayFailureReport>),
+}
+
+pub(crate) struct GatewayInner {
+    pub(crate) state_path: PathBuf,
+    pub(crate) state: Mutex<GatewayStateFile>,
+    pub(crate) routes: RwLock<BTreeMap<AppKind, ActiveRoute>>,
+    pub(crate) activation_lock: Mutex<()>,
+    pub(crate) listener: RwLock<ListenerState>,
+    /// While set, the serve loop answers new requests with 503 so a port
+    /// change can drain in-flight work without cutting long requests.
+    pub(crate) maintenance: AtomicBool,
+    /// Requests accepted but not yet answered; drains to zero before a
+    /// listener swap. Panicking workers release their count via unwind.
+    pub(crate) inflight: AtomicUsize,
+    pub(crate) stopping: AtomicBool,
+    /// False when the persisted identity could not be read or safely
+    /// recreated. A listener must never serve with a fabricated identity.
+    pub(crate) state_available: AtomicBool,
+    /// A port-change transaction whose rollback could not preserve an
+    /// externally modified file. Kept until explicitly resolved.
+    pub(crate) blocked_recovery: Mutex<Option<port_change::BlockedPortChange>>,
+    pub(crate) metrics: Arc<GatewayMetrics>,
+}
+
+impl GatewayInner {
+    /// The loopback base URL derived from the persisted port — the single
+    /// address contract, read live so a port change takes effect everywhere.
+    pub(crate) fn configured_base_url(&self) -> String {
+        format!(
+            "http://127.0.0.1:{}",
+            self.state
+                .lock()
+                .map(|state| state.port)
+                .unwrap_or(DEFAULT_GATEWAY_PORT)
+        )
+    }
+}
+
+/// Drops the in-flight count when the request handler exits, including via
+/// panic unwinding, so a drain can never wait on a leaked counter.
+pub(crate) struct InflightGuard(Arc<GatewayInner>);
+
+impl Drop for InflightGuard {
+    fn drop(&mut self) {
+        self.0.inflight.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 /// One active routed provider as shown on the status page. Deliberately no
@@ -105,12 +223,70 @@ pub(crate) struct RouteObservation {
     pub(crate) upstream_protocol: UpstreamProtocol,
 }
 
+/// The listener's runtime condition, kept distinct from the configured port.
+/// The UI must never present a saved port as an actually listening one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum GatewayStatusKind {
+    /// Listening without routed clients.
+    Standby,
+    /// Listening with at least one active route.
+    Running,
+    /// The configured port is held by another process.
+    PortConflict,
+    /// The system refused the bind for a non-conflict reason.
+    BindRejected,
+    /// Gateway state was lost or replaced while a client still points at the
+    /// gateway; providers must be re-applied explicitly.
+    NeedsRepair,
+    /// A port-change transaction is stuck waiting for an explicit decision.
+    RecoveryBlocked,
+}
+
+/// The process holding the configured port, when the platform could identify
+/// it reliably. An unidentified holder stays `None` — the gateway never kills
+/// other processes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GatewayPortProcess {
+    pub(crate) pid: u32,
+    pub(crate) name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum GatewayFailureKind {
+    PortInUse,
+    SystemRejected,
+    StateUnusable,
+}
+
+/// Why the listener is down, with the port, the OS error code, and the
+/// identified holder process when available.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GatewayFailureReport {
+    pub(crate) port: u16,
+    pub(crate) kind: GatewayFailureKind,
+    pub(crate) os_code: Option<i32>,
+    pub(crate) message: String,
+    pub(crate) process: Option<GatewayPortProcess>,
+}
+
 /// Read-only listener facts plus request telemetry for the status page.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GatewayObservation {
-    pub(crate) port: u16,
-    pub(crate) base_url: String,
+    /// The saved port that client configurations are built against.
+    pub(crate) configured_port: u16,
+    /// The port actually being served, or `null` while not listening.
+    pub(crate) listening_port: Option<u16>,
+    /// The served loopback base URL, or `null` while not listening.
+    pub(crate) base_url: Option<String>,
+    pub(crate) status: GatewayStatusKind,
+    pub(crate) failure: Option<GatewayFailureReport>,
+    /// Present only while a port-change transaction awaits a decision.
+    pub(crate) blocked_recovery: Option<port_change::BlockedPortChange>,
     pub(crate) routes: Vec<RouteObservation>,
     pub(crate) metrics: GatewayMetricsSnapshot,
 }
@@ -119,6 +295,205 @@ pub(crate) struct GatewayObservation {
 /// `127.0.0.1`; the routing catalog is not a network management surface.
 #[derive(Clone)]
 pub(crate) struct GatewayController {
-    inner: Arc<GatewayInner>,
-    server: Arc<Server>,
+    pub(crate) inner: Arc<GatewayInner>,
+}
+
+impl GatewayController {
+    /// The saved port every client-facing address is derived from.
+    pub(crate) fn configured_port(&self) -> u16 {
+        self.inner
+            .state
+            .lock()
+            .map(|state| state.port)
+            .unwrap_or(DEFAULT_GATEWAY_PORT)
+    }
+
+    /// The loopback base URL that client configurations are written against.
+    /// It follows the configured port, the single address contract, whether
+    /// or not the listener is currently up.
+    pub(crate) fn configured_base_url(&self) -> String {
+        self.inner.configured_base_url()
+    }
+
+    pub(crate) fn listening(&self) -> Option<BoundListener> {
+        let listener = self.inner.listener.read().ok()?;
+        match &*listener {
+            ListenerState::Listening { listener } => Some(listener.clone()),
+            ListenerState::Failed(_) => None,
+        }
+    }
+
+    /// The served base URL; `None` while the listener is down.
+    pub(crate) fn listening_base_url(&self) -> Option<String> {
+        self.listening()
+            .map(|listener| format!("http://127.0.0.1:{}", listener.port()))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_listening(&self) -> bool {
+        self.listening().is_some()
+    }
+
+    pub(crate) fn blocked_recovery(&self) -> Option<port_change::BlockedPortChange> {
+        self.inner
+            .blocked_recovery
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone())
+    }
+
+    pub(crate) fn state_available(&self) -> bool {
+        self.inner.state_available.load(Ordering::Acquire)
+    }
+
+    /// Persists the one listener-address contract before publishing it to
+    /// callers. The port-change journal decides whether a later failure rolls
+    /// this fact back or completes it.
+    pub(crate) fn persist_port(&self, port: u16) -> Result<(), String> {
+        let mut state = self
+            .inner
+            .state
+            .lock()
+            .map_err(|_| "本机协议网关状态锁不可用".to_string())?;
+        let mut next = state.clone();
+        next.port = port;
+        write_state(&self.inner.state_path, &next)?;
+        *state = next;
+        Ok(())
+    }
+
+    /// Publishes a replacement listener and returns the previous listener so
+    /// the caller can stop that exact socket after the handoff.
+    pub(crate) fn replace_listener(&self, listener: BoundListener) -> Option<BoundListener> {
+        // The listener lock protects only this process's publication slot. If
+        // a handler panicked while holding it, keeping the poisoned old slot
+        // would strand a committed endpoint transaction, so retain its value
+        // and complete the deterministic handoff.
+        let mut state = self
+            .inner
+            .listener
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = std::mem::replace(&mut *state, ListenerState::Listening { listener });
+        match previous {
+            ListenerState::Listening { listener } => Some(listener),
+            ListenerState::Failed(_) => None,
+        }
+    }
+
+    pub(crate) fn block_port_change(&self, blocked: port_change::BlockedPortChange) {
+        if let Ok(mut slot) = self.inner.blocked_recovery.lock() {
+            *slot = Some(blocked);
+        }
+    }
+
+    pub(crate) fn clear_blocked_port_change(&self) -> Result<(), String> {
+        let mut slot = self
+            .inner
+            .blocked_recovery
+            .lock()
+            .map_err(|_| "端口修改恢复状态锁不可用".to_string())?;
+        *slot = None;
+        Ok(())
+    }
+
+    /// Replaces the listener fact atomically.
+    pub(crate) fn set_listener(&self, state: ListenerState) {
+        if let Ok(mut listener) = self.inner.listener.write() {
+            *listener = state;
+        }
+    }
+
+    pub(crate) fn shutdown(&self) {
+        self.inner.stopping.store(true, Ordering::Release);
+        if let Some(listener) = self.listening() {
+            listener.stop();
+        }
+    }
+}
+
+/// Reads the client files best-effort and reports whether either still points
+/// at a loopback gateway endpoint with this application's capability token.
+pub(crate) fn points_at_gateway_files(local: &LocalState) -> bool {
+    for app in [AppKind::Codex, AppKind::Claude] {
+        let Ok(target) = local.target(app) else {
+            continue;
+        };
+        let Ok(text) = fs::read_to_string(target) else {
+            continue;
+        };
+        let codex_auth = if app == AppKind::Codex {
+            crate::local_state::LocalState::codex_auth_path()
+                .ok()
+                .and_then(|path| fs::read_to_string(path).ok())
+        } else {
+            None
+        };
+        if routing::config_points_at_gateway(app, &text, codex_auth.as_deref()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Classifies a bind error into the structured failure report, identifying
+/// the holder process only when the platform reports it reliably.
+pub(crate) fn bind_failure_report(
+    port: u16,
+    error: Box<dyn std::error::Error + Send + Sync>,
+) -> GatewayFailureReport {
+    const WSAEADDRINUSE: i32 = 10048;
+    let io_error = error.downcast_ref::<std::io::Error>();
+    let os_code = io_error.and_then(|error| error.raw_os_error());
+    let in_use = matches!(
+        io_error.map(|error| error.kind()),
+        Some(std::io::ErrorKind::AddrInUse)
+    ) || os_code == Some(WSAEADDRINUSE);
+    let holder = if in_use {
+        port_probe::find_listener(port)
+    } else {
+        None
+    };
+    let (kind, message) = if in_use {
+        let holder_text = match &holder {
+            Some(info) => match &info.name {
+                Some(name) => format!("（占用进程 {}，PID {}）", name, info.pid),
+                None => format!("（占用进程 PID {}）", info.pid),
+            },
+            None => "（占用进程未知）".to_string(),
+        };
+        (
+            GatewayFailureKind::PortInUse,
+            format!("无法监听 127.0.0.1:{port}：端口已被占用{holder_text}。"),
+        )
+    } else {
+        let code_text = os_code
+            .map(|code| format!("（系统错误码 {code}）"))
+            .unwrap_or_default();
+        (
+            GatewayFailureKind::SystemRejected,
+            format!("无法监听 127.0.0.1:{port}：绑定请求被系统拒绝{code_text}。"),
+        )
+    };
+    GatewayFailureReport {
+        port,
+        kind,
+        os_code,
+        message,
+        process: holder.map(|info| GatewayPortProcess {
+            pid: info.pid,
+            name: info.name,
+        }),
+    }
+}
+
+/// A minimal failure report for lock-poisoned or test-only paths.
+pub(crate) fn test_failure_report(port: u16, message: &str) -> GatewayFailureReport {
+    GatewayFailureReport {
+        port,
+        kind: GatewayFailureKind::PortInUse,
+        os_code: None,
+        message: message.to_string(),
+        process: None,
+    }
 }

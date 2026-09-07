@@ -95,6 +95,21 @@ pub fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> 
     }
 }
 
+/// Rewrites only the loopback endpoint in an already-owned gateway client
+/// configuration. A gateway port change is deliberately narrower than a
+/// provider projection: model and common settings remain exactly as the user
+/// last wrote them.
+pub fn render_gateway_base_url(
+    app: AppKind,
+    current: &str,
+    base_url: &str,
+) -> Result<String, AdapterError> {
+    match app {
+        AppKind::Codex => codex::render_gateway_base_url(current, base_url),
+        AppKind::Claude => claude::render_gateway_base_url(current, base_url),
+    }
+}
+
 /// Renders only the current client's non-default common settings as a
 /// self-contained TOML or JSON fragment. This is a read-only editor preview,
 /// not a candidate client file: provider and host-owned configuration remain
@@ -261,5 +276,22 @@ mod tests {
             render_common_settings(AppKind::Claude, &settings).expect("fragment"),
             "{}"
         );
+    }
+
+    #[test]
+    fn gateway_endpoint_renderer_changes_only_the_endpoint_slot() {
+        let codex = "model = \"user-selected\"\nopenai_base_url = \"http://127.0.0.1:47821/v1\"\nthreads = 8\n";
+        let codex_rendered =
+            render_gateway_base_url(AppKind::Codex, codex, "http://127.0.0.1:47822/v1").unwrap();
+        assert!(codex_rendered.contains("model = \"user-selected\""));
+        assert!(codex_rendered.contains("threads = 8"));
+        assert!(codex_rendered.contains("47822/v1"));
+
+        let claude = r#"{"model":"user-selected","env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:47821","HOST_KEY":"keep"}}"#;
+        let claude_rendered =
+            render_gateway_base_url(AppKind::Claude, claude, "http://127.0.0.1:47822").unwrap();
+        assert!(claude_rendered.contains("user-selected"));
+        assert!(claude_rendered.contains("HOST_KEY"));
+        assert!(claude_rendered.contains("47822"));
     }
 }

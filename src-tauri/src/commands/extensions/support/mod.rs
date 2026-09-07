@@ -69,6 +69,30 @@ pub(super) fn discovered_observations(
     DISCOVERED_OBSERVATIONS.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
+/// The backend facts of one diagnostic that repair planning needs. Real
+/// paths and baselines stay out; repair re-derives everything from the
+/// library at prepare time.
+#[derive(Clone)]
+pub(super) struct CachedDiagnostic {
+    pub(super) remediation: asb_core::extensions::diagnostics::DiagnosticRemediation,
+    /// Set exactly when the subject is a managed binding.
+    pub(super) binding_id: Option<String>,
+}
+
+/// The most recent discovery scan. A repair request must name this scan;
+/// anything else is stale and rejected.
+#[derive(Clone)]
+pub(super) struct CachedDiscoveryScan {
+    pub(super) scan_id: String,
+    pub(super) diagnostics: BTreeMap<String, CachedDiagnostic>,
+}
+
+static LATEST_DISCOVERY_SCAN: OnceLock<Mutex<Option<CachedDiscoveryScan>>> = OnceLock::new();
+
+pub(super) fn latest_discovery_scan() -> &'static Mutex<Option<CachedDiscoveryScan>> {
+    LATEST_DISCOVERY_SCAN.get_or_init(|| Mutex::new(None))
+}
+
 static CHECK_REGISTRY: OnceLock<CheckRegistry> = OnceLock::new();
 
 pub(super) fn check_registry() -> &'static CheckRegistry {

@@ -70,7 +70,7 @@ export function BackupsPage({
         >
           <div className="asb-backup-toolbar">
             <div className="asb-panel-actions">
-              {lastSwitch && (
+              {lastSwitch && lastSwitch.operation !== "gatewayPortChange" && (
                 <Button
                   variant="danger"
                   disabled={busy}
@@ -91,6 +91,8 @@ export function BackupsPage({
                 ? ` 已投影供应商「${lastSwitch.profileName}」`
                 : lastSwitch.operation === "restore"
                   ? " 恢复了备份"
+                  : lastSwitch.operation === "gatewayPortChange"
+                    ? " 已修改网关监听端口"
                   : " 已应用通用设置投影"}
               ，<Time iso={lastSwitch.at} />。
             </p>

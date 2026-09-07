@@ -181,6 +181,21 @@ pub(super) fn synchronize_document_baselines(
     removed_bindings: &BTreeSet<String>,
 ) -> Result<Vec<(String, ManagedBaselineFile)>, CommandError> {
     let mut hashes = BTreeMap::new();
+    let mut repaired_documents = BTreeSet::new();
+    for operation in &plan.operations {
+        if operation.operation != asb_core::extensions::contracts::PlanOperation::Repair {
+            continue;
+        }
+        for step in operation
+            .targets
+            .iter()
+            .flat_map(|target| target.steps.iter())
+        {
+            if let PlanStep::DocumentWrite { path, .. } = step {
+                repaired_documents.insert(path.clone());
+            }
+        }
+    }
     for step in plan
         .planned_targets()
         .flat_map(|target| target.steps.iter())
@@ -221,14 +236,55 @@ pub(super) fn synchronize_document_baselines(
         let Some(mut baseline) = store.get_baseline_file(&binding.id).map_err(store_error)? else {
             continue;
         };
-        if update_baseline_document_hashes(&mut baseline, &hashes) {
+        if update_baseline_document_hashes(&mut baseline, &hashes)
+            || update_repaired_document_hashes(&mut baseline, &hashes, &repaired_documents)
+        {
             baselines.insert(binding.id, baseline);
         }
     }
     for baseline in baselines.values_mut() {
         update_baseline_document_hashes(baseline, &hashes);
+        update_repaired_document_hashes(baseline, &hashes, &repaired_documents);
     }
     Ok(baselines.into_iter().collect())
+}
+
+/// Repair explicitly accepts a missing owned entry whose restoration was
+/// re-validated while building the plan. That deletion necessarily made each
+/// peer binding's whole-document hash stale, so all peers in the repaired
+/// document move to the verified post-write hash together.
+fn update_repaired_document_hashes(
+    baseline: &mut ManagedBaselineFile,
+    hashes: &BTreeMap<String, (Option<String>, String)>,
+    repaired_documents: &BTreeSet<String>,
+) -> bool {
+    let mut changed = false;
+    for entry in &mut baseline.entries {
+        let (target_path, last_document_hash) = match entry {
+            ManagedBaseline::DocumentEntry {
+                target_path,
+                last_document_hash,
+                ..
+            }
+            | ManagedBaseline::SetMember {
+                target_path,
+                last_document_hash,
+                ..
+            } => (target_path, last_document_hash),
+            ManagedBaseline::Directory { .. } => continue,
+        };
+        if !repaired_documents.contains(target_path) {
+            continue;
+        }
+        let Some((_, next_hash)) = hashes.get(target_path) else {
+            continue;
+        };
+        if last_document_hash != next_hash {
+            *last_document_hash = next_hash.clone();
+            changed = true;
+        }
+    }
+    changed
 }
 
 pub(super) fn update_baseline_document_hashes(

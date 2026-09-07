@@ -3,17 +3,15 @@ import type {
   AppKind,
   BindingStatus,
   CommandError,
-  ExtensionDiscoveryDiagnostic,
   ExtensionDraft,
   ExtensionKind,
   ExtensionListItem,
   ExtensionPlanView,
   McpEditRequest,
   McpEditViewEnvelope,
-  ObservedExtension,
   SkillUpdateReport,
-  TakeoverPreview,
 } from "../api/client";
+import { useDiscoverScan } from "../app/extensions/useDiscoverScan";
 import { useExtensions } from "../app/useExtensions";
 import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
@@ -62,13 +60,16 @@ interface ExtensionsPageProps {
 export function ExtensionsPage({ busy, setBusy, clearError, onError }: ExtensionsPageProps) {
   const ext = useExtensions({ busy, setBusy, clearError, onError });
   const workspace = ext.workspace;
+  const discovery = useDiscoverScan({
+    refresh: ext.refresh,
+    runExclusive: ext.runExclusive,
+    onError,
+  });
   const [kindTab, setKindTab] = useState<ExtensionKind>("skill");
   const [clientFilter, setClientFilter] = useState<ClientFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<AddMode>(null);
-  const [observations, setObservations] = useState<ObservedExtension[] | null>(null);
-  const [discoveryDiagnostics, setDiscoveryDiagnostics] = useState<ExtensionDiscoveryDiagnostic[]>([]);
   const [installTargets, setInstallTargets] = useState<string[]>([]);
   const [updateReport, setUpdateReport] = useState<SkillUpdateReport | null>(null);
   const [skillSelection, setSkillSelection] = useState<ReadonlySet<string>>(new Set());
@@ -84,8 +85,6 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
   const [skillDisableSharedSettings, setSkillDisableSharedSettings] = useState<boolean | null>(null);
   const [projectFormOpen, setProjectFormOpen] = useState(false);
   const [projectRoot, setProjectRoot] = useState("");
-  const [takeoverTarget, setTakeoverTarget] = useState<ObservedExtension | null>(null);
-  const [takeoverPreview, setTakeoverPreview] = useState<TakeoverPreview | null>(null);
   const [portableFormOpen, setPortableFormOpen] = useState(false);
   const [portablePath, setPortablePath] = useState("");
   const [exportTarget, setExportTarget] = useState<ExtensionListItem | null>(null);
@@ -98,6 +97,22 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
     [projects],
   );
   const selected = items.find((item) => item.id === selectedId) ?? null;
+  const resourceNames = useMemo(
+    () => new Map(items.map((item) => [item.id, item.name])),
+    [items],
+  );
+  const bindingInfo = useMemo(
+    () =>
+      new Map(
+        items.flatMap((item) =>
+          item.bindings.map((binding) => [
+            binding.id,
+            { name: item.name, kind: item.kind, client: binding.target.client },
+          ]),
+        ),
+      ),
+    [items],
+  );
 
   useEffect(() => {
     setSelectedId(null);
@@ -108,14 +123,6 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
     setBatchReports(null);
     setBatchChecked(new Set());
   }, [kindTab]);
-
-  const runDiscover = async () => {
-    const found = await ext.discover();
-    if (found) {
-      setObservations(found.observations);
-      setDiscoveryDiagnostics(found.diagnostics);
-    }
-  };
 
   const visible = items.filter(
     (item) =>
@@ -203,8 +210,20 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
 
   const confirmPlan = async () => {
     if (!planView) return;
+    const wasRepair = planView.operations.some(
+      (operation) => operation.operation === "repair",
+    );
     const outcome = await ext.applyPlan(planView.planId);
     if (outcome !== null) setPlanView(null);
+    if (
+      outcome !== null &&
+      wasRepair &&
+      outcome.rejected === null &&
+      !outcome.rolledBack &&
+      outcome.record !== null
+    ) {
+      await discovery.rescanAfterWrite();
+    }
   };
 
   const requestRestore = async (operationId: string) => {
@@ -390,49 +409,6 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
       setSelectedId(definition.id);
     }
     return definition;
-  };
-
-  const importObservedSkill = async (observed: ObservedExtension) => {
-    if (!observed.contentDigest) {
-      toast({ kind: "warning", title: "该条目没有可导入的内容摘要" });
-      return;
-    }
-    const definition = await ext.importObservedSkill(observed.observationId);
-    if (definition) {
-      setAddMode(null);
-      setKindTab("skill");
-      setSelectedId(definition.id);
-    }
-  };
-
-  const importObservedMcp = async (observed: ObservedExtension) => {
-    const definition = await ext.importObservedMcp(observed.observationId);
-    if (definition) {
-      setAddMode(null);
-      setKindTab("mcp");
-      setSelectedId(definition.id);
-    }
-  };
-
-  const requestTakeover = async (observed: ObservedExtension) => {
-    const preview = await ext.previewTakeover(observed.observationId);
-    if (preview) {
-      setTakeoverTarget(observed);
-      setTakeoverPreview(preview);
-    }
-  };
-
-  const confirmTakeover = async () => {
-    if (!takeoverTarget || !takeoverPreview) return;
-    const kind = takeoverPreview.kind;
-    const definition = await ext.takeoverObserved(takeoverTarget.observationId);
-    if (definition) {
-      setTakeoverTarget(null);
-      setTakeoverPreview(null);
-      setAddMode(null);
-      setKindTab(kind === "mcp" ? "mcp" : "skill");
-      setSelectedId(definition.id);
-    }
   };
 
   const submitPortableImport = async () => {
@@ -753,14 +729,28 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
             )}
             {addMode === "discover" && (
               <DiscoverPanel
-                observations={observations}
-                diagnostics={discoveryDiagnostics}
-                loading={busy}
+                discovery={discovery}
                 busy={busy}
-                onScan={() => void runDiscover()}
-                onImportSkill={(observed) => void importObservedSkill(observed)}
-                onImportMcp={(observed) => void importObservedMcp(observed)}
-                onTakeover={(observed) => void requestTakeover(observed)}
+                kindTab={kindTab}
+                clientFilter={clientFilter}
+                search={search}
+                projectNames={projectNames}
+                bindingInfo={bindingInfo}
+                onViewDetails={(observed) => {
+                  const definitionId = observed.actions.managedDefinitionId;
+                  if (!definitionId) return;
+                  setAddMode(null);
+                  setKindTab(observed.kind);
+                  setSelectedId(definitionId);
+                }}
+                onImportSkill={(observed) => void discovery.importSkill(observed)}
+                onImportMcp={(observed) => void discovery.importMcp(observed)}
+                onTakeover={(observed) => void discovery.requestTakeover(observed)}
+                onRepair={(diagnosticIds) =>
+                  void discovery.prepareRepair(diagnosticIds).then((view) => {
+                    if (view) setPlanView(view);
+                  })
+                }
               />
             )}
           </div>
@@ -778,6 +768,7 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
           view={planView}
           busy={busy}
           projectNames={projectNames}
+          resourceNames={resourceNames}
           onConfirm={() => void confirmPlan()}
           onCancel={() => setPlanView(null)}
         />
@@ -802,14 +793,19 @@ export function ExtensionsPage({ busy, setBusy, clearError, onError }: Extension
           }}
         />
       )}
-      {takeoverPreview && takeoverTarget && (
+      {discovery.takeover && (
         <TakeoverConfirmSheet
-          takeoverPreview={takeoverPreview}
-          confirmTakeover={confirmTakeover}
-          cancelTakeover={() => {
-            setTakeoverTarget(null);
-            setTakeoverPreview(null);
-          }}
+          takeoverPreview={discovery.takeover.preview}
+          confirmTakeover={() =>
+            void discovery.confirmTakeover().then((result) => {
+              if (result) {
+                setAddMode(null);
+                setKindTab(result.kind === "mcp" ? "mcp" : "skill");
+                setSelectedId(result.definition.id);
+              }
+            })
+          }
+          cancelTakeover={discovery.cancelTakeover}
         />
       )}
       {exportTarget && (

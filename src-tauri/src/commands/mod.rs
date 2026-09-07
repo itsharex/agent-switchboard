@@ -47,6 +47,24 @@ pub(crate) use status::config_status_report;
 pub(crate) use status::ConfigFileStatus;
 pub(crate) use window::apply_desktop_settings;
 
+use std::sync::{Arc, Mutex, MutexGuard};
+
+/// Serializes the writers that replace client configuration files — switch,
+/// save-and-apply, restore/undo, gateway port changes, and retry-driven
+/// gateway recovery. Every writer also verifies an expected content hash,
+/// but hash checks alone leave a read-then-write window; this gate closes it
+/// so two confirmed transactions can never interleave their file writes.
+#[derive(Clone, Default)]
+pub(crate) struct ConfigWriteGate(Arc<Mutex<()>>);
+
+impl ConfigWriteGate {
+    pub(crate) fn lock(&self) -> Result<MutexGuard<'_, ()>, String> {
+        self.0
+            .lock()
+            .map_err(|_| "客户端配置写入闸门不可用".to_string())
+    }
+}
+
 pub use app_settings::*;
 pub use discovery::*;
 pub use profiles::*;

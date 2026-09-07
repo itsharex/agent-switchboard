@@ -28,7 +28,7 @@ pub struct ExtensionManifest {
 }
 
 /// Which resource family an extension belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ExtensionKind {
     Skill,

@@ -115,7 +115,7 @@ fn run_codex(api_key: &str) {
         .configuration()
         .create_provider(nvidia_draft(AppKind::Codex, api_key))
         .expect("create temporary Codex NVIDIA provider");
-    let gateway = GatewayController::start(&state).expect("start temporary gateway");
+    let gateway = GatewayController::start(&state);
     let projection = gateway
         .project(&SwitchPlan::direct(
             record.profile,
@@ -215,7 +215,7 @@ fn run_claude(api_key: &str) {
         .configuration()
         .create_provider(nvidia_draft(AppKind::Claude, api_key))
         .expect("create temporary Claude NVIDIA provider");
-    let gateway = GatewayController::start(&state).expect("start temporary gateway");
+    let gateway = GatewayController::start(&state);
     let projection = gateway
         .project(&SwitchPlan::direct(
             record.profile,

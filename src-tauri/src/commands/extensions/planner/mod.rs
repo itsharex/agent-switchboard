@@ -81,98 +81,108 @@ pub async fn prepare_extension_plan(
             paths: &paths,
             secrets: &recorder,
         };
-        let mut plan = planner.build(&request)?;
-        let operation_id = new_id("op");
-        let plan_id = new_id("plan");
-        let backup_root = store.backup_root(&operation_id);
-        let journal_dir = store.transaction_dir(&operation_id);
-        plan.plan_id = plan_id.clone();
-        plan.created_at = now();
-        // The validity window: now + the plan TTL.
-        plan.preconditions.expires_at = chrono::Utc::now()
-            .checked_add_signed(chrono::Duration::seconds(
-                asb_core::extensions::plan::PLAN_TTL_SECONDS as i64,
-            ))
-            .unwrap_or_else(chrono::Utc::now)
-            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        plan.preconditions.generation = store.manifest().map_err(store_error)?.generation;
-        plan.preconditions.secret_digests = resolved.into_inner();
-        // Wire every step's backup directory to this operation's root.
-        for target in plan.planned_targets_mut() {
-            for step in &mut target.steps {
-                match step {
-                    PlanStep::DocumentWrite { backup_dir, .. }
-                    | PlanStep::DocumentRemove { backup_dir, .. }
-                    | PlanStep::DirectoryDeploy { backup_dir, .. }
-                    | PlanStep::DirectoryRemove { backup_dir, .. } => {
-                        *backup_dir = backup_root.to_string_lossy().to_string();
-                    }
+        let plan = planner.build(&request)?;
+        stage_plan(&store, plan)
+    })
+    .await
+}
+
+/// The one staging path every prepared plan goes through: identities, the
+/// validity window, backup wiring, baseline synchronization, the pre-state
+/// snapshot, and the pending-plan registration. Apply later consumes
+/// exactly this pending plan.
+pub(super) fn stage_plan(
+    store: &ExtensionStore,
+    mut plan: ExtensionPlan,
+) -> Result<ExtensionPlanView, CommandError> {
+    let operation_id = new_id("op");
+    let plan_id = new_id("plan");
+    let backup_root = store.backup_root(&operation_id);
+    let journal_dir = store.transaction_dir(&operation_id);
+    plan.plan_id = plan_id.clone();
+    plan.created_at = now();
+    // The validity window: now + the plan TTL.
+    plan.preconditions.expires_at = chrono::Utc::now()
+        .checked_add_signed(chrono::Duration::seconds(
+            asb_core::extensions::plan::PLAN_TTL_SECONDS as i64,
+        ))
+        .unwrap_or_else(chrono::Utc::now)
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    plan.preconditions.generation = store.manifest().map_err(store_error)?.generation;
+    // Wire every step's backup directory to this operation's root.
+    for target in plan.planned_targets_mut() {
+        for step in &mut target.steps {
+            match step {
+                PlanStep::DocumentWrite { backup_dir, .. }
+                | PlanStep::DocumentRemove { backup_dir, .. }
+                | PlanStep::DirectoryDeploy { backup_dir, .. }
+                | PlanStep::DirectoryRemove { backup_dir, .. } => {
+                    *backup_dir = backup_root.to_string_lossy().to_string();
                 }
             }
         }
-        let removed_bindings: BTreeSet<String> = plan
-            .operations
-            .iter()
-            .filter(|operation| operation.operation == PlanOperation::Remove)
-            .flat_map(|operation| operation.targets.iter())
-            .filter(|target| target.binding.desired == DesiredState::Disabled)
-            .map(|target| target.binding.id.clone())
-            .collect();
-        let baseline_files = synchronize_document_baselines(&store, &plan, &removed_bindings)?;
-        // Snapshot every library row the batch can change, including
-        // baselines of other bindings that share a document. The executor
-        // journals this complete pre-state before any client write.
-        let affected_bindings: BTreeSet<String> = plan
-            .planned_bindings()
-            .map(|binding| binding.id.clone())
-            .chain(
-                baseline_files
-                    .iter()
-                    .map(|(binding_id, _)| binding_id.clone()),
-            )
-            .chain(removed_bindings.iter().cloned())
-            .collect();
-        let current_bindings = store.list_bindings().map_err(store_error)?;
-        let mut pre_bindings = Vec::new();
-        let mut pre_baselines = Vec::new();
-        for binding_id in &affected_bindings {
-            if let Some(binding) = current_bindings
+    }
+    let removed_bindings: BTreeSet<String> = plan
+        .operations
+        .iter()
+        .filter(|operation| operation.operation == PlanOperation::Remove)
+        .flat_map(|operation| operation.targets.iter())
+        .filter(|target| target.binding.desired == DesiredState::Disabled)
+        .map(|target| target.binding.id.clone())
+        .collect();
+    let baseline_files = synchronize_document_baselines(store, &plan, &removed_bindings)?;
+    // Snapshot every library row the batch can change, including
+    // baselines of other bindings that share a document. The executor
+    // journals this complete pre-state before any client write.
+    let affected_bindings: BTreeSet<String> = plan
+        .planned_bindings()
+        .map(|binding| binding.id.clone())
+        .chain(
+            baseline_files
                 .iter()
-                .find(|binding| binding.id == *binding_id)
-            {
-                pre_bindings.push(binding.clone());
-            }
-            if let Some(baseline) = store.get_baseline_file(binding_id).map_err(store_error)? {
-                pre_baselines.push((binding_id.clone(), baseline));
-            }
+                .map(|(binding_id, _)| binding_id.clone()),
+        )
+        .chain(removed_bindings.iter().cloned())
+        .collect();
+    let current_bindings = store.list_bindings().map_err(store_error)?;
+    let mut pre_bindings = Vec::new();
+    let mut pre_baselines = Vec::new();
+    for binding_id in &affected_bindings {
+        if let Some(binding) = current_bindings
+            .iter()
+            .find(|binding| binding.id == *binding_id)
+        {
+            pre_bindings.push(binding.clone());
         }
-        let commit = LibraryCommit {
-            history_operation_id: operation_id.clone(),
-            binding_upserts: plan
-                .planned_bindings()
-                .filter(|binding| !removed_bindings.contains(&binding.id))
-                .cloned()
-                .collect(),
-            baseline_files,
-            baseline_deletes: Vec::new(),
-            binding_deletes: removed_bindings.into_iter().collect(),
-            snapshot: None,
-            pre_bindings,
-            pre_baselines,
-        };
-        pending_plans().lock().expect("plans").insert(
-            plan_id.clone(),
-            PendingPlan {
-                plan,
-                operation_id,
-                journal_dir,
-                commit,
-            },
-        );
-        let view = redact_plan(&pending_plans().lock().expect("plans")[&plan_id].plan);
-        Ok(view)
-    })
-    .await
+        if let Some(baseline) = store.get_baseline_file(binding_id).map_err(store_error)? {
+            pre_baselines.push((binding_id.clone(), baseline));
+        }
+    }
+    let commit = LibraryCommit {
+        history_operation_id: operation_id.clone(),
+        binding_upserts: plan
+            .planned_bindings()
+            .filter(|binding| !removed_bindings.contains(&binding.id))
+            .cloned()
+            .collect(),
+        baseline_files,
+        baseline_deletes: Vec::new(),
+        binding_deletes: removed_bindings.into_iter().collect(),
+        snapshot: None,
+        pre_bindings,
+        pre_baselines,
+    };
+    pending_plans().lock().expect("plans").insert(
+        plan_id.clone(),
+        PendingPlan {
+            plan,
+            operation_id,
+            journal_dir,
+            commit,
+        },
+    );
+    let view = redact_plan(&pending_plans().lock().expect("plans")[&plan_id].plan);
+    Ok(view)
 }
 
 /// The resolved MCP document of one target: the single owner of "client ×
@@ -241,6 +251,12 @@ impl Planner<'_> {
                     return Err(CommandError::new(
                         "extension-invalid",
                         "恢复请使用 prepare_extension_restore",
+                    ))
+                }
+                PlanOperation::Repair => {
+                    return Err(CommandError::new(
+                        "extension-invalid",
+                        "修复请使用 prepare_extension_repair",
                     ))
                 }
             };
@@ -380,4 +396,7 @@ mod document;
 mod lifecycle;
 mod remove;
 mod rename;
+mod repair;
 mod rules;
+
+pub(super) use repair::build_repair_operations;

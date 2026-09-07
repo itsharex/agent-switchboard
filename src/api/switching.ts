@@ -17,7 +17,7 @@ export interface RouteState {
   scopeWarnings: string[];
 }
 
-export type WriteOperation = "projection" | "restore";
+export type WriteOperation = "projection" | "gatewayPortChange" | "restore";
 
 export interface ConfigWriteRecord {
   app: AppKind;

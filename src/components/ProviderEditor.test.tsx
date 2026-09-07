@@ -388,7 +388,7 @@ describe("ProviderEditor", () => {
       await user.click(screen.getByRole("combobox", { name: "API 格式" }));
       await user.click(screen.getByRole("option", { name: /Chat Completions/ }));
 
-      expect(await screen.findByText(/无法读取实际监听地址/)).toBeInTheDocument();
+      expect(await screen.findByText(/网关当前未在监听/)).toBeInTheDocument();
       expect(screen.queryByText(/127\.0\.0\.1:端口/)).not.toBeInTheDocument();
     } finally {
       invokeMock.mockReset();

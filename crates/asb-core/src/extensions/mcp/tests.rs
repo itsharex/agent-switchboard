@@ -22,9 +22,10 @@ fn resolve_yes(_reference: &str) -> Option<String> {
 
 #[test]
 fn codex_reader_reports_transport_and_unknown_fields() {
-    let servers = read_codex_servers(CODEX_DOC).unwrap();
-    assert_eq!(servers.len(), 1);
-    let server = &servers[0];
+    let document = read_codex_servers(CODEX_DOC).unwrap();
+    assert!(document.collection_problem.is_none());
+    assert_eq!(document.servers.len(), 1);
+    let server = &document.servers[0];
     assert_eq!(server.key, "existing");
     assert_eq!(
         server.transport,
@@ -33,14 +34,82 @@ fn codex_reader_reports_transport_and_unknown_fields() {
         }
     );
     assert!(server.unknown_fields.is_empty());
+    assert!(server.problem.is_none());
 
     let extended = format!(
         "{}\n[mcp_servers.odd]\ncommand = \"x\"\nmystery_field = 1\n",
         CODEX_DOC
     );
-    let servers = read_codex_servers(&extended).unwrap();
-    let odd = servers.iter().find(|server| server.key == "odd").unwrap();
+    let document = read_codex_servers(&extended).unwrap();
+    let odd = document
+        .servers
+        .iter()
+        .find(|server| server.key == "odd")
+        .unwrap();
     assert_eq!(odd.unknown_fields, vec!["mystery_field".to_string()]);
+}
+
+#[test]
+fn malformed_mcp_collections_and_transports_are_typed_not_silently_empty() {
+    // A non-table `mcp_servers` collection is a typed problem; the reader
+    // must not report "no servers" for it.
+    let scalar = "model = \"host\"\nmcp_servers = \"broken\"\n";
+    let document = read_codex_servers(scalar).unwrap();
+    assert!(document.servers.is_empty());
+    assert_eq!(
+        document.collection_problem,
+        McpCollectionProblem::InvalidType
+    );
+
+    // Neither transport field: missing; both: conflicting.
+    let ambiguous = format!(
+        "{CODEX_DOC}\n[mcp_servers.missing_both]\nargs = []\n[mcp_servers.conflicting]\ncommand = \"npx\"\nurl = \"https://mcp.example.test\"\n"
+    );
+    let document = read_codex_servers(&ambiguous).unwrap();
+    let missing = document
+        .servers
+        .iter()
+        .find(|server| server.key == "missing_both")
+        .unwrap();
+    assert_eq!(missing.problem, McpEntryProblem::TransportMissing);
+    let conflicting = document
+        .servers
+        .iter()
+        .find(|server| server.key == "conflicting")
+        .unwrap();
+    assert_eq!(conflicting.problem, McpEntryProblem::TransportConflicting);
+
+    // Claude: a non-object `mcpServers` is a typed problem as well.
+    let claude_broken = r#"{ "mcpServers": ["not", "an", "object"] }"#;
+    let document =
+        read_claude_servers(claude_broken, |root| root.get("mcpServers")).unwrap();
+    assert!(document.servers.is_empty());
+    assert_eq!(
+        document.collection_problem,
+        McpCollectionProblem::InvalidType
+    );
+
+    // A collection that is simply absent stays a clean empty read.
+    let document = read_claude_servers("{}", |root| root.get("mcpServers")).unwrap();
+    assert!(document.collection_problem.is_none());
+
+    // Claude entries distinguish a missing command from an unknown type.
+    let claude_entries = r#"{ "mcpServers": {
+      "no_command": { "type": "stdio" },
+      "odd_type": { "type": "carrier-pigeon", "url": "x" }
+    } }"#;
+    let document =
+        read_claude_servers(claude_entries, |root| root.get("mcpServers")).unwrap();
+    assert_eq!(
+        document.servers[0].problem,
+        McpEntryProblem::TransportMissing
+    );
+    assert_eq!(
+        document.servers[1].problem,
+        McpEntryProblem::UnknownTransportType {
+            type_name: "carrier-pigeon".to_string()
+        }
+    );
 }
 
 #[test]

@@ -16,9 +16,10 @@ mod prompt_documents;
 mod restore;
 
 pub use executor::{
-    execute, execute_codex, read_codex_preview, read_preview, restore, restore_codex,
-    sha256_digest, sha256_hex, CodexSwitchRequest, FilePreview, RecoveryOutcome, RestoreOutcome,
-    SwitchError, SwitchOutcome, SwitchRequest,
+    execute, execute_codex, execute_rendered, read_codex_preview, read_preview, restore,
+    restore_codex, sha256_digest, sha256_hex, CodexSwitchRequest, FilePreview, RecoveryOutcome,
+    RenderedWriteOutcome, RenderedWriteRequest, RestoreOutcome, SwitchError, SwitchOutcome,
+    SwitchRequest,
 };
 pub use extensions::{
     apply_extension_plan, journal_lock_targets, recover_pending, ExtensionApplyRequest,

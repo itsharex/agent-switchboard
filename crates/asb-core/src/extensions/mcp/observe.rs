@@ -13,7 +13,60 @@ pub struct ObservedMcpServer {
     /// Field names present in the native entry that this contract does not
     /// model. They stay untouched in the document.
     pub unknown_fields: Vec<String>,
-    pub diagnostics: Vec<String>,
+    /// Extra per-entry notes that are not problems (e.g. a field the client
+    /// ignores in this scope).
+    pub notes: Vec<String>,
+    /// The typed transport problem of this entry, if any.
+    pub problem: McpEntryProblem,
+}
+
+/// The typed transport problem of one observed entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum McpEntryProblem {
+    /// The entry is readable and its transport is decided.
+    None,
+    /// The entry is not a table/object, so no fields could be read.
+    NotAnObject,
+    /// The entry carries neither a url nor a command.
+    TransportMissing,
+    /// The entry carries both a url and a command.
+    TransportConflicting,
+    /// The entry names a transport type this contract does not know.
+    UnknownTransportType { type_name: String },
+}
+
+impl McpEntryProblem {
+    pub fn is_none(&self) -> bool {
+        matches!(self, McpEntryProblem::None)
+    }
+}
+
+/// The typed problem of the MCP collection itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum McpCollectionProblem {
+    /// No collection key, or the collection is empty and well-formed.
+    None,
+    /// The collection key exists but is not a table/object. The document
+    /// must never be reported as having zero servers in this state.
+    InvalidType,
+}
+
+impl McpCollectionProblem {
+    pub fn is_none(&self) -> bool {
+        matches!(self, McpCollectionProblem::None)
+    }
+}
+
+/// Everything one document read observes: its server entries plus the
+/// collection-level problem, so callers can report a malformed collection
+/// instead of silently reading it as empty.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObservedMcpDocument {
+    pub servers: Vec<ObservedMcpServer>,
+    pub collection_problem: McpCollectionProblem,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -76,29 +129,42 @@ pub(super) fn claude_modeled_fields_for(
     }
 }
 
-/// Reads the `mcp_servers` tables from a Codex `config.toml`.
+/// Reads the `mcp_servers` collection from a Codex `config.toml`. A present
+/// but non-table collection is a typed problem, never an empty list.
 pub fn read_codex_servers(
     document: &str,
-) -> Result<Vec<ObservedMcpServer>, crate::adapter::AdapterError> {
+) -> Result<ObservedMcpDocument, crate::adapter::AdapterError> {
     let doc = crate::adapter::codex::parse(document)?;
     let mut servers = Vec::new();
-    let Some(Item::Table(mcp_table)) = doc.get("mcp_servers") else {
-        return Ok(servers);
+    let Some(item) = doc.get("mcp_servers") else {
+        return Ok(ObservedMcpDocument {
+            servers,
+            collection_problem: McpCollectionProblem::None,
+        });
     };
-    for (key, item) in mcp_table.iter() {
-        let Some(table) = item.as_table() else {
-            servers.push(ObservedMcpServer {
+    let Item::Table(mcp_table) = item else {
+        return Ok(ObservedMcpDocument {
+            servers,
+            collection_problem: McpCollectionProblem::InvalidType,
+        });
+    };
+    for (key, entry) in mcp_table.iter() {
+        servers.push(match entry.as_table() {
+            Some(table) => read_codex_server_table(key, table),
+            None => ObservedMcpServer {
                 key: key.to_string(),
                 transport: ObservedTransport::Unknown,
                 enabled: None,
                 unknown_fields: Vec::new(),
-                diagnostics: vec!["mcp_servers 的该条目不是表，无法解读".to_string()],
-            });
-            continue;
-        };
-        servers.push(read_codex_server_table(key, table));
+                notes: Vec::new(),
+                problem: McpEntryProblem::NotAnObject,
+            },
+        });
     }
-    Ok(servers)
+    Ok(ObservedMcpDocument {
+        servers,
+        collection_problem: McpCollectionProblem::None,
+    })
 }
 
 fn read_codex_server_table(key: &str, table: &Table) -> ObservedMcpServer {
@@ -110,16 +176,18 @@ fn read_codex_server_table(key: &str, table: &Table) -> ObservedMcpServer {
     let bool_field = |name: &str| table.get(name).and_then(|item| item.as_bool());
     let url = string_field("url");
     let command = string_field("command");
-    let transport = match (url, command) {
-        (Some(url), None) => ObservedTransport::Http { url },
-        (None, Some(command)) => ObservedTransport::Stdio { command },
-        (Some(_), Some(_)) => ObservedTransport::Unknown,
-        (None, None) => ObservedTransport::Unknown,
+    let (transport, problem) = match (url, command) {
+        (Some(url), None) => (ObservedTransport::Http { url }, McpEntryProblem::None),
+        (None, Some(command)) => (ObservedTransport::Stdio { command }, McpEntryProblem::None),
+        (Some(_), Some(_)) => (
+            ObservedTransport::Unknown,
+            McpEntryProblem::TransportConflicting,
+        ),
+        (None, None) => (
+            ObservedTransport::Unknown,
+            McpEntryProblem::TransportMissing,
+        ),
     };
-    let mut diagnostics = Vec::new();
-    if matches!(transport, ObservedTransport::Unknown) {
-        diagnostics.push("该服务缺少 url 或 command，传输类型无法判定".to_string());
-    }
     let unknown_fields: Vec<String> = table
         .iter()
         .map(|(name, _)| name.to_string())
@@ -130,26 +198,39 @@ fn read_codex_server_table(key: &str, table: &Table) -> ObservedMcpServer {
         transport,
         enabled: bool_field("enabled"),
         unknown_fields,
-        diagnostics,
+        notes: Vec::new(),
+        problem,
     }
 }
 
-/// Reads one Claude `mcpServers` object located at `pointer_description`
-/// (used only for diagnostics). `extract` obtains the object from the parsed
-/// document.
+/// Reads one Claude `mcpServers`-shaped collection located by `read_collection`
+/// (root document → collection value, `None` when absent). A present but
+/// non-object collection is a typed problem, never an empty list.
 pub fn read_claude_servers(
     document: &str,
-    read_object: impl FnOnce(&JsonValue) -> Option<&JsonMap<String, JsonValue>>,
-) -> Result<Vec<ObservedMcpServer>, crate::adapter::AdapterError> {
+    read_collection: impl FnOnce(&JsonValue) -> Option<&JsonValue>,
+) -> Result<ObservedMcpDocument, crate::adapter::AdapterError> {
     let root = crate::adapter::claude::parse(document)?;
     let mut servers = Vec::new();
-    let Some(map) = read_object(&root) else {
-        return Ok(servers);
+    let Some(collection) = read_collection(&root) else {
+        return Ok(ObservedMcpDocument {
+            servers,
+            collection_problem: McpCollectionProblem::None,
+        });
+    };
+    let Some(map) = collection.as_object() else {
+        return Ok(ObservedMcpDocument {
+            servers,
+            collection_problem: McpCollectionProblem::InvalidType,
+        });
     };
     for (key, entry) in map {
         servers.push(read_claude_server_entry(key, entry));
     }
-    Ok(servers)
+    Ok(ObservedMcpDocument {
+        servers,
+        collection_problem: McpCollectionProblem::None,
+    })
 }
 
 fn read_claude_server_entry(key: &str, entry: &JsonValue) -> ObservedMcpServer {
@@ -159,7 +240,8 @@ fn read_claude_server_entry(key: &str, entry: &JsonValue) -> ObservedMcpServer {
             transport: ObservedTransport::Unknown,
             enabled: None,
             unknown_fields: Vec::new(),
-            diagnostics: vec!["该条目不是对象，无法解读".to_string()],
+            notes: Vec::new(),
+            problem: McpEntryProblem::NotAnObject,
         };
     };
     let string_field = |name: &str| {
@@ -168,32 +250,49 @@ fn read_claude_server_entry(key: &str, entry: &JsonValue) -> ObservedMcpServer {
             .and_then(|value| value.as_str().map(str::to_string))
     };
     let type_field = string_field("type");
-    let transport = match type_field.as_deref() {
-        Some("stdio") => string_field("command").map_or(ObservedTransport::Unknown, |command| {
-            ObservedTransport::Stdio { command }
-        }),
-        Some("http") => string_field("url").map_or(ObservedTransport::Unknown, |url| {
-            ObservedTransport::Http { url }
-        }),
-        Some("sse") => string_field("url").map_or(ObservedTransport::Unknown, |url| {
-            ObservedTransport::ClaudeSse { url }
-        }),
-        Some("ws") => string_field("url").map_or(ObservedTransport::Unknown, |url| {
-            ObservedTransport::ClaudeWs { url }
-        }),
+    let (transport, problem) = match type_field.as_deref() {
+        Some("stdio") => match string_field("command") {
+            Some(command) => (ObservedTransport::Stdio { command }, McpEntryProblem::None),
+            None => (
+                ObservedTransport::Unknown,
+                McpEntryProblem::TransportMissing,
+            ),
+        },
+        Some("http") => match string_field("url") {
+            Some(url) => (ObservedTransport::Http { url }, McpEntryProblem::None),
+            None => (
+                ObservedTransport::Unknown,
+                McpEntryProblem::TransportMissing,
+            ),
+        },
+        Some("sse") => match string_field("url") {
+            Some(url) => (ObservedTransport::ClaudeSse { url }, McpEntryProblem::None),
+            None => (
+                ObservedTransport::Unknown,
+                McpEntryProblem::TransportMissing,
+            ),
+        },
+        Some("ws") => match string_field("url") {
+            Some(url) => (ObservedTransport::ClaudeWs { url }, McpEntryProblem::None),
+            None => (
+                ObservedTransport::Unknown,
+                McpEntryProblem::TransportMissing,
+            ),
+        },
         // Older documents omit `type` for stdio.
-        None => string_field("command").map_or(ObservedTransport::Unknown, |command| {
-            ObservedTransport::Stdio { command }
-        }),
-        Some(other) => {
-            return ObservedMcpServer {
-                key: key.to_string(),
-                transport: ObservedTransport::Unknown,
-                enabled: None,
-                unknown_fields: Vec::new(),
-                diagnostics: vec![format!("未知传输类型 {other}；按只读展示")],
-            };
-        }
+        None => match string_field("command") {
+            Some(command) => (ObservedTransport::Stdio { command }, McpEntryProblem::None),
+            None => (
+                ObservedTransport::Unknown,
+                McpEntryProblem::TransportMissing,
+            ),
+        },
+        Some(other) => (
+            ObservedTransport::Unknown,
+            McpEntryProblem::UnknownTransportType {
+                type_name: other.to_string(),
+            },
+        ),
     };
     let modeled: &[&str] = match transport {
         ObservedTransport::Stdio { .. } => CLAUDE_STDIO_FIELDS,
@@ -202,14 +301,9 @@ fn read_claude_server_entry(key: &str, entry: &JsonValue) -> ObservedMcpServer {
         | ObservedTransport::ClaudeWs { .. } => CLAUDE_REMOTE_FIELDS,
         ObservedTransport::Unknown => &[],
     };
-    let mut diagnostics = Vec::new();
-    if matches!(transport, ObservedTransport::Unknown) {
-        diagnostics.push("该服务缺少 type 与 command，传输类型无法判定".to_string());
-    }
+    let mut notes = Vec::new();
     if object.contains_key("enabled") {
-        diagnostics.push(
-            "Claude 的服务定义没有原生 enabled 字段；停用属于项目级 disabledMcpServers".to_string(),
-        );
+        notes.push("Claude 的服务定义没有原生 enabled 字段；停用属于项目级 disabledMcpServers".to_string());
     }
     let unknown_fields: Vec<String> = object
         .keys()
@@ -221,6 +315,7 @@ fn read_claude_server_entry(key: &str, entry: &JsonValue) -> ObservedMcpServer {
         transport,
         enabled: None,
         unknown_fields,
-        diagnostics,
+        notes,
+        problem,
     }
 }

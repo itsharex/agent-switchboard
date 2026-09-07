@@ -73,6 +73,15 @@ pub(super) fn run_restore(
     gateway: &crate::gateway::GatewayController,
     record: &BackupRecord,
 ) -> Result<RestoreOutcome, CommandError> {
+    if matches!(
+        record.reason.as_str(),
+        "gateway-port-change" | "gateway-port-rollback"
+    ) {
+        return Err(CommandError::new(
+            "gateway-port-restore-unavailable",
+            "网关端口修改涉及全部客户端与监听器，请在网关页修改端口，不能恢复单个客户端配置",
+        ));
+    }
     let target = state
         .target(record.app)
         .map_err(|error| CommandError::new("config-path-unavailable", error))?;

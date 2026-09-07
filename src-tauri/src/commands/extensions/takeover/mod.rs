@@ -96,6 +96,8 @@ pub async fn preview_discovered_takeover(
             }
             ExtensionKind::Skill => {
                 let (candidate, material) = resolve_skill_takeover(&store, &cached)?;
+                // Equivalence is content-based: the same immutable digest is
+                // the same library content, whatever it was named.
                 let definition_exists = store
                     .list_definitions()
                     .map_err(store_error)?
@@ -105,7 +107,6 @@ pub async fn preview_discovered_takeover(
                             &definition.payload,
                             ExtensionPayload::Skill(skill)
                                 if skill.content_digest == candidate.content_digest
-                                    && definition.name == material.observed.name
                         )
                     });
                 Ok(TakeoverPreviewDto {
@@ -254,16 +255,33 @@ pub(super) fn takeover_observed_skill(
 ) -> Result<ExtensionMutationDto, CommandError> {
     let (candidate, material) = resolve_skill_takeover(store, cached)?;
     let observed = &material.observed;
-    let mutation = import_cached_skill_candidate(
-        store,
-        &candidate.content_digest,
-        observed.name.clone(),
-        Some(observed.client),
-    )?;
-    let definition = store
-        .get_definition(&mutation.id)
+    // Managing includes adding to the library: an equivalent definition
+    // (same immutable content digest) is reused, never duplicated.
+    let existing = store
+        .list_definitions()
         .map_err(store_error)?
-        .ok_or_else(|| CommandError::new("extension-store", "接管定义未持久化"))?;
+        .into_iter()
+        .find(|definition| {
+            matches!(
+                &definition.payload,
+                ExtensionPayload::Skill(skill) if skill.content_digest == candidate.content_digest
+            )
+        });
+    let definition = match existing {
+        Some(definition) => definition,
+        None => {
+            let mutation = import_cached_skill_candidate(
+                store,
+                &candidate.content_digest,
+                observed.name.clone(),
+                Some(observed.client),
+            )?;
+            store
+                .get_definition(&mutation.id)
+                .map_err(store_error)?
+                .ok_or_else(|| CommandError::new("extension-store", "接管定义未持久化"))?
+        }
+    };
     let ExtensionPayload::Skill(skill) = &definition.payload else {
         return Err(CommandError::new(
             "extension-invalid",

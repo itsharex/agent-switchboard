@@ -1,78 +1,85 @@
-//! Gateway controller lifecycle: start, observe, project, commit, shutdown.
+//! Gateway observations and client projections.
 
 use super::*;
 
 impl GatewayController {
-    pub(crate) fn start(local: &LocalState) -> Result<Self, String> {
-        let state_path = local.gateway_state_path();
-        let mut state = read_or_create_state(&state_path)?;
-        let server = Arc::new(
-            Server::http(("127.0.0.1", state.port))
-                .map_err(|_| "无法启动本机协议网关：本机端口不可用".to_string())?,
-        );
-        let port = server
-            .server_addr()
-            .to_ip()
-            .map(|address| address.port())
-            .ok_or_else(|| "无法读取本机协议网关端口".to_string())?;
-        if state.port == 0 {
-            state.port = port;
-            write_state(&state_path, &state)?;
-        }
-        let inner = Arc::new(GatewayInner {
-            state_path,
-            state: Mutex::new(state),
-            routes: RwLock::new(BTreeMap::new()),
-            activation_lock: Mutex::new(()),
-            stopping: AtomicBool::new(false),
-            base_url: format!("http://127.0.0.1:{port}"),
-            metrics: Arc::new(GatewayMetrics::new()),
-        });
-        let controller = Self {
-            inner: Arc::clone(&inner),
-            server: Arc::clone(&server),
+    /// Read-only snapshot of the configured port, the live listener, active
+    /// routes, and request telemetry for the status page. Never exposes
+    /// tokens or upstream keys.
+    pub(crate) fn observe(&self, local: &LocalState) -> GatewayObservation {
+        let configured_port = self.configured_port();
+        let listening = self.listening();
+        let failure = if listening.is_some() {
+            None
+        } else {
+            match self.inner.listener.read() {
+                Ok(listener) => match &*listener {
+                    ListenerState::Failed(report) => Some((**report).clone()),
+                    ListenerState::Listening { .. } => None,
+                },
+                Err(_) => Some(test_failure_report(
+                    configured_port,
+                    "本机协议网关状态锁不可用",
+                )),
+            }
         };
-        controller.rehydrate(local);
-        thread::Builder::new()
-            .name("asb-local-gateway".to_string())
-            .spawn(move || server::serve(server, inner))
-            .map_err(|_| "无法启动本机协议网关工作线程".to_string())?;
-        Ok(controller)
-    }
-
-    /// Read-only snapshot of listener facts, active routes, and request
-    /// telemetry for the status page. Never exposes tokens or upstream keys.
-    pub(crate) fn observe(&self) -> Result<GatewayObservation, String> {
-        let port = self
-            .inner
-            .state
-            .lock()
-            .map_err(|_| "本机协议网关状态锁不可用".to_string())?
-            .port;
+        let blocked = self.blocked_recovery();
+        let status = if blocked.is_some() {
+            GatewayStatusKind::RecoveryBlocked
+        } else if listening
+            .as_ref()
+            .is_some_and(|listener| listener.port() != configured_port)
+        {
+            GatewayStatusKind::NeedsRepair
+        } else if self.has_unreconciled_gateway_files(local) {
+            GatewayStatusKind::NeedsRepair
+        } else if listening.is_none() {
+            match failure.as_ref().map(|report| report.kind) {
+                Some(GatewayFailureKind::PortInUse) => GatewayStatusKind::PortConflict,
+                Some(GatewayFailureKind::StateUnusable) => GatewayStatusKind::NeedsRepair,
+                _ => GatewayStatusKind::BindRejected,
+            }
+        } else if self.has_active_routes() {
+            GatewayStatusKind::Running
+        } else {
+            GatewayStatusKind::Standby
+        };
         let routes = self
             .inner
             .routes
             .read()
-            .map_err(|_| "本机协议网关路由锁不可用".to_string())?
-            .values()
-            .map(|route| RouteObservation {
-                app: route.app,
-                profile_id: route.profile_id.clone(),
-                upstream_protocol: route.upstream_protocol,
+            .map(|routes| {
+                routes
+                    .values()
+                    .map(|route| RouteObservation {
+                        app: route.app,
+                        profile_id: route.profile_id.clone(),
+                        upstream_protocol: route.upstream_protocol,
+                    })
+                    .collect()
             })
-            .collect();
-        Ok(GatewayObservation {
-            port,
-            base_url: self.inner.base_url.clone(),
+            .unwrap_or_default();
+        let listening_port = listening.as_ref().map(BoundListener::port);
+        GatewayObservation {
+            configured_port,
+            listening_port,
+            base_url: listening_port.map(|port| format!("http://127.0.0.1:{port}")),
+            status,
+            failure,
+            blocked_recovery: blocked,
             routes,
             metrics: self.inner.metrics.snapshot(),
-        })
+        }
     }
 
     /// Produces the client projection without mutating the gateway state.
     /// The caller can safely preview this result; its route token is bound to
     /// the route fingerprint, so editing a routing parameter invalidates
     /// stale previews while metadata edits keep the token stable.
+    ///
+    /// Routed projections are rejected while the listener is down or a
+    /// port-change recovery is blocked: a gateway-dependent client write must
+    /// never land against an address nothing serves.
     pub(crate) fn project(&self, plan: &SwitchPlan) -> Result<GatewayProjection, String> {
         validate_plan(&plan.profile, &plan.common).map_err(|error| error.to_string())?;
         if plan.profile.route_mode == RouteMode::Official || is_direct(&plan.profile) {
@@ -82,11 +89,21 @@ impl GatewayController {
                 warning: None,
             });
         }
+        if self.blocked_recovery().is_some() {
+            return Err(
+                "存在未完成的端口修改恢复，已暂停经本机协议网关的切换；请先在网关页处理恢复状态"
+                    .to_string(),
+            );
+        }
+        let base_url = self.listening_base_url().ok_or_else(|| {
+            "本机协议网关当前未在监听，无法写入经网关转换的客户端配置；请先在网关页恢复监听"
+                .to_string()
+        })?;
         let route = self.route_for_profile(&plan.profile)?;
         let mut projected = SwitchPlan::through_gateway(plan.profile.clone(), plan.common.clone());
         projected.profile.base_url = Some(match route.app {
-            AppKind::Codex => format!("{}/v1", self.inner.base_url),
-            AppKind::Claude => self.inner.base_url.clone(),
+            AppKind::Codex => format!("{base_url}/v1"),
+            AppKind::Claude => base_url.clone(),
         });
         // Both clients can authenticate to this loopback listener with a
         // bearer token. The original upstream protocol stays only on `route`.
@@ -95,17 +112,12 @@ impl GatewayController {
             .profile
             .upstream_protocol
             .expect("validated custom profile has a protocol");
-        let gateway_url = projected
-            .profile
-            .base_url
-            .clone()
-            .expect("routed projection has a gateway base url");
         let mut warning = format!(
-            "该供应商的上游协议是 {}，与 {} 原生协议（{}）不同：切换后客户端配置中的服务地址会被改写为本机协议网关地址 {}（127.0.0.1 仅监听本机回环），请求由网关转换为 {} 格式并携带原 API 密钥转发到所填服务地址，原地址与密钥只保存在本应用内。退出应用前请先切换到直连或官方登录，否则客户端将无法请求。",
+            "该供应商的上游协议是 {}，与 {} 原生协议（{}）不同：切换后客户端配置中的服务地址会被改写为本机协议网关地址 {}（127.0.0.1 仅监听本机），请求由网关转换为 {} 格式并携带原 API 密钥转发到所填服务地址，原地址与密钥只保存在本应用内。退出应用前请先切换到直连或官方登录，否则客户端将无法请求。",
             protocol.label(),
             plan.profile.app.label(),
             UpstreamProtocol::native_for(plan.profile.app).label(),
-            gateway_url,
+            projected.profile.base_url.clone().expect("routed projection has a gateway base url"),
             protocol.label(),
         );
         if plan.profile.app == AppKind::Codex && protocol != UpstreamProtocol::Responses {
@@ -191,9 +203,9 @@ impl GatewayController {
         }
         let activation = match routes.as_slice() {
             [route] => GatewayActivation::Routed(route.clone()),
-            [] if self.points_to_gateway(app, &text) => {
+            [] if routing::config_points_at_gateway(app, &text, codex_auth.as_deref()) => {
                 return Err(
-                    "恢复的配置指向本机协议网关，但未找到匹配的供应商；已拒绝恢复".to_string(),
+                    "恢复的配置指向本机协议网关，但未找到匹配的供应商；已拒绝恢复。请重新应用该供应商以更新地址与凭据".to_string(),
                 )
             }
             [] => GatewayActivation::Direct { app },
@@ -251,8 +263,42 @@ impl GatewayController {
             .unwrap_or(true)
     }
 
-    pub(crate) fn shutdown(&self) {
-        self.inner.stopping.store(true, Ordering::Release);
-        self.server.unblock();
+    /// Whether any client still depends on this gateway: an in-memory or
+    /// persisted route, or a live client configuration pointing at the
+    /// loopback endpoint. Exit decisions must consult the persisted facts and
+    /// real client files, not only successfully restored in-memory routes.
+    pub(crate) fn has_gateway_dependency(&self, local: &LocalState) -> bool {
+        if self.has_active_routes() {
+            return true;
+        }
+        if self
+            .inner
+            .state
+            .lock()
+            .map(|state| !state.active.is_empty())
+            .unwrap_or(true)
+        {
+            return true;
+        }
+        points_at_gateway_files(local)
+    }
+
+    /// Blocks new requests and waits for in-flight ones to finish. Returns
+    /// `false` when long requests outlast the drain budget; the caller must
+    /// then resume serving without changing anything.
+    pub(crate) fn enter_maintenance_and_drain(&self) -> bool {
+        self.inner.maintenance.store(true, Ordering::Release);
+        let deadline = std::time::Instant::now() + PORT_CHANGE_DRAIN_TIMEOUT;
+        while std::time::Instant::now() < deadline {
+            if self.inner.inflight.load(Ordering::Acquire) == 0 {
+                return true;
+            }
+            thread::sleep(std::time::Duration::from_millis(100));
+        }
+        self.inner.inflight.load(Ordering::Acquire) == 0
+    }
+
+    pub(crate) fn exit_maintenance(&self) {
+        self.inner.maintenance.store(false, Ordering::Release);
     }
 }

@@ -199,8 +199,25 @@ export interface ProjectRegistration {
 export type ObservedOrigin =
   | { origin: "userRoot" }
   | { origin: "legacyRoot" }
-  | { origin: "projectRoot" }
+  | { origin: "projectRoot"; projectId: string }
   | { origin: "managed" };
+
+/** Backend-judged eligibility of one discovered row's actions. */
+export interface ActionSupport {
+  supported: boolean;
+  /** An equivalent definition already exists in the library. */
+  inLibrary?: boolean;
+  reason?: string | null;
+}
+
+export interface ObservedActions {
+  /** Copy the content into the library; the original stays independent. */
+  import: ActionSupport;
+  /** Start managing the current location, recording its original state. */
+  takeover: ActionSupport;
+  /** The library definition managing this row, when managed. */
+  managedDefinitionId?: string | null;
+}
 
 export interface ObservedExtension {
   observationId: string;
@@ -212,17 +229,59 @@ export interface ObservedExtension {
   managed: boolean;
   contentDigest?: string | null;
   transport?: string | null;
-  diagnostics: string[];
+  actions: ObservedActions;
 }
 
-export interface ExtensionDiscoveryDiagnostic {
+/** Stable machine code of one diagnostic; message text is display-only. */
+export type DiagnosticCode =
+  | "skillManifestMissing"
+  | "skillFrontmatterMissing"
+  | "skillFrontmatterInvalid"
+  | "skillDirUnreadable"
+  | "skillEntryLink"
+  | "skillEntryUnsupported"
+  | "skillRootUnreadable"
+  | "skillRootEntryUnreadable"
+  | "mcpDocumentUnreadable"
+  | "mcpDocumentUnparsable"
+  | "mcpCollectionInvalid"
+  | "mcpEntryNotAnObject"
+  | "mcpTransportMissing"
+  | "mcpTransportConflicting"
+  | "mcpTransportUnknown"
+  | "mcpUnknownFields"
+  | "mcpIgnoredField"
+  | "managedTargetMissing"
+  | "managedEntryMissing"
+  | "managedTargetExternalChange"
+  | "managedTargetUnreadable";
+
+export type ExtensionDiagnosticRemediation =
+  | { kind: "auto"; reason: string }
+  | { kind: "manual"; reason: string }
+  | { kind: "info" };
+
+export type DiagnosticSubject =
+  | { kind: "discoveryEntry"; observationId: string }
+  | { kind: "managedBinding"; bindingId: string }
+  | { kind: "scanLocation"; label: string; resourceKind: ExtensionKind };
+
+export interface ExtensionDiagnostic {
+  id: string;
+  code: DiagnosticCode;
   client: AppKind;
+  subject: DiagnosticSubject;
   message: string;
+  remediation: ExtensionDiagnosticRemediation;
 }
 
+/** One discovery scan: a snapshot identity plus everything observed and
+ * every problem found. A repair request must name this scan. */
 export interface ExtensionDiscovery {
+  scanId: string;
+  scannedAt: string;
   observations: ObservedExtension[];
-  diagnostics: ExtensionDiscoveryDiagnostic[];
+  diagnostics: ExtensionDiagnostic[];
 }
 
 export interface SkillCandidateDto {
@@ -304,7 +363,14 @@ export interface RollbackSummary {
   failed: string[];
 }
 
-export type PlanOperation = "install" | "update" | "enable" | "disable" | "remove" | "restore";
+export type PlanOperation =
+  | "install"
+  | "update"
+  | "enable"
+  | "disable"
+  | "remove"
+  | "restore"
+  | "repair";
 
 /** One resource's slice of a finished batch operation. */
 export interface OperationResourceRecord {

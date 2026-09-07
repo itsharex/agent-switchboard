@@ -246,6 +246,23 @@ fn legacy_codex_reset_cache_is_rejected_without_rewriting_it() {
 }
 
 #[test]
+fn a_legacy_usage_cache_file_is_deleted_and_read_as_absent() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let state = LocalState::from_root(directory.path().join("state"));
+    fs::create_dir_all(&state.root).expect("create state directory");
+    let legacy = r#"{"entries":{"profile-1":{"queryDigest":"stale","summary":{"readings":[],"at":"2026-09-06T00:00:00Z"}}}}"#;
+    fs::write(state.usage_cache_path(), legacy).expect("write legacy cache");
+
+    assert_eq!(
+        state
+            .load_usage_cache()
+            .expect("legacy cache is dropped, not an error"),
+        None
+    );
+    assert!(!state.usage_cache_path().exists());
+}
+
+#[test]
 fn codex_quota_baseline_is_absent_without_creating_a_file() {
     let directory = tempfile::tempdir().expect("temporary directory");
     let state = LocalState::from_root(directory.path().join("state"));

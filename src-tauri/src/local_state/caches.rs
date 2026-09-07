@@ -157,15 +157,23 @@ impl LocalState {
     /// The last successful provider-usage snapshots for the custom tray panel. The
     /// file contains normalized readings plus query digests only: no API key,
     /// endpoint, raw response, or usage-script source is persisted here.
+    ///
+    /// The cache is disposable: a file that no longer parses (a prior format
+    /// or externally corrupted content) is deleted and treated as absent, so
+    /// the next query rebuilds it instead of every query failing on it.
     pub(crate) fn load_usage_cache(&self) -> Result<Option<UsageCache>, String> {
         let text = match fs::read_to_string(self.usage_cache_path()) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err("托盘用量缓存不可读".to_string()),
         };
-        serde_json::from_str(&text)
-            .map(Some)
-            .map_err(|_| "托盘用量缓存格式无效".to_string())
+        match serde_json::from_str(&text) {
+            Ok(cache) => Ok(Some(cache)),
+            Err(_) => {
+                let _ = fs::remove_file(self.usage_cache_path());
+                Ok(None)
+            }
+        }
     }
 
     pub(crate) fn save_usage_cache(&self, cache: &UsageCache) -> Result<(), String> {

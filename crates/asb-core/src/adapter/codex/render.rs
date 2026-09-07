@@ -8,6 +8,19 @@ pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, Adapter
     render_entries(current, overlay(plan))
 }
 
+pub(crate) fn render_gateway_base_url(
+    current: &str,
+    base_url: &str,
+) -> Result<String, AdapterError> {
+    render_entries(
+        current,
+        vec![(
+            "openai_base_url".to_string(),
+            OverlayEntry::Set(crate::contracts::ConfigValue::Str(base_url.to_string())),
+        )],
+    )
+}
+
 pub(crate) fn render_common_settings(common: &CommonSettings) -> Result<String, AdapterError> {
     let rendered = render_entries("", common_overlay(common))?;
     Ok(if rendered.trim().is_empty() {

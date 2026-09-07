@@ -13,6 +13,7 @@ pub(crate) use recovery::{ensure_profile_save_recovered, recover_pending_profile
 use crate::commands::error::{
     blocking, observe, require_write_confirmation, state, store_error, CommandError,
 };
+use crate::commands::ConfigWriteGate;
 use crate::runtime_log::RuntimeLogAction;
 use asb_core::adapter;
 use asb_core::contracts::{
@@ -110,6 +111,10 @@ pub async fn commit_profile_save(
             .clone();
         blocking(move || {
             let _commit_guard = preparations.lock_commit()?;
+            let write_gate = write_gate(&app)?;
+            let _write_gate = write_gate
+                .lock()
+                .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
             ensure_profile_save_recovered(&app)?;
             commit_prepared_profile_save(&state, &gateway, &prepared, confirm_write)
         })
@@ -141,6 +146,12 @@ pub async fn preview_switch(
     .await
 }
 
+fn write_gate(app: &AppHandle) -> Result<ConfigWriteGate, CommandError> {
+    app.try_state::<ConfigWriteGate>()
+        .map(|gate| gate.inner().clone())
+        .ok_or_else(|| CommandError::new("app-state-unavailable", "写入闸门尚未初始化"))
+}
+
 #[tauri::command]
 pub async fn execute_switch(
     app: AppHandle,
@@ -157,6 +168,10 @@ pub async fn execute_switch(
             .inner()
             .clone();
         blocking(move || {
+            let write_gate = write_gate(&app)?;
+            let _write_gate = write_gate
+                .lock()
+                .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
             ensure_profile_save_recovered(&app)?;
             let projection = build_plan(&state, &gateway, &profile_id)?;
             let codex_projection = projection.clone();
@@ -256,6 +271,10 @@ pub async fn restore_backup(
             .inner()
             .clone();
         blocking(move || {
+            let write_gate = write_gate(&app)?;
+            let _write_gate = write_gate
+                .lock()
+                .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
             ensure_profile_save_recovered(&app)?;
             let record = find_backup(&state, &backup_id)?;
             let outcome = run_restore(&state, &gateway, &record)?;
@@ -283,6 +302,10 @@ pub async fn undo_last_switch(
             .inner()
             .clone();
         blocking(move || {
+            let write_gate = write_gate(&app)?;
+            let _write_gate = write_gate.lock().map_err(|error| {
+                CommandError::new("config-write-gate-unavailable", error)
+            })?;
             ensure_profile_save_recovered(&app)?;
             let last = state
                 .configuration()
@@ -291,6 +314,12 @@ pub async fn undo_last_switch(
                 .ok_or_else(|| {
                     CommandError::new("undo-unavailable", "该客户端没有可撤回的切换记录")
                 })?;
+            if last.operation == WriteOperation::GatewayPortChange {
+                return Err(CommandError::new(
+                    "undo-unavailable",
+                    "网关端口修改涉及全部客户端与监听器，请在网关页修改端口，不能撤回单个客户端配置",
+                ));
+            }
             let record = find_backup(&state, &last.backup_id)?;
             let outcome = run_restore(&state, &gateway, &record)?;
             crate::tray::refresh(&app);

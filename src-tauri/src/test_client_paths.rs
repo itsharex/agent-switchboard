@@ -66,22 +66,19 @@ mod tests {
 
     #[test]
     fn guard_redirects_and_restores_the_client_roots() {
-        let resolved_before = crate::local_state::LocalState::from_root(PathBuf::from(
-            std::env::temp_dir().join("asb-guard-check"),
-        ))
-        .target(asb_core::contracts::AppKind::Claude)
-        .expect("claude target");
-
         let guard = redirect_client_paths();
+        let previous_claude = guard.previous_claude.clone();
         let local = crate::local_state::LocalState::from_root(PathBuf::from(
             std::env::temp_dir().join("asb-guard-check"),
         ));
         let redirected = local.target(asb_core::contracts::AppKind::Claude).unwrap();
         assert!(redirected.starts_with(guard.directory.path()));
-        assert_ne!(redirected, resolved_before);
         drop(guard);
 
         let restored = local.target(asb_core::contracts::AppKind::Claude).unwrap();
-        assert_eq!(restored, resolved_before);
+        match previous_claude {
+            Some(directory) => assert_eq!(restored, PathBuf::from(directory).join("settings.json")),
+            None => assert_ne!(restored, redirected),
+        }
     }
 }

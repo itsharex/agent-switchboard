@@ -233,6 +233,18 @@ export function prepareExtensionPlan(request: PlanRequest): Promise<ExtensionPla
   return invoke<ExtensionPlanView>("prepare_extension_plan", { request });
 }
 
+/** Prepares the one-click repair batch for the latest scan's auto-repairable
+ * diagnostics. The preview it returns still goes through the shared
+ * confirm-then-apply flow; nothing is written here. */
+export function prepareExtensionRepair(
+  scanId: string,
+  diagnosticIds: string[],
+): Promise<ExtensionPlanView> {
+  return invoke<ExtensionPlanView>("prepare_extension_repair", {
+    request: { scanId, diagnosticIds },
+  });
+}
+
 export function applyExtensionPlan(
   planId: string,
   confirmWrite: boolean,

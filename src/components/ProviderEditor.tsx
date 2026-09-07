@@ -105,7 +105,11 @@ export function ProviderEditor({
     void (async () => {
       try {
         const status = await getGatewayStatus();
-        if (active) setGatewayBaseUrl(status.baseUrl);
+        if (!active) return;
+        // A saved port must never be presented as a listening one: without a
+        // live listener the editor refuses to show any loopback address.
+        setGatewayBaseUrl(status.baseUrl);
+        setGatewayAddressError(status.baseUrl === null);
       } catch {
         if (active) setGatewayAddressError(true);
       }
@@ -144,9 +148,9 @@ export function ProviderEditor({
   const claudeSettings = draft.modelOptions?.kind === "claude" ? draft.modelOptions : null;
   const gatewayRouteWarning = gatewayBaseUrl
     ? `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：切换到该供应商时，客户端的服务地址会被改写为本机协议网关 ${gatewayBaseUrl}（仅监听本机），请求由网关转换为该协议后转发到所填服务地址；请保持本应用运行，退出前先切换到直连或官方登录。`
-    : gatewayAddressError
-      ? `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：此路径需要本机协议网关转换，但无法读取实际监听地址。请在“网关”页确认网关状态后再切换。`
-      : `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：此路径需要本机协议网关转换，正在读取实际监听地址。`;
+      : gatewayAddressError
+        ? `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：此路径需要本机协议网关转换，但网关当前未在监听。请在“网关”页重试监听或修改端口，再切换到该供应商。`
+        : `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：此路径需要本机协议网关转换，正在读取实际监听地址。`;
 
   return (
     <form

@@ -1,0 +1,71 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button } from "./Button";
+
+export function ConfirmGatewayRecoveryDiscard({ onConfirm }: { onConfirm: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <div>
+        <Button variant="secondary" onClick={() => setConfirming(true)}>
+          保留当前配置并清除恢复记录
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-body-medium text-text-secondary">
+        不会覆盖当前客户端配置（包括外部修改）；会清除本次恢复记录与可清理的备份。
+      </span>
+      <Button variant="danger" onClick={onConfirm}>确认保留并清除</Button>
+      <Button variant="secondary" onClick={() => setConfirming(false)}>取消</Button>
+    </div>
+  );
+}
+
+export function CopyGatewayAddressButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+  return (
+    <Button
+      variant="secondary"
+      onClick={() => {
+        void navigator.clipboard?.writeText(value).then(() => {
+          setCopied(true);
+          if (timer.current !== null) window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    >
+      {copied ? "已复制" : "复制"}
+    </Button>
+  );
+}
+
+export function GatewayPanel({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+  return (
+    <section className="asb-panel" aria-label="协议网关">
+      <div className="asb-panel-heading">
+        <h2 className="asb-panel-title">本机协议网关</h2>
+        {aside}
+      </div>
+      <div className="flex flex-col gap-6">{children}</div>
+    </section>
+  );
+}
+
+export function GatewayStatTile({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="flex flex-col gap-1 rounded-2xl bg-background-secondary-default px-4 py-3"
+    >
+      <p className="m-0 text-body-2-medium text-text-secondary">{label}</p>
+      <p className="m-0 text-title-2-medium text-text-primary tabular-nums">{value}</p>
+    </div>
+  );
+}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { CommandError } from "../api/client";
+import { NavMoreMenu } from "../components/NavMoreMenu";
 import { PinTopButton } from "../components/PinTopButton";
 import { UpdateButton } from "../components/UpdateButton";
 import { Button } from "../components/Button";
@@ -7,7 +8,13 @@ import { WindowControls } from "../components/WindowControls";
 import appIcon from "../assets/app-icon.png";
 import { isBrowserDevelopment } from "../lib/runtime";
 
-export const PAGES = ["概览", "供应商", "通用设置", "扩展", "用量", "会话", "网关", "日志", "备份", "发现", "设置"] as const;
+/** Topbar residents, then the pages housed behind the 更多 disclosure
+ * (2026-09-07 用户指令，方案 A). The two lists are the page inventory's
+ * only owner: the Page union and the rendered nav both derive from them. */
+const PRIMARY_PAGES = ["概览", "供应商", "通用设置", "会话", "设置"] as const;
+const OVERFLOW_PAGES = ["扩展", "用量", "网关", "日志", "备份", "发现"] as const;
+
+const PAGES = [...PRIMARY_PAGES, ...OVERFLOW_PAGES] as const;
 export type Page = (typeof PAGES)[number];
 
 interface AppShellProps {
@@ -59,11 +66,10 @@ export function AppShell({
           </span>
           <nav aria-label="主导航">
             <ul className="asb-nav">
-              {PAGES.map((item) => (
+              {PRIMARY_PAGES.map((item) => (
                 <li key={item}>
                   <button
                     type="button"
-                    aria-label={item}
                     aria-current={page === item ? "page" : undefined}
                     onClick={() => onPageChange(item)}
                   >
@@ -71,6 +77,7 @@ export function AppShell({
                   </button>
                 </li>
               ))}
+              <NavMoreMenu items={OVERFLOW_PAGES} page={page} onPageChange={onPageChange} />
             </ul>
           </nav>
           {isBrowserDevelopment ? <span className="asb-web-development-badge">浏览器开发 · 本机后端</span> : null}

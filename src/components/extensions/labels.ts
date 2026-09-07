@@ -1,5 +1,6 @@
 import type {
   AppKind,
+  ExtensionDiagnosticRemediation,
   ExtensionTarget,
   FileState,
   PlanOperation,
@@ -30,6 +31,41 @@ export const OPERATION_LABELS: Record<PlanOperation, string> = {
   disable: "停用",
   remove: "移除",
   restore: "恢复",
+  repair: "修复",
+};
+
+/** Renderer-safe labels for diagnostic problem codes. */
+export const DIAGNOSTIC_CODE_LABELS: Record<string, string> = {
+  skillManifestMissing: "缺少 SKILL.md",
+  skillFrontmatterMissing: "缺少 frontmatter",
+  skillFrontmatterInvalid: "frontmatter 无法解析",
+  skillDirUnreadable: "目录无法读取",
+  skillEntryLink: "包含链接或重解析点",
+  skillEntryUnsupported: "包含不支持的文件类型",
+  skillRootUnreadable: "Skill 根目录无法读取",
+  skillRootEntryUnreadable: "Skill 目录项无法读取",
+  mcpDocumentUnreadable: "MCP 文档无法读取",
+  mcpDocumentUnparsable: "MCP 文档无法解析",
+  mcpCollectionInvalid: "MCP 集合类型错误",
+  mcpEntryNotAnObject: "MCP 条目不是对象",
+  mcpTransportMissing: "缺少传输字段",
+  mcpTransportConflicting: "传输字段冲突",
+  mcpTransportUnknown: "未知传输类型",
+  mcpUnknownFields: "未识别字段（按原文保留）",
+  mcpIgnoredField: "该客户端忽略的字段",
+  managedTargetMissing: "托管目标缺失",
+  managedEntryMissing: "托管条目缺失",
+  managedTargetExternalChange: "外部改动",
+  managedTargetUnreadable: "托管目标不可读",
+};
+
+export const REMEDIATION_LABELS: Record<
+  ExtensionDiagnosticRemediation["kind"],
+  string
+> = {
+  auto: "可自动修复",
+  manual: "需人工处理",
+  info: "信息提示",
 };
 
 export const TRANSPORT_LABELS: Record<string, string> = {

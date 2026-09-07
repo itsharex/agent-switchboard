@@ -106,11 +106,81 @@ export interface GatewayMetricsStatus {
   samples: GatewaySample[];
 }
 
-export interface GatewayStatus {
+/** The listener's runtime condition. A saved port is never presented as a
+ * listening one: `standby`/`running` imply `listeningPort` is set, while the
+ * failure states imply it is null. */
+export type GatewayStatusKind =
+  | "standby"
+  | "running"
+  | "portConflict"
+  | "bindRejected"
+  | "needsRepair"
+  | "recoveryBlocked";
+
+/** The process holding the configured port, when the platform could identify
+ * it reliably; an unknown holder stays null and is never terminated. */
+export interface GatewayPortProcessStatus {
+  pid: number;
+  name: string | null;
+}
+
+export type GatewayFailureKind = "portInUse" | "systemRejected" | "stateUnusable";
+
+/** Why the listener is down: the port, the OS error code, the identified
+ * holder process when known, and a scrubbed user-readable message. */
+export interface GatewayFailureStatus {
   port: number;
-  baseUrl: string;
+  kind: GatewayFailureKind;
+  osCode: number | null;
+  message: string;
+  process: GatewayPortProcessStatus | null;
+}
+
+/** A port-change transaction stuck before its commit point because a
+ * rollback target was modified externally. Kept until explicitly resolved. */
+export interface GatewayBlockedRecoveryStatus {
+  fromPort: number;
+  toPort: number;
+  apps: AppKind[];
+  reason: string;
+}
+
+export interface GatewayStatus {
+  /** The saved port that client configurations are built against. */
+  configuredPort: number;
+  /** The port actually being served, or null while not listening. */
+  listeningPort: number | null;
+  /** The served loopback base URL, or null while not listening. */
+  baseUrl: string | null;
+  status: GatewayStatusKind;
+  failure: GatewayFailureStatus | null;
+  blockedRecovery: GatewayBlockedRecoveryStatus | null;
   routes: GatewayRouteStatus[];
   metrics: GatewayMetricsStatus;
+}
+
+/** One client configuration the confirmed port change will rewrite. */
+export interface GatewayPortChangeClientPlan {
+  app: AppKind;
+  profileId: string;
+  profileName: string;
+  currentBaseUrl: string;
+  newBaseUrl: string;
+}
+
+/** The one-shot plan bound to a held socket, produced by the preparation. */
+export interface GatewayPortChangePlan {
+  preparationId: string;
+  fromPort: number;
+  toPort: number;
+  clients: GatewayPortChangeClientPlan[];
+}
+
+export interface GatewayPortChangeResult {
+  fromPort: number;
+  toPort: number;
+  clients: GatewayPortChangeClientPlan[];
+  warnings: string[];
 }
 
 export function getConfigStatus(): Promise<ConfigFileStatus[]> {
@@ -123,6 +193,39 @@ export function getRuntimeOverview(): Promise<RuntimeOverview> {
 
 export function getGatewayStatus(): Promise<GatewayStatus> {
   return invoke<GatewayStatus>("gateway_status");
+}
+
+/** Retries binding the configured port after a failed start. */
+export function retryGatewayBind(): Promise<GatewayStatus> {
+  return invoke<GatewayStatus>("gateway_retry_bind");
+}
+
+/** Validates the new port, holds its socket, and identifies the client
+ * configurations to rewrite. No file is modified. */
+export function prepareGatewayPortChange(newPort: number): Promise<GatewayPortChangePlan> {
+  return invoke<GatewayPortChangePlan>("gateway_prepare_port_change", { newPort });
+}
+
+/** Applies the confirmed port change as one recoverable transaction. */
+export function commitGatewayPortChange(
+  preparationId: string,
+  confirmWrite: boolean,
+): Promise<GatewayPortChangeResult> {
+  return invoke<GatewayPortChangeResult>("gateway_commit_port_change", {
+    preparationId,
+    confirmWrite,
+  });
+}
+
+/** Releases the one-shot prepared socket without changing configuration. */
+export function cancelGatewayPortChange(preparationId: string): Promise<void> {
+  return invoke<void>("gateway_cancel_port_change", { preparationId });
+}
+
+/** Discards a blocked port-change recovery, keeping the current externally
+ * modified configuration. */
+export function discardGatewayPortChange(confirmWrite: boolean): Promise<GatewayStatus> {
+  return invoke<GatewayStatus>("gateway_discard_port_change", { confirmWrite });
 }
 
 export function listRuntimeLogs(): Promise<RuntimeLogEntry[]> {

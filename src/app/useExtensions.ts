@@ -65,6 +65,7 @@ export function useExtensions({ busy, setBusy, clearError, onError }: Extensions
     workspace,
     loaded,
     refresh,
+    runExclusive,
     ...library,
     ...importing,
     ...skills,

@@ -9,6 +9,9 @@ interface Props {
   view: ExtensionPlanView;
   busy: boolean;
   projectNames: ReadonlyMap<string, string>;
+  /** definitionId → display name, so the preview names the objects it
+   * will touch instead of opaque ids. */
+  resourceNames?: ReadonlyMap<string, string>;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -24,7 +27,14 @@ function toKeyChange(change: PlanChangeView): KeyChange {
 
 /** The single preview surface for extension plans: every apply goes through
  * this sheet, grouped by resource operation with one block per target. */
-export function ExtensionPlanSheet({ view, busy, projectNames, onConfirm, onCancel }: Props) {
+export function ExtensionPlanSheet({
+  view,
+  busy,
+  projectNames,
+  resourceNames,
+  onConfirm,
+  onCancel,
+}: Props) {
   const summaryOperation =
     view.operations.find((operation) => operation.operation === "install" || operation.operation === "remove")
       ?.operation ?? view.operations[0]?.operation ?? "update";
@@ -35,8 +45,11 @@ export function ExtensionPlanSheet({ view, busy, projectNames, onConfirm, onCanc
     </p>,
     ...view.operations.flatMap((operation, operationIndex) => [
       <p key={`resource-${operationIndex}`} className="asb-scope-note">
-        资源 <span className="asb-code">{operation.definitionId}</span>（修订 r
-        {operation.definitionRevision}）· {OPERATION_LABELS[operation.operation]}
+        资源{" "}
+        <span className="asb-code">
+          {resourceNames?.get(operation.definitionId) ?? operation.definitionId}
+        </span>
+        （修订 r{operation.definitionRevision}）· {OPERATION_LABELS[operation.operation]}
       </p>,
       ...operation.targets.map((target, index) => (
         <div key={`${operationIndex}-${index}`} className="asb-ext-plan-target">

@@ -9,6 +9,87 @@
   border-top: 1px solid var(--asb-hairline);
 }
 
+/* Collapsible discovery warning surface. Collapsed it is exactly one row:
+   the counted summary may truncate, but the actions never wrap and are
+   never pushed out of the line. */
+.asb-discovery-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-discovery-summary {
+  min-width: 0;
+}
+
+.asb-discovery-summary-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.asb-discovery-summary-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-discovery-summary-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--asb-space-2);
+  white-space: nowrap;
+}
+
+.asb-discovery-diagnostic-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-discovery-diagnostic {
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+}
+
+.asb-discovery-diagnostic p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.asb-discovery-diagnostic.is-focused {
+  border-color: var(--asb-warning);
+}
+
+.asb-discovery-diagnostic-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-discovery-count {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asb-discovery-count:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
 .asb-discovery-basis {
   margin: 0;
   font: var(--asb-text-label);
@@ -388,21 +469,6 @@
   gap: 2px;
   font: var(--asb-text-label);
   overflow-wrap: anywhere;
-}
-
-.asb-ext-discover-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-3);
-}
-
-.asb-ext-discover-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-1);
 }
 
 /* Row-level activation for tables whose rows open a detail surface. */

@@ -191,7 +191,6 @@ pub struct ObservedExtension {
     /// Transport label for observed MCP servers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transport: Option<String>,
-    pub diagnostics: Vec<String>,
 }
 
 /// How a skill/MCP dependency resolves against the library and a target.
@@ -367,6 +366,8 @@ pub struct RollbackSummary {
 
 /// The set of plan operations the workspace supports. Restore replans a
 /// previous operation's inverse and goes through the same preview flow.
+/// Repair restores the last validly deployed state of managed objects the
+/// discovery scan found damaged; it never advances the applied revision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PlanOperation {
@@ -376,6 +377,7 @@ pub enum PlanOperation {
     Disable,
     Remove,
     Restore,
+    Repair,
 }
 
 impl PlanOperation {
@@ -387,6 +389,7 @@ impl PlanOperation {
             PlanOperation::Disable => "停用",
             PlanOperation::Remove => "移除",
             PlanOperation::Restore => "恢复",
+            PlanOperation::Repair => "修复",
         }
     }
 }

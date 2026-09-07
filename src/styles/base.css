@@ -54,6 +54,52 @@
   font-weight: 700;
 }
 
+/* Overflow disclosure (更多): low-frequency pages collapse behind one trigger
+   (DESIGN.md §3). While the current page is in the menu, the trigger carries
+   the page name and the same current-page treatment. */
+.asb-nav-more {
+  position: relative;
+}
+
+.asb-nav-more > button[data-active] {
+  color: var(--asb-text);
+  font-weight: 700;
+}
+
+.asb-nav-more-chevron {
+  display: inline-flex;
+  margin-left: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  transition: transform var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-nav-more > button[aria-expanded="true"] .asb-nav-more-chevron {
+  transform: rotate(180deg);
+}
+
+.asb-nav-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 8rem;
+  margin: 0;
+  padding: var(--asb-space-1);
+  list-style: none;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-menu);
+  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+}
+
+.asb-nav-more-menu button {
+  display: block;
+  width: 100%;
+  border-radius: var(--asb-radius-action);
+}
+
 
 /* Workspace: banner overlay layer + the scrolling page area. Banners float
    out of flow so their lifecycle can never reflow the page (DESIGN.md §7). */

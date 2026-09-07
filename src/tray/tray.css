@@ -18,6 +18,7 @@ html, body, #root { background: transparent; overflow: hidden; }
 }
 .tray-header, .tray-footer { flex-shrink: 0; }
 .tray-header { border-bottom: 1px solid var(--asb-hairline); }
+.tray-app-logo { width: 24px; height: 24px; object-fit: contain; }
 .tray-list { min-height: 0; overflow: auto; }
 .tray-group + .tray-group { border-top: 1px solid var(--asb-hairline); }
 .tray-client-logo { width: 20px; height: 20px; padding: 2px; border-radius: var(--asb-radius-check); background: var(--asb-text-on-action); }
@@ -43,5 +44,5 @@ html, body, #root { background: transparent; overflow: hidden; }
 .tray-detail, .tray-time { color: var(--asb-text-muted); font-variant-numeric: tabular-nums; }
 .tray-switch { color: var(--asb-action); flex-shrink: 0; }
 .tray-footer { border-top: 1px solid var(--asb-hairline); }
-.tray-footer-button.asb-btn { border-color: transparent; background: transparent; min-width: 0; gap: 6px; }
+.tray-ghost-button.asb-btn { border-color: transparent; background: transparent; min-width: 0; gap: 6px; }
 .tray-error { color: var(--asb-danger); overflow-wrap: anywhere; max-height: 96px; overflow: auto; }

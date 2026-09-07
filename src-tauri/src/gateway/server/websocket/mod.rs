@@ -207,7 +207,14 @@ where
             }
         }
         Ok(PreparedResponse::Upstream(request)) => {
-            if execute_request(socket, client, &inner.base_url, &route, context, request) {
+            if execute_request(
+                socket,
+                client,
+                &inner.configured_base_url(),
+                &route,
+                context,
+                request,
+            ) {
                 ExchangeOutcome::Served
             } else {
                 ExchangeOutcome::Disconnect

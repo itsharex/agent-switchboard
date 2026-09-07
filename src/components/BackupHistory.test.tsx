@@ -97,6 +97,31 @@ describe("BackupHistory", () => {
     expect(await screen.findByText("与当前文件一致")).toBeInTheDocument();
   });
 
+  it("does not offer an isolated restore for a gateway port-change backup", () => {
+    const gatewayRecord: BackupRecord = {
+      ...records[0],
+      id: "gateway-port-change-20260907",
+      reason: "gateway-port-change",
+    };
+    render(<BackupHistory records={[gatewayRecord]} busy={false} onRestore={() => {}} />);
+
+    expect(screen.queryByRole("button", { name: "恢复" })).not.toBeInTheDocument();
+    expect(screen.getByText("网关端口修改前备份")).toBeInTheDocument();
+    expect(screen.getByText("请在网关页修改端口")).toBeInTheDocument();
+  });
+
+  it("does not offer an isolated restore for a gateway port rollback backup", () => {
+    const rollbackRecord: BackupRecord = {
+      ...records[0],
+      id: "gateway-port-rollback-20260907",
+      reason: "gateway-port-rollback",
+    };
+    render(<BackupHistory records={[rollbackRecord]} busy={false} onRestore={() => {}} />);
+
+    expect(screen.queryByRole("button", { name: "恢复" })).not.toBeInTheDocument();
+    expect(screen.getByText("网关端口恢复前备份")).toBeInTheDocument();
+  });
+
   it("shows an empty state when there is nothing to restore", () => {
     render(<BackupHistory records={[]} busy={false} onRestore={() => {}} />);
     expect(screen.getByText("暂无备份")).toBeInTheDocument();

@@ -15,7 +15,13 @@ interface Props {
 function reasonLabel(reason: string): string {
   if (reason === "switch") return "切换前备份";
   if (reason === "restore-precheck") return "恢复前备份";
+  if (reason === "gateway-port-change") return "网关端口修改前备份";
+  if (reason === "gateway-port-rollback") return "网关端口恢复前备份";
   return reason;
+}
+
+function isGatewayPortBackup(reason: string): boolean {
+  return reason === "gateway-port-change" || reason === "gateway-port-rollback";
 }
 
 function clientLabel(app: string): string {
@@ -103,18 +109,25 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
     {
       key: "actions",
       header: "操作",
-      render: (record) => (
-        <div className="asb-backup-actions">
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => setPending(record)}
-          >
-            恢复
-          </Button>
-          <DiffRow record={record} />
-        </div>
-      ),
+      render: (record) => {
+        const isGatewayPortChange = isGatewayPortBackup(record.reason);
+        return (
+          <div className="asb-backup-actions">
+            {isGatewayPortChange ? (
+              <span className="asb-scope-note">请在网关页修改端口</span>
+            ) : (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setPending(record)}
+              >
+                恢复
+              </Button>
+            )}
+            <DiffRow record={record} />
+          </div>
+        );
+      },
     },
   ];
 

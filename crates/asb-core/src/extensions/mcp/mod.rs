@@ -28,7 +28,10 @@ pub use import::{
     import_claude_project_private_server, import_claude_server, import_codex_server,
     NativeMcpImportError,
 };
-pub use observe::{read_claude_servers, read_codex_servers, ObservedMcpServer, ObservedTransport};
+pub use observe::{
+    read_claude_servers, read_codex_servers, McpCollectionProblem, McpEntryProblem,
+    ObservedMcpDocument, ObservedMcpServer, ObservedTransport,
+};
 pub use redaction::{redact_change, redact_rendered_entry};
 pub use render::{
     render_claude, render_codex, ClaudeServerRender, CodexServerRender, ProjectionError,

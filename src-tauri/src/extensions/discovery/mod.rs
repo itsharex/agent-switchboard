@@ -1,6 +1,6 @@
 //! Read-only discovery of Skills and MCP servers already present on the
 //! machine, plus the file-consistency status of managed bindings.
-
+//!
 //! Discovery never creates directories, links, indexes, or client
 //! configuration. A fresh environment yields an empty result and no writes.
 
@@ -18,8 +18,10 @@ use asb_core::extensions::contracts::{
     ExtensionBinding, ExtensionDefinition, ExtensionKind, ExtensionPayload, ExtensionTarget,
     FileState, ManagedBaseline, ManagedBaselineFile, ObservedExtension, ObservedOrigin,
 };
+use asb_core::extensions::diagnostics::{
+    DiagnosticCode, DiagnosticRemediation, DiagnosticSubject, ExtensionDiagnostic,
+};
 use asb_core::extensions::skill::content_digest;
-use serde::Serialize;
 
 pub struct DiscoveredPaths {
     pub home: std::path::PathBuf,
@@ -50,18 +52,53 @@ impl DiscoveredPaths {
 
 pub struct DiscoveryResult {
     pub observed: Vec<ObservedExtension>,
-    pub diagnostics: Vec<DiscoveryDiagnostic>,
+    pub diagnostics: Vec<DiagnosticSeed>,
 }
 
-/// A document or directory that discovery deliberately left untouched because
-/// it could not safely read or parse it.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscoveryDiagnostic {
+/// A problem found during one scan, before scan-wide identities exist.
+/// Entry subjects reference the observation by its position in
+/// [`DiscoveryResult::observed`]; the workspace resolves them to stable ids.
+#[derive(Debug, Clone)]
+pub struct DiagnosticSeed {
+    pub code: DiagnosticCode,
     pub client: AppKind,
-    pub path: String,
+    pub subject: DiagnosticSubjectSeed,
     pub message: String,
+    pub remediation: DiagnosticRemediation,
 }
+
+#[derive(Debug, Clone)]
+pub enum DiagnosticSubjectSeed {
+    /// Resolved to `DiagnosticSubject::DiscoveryEntry` with the observation's
+    /// assigned id.
+    Entry { observation_index: usize },
+    /// Resolved to `DiagnosticSubject::ManagedBinding`.
+    Binding { binding_id: String },
+    /// Already final; the label names a renderer-safe scope, never a path,
+    /// and the kind keeps the problem under its workspace tab.
+    Location {
+        label: String,
+        /// Backend-only identity of a physical location. It prevents two
+        /// same-labelled documents from collapsing without exposing a path.
+        location_key: String,
+        resource_kind: asb_core::extensions::contracts::ExtensionKind,
+    },
+}
+
+/// Renders the renderer-safe location label of one skill-scope problem.
+pub(super) fn skill_location_label(origin: &ObservedOrigin, dir: &Path) -> String {
+    let name = dir
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
+    match origin {
+        ObservedOrigin::ProjectRoot { .. } => format!("项目 Skill 目录 {name}"),
+        ObservedOrigin::LegacyRoot { .. } => format!("历史 Skill 目录 {name}"),
+        _ => format!("Skill 目录 {name}"),
+    }
+}
+
+pub use managed::managed_binding_diagnostic;
 
 pub fn discover(
     paths: &DiscoveredPaths,
@@ -80,7 +117,9 @@ pub fn discover(
             paths.codex_home.as_deref(),
             paths.claude_dir.as_deref(),
         );
-        if let Some(text) = read_discovery_document(client, &document, &mut diagnostics) {
+        if let Some(text) =
+            read_discovery_document(client, "MCP 配置文档", &document, &mut diagnostics)
+        {
             append_mcp_observations(
                 client,
                 &document,
@@ -96,6 +135,7 @@ pub fn discover(
                         &project.root,
                         &text,
                         &mut observed,
+                        &mut diagnostics,
                     );
                 }
             }
@@ -132,7 +172,9 @@ pub fn discover(
                 crate::extensions::paths::claude_project_mcp_path(&root),
             ),
         ] {
-            if let Some(text) = read_discovery_document(client, &document, &mut diagnostics) {
+            if let Some(text) =
+                read_discovery_document(client, "项目 MCP 配置文档", &document, &mut diagnostics)
+            {
                 append_mcp_observations(
                     client,
                     &document,
@@ -384,6 +426,65 @@ fn mcp_binding_document(
     }
 }
 
+/// Turns one scan's seeds into final diagnostics: stable ids, resolved
+/// subjects, and one diagnostic per (object, problem type) — objects are
+/// never merged by message text. `new_id` mints the scan-scoped diagnostic
+/// identities.
+pub fn finalize_diagnostics(
+    seeds: Vec<DiagnosticSeed>,
+    observation_ids: &[String],
+    new_id: &mut dyn FnMut(&str) -> String,
+) -> Vec<ExtensionDiagnostic> {
+    let mut out: Vec<ExtensionDiagnostic> = Vec::new();
+    let mut seen: std::collections::BTreeSet<(AppKind, String, DiagnosticCode)> =
+        std::collections::BTreeSet::new();
+    for seed in seeds {
+        let (subject, subject_key) = match seed.subject {
+            DiagnosticSubjectSeed::Entry { observation_index } => {
+                let Some(observation_id) = observation_ids.get(observation_index) else {
+                    continue;
+                };
+                (
+                    DiagnosticSubject::DiscoveryEntry {
+                        observation_id: observation_id.clone(),
+                    },
+                    format!("entry:{observation_id}"),
+                )
+            }
+            DiagnosticSubjectSeed::Binding { binding_id } => (
+                DiagnosticSubject::ManagedBinding {
+                    binding_id: binding_id.clone(),
+                },
+                format!("binding:{binding_id}"),
+            ),
+            DiagnosticSubjectSeed::Location {
+                label,
+                location_key,
+                resource_kind,
+            } => (
+                DiagnosticSubject::ScanLocation {
+                    label,
+                    resource_kind,
+                },
+                format!("location:{location_key}"),
+            ),
+        };
+        if !seen.insert((seed.client, subject_key, seed.code)) {
+            continue;
+        }
+        out.push(ExtensionDiagnostic {
+            id: new_id("diag"),
+            code: seed.code,
+            client: seed.client,
+            subject,
+            message: seed.message,
+            remediation: seed.remediation,
+        });
+    }
+    out
+}
+
+mod managed;
 mod mcp;
 mod skills;
 #[cfg(test)]

@@ -117,14 +117,25 @@ pub async fn apply_extension_plan(
                 // fail together.
                 let mut applied = journal_commit.clone();
                 for binding in &mut applied.binding_upserts {
-                    if let Some(revision) = pending
+                    // A repair restores the last validly deployed state; it
+                    // is not a new apply and must keep the recorded
+                    // lastAppliedRevision instead of advancing it.
+                    let is_repair = pending
                         .plan
                         .operations
                         .iter()
                         .find(|operation| operation.definition_id == binding.resource_id)
-                        .map(|operation| operation.definition_revision)
-                    {
-                        binding.last_applied_revision = Some(revision);
+                        .is_some_and(|operation| operation.operation == PlanOperation::Repair);
+                    if !is_repair {
+                        if let Some(revision) = pending
+                            .plan
+                            .operations
+                            .iter()
+                            .find(|operation| operation.definition_id == binding.resource_id)
+                            .map(|operation| operation.definition_revision)
+                        {
+                            binding.last_applied_revision = Some(revision);
+                        }
                     }
                     binding.updated_at = now();
                 }

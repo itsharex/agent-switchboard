@@ -96,7 +96,7 @@ where
 /// Reads the live file and refuses to continue when its hash no longer
 /// matches the previewed state. Returns the text, whether the target
 /// existed, and the verified hash.
-fn read_unchanged_current<Io: SwitchIo>(
+pub(crate) fn read_unchanged_current<Io: SwitchIo>(
     io: &Io,
     target: &Path,
     app: AppKind,
@@ -157,16 +157,17 @@ fn plan_candidate(
 
 /// Snapshots the current content as the pre-write backup, sidecar metadata
 /// included.
-fn back_up_current<Io: SwitchIo>(
+pub(crate) fn back_up_current<Io: SwitchIo>(
     io: &Io,
     target: &Path,
     backup_dir: &Path,
     current: &str,
     found_hash: &str,
     target_existed: bool,
-    plan: &SwitchPlan,
+    app: AppKind,
+    reason: &str,
 ) -> Result<BackupRecord, SwitchError> {
-    verify_live_snapshot(io, target, plan.app(), current, target_existed)?;
+    verify_live_snapshot(io, target, app, current, target_existed)?;
     io.ensure_dir(backup_dir)
         .map_err(|e| SwitchError::CommitFailed {
             stage: "backup-dir",
@@ -194,7 +195,7 @@ fn back_up_current<Io: SwitchIo>(
             message: error.to_string(),
             recovery: RecoveryOutcome::NotNeeded,
         })?;
-    if backup_text != current || adapter::validate_syntax(plan.app(), &backup_text).is_err() {
+    if backup_text != current || adapter::validate_syntax(app, &backup_text).is_err() {
         return Err(SwitchError::CommitFailed {
             stage: "backup-verify",
             message: "备份回读内容或语法不匹配".to_string(),
@@ -203,14 +204,14 @@ fn back_up_current<Io: SwitchIo>(
     }
     let backup = BackupRecord {
         id: format!("{}-{ts}", &found_hash[..12.min(found_hash.len())]),
-        app: plan.app(),
+        app,
         target_path: target.to_string_lossy().to_string(),
         backup_path: backup_path.to_string_lossy().to_string(),
         created_at,
         content_hash: found_hash.to_string(),
         target_existed,
         linked_backup_id: None,
-        reason: "provider-projection".to_string(),
+        reason: reason.to_string(),
     };
     write_backup_metadata(io, &backup, "backup-meta")?;
     Ok(backup)
@@ -219,7 +220,7 @@ fn back_up_current<Io: SwitchIo>(
 /// Writes the rendered candidate: temporary file → syntax validation →
 /// atomic replacement → post-write verification. A failed stage after the
 /// replacement restores the just-created backup.
-fn commit_rendered<Io: SwitchIo>(
+pub(crate) fn commit_rendered<Io: SwitchIo>(
     io: &Io,
     target: &Path,
     app: AppKind,
@@ -363,7 +364,8 @@ where
         &current,
         &found_hash,
         target_existed,
-        plan,
+        plan.app(),
+        "provider-projection",
     ) {
         Ok(backup) => backup,
         Err(error) => return finish(Err(error)),

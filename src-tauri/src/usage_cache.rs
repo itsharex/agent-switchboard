@@ -245,6 +245,22 @@ mod tests {
     }
 
     #[test]
+    fn a_cache_file_from_a_prior_format_is_dropped_and_rebuilt_by_the_next_query() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let root = directory.path().join("state");
+        let state = LocalState::from_root(root.clone());
+        fs::create_dir_all(&root).expect("create state directory");
+        let legacy = r#"{"entries":{"profile-1":{"queryDigest":"stale","summary":{"readings":[],"at":"2026-09-06T00:00:00Z"}}}}"#;
+        fs::write(root.join("usage-cache.json"), legacy).expect("write legacy cache");
+
+        record_success(&state, &profile(), summary()).expect("rebuild cache");
+
+        let persisted = fs::read_to_string(root.join("usage-cache.json")).expect("rebuilt cache");
+        assert!(persisted.contains("attemptedAt"));
+        assert_eq!(get(&state, &profile()), Some(summary()));
+    }
+
+    #[test]
     fn a_changed_query_hides_its_prior_summary() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = LocalState::from_root(directory.path().join("state"));

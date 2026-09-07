@@ -8,11 +8,13 @@
 
 mod codex;
 mod preview;
+mod rendered;
 mod switch;
 
 pub use codex::{execute_codex, restore_codex};
 pub(crate) use preview::read_current_or_empty;
 pub use preview::{read_codex_preview, read_preview};
+pub use rendered::execute_rendered;
 pub(crate) use switch::verify_live_snapshot;
 pub use switch::{execute, restore};
 
@@ -200,6 +202,27 @@ pub struct SwitchRequest<'a> {
     pub expected_hash: &'a str,
     /// Hash of the candidate file shown in the preview.
     pub expected_rendered_hash: &'a str,
+}
+
+/// A narrow, executor-owned write of a pre-rendered current client document.
+/// It has the same lock, backup, validation, atomic replacement, and
+/// callback rollback contract as a provider projection, without recomputing
+/// unrelated provider or common-setting fields.
+pub struct RenderedWriteRequest<'a> {
+    pub target: &'a Path,
+    pub app: asb_core::AppKind,
+    pub backup_dir: &'a Path,
+    pub expected_hash: &'a str,
+    pub expected_target_existed: bool,
+    pub rendered: &'a str,
+    pub reason: &'a str,
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderedWriteOutcome {
+    pub backup: BackupRecord,
+    pub final_hash: String,
+    pub warnings: Vec<String>,
 }
 
 /// The two files that form one Codex built-in-`openai` switch. The

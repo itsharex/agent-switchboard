@@ -106,9 +106,17 @@ pub fn run() {
         .setup(|app| {
             let local =
                 local_state::LocalState::from_app(app.handle()).map_err(std::io::Error::other)?;
-            let gateway =
-                gateway::GatewayController::start(&local).map_err(std::io::Error::other)?;
-            app.manage(gateway);
+            app.manage(commands::ConfigWriteGate::default());
+            let write_gate = app.state::<commands::ConfigWriteGate>().inner().clone();
+            // Startup can replay a pending port change before the controller
+            // is published. Hold the same gate as every later client-config
+            // transaction so that recovery has one write boundary.
+            let _write_guard = write_gate.lock().map_err(std::io::Error::other)?;
+            // The gateway controller always exists; a failed port bind or an
+            // unusable state file becomes a visible runtime state instead of
+            // refusing the window.
+            app.manage(gateway::GatewayController::start(&local));
+            app.manage(gateway::PortChangePreparations::default());
             app.manage(commands::switching::ProfileSavePreparations::default());
             commands::switching::recover_pending_profile_save(app.handle())
                 .map_err(std::io::Error::other)?;
@@ -160,8 +168,14 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window
                     .app_handle()
-                    .state::<gateway::GatewayController>()
-                    .has_active_routes()
+                    .try_state::<gateway::GatewayController>()
+                    .map(|gateway| {
+                        gateway.has_gateway_dependency(
+                            &local_state::LocalState::from_app(window.app_handle())
+                                .expect("startup resolved the state directory"),
+                        )
+                    })
+                    .unwrap_or(false)
                 {
                     api.prevent_close();
                     let _ = window.hide();
@@ -192,6 +206,11 @@ pub fn run() {
             commands::status::config_status,
             commands::status::runtime_overview,
             commands::gateway::gateway_status,
+            commands::gateway::gateway_retry_bind,
+            commands::gateway::gateway_prepare_port_change,
+            commands::gateway::gateway_commit_port_change,
+            commands::gateway::gateway_cancel_port_change,
+            commands::gateway::gateway_discard_port_change,
             commands::list_profiles,
             commands::reset_profile_store,
             commands::switching::prepare_profile_save,
@@ -281,6 +300,7 @@ pub fn run() {
             commands::extensions::update_skill_dependencies,
             commands::extensions::put_extension_secret,
             commands::extensions::prepare_extension_plan,
+            commands::extensions::prepare_extension_repair,
             commands::extensions::apply_extension_plan,
             commands::extensions::get_extension_operation,
             commands::extensions::prepare_extension_restore,
@@ -301,8 +321,14 @@ pub fn run() {
                     return;
                 }
                 if app
-                    .state::<gateway::GatewayController>()
-                    .has_active_routes()
+                    .try_state::<gateway::GatewayController>()
+                    .map(|gateway| {
+                        gateway.has_gateway_dependency(
+                            &local_state::LocalState::from_app(&app)
+                                .expect("startup resolved the state directory"),
+                        )
+                    })
+                    .unwrap_or(false)
                 {
                     api.prevent_exit();
                     if let Some(window) = app.get_webview_window("main") {
