@@ -1,4 +1,5 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
+import { useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
 
 export interface SelectOption {
@@ -25,24 +26,32 @@ interface Props {
  * the chosen item marked by a right-aligned check. Rendering contract and
  * visuals are owned here; all values come from styles/tokens.css.
  */
-export function Select({
-  value,
-  options,
-  onChange,
-  placeholder,
-  ariaLabel,
-  disabled = false,
-}: Props) {
+export function Select({ value, options, onChange, placeholder, ariaLabel, disabled = false }: Props) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [container, setContainer] = useState<HTMLElement>();
   return (
-    <SelectPrimitive.Root value={value ?? ""} onValueChange={onChange} disabled={disabled}>
-      <SelectPrimitive.Trigger className="asb-select-trigger" aria-label={ariaLabel}>
+    <SelectPrimitive.Root
+      value={value ?? ""}
+      onValueChange={onChange}
+      disabled={disabled}
+      onOpenChange={(open) => {
+        // Keep the listbox inside its modal's focus and accessibility boundary.
+        if (open) setContainer(trigger.current?.closest<HTMLElement>('[role="dialog"]') ?? undefined);
+      }}
+    >
+      <SelectPrimitive.Trigger ref={trigger} className="asb-select-trigger" aria-label={ariaLabel}>
         <SelectPrimitive.Value placeholder={placeholder} />
         <SelectPrimitive.Icon className="asb-select-chevron">
           <ChevronDownIcon />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal>
-        <SelectPrimitive.Content className="asb-select-content" position="popper" sideOffset={4}>
+      <SelectPrimitive.Portal container={container}>
+        <SelectPrimitive.Content
+          className="asb-select-content"
+          position="popper"
+          sideOffset={4}
+          onEscapeKeyDown={(event) => event.stopPropagation()}
+        >
           <SelectPrimitive.ScrollUpButton className="asb-select-scroll">
             <ChevronUpIcon />
           </SelectPrimitive.ScrollUpButton>

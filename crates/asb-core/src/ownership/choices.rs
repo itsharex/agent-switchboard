@@ -1,37 +1,51 @@
-use crate::ownership::spec::{ChoiceControl, ChoiceOption, ChoiceSpec};
+use crate::ownership::spec::{ChoiceControl, ChoiceOption, ChoiceSpec, SettingOwner};
 use crate::ownership::CODEX_WEB_SEARCH_KEY;
+
+pub const CODEX_SUBAGENT_REASONING_EFFORT_KEY: &str = "agents.default_subagent_reasoning_effort";
+
+const CODEX_REASONING_EFFORT_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        value: "minimal",
+        label: "极低",
+    },
+    ChoiceOption {
+        value: "low",
+        label: "低",
+    },
+    ChoiceOption {
+        value: "medium",
+        label: "中",
+    },
+    ChoiceOption {
+        value: "high",
+        label: "高",
+    },
+    ChoiceOption {
+        value: "xhigh",
+        label: "极高",
+    },
+];
 
 pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     ChoiceSpec {
         key: "model_reasoning_effort",
+        owner: SettingOwner::Provider,
         label: "推理强度",
         group: "模型行为",
         control: ChoiceControl::Slider,
-        options: &[
-            ChoiceOption {
-                value: "minimal",
-                label: "极低",
-            },
-            ChoiceOption {
-                value: "low",
-                label: "低",
-            },
-            ChoiceOption {
-                value: "medium",
-                label: "中",
-            },
-            ChoiceOption {
-                value: "high",
-                label: "高",
-            },
-            ChoiceOption {
-                value: "xhigh",
-                label: "极高",
-            },
-        ],
+        options: CODEX_REASONING_EFFORT_OPTIONS,
+    },
+    ChoiceSpec {
+        key: CODEX_SUBAGENT_REASONING_EFFORT_KEY,
+        owner: SettingOwner::Provider,
+        label: "默认推理强度",
+        group: "子 agent",
+        control: ChoiceControl::Slider,
+        options: CODEX_REASONING_EFFORT_OPTIONS,
     },
     ChoiceSpec {
         key: "plan_mode_reasoning_effort",
+        owner: SettingOwner::Provider,
         label: "计划模式推理强度",
         group: "模型行为",
         control: ChoiceControl::Slider,
@@ -64,13 +78,14 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "model_reasoning_summary",
+        owner: SettingOwner::Provider,
         label: "推理摘要",
         group: "模型行为",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "auto",
-                label: "自动",
+                label: "自动摘要",
             },
             ChoiceOption {
                 value: "concise",
@@ -88,6 +103,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "model_verbosity",
+        owner: SettingOwner::Provider,
         label: "回复详细度",
         group: "模型行为",
         control: ChoiceControl::Segment,
@@ -108,6 +124,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "personality",
+        owner: SettingOwner::Provider,
         label: "助手个性",
         group: "模型行为",
         control: ChoiceControl::Segment,
@@ -128,6 +145,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: CODEX_WEB_SEARCH_KEY,
+        owner: SettingOwner::Provider,
         label: "网页搜索",
         group: "模型行为",
         control: ChoiceControl::Segment,
@@ -152,6 +170,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "sandbox_mode",
+        owner: SettingOwner::Client,
         label: "沙箱模式",
         group: "安全与审批",
         control: ChoiceControl::Segment,
@@ -172,6 +191,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "approval_policy",
+        owner: SettingOwner::Client,
         label: "批准策略",
         group: "安全与审批",
         control: ChoiceControl::Segment,
@@ -192,6 +212,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "approvals_reviewer",
+        owner: SettingOwner::Client,
         label: "审批复核方式",
         group: "安全与审批",
         control: ChoiceControl::Segment,
@@ -208,6 +229,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "windows.sandbox",
+        owner: SettingOwner::Client,
         label: "Windows 沙箱权限",
         group: "安全与审批",
         control: ChoiceControl::Segment,
@@ -224,6 +246,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "history.persistence",
+        owner: SettingOwner::Client,
         label: "会话历史",
         group: "隐私与数据",
         control: ChoiceControl::Segment,
@@ -240,6 +263,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "file_opener",
+        owner: SettingOwner::Client,
         label: "文件打开方式",
         group: "工具与功能",
         control: ChoiceControl::Segment,
@@ -270,6 +294,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
 pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
     ChoiceSpec {
         key: "effortLevel",
+        owner: SettingOwner::Provider,
         label: "推理强度",
         group: "模型行为",
         control: ChoiceControl::Slider,
@@ -294,6 +319,7 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "outputStyle",
+        owner: SettingOwner::Provider,
         label: "输出风格",
         group: "模型行为",
         control: ChoiceControl::Segment,
@@ -318,13 +344,14 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
     },
     ChoiceSpec {
         key: "preferredNotifChannel",
+        owner: SettingOwner::Client,
         label: "通知渠道",
         group: "界面与交互",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "auto",
-                label: "自动",
+                label: "自动选择渠道",
             },
             ChoiceOption {
                 value: "terminal_bell",

@@ -11,7 +11,6 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 vi.mock("./use-toast", () => ({ toast: vi.fn() }));
 
 const available: UpdateCheck = {
-  currentVersion: "0.1.0",
   latestVersion: "0.2.0",
   releaseNotes: "### 新功能\n\n- 支持在应用内阅读更新内容\n\n### 修复\n\n- 修复更新状态不同步",
   checkedAt: "2026-08-31T08:00:00Z",
@@ -21,6 +20,7 @@ const available: UpdateCheck = {
 function renderSection(overrides: Partial<Parameters<typeof UpdateSection>[0]> = {}) {
   const props = {
     channel: null,
+    appVersion: null,
     result: null,
     busy: false,
     installing: false,
@@ -48,6 +48,34 @@ describe("UpdateSection", () => {
     expect(screen.getByText("由 Microsoft Store 管理更新")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "检查更新" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更新发布页" })).not.toBeInTheDocument();
+  });
+
+  it("shows the running build's version before any check ran", () => {
+    renderSection({ appVersion: "0.1.15" });
+
+    expect(screen.getByText(/当前版本 v0\.1\.15/)).toBeInTheDocument();
+    expect(screen.queryByText(/检查于/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the version visible after a completed check", () => {
+    renderSection({ appVersion: "0.1.15", checkedAt: "2026-08-31T08:00:00Z" });
+
+    expect(screen.getByText(/当前版本 v0\.1\.15 · 检查于/)).toBeInTheDocument();
+  });
+
+  it("shows the installed version in a Store installation", () => {
+    renderSection({ channel: "microsoftStore", appVersion: "0.1.15" });
+
+    expect(
+      screen.getByText("当前版本 v0.1.15 · Store 会自动检查并安装新版本"),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the version line while the process has not reported its build", () => {
+    renderSection({ checkedAt: "2026-08-31T08:00:00Z" });
+
+    expect(screen.getByText(/检查于/)).toBeInTheDocument();
+    expect(screen.queryByText(/当前版本/)).not.toBeInTheDocument();
   });
 
   it("shows the manual check affordance before any check ran", () => {

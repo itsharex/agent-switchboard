@@ -7,7 +7,7 @@ export const configurationAssembly = {
     "tone": "codex",
     "client": "Codex",
     "provider": "Amazon Bedrock",
-    "commonFields": [
+    "parameterFields": [
       {
         "key": "hide_agent_reasoning",
         "value": "true",
@@ -43,7 +43,7 @@ export const configurationAssembly = {
       },
       {
         "key": "openai_base_url",
-        "value": "https://bedrock-runtime.us-east-1.amazonaws.com/v1"
+        "value": "••••••••"
       }
     ],
     "fileName": "config.toml",
@@ -51,17 +51,18 @@ export const configurationAssembly = {
     "codeLines": [
       "model = \"GPT-6 Astra\"",
       "model_provider = \"openai\"",
-      "openai_base_url = \"https://bedrock-runtime.us-east-1.amazonaws.com/v1\"",
+      "openai_base_url = \"http://127.0.0.1:47821/codex/••••••••/v1\"",
       "hide_agent_reasoning = true",
       "model_reasoning_effort = \"high\""
     ],
     "preservedPaths": [
-      "hooks",
-      "permissions.<name>"
+      "agents.<role>",
+      "hooks"
     ],
     "separateModules": [
       "$CODEX_HOME/AGENTS.md",
       "model_providers.<id>",
+      "agents",
       "mcp_servers.<id>",
       "skills.config"
     ]
@@ -71,7 +72,7 @@ export const configurationAssembly = {
     "tone": "claude",
     "client": "Claude Code",
     "provider": "Amazon Bedrock",
-    "commonFields": [
+    "parameterFields": [
       {
         "key": "autoCompactEnabled",
         "value": "true",
@@ -102,7 +103,7 @@ export const configurationAssembly = {
       },
       {
         "key": "env.ANTHROPIC_BASE_URL",
-        "value": "https://bedrock-runtime.us-east-1.amazonaws.com/v1"
+        "value": "http://127.0.0.1:47821"
       },
       {
         "key": "env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
@@ -119,7 +120,7 @@ export const configurationAssembly = {
       "{",
       "  \"model\": \"Claude Opus 5.1\",",
       "  \"env\": {",
-      "    \"ANTHROPIC_BASE_URL\": \"https://bedrock-runtime.us-east-1.amazonaws.com/v1\",",
+      "    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:47821\",",
       "    \"ANTHROPIC_AUTH_TOKEN\": \"••••••••\",",
       "    \"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS\": \"1\"",
       "  },",
@@ -141,14 +142,14 @@ export const configurationAssembly = {
 
 export type ConfigurationAssemblyClientId = keyof typeof configurationAssembly;
 export type ConfigurationAssemblyClient = (typeof configurationAssembly)[ConfigurationAssemblyClientId];
-export type ConfigurationAssemblyCommonField = {
-  [ClientId in ConfigurationAssemblyClientId]: (typeof configurationAssembly)[ClientId]["commonFields"][number];
+export type ConfigurationAssemblyParameterField = {
+  [ClientId in ConfigurationAssemblyClientId]: (typeof configurationAssembly)[ClientId]["parameterFields"][number];
 }[ConfigurationAssemblyClientId];
 export type ConfigurationAssemblyProviderField = {
   [ClientId in ConfigurationAssemblyClientId]: (typeof configurationAssembly)[ClientId]["providerFields"][number];
 }[ConfigurationAssemblyClientId];
 export type ConfigurationAssemblyFieldKey =
-  | ConfigurationAssemblyCommonField["key"]
+  | ConfigurationAssemblyParameterField["key"]
   | ConfigurationAssemblyProviderField["key"];
 export type ConfigurationAssemblyControlValue =
-  ConfigurationAssemblyCommonField["options"][number];
+  ConfigurationAssemblyParameterField["options"][number];

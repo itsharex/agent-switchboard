@@ -8,19 +8,21 @@ import {
 
 import {
   configurationAssembly,
-  type ConfigurationAssemblyCommonField,
+  type ConfigurationAssemblyClient,
+  type ConfigurationAssemblyParameterField,
   type ConfigurationAssemblyControlValue,
   type ConfigurationAssemblyClientId,
 } from "../generated/configuration-assembly";
+import type { SiteContent } from "../content/site-content";
 import { useSitePreferences } from "../use-site-preferences";
 
 const clientIds = Object.keys(configurationAssembly) as ConfigurationAssemblyClientId[];
 const ENERGY_PARTICLE_COUNT = 9;
 const SLIDER_THUMB_SIZE_PX = 28;
-type CommonAssemblyField = {
-  key: ConfigurationAssemblyCommonField["key"];
+type ParameterAssemblyField = {
+  key: ConfigurationAssemblyParameterField["key"];
   value: ConfigurationAssemblyControlValue;
-  control: ConfigurationAssemblyCommonField["control"];
+  control: ConfigurationAssemblyParameterField["control"];
   options: readonly ConfigurationAssemblyControlValue[];
 };
 type AssemblySliderStyle = CSSProperties & {
@@ -36,11 +38,11 @@ function nextTabIndex(current: number, key: string) {
   return null;
 }
 
-function CommonSettingControl({
+function ParameterSettingControl({
   field,
   labels,
 }: {
-  field: CommonAssemblyField;
+  field: ParameterAssemblyField;
   labels: Record<ConfigurationAssemblyControlValue, string>;
 }) {
   const selectedIndex = field.options.indexOf(field.value);
@@ -96,13 +98,80 @@ function CommonSettingControl({
   );
 }
 
+function AssemblyInputs({ active, assembly }: {
+  active: ConfigurationAssemblyClient;
+  assembly: SiteContent["assembly"];
+}) {
+  const copy = assembly.clients[active.id];
+  return (
+    <>
+      <section className="assembly-block assembly-block-parameters">
+        <h3>{copy.parametersTitle}</h3>
+        <div className="assembly-parameter-settings">
+          {active.parameterFields.map((field) => (
+            <div className="assembly-parameter-setting" key={field.key}>
+              <span className="assembly-parameter-setting-label">
+                {assembly.fieldLabels[field.key]}
+              </span>
+              <ParameterSettingControl field={field} labels={assembly.controlLabels} />
+            </div>
+          ))}
+        </div>
+      </section>
+      <span className="assembly-plus" aria-hidden="true">+</span>
+      <section className={`assembly-block assembly-block-provider assembly-block-${active.tone}`}>
+        <h3>{copy.providerTitle}</h3>
+        <dl>
+          {active.providerFields.map((field) => (
+            <div className="assembly-field" key={field.key}>
+              <dt>{assembly.fieldLabels[field.key]}</dt>
+              <dd>{field.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </>
+  );
+}
+
+function AssemblyFile({ active, assembly }: {
+  active: ConfigurationAssemblyClient;
+  assembly: SiteContent["assembly"];
+}) {
+  const copy = assembly.clients[active.id];
+  return (
+    <section className="assembly-file" aria-label={`${assembly.combineLabel}：${active.fileName}`}>
+      <div className="assembly-file-head">
+        <strong>{active.fileName}</strong>
+        <span>{copy.fileNote}</span>
+      </div>
+      <code className="assembly-path">{active.filePath}</code>
+      <div className="assembly-preserved-boundary">
+        <div><span>{copy.preservedLabel}</span><code>{active.preservedPaths.join(" · ")}</code></div>
+        <span>{copy.preservedState}</span>
+        <div><span>{copy.managedLabel}</span><code>{active.separateModules.join(" · ")}</code></div>
+        <span>{copy.managedState}</span>
+      </div>
+      <pre>
+        <code>
+          {active.codeLines.map((line, index) => (
+            <span className="assembly-code-line" key={`${index}-${line}`}>
+              <span aria-hidden="true">{index + 1}</span>
+              {line}
+            </span>
+          ))}
+        </code>
+      </pre>
+    </section>
+  );
+}
+
 export function ConfigurationAssembly() {
   const { content } = useSitePreferences();
   const [activeClient, setActiveClient] = useState<ConfigurationAssemblyClientId>("codex");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const tabsId = useId();
   const active = configurationAssembly[activeClient];
-  const copy = content.assembly.clients[activeClient];
 
   const selectTab = (index: number) => {
     const clientId = clientIds[index];
@@ -151,69 +220,14 @@ export function ConfigurationAssembly() {
         aria-labelledby={`${tabsId}-${activeClient}-tab`}
         className="assembly-stage"
       >
-        <section className="assembly-block assembly-block-common">
-          <h3>{copy.commonTitle}</h3>
-          <div className="assembly-common-settings">
-            {active.commonFields.map((field) => (
-              <div className="assembly-common-setting" key={field.key}>
-                <span className="assembly-common-setting-label">
-                  {content.assembly.fieldLabels[field.key]}
-                </span>
-                <CommonSettingControl field={field} labels={content.assembly.controlLabels} />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <span className="assembly-plus" aria-hidden="true">+</span>
-
-        <section className={`assembly-block assembly-block-provider assembly-block-${active.tone}`}>
-          <h3>{copy.providerTitle}</h3>
-          <dl>
-            {active.providerFields.map((field) => (
-              <div className="assembly-field" key={field.key}>
-                <dt>{content.assembly.fieldLabels[field.key]}</dt>
-                <dd>{field.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-
+        <AssemblyInputs active={active} assembly={content.assembly} />
         <div className="assembly-arrow" aria-hidden="true">
           <svg viewBox="0 0 72 20" fill="none">
             <path d="M1 10h64M57 3l8 7-8 7" />
           </svg>
         </div>
 
-        <section className="assembly-file" aria-label={`${content.assembly.combineLabel}：${active.fileName}`}>
-          <div className="assembly-file-head">
-            <strong>{active.fileName}</strong>
-            <span>{copy.fileNote}</span>
-          </div>
-          <code className="assembly-path">{active.filePath}</code>
-          <div className="assembly-preserved-boundary">
-            <div>
-              <span>{copy.preservedLabel}</span>
-              <code>{active.preservedPaths.join(" · ")}</code>
-            </div>
-            <span>{copy.preservedState}</span>
-            <div>
-              <span>{copy.managedLabel}</span>
-              <code>{active.separateModules.join(" · ")}</code>
-            </div>
-            <span>{copy.managedState}</span>
-          </div>
-          <pre>
-            <code>
-              {active.codeLines.map((line, index) => (
-                <span className="assembly-code-line" key={`${index}-${line}`}>
-                  <span aria-hidden="true">{index + 1}</span>
-                  {line}
-                </span>
-              ))}
-            </code>
-          </pre>
-        </section>
+        <AssemblyFile active={active} assembly={content.assembly} />
       </div>
     </div>
   );

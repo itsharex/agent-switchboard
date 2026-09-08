@@ -1,13 +1,12 @@
 use super::*;
 
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, CodexModelSettings, CommonSettingValue, ConfigValue,
-    ModelOptions, RouteMode, UpstreamProtocol, UsageQuery,
+    AppKind, ClaudeModelSettings, CodexModelSettings, ModelOptions, RouteMode, UpstreamProtocol,
+    UsageQuery,
 };
-use crate::ownership::default_common_settings;
 use crate::validate::error::MAX_NOTES_LEN;
 
-fn profile(app: AppKind) -> ProviderProfile {
+pub(super) fn profile(app: AppKind) -> ProviderProfile {
     ProviderProfile {
         id: "p1".into(),
         app,
@@ -17,8 +16,13 @@ fn profile(app: AppKind) -> ProviderProfile {
         base_url: Some("https://example.internal/v1".into()),
         api_key: "test-api-key".into(),
         upstream_protocol: Some(UpstreamProtocol::Responses),
+        responses_options: Some(crate::contracts::ResponsesOptions {
+
+            request_mode: crate::contracts::ResponsesRequestMode::Standard,
+        }),
         max_output_tokens: None.into(),
         model_options: None,
+        parameters: crate::ownership::default_provider_parameters(app),
         notes: None,
         website_url: None,
         usage_query: None,
@@ -126,6 +130,7 @@ fn protocol_owns_the_upstream_authentication_scheme() {
 fn codex_anthropic_routes_require_an_explicit_positive_output_limit() {
     let mut route = profile(AppKind::Codex);
     route.upstream_protocol = Some(UpstreamProtocol::AnthropicMessages);
+    route.responses_options = None;
     assert_eq!(
         route.validate(),
         Err(ValidationError::CodexAnthropicRequiresMaxOutputTokens)
@@ -139,6 +144,7 @@ fn codex_anthropic_routes_require_an_explicit_positive_output_limit() {
     assert!(route.validate().is_ok());
 
     route.upstream_protocol = Some(UpstreamProtocol::ChatCompletions);
+    route.responses_options = None;
     assert_eq!(
         route.validate(),
         Err(ValidationError::UnexpectedMaxOutputTokens)
@@ -259,121 +265,6 @@ fn claude_one_m_is_explicit_and_model_identifiers_are_marker_free() {
 }
 
 #[test]
-fn default_settings_validate_and_reject_unknown_keys_loudly() {
-    for app in [AppKind::Codex, AppKind::Claude] {
-        assert!(default_common_settings(app).validate_for(app).is_ok());
-    }
-
-    let mut settings = default_common_settings(AppKind::Codex);
-    settings.settings.insert(
-        "threads".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Bool(true),
-        },
-    );
-    let error = settings.validate_for(AppKind::Codex).unwrap_err();
-    assert!(matches!(error, ValidationError::UnknownCommonKey { .. }));
-    assert!(error.to_string().contains("threads"));
-
-    let mut provider_key = default_common_settings(AppKind::Claude);
-    provider_key.settings.insert(
-        "model".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Str("m".into()),
-        },
-    );
-    assert!(matches!(
-        provider_key.validate_for(AppKind::Claude),
-        Err(ValidationError::UnknownCommonKey { .. })
-    ));
-}
-
-#[test]
-fn incomplete_settings_are_rejected_with_the_missing_key() {
-    let mut settings = default_common_settings(AppKind::Codex);
-    settings.settings.remove("model_reasoning_effort");
-    let error = settings.validate_for(AppKind::Codex).unwrap_err();
-    assert_eq!(
-        error,
-        ValidationError::MissingCommonKey {
-            key: "model_reasoning_effort".to_string()
-        }
-    );
-}
-
-#[test]
-fn choice_values_must_be_catalog_values_and_toggles_must_be_bools() {
-    let mut settings = default_common_settings(AppKind::Codex);
-    settings.settings.insert(
-        "model_reasoning_effort".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Str("xhigh".into()),
-        },
-    );
-    assert!(settings.validate_for(AppKind::Codex).is_ok());
-
-    settings.settings.insert(
-        "model_reasoning_effort".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Str("extreme".into()),
-        },
-    );
-    let error = settings.validate_for(AppKind::Codex).unwrap_err();
-    assert!(matches!(error, ValidationError::BadCommonValue { .. }));
-    assert!(error.to_string().contains("minimal"));
-
-    settings.settings.insert(
-        "model_reasoning_effort".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Bool(true),
-        },
-    );
-    assert!(matches!(
-        settings.validate_for(AppKind::Codex),
-        Err(ValidationError::BadCommonValue { .. })
-    ));
-
-    let mut toggled = default_common_settings(AppKind::Claude);
-    toggled.settings.insert(
-        "autoCompactEnabled".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Str("on".into()),
-        },
-    );
-    assert!(matches!(
-        toggled.validate_for(AppKind::Claude),
-        Err(ValidationError::BadCommonValue { .. })
-    ));
-
-    // Both polarities are legal: the parameter is a plain value.
-    let mut both = default_common_settings(AppKind::Claude);
-    both.settings.insert(
-        "autoCompactEnabled".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Bool(false),
-        },
-    );
-    assert!(both.validate_for(AppKind::Claude).is_ok());
-    both.settings.insert(
-        "autoCompactEnabled".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Bool(true),
-        },
-    );
-    assert!(both.validate_for(AppKind::Claude).is_ok());
-}
-
-#[test]
-fn plan_uses_the_profile_app_for_the_fixed_common_settings() {
-    let claude_profile = profile(AppKind::Claude);
-    assert!(validate_plan(&claude_profile, &default_common_settings(AppKind::Claude),).is_ok());
-    assert!(matches!(
-        validate_plan(&claude_profile, &default_common_settings(AppKind::Codex),),
-        Err(ValidationError::UnknownCommonKey { .. })
-    ));
-}
-
-#[test]
 fn usage_query_contract_rejects_empty_paths_and_scripts_before_persistence() {
     let valid = UsageQuery::Declarative {
         url: "{{baseUrl}}/balance".to_string(),
@@ -433,6 +324,7 @@ fn official_profile(app: AppKind) -> ProviderProfile {
     p.base_url = None;
     p.api_key = String::new();
     p.upstream_protocol = None;
+    p.responses_options = None;
     p
 }
 

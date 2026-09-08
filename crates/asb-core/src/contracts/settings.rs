@@ -4,8 +4,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::contracts::AppKind;
 
+/// Largest integer that can round-trip through JSON's IEEE-754 number type
+/// without a loss of precision. Typed configuration values use `f64`, so a
+/// TOML integer outside this range must never be read into or written from a
+/// `ConfigValue::Number`.
+pub const MAX_EXACT_CONFIG_INTEGER: i64 = 9_007_199_254_740_991;
+
 /// A plain configuration value. The array shape exists for provider-owned
-/// lists such as `availableModels` and can never pass common-settings
+/// lists such as `availableModels` and can never pass scalar-setting
 /// validation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -24,7 +30,7 @@ impl ConfigValue {
             ConfigValue::Bool(b) => b.to_string(),
             ConfigValue::Str(s) => s.clone(),
             ConfigValue::Number(n) => {
-                if n.fract() == 0.0 && n.abs() < 1e15 {
+                if n.fract() == 0.0 && n.abs() <= MAX_EXACT_CONFIG_INTEGER as f64 {
                     format!("{}", *n as i64)
                 } else {
                     format!("{n}")
@@ -38,52 +44,68 @@ impl ConfigValue {
     }
 }
 
-/// The application-owned intent for one officially supported common setting.
+/// The stored intent for one officially supported scalar setting.
 ///
 /// `Automatic` deliberately means that Agent Switchboard does not emit the
 /// setting into the client configuration. It is not a synthetic host value:
 /// the client and active model choose their own documented default. `Explicit`
 /// writes exactly the value the user selected, including a value that happens
 /// to match a documented default.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "mode", rename_all = "camelCase")]
-pub enum CommonSettingValue {
+pub enum SettingValue {
     Automatic,
     Explicit { value: ConfigValue },
 }
 
-/// The complete common-setting intent for exactly one client, persisted as
-/// `common/{client}.json`. Every supported parameter has one tagged intent so
-/// an absent client-file key can never be confused with an explicit false or
-/// a guessed application default.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CommonSettings {
-    pub settings: BTreeMap<String, CommonSettingValue>,
+impl<'de> Deserialize<'de> for SettingValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Serde ignores extra members on internally tagged unit variants.
+        // An empty struct variant preserves the exact automatic wire shape.
+        #[derive(Deserialize)]
+        #[serde(tag = "mode", rename_all = "camelCase", deny_unknown_fields)]
+        enum Intent {
+            Automatic {},
+            Explicit { value: ConfigValue },
+        }
+        Ok(match Intent::deserialize(deserializer)? {
+            Intent::Automatic {} => Self::Automatic,
+            Intent::Explicit { value } => Self::Explicit { value },
+        })
+    }
 }
 
-impl CommonSettings {
-    pub fn value(&self, key: &str) -> Option<&CommonSettingValue> {
+/// Complete scalar intents for a single ownership scope. Provider parameters
+/// live in their provider profile; client settings live in their client file.
+/// Each scope validates its exact key set against the ownership directory.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SettingsValues {
+    pub settings: BTreeMap<String, SettingValue>,
+}
+
+impl SettingsValues {
+    pub fn value(&self, key: &str) -> Option<&SettingValue> {
         self.settings.get(key)
     }
 }
 
-/// One client's common settings together with the stable revision used for
+/// One client's settings together with the stable revision used for
 /// optimistic editor saves. It represents application state only and never a
 /// client file preview or write.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CommonSettingsSnapshot {
-    pub settings: CommonSettings,
+pub struct ClientSettingsSnapshot {
+    pub settings: SettingsValues,
     pub settings_hash: String,
 }
 
-/// A side-effect-free rendering of the current draft's general-settings
+/// A side-effect-free rendering of the current draft's client-settings
 /// fragment. It never includes provider routing, credentials, or host-owned
 /// configuration.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CommonSettingsPreview {
+pub struct ClientSettingsPreview {
     pub app: AppKind,
     pub target: String,
     pub content: String,

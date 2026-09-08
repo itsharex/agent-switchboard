@@ -1,4 +1,4 @@
-//! The application configuration store: providers, common settings, and
+//! The application configuration store: providers, client settings, and
 //! write history under `state/configuration/`.
 //!
 //! Layout (the only persisted shape):
@@ -6,7 +6,7 @@
 //! ```text
 //! state/
 //! ├─ configuration/
-//! │  ├─ common/{codex,claude}.json
+//! │  ├─ client-settings/{codex,claude}.json
 //! │  ├─ providers/{codex,claude}/{uuid}.json
 //! │  ├─ history/{codex,claude}.json
 //! │  └─ save-journal.json (only while a confirmed active profile is applying)
@@ -18,12 +18,17 @@
 //! of these files is a Codex or Claude Code configuration: switching remains
 //! the only writer of real client files.
 
-pub mod common;
+pub mod client_settings;
 pub mod history;
+pub mod migration;
 pub mod providers;
 pub mod snapshot;
 
+pub(crate) const SWITCH_INTENT_FILE: &str = "switch-intent.json";
+pub(crate) const PROFILE_PREIMAGE_FILE: &str = "save-before.json";
+
 use asb_core::contracts::AppKind;
+use asb_switch::io::{FsIo, SwitchIo};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -115,9 +120,18 @@ impl ConfigStore {
         self.configuration_dir().join(kind)
     }
 
-    pub fn common_path(&self, app: AppKind) -> PathBuf {
-        self.client_dir("common")
+    pub fn client_settings_path(&self, app: AppKind) -> PathBuf {
+        self.client_dir("client-settings")
             .join(format!("{}.json", app.dir_name()))
+    }
+
+    /// The directory marks an initialized current layout even when neither
+    /// client has saved preferences yet. Missing provider fields in that
+    /// layout are corruption, never evidence of a predecessor schema.
+    fn initialize_current_layout(&self) -> Result<(), String> {
+        self.ensure_layout().map_err(|error| error.to_string())?;
+        fs::create_dir_all(self.client_dir("client-settings"))
+            .map_err(|error| format!("无法初始化客户端设置目录：{error}"))
     }
 
     pub fn providers_dir(&self, app: AppKind) -> PathBuf {
@@ -129,17 +143,21 @@ impl ConfigStore {
             .join(format!("{}.json", app.dir_name()))
     }
 
-    /// Confirms that the retired aggregate store is absent. The provider-file
-    /// reader owns the exact immediate authentication-contract upgrade before
-    /// exposing any profile, so normal callers only receive the current shape.
+    /// Runtime readers never interpret predecessor data. Startup completes
+    /// the offline conversion before any command can observe this store.
     pub fn ensure_layout(&self) -> Result<(), ProfileStoreError> {
-        if self.legacy_store_path().exists() {
+        if self.legacy_store_path().exists()
+            || self.configuration_dir().join("common").exists()
+            || migration::journal_path(self).exists()
+            || (self.client_dir("client-settings").exists()
+                && !self.client_dir("client-settings").is_dir())
+        {
             return Err(ProfileStoreError::Unsupported);
         }
         Ok(())
     }
 
-    /// Removes every persisted provider, common setting, and history record.
+    /// Removes every persisted provider, client setting, and history record.
     /// The reset is the recovery path for unreadable legacy data.
     pub fn reset(&self) -> Result<(), String> {
         if let Err(error) = fs::remove_dir_all(self.configuration_dir()) {
@@ -177,12 +195,26 @@ pub(crate) fn write_json_atomic(path: &Path, json: &str) -> Result<(), String> {
         safe_file_stem(path),
         Uuid::new_v4().simple()
     ));
-    fs::write(&temporary, json).map_err(|_| "无法写入配置存储临时文件".to_string())?;
+    if let Err(error) = FsIo
+        .write_new_file(&temporary, json)
+        .and_then(|_| FsIo.sync_file(&temporary))
+    {
+        let cleanup = fs::remove_file(&temporary);
+        return Err(format!(
+            "无法写入并同步配置存储临时文件：{error}{}",
+            if cleanup.is_err() && temporary.exists() {
+                "；临时文件清理失败"
+            } else {
+                ""
+            }
+        ));
+    }
     if fs::rename(&temporary, path).is_err() {
         let _ = fs::remove_file(&temporary);
         return Err("无法原子保存配置存储".to_string());
     }
-    Ok(())
+    FsIo.sync_dir(parent)
+        .map_err(|_| "配置已替换，但存储目录同步失败".to_string())
 }
 
 fn safe_file_stem(path: &Path) -> String {

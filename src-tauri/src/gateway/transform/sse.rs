@@ -4,7 +4,30 @@
 //! owns only the target-event wire framing so there is no second buffered
 //! conversion implementation to keep in sync.
 
+use crate::provider_diagnostics::ProviderDiagnostic;
+use asb_core::contracts::UpstreamProtocol;
 use serde_json::Value;
+
+pub(crate) fn diagnostic_event(
+    protocol: UpstreamProtocol,
+    diagnostic: &ProviderDiagnostic,
+) -> Vec<u8> {
+    let mut error = diagnostic.error_value();
+    let (event, value) = match protocol {
+        UpstreamProtocol::Responses => (
+            "response.failed",
+            serde_json::json!({
+                "type":"response.failed", "response":{"object":"response", "status":"failed", "error":error}
+            }),
+        ),
+        UpstreamProtocol::AnthropicMessages => {
+            error["type"] = serde_json::json!("api_error");
+            ("error", serde_json::json!({"type":"error", "error":error}))
+        }
+        UpstreamProtocol::ChatCompletions => ("error", serde_json::json!({"error":error})),
+    };
+    render_event(event, &value)
+}
 
 pub(super) fn render_event(event: &str, value: &Value) -> Vec<u8> {
     let mut output = Vec::new();

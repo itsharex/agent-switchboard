@@ -102,7 +102,7 @@ fn held_lock_blocks_and_stale_lock_recovery_is_explicit() {
     .unwrap();
     assert!(fs::read_to_string(&target)
         .unwrap()
-        .contains("relay-b.internal"));
+        .contains("http://127.0.0.1:18900/codex/"));
 }
 
 #[test]

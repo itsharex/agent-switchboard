@@ -1,0 +1,65 @@
+/* 收尾 */
+.final {
+  padding-block: 96px 48px;
+  text-align: center;
+}
+
+.final h2 {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 600;
+}
+
+.final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.site-footer {
+  max-width: 640px;
+  margin: 72px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--site-hairline);
+  color: var(--site-text-muted);
+  font-size: 13px;
+}
+
+/* 首次进入的淡入与位移 */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity var(--site-motion-node) var(--site-easing),
+    transform var(--site-motion-node) var(--site-easing);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .assembly-slider-fill,
+  .assembly-slider-particles,
+  .assembly-slider-thumb,
+  .assembly-slider-ticks span {
+    transition: none;
+  }
+
+  .assembly-slider-particle {
+    animation: none;
+  }
+
+}

@@ -36,7 +36,7 @@ pub(crate) fn commit(
         .map(|entry| entry.snapshot.clone())
         .collect();
     if snapshots != prepared.snapshots {
-        return Err("客户端配置、登录缓存或供应商路由已在预览后变化，请重新发起修改".to_string());
+        return Err("客户端配置或供应商路由已在预览后变化，请重新发起修改".to_string());
     }
     let builds = endpoint_builds(local, observed)?;
     if !controller.enter_maintenance_and_drain() {

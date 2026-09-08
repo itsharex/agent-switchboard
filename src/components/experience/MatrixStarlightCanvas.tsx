@@ -252,9 +252,10 @@ function setupMatrixStarlight({
   let dimensions = getMatrixCanvasDimensions(canvas);
   let frameId = 0;
   let lastFrameAt = 0;
+  const reduced = () => motionQuery.matches || document.documentElement.dataset.motion === "reduce";
 
   const paint = (timestamp: number) => {
-    if (!dimensions.width || !dimensions.height) return;
+    if (document.hidden || !dimensions.width || !dimensions.height) return;
     context.setTransform(
       dimensions.pixelRatio,
       0,
@@ -269,7 +270,7 @@ function setupMatrixStarlight({
     dimensions = getMatrixCanvasDimensions(canvas);
     canvas.width = Math.round(dimensions.width * dimensions.pixelRatio);
     canvas.height = Math.round(dimensions.height * dimensions.pixelRatio);
-    paint(motionQuery.matches ? 0 : performance.now());
+    paint(reduced() ? 0 : performance.now());
   };
   const animate = (timestamp: number) => {
     if (timestamp - lastFrameAt >= MATRIX_STARLIGHT.frameInterval) {
@@ -280,7 +281,8 @@ function setupMatrixStarlight({
   };
   const syncMotion = () => {
     window.cancelAnimationFrame(frameId);
-    if (motionQuery.matches) {
+    if (document.hidden) return;
+    if (reduced()) {
       paint(0);
       return;
     }
@@ -291,6 +293,7 @@ function setupMatrixStarlight({
 
   observer.observe(canvas);
   motionQuery.addEventListener("change", syncMotion);
+  document.addEventListener("visibilitychange", syncMotion);
   resize();
   syncMotion();
 
@@ -298,6 +301,7 @@ function setupMatrixStarlight({
     window.cancelAnimationFrame(frameId);
     observer.disconnect();
     motionQuery.removeEventListener("change", syncMotion);
+    document.removeEventListener("visibilitychange", syncMotion);
   };
 }
 
@@ -310,15 +314,26 @@ function useMatrixStarlightCanvas(
     const context = canvas?.getContext("2d");
     if (!canvas || !context) return;
 
-    const tone = resolveTone(variant, canvas);
-    if (!tone) return;
-
-    return setupMatrixStarlight({
-      canvas,
-      context,
-      motionQuery: window.matchMedia("(prefers-reduced-motion: reduce)"),
-      tone,
-    });
+    let cleanup: (() => void) | undefined;
+    const restart = () => {
+      cleanup?.();
+      const tone = resolveTone(variant, canvas);
+      if (!tone) return;
+      cleanup = setupMatrixStarlight({
+        canvas, context, tone,
+        motionQuery: window.matchMedia("(prefers-reduced-motion: reduce)"),
+      });
+    };
+    const appearance = new MutationObserver(restart);
+    appearance.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-motion"] });
+    const themeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    themeQuery.addEventListener("change", restart);
+    restart();
+    return () => {
+      cleanup?.();
+      appearance.disconnect();
+      themeQuery.removeEventListener("change", restart);
+    };
   }, [canvasRef, variant]);
 }
 

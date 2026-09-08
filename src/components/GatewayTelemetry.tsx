@@ -173,17 +173,37 @@ function TrendCard({ rows }: { rows: TrendRow[] }) {
           ))}
         </dl>
       </div>
-      <div className="min-h-0 w-full flex-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={rows} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
-            <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={(value: number) => formatClock(Number(value))} tickLine={false} axisLine={false} tickMargin={12} tick={{ fontSize: 12, fill: "var(--color-text-tertiary)" }} />
-            <YAxis width={44} allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--color-text-tertiary)" }} />
-            <Tooltip content={<TrendTooltip />} cursor={{ stroke: "var(--color-chart-cursor)", strokeWidth: 1, strokeDasharray: "4 4" }} />
-            <Line type="monotone" dataKey="codex" name="Codex" stroke="var(--color-chart-1)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="claude" name="Claude Code" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
+      {total === 0 ? (
+        <p
+          className="m-0 flex flex-1 items-center justify-center text-body-medium text-text-tertiary"
+          role="status"
+        >
+          暂无网关请求记录。
+        </p>
+      ) : (
+        <div className="min-h-0 w-full flex-1">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={rows} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
+              <XAxis
+                dataKey="timestamp"
+                type="number"
+                scale="time"
+                domain={["dataMin", "dataMax"]}
+                ticks={rows.filter((_, index) => index % 10 === 0).map((row) => row.timestamp)}
+                tickFormatter={(value: number) => formatClock(Number(value))}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={12}
+                tick={{ fontSize: 12, fill: "var(--color-text-tertiary)" }}
+              />
+              <YAxis width={44} allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--color-text-tertiary)" }} />
+              <Tooltip content={<TrendTooltip />} cursor={{ stroke: "var(--color-chart-cursor)", strokeWidth: 1, strokeDasharray: "4 4" }} />
+              <Line type="monotone" dataKey="codex" name="Codex" stroke="var(--color-chart-1)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="claude" name="Claude Code" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </figure>
   );
 }

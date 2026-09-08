@@ -9,12 +9,16 @@ pub enum ValidationError {
     EmptyId,
     #[error("自定义供应商必须填写服务地址")]
     CustomRequiresBaseUrl,
-    #[error("base_url 必须是 http(s) URL，当前值为 {0:?}；请填写包含协议头的完整地址")]
+    #[error("服务地址无效：{0}")]
     BadBaseUrl(String),
     #[error("必须填写 API 密钥")]
     EmptyApiKey,
     #[error("自定义供应商必须选择上游 API 格式")]
     CustomRequiresProtocol,
+    #[error("自定义 Responses 供应商必须明确配置请求模式")]
+    ResponsesRequiresOptions,
+    #[error("Responses 能力设置只适用于自定义 Responses 供应商")]
+    UnexpectedResponsesOptions,
     #[error("Codex 转换到 Anthropic Messages 时必须配置正整数的最大输出 token 数")]
     CodexAnthropicRequiresMaxOutputTokens,
     #[error("最大输出 token 数只适用于 Codex 转换到 Anthropic Messages 的供应商")]
@@ -28,12 +32,12 @@ pub enum ValidationError {
         options_kind: &'static str,
         app: AppKind,
     },
-    #[error("键 {key} 不是 {app:?} 的通用设置参数；通用设置文件只能包含设置页列出的参数")]
-    UnknownCommonKey { app: AppKind, key: String },
-    #[error("通用设置缺少参数 {key:?} 的值；请重新加载后再保存")]
-    MissingCommonKey { key: String },
+    #[error("键 {key} 不属于当前 {app:?} 设置作用域；供应商参数与客户端设置必须分别保存")]
+    UnknownSettingKey { app: AppKind, key: String },
+    #[error("设置缺少参数 {key:?} 的值；请重新加载后再保存")]
+    MissingSettingKey { key: String },
     #[error("键 {key} 的值必须是 {allowed} 之一，当前值为 {value:?}")]
-    BadCommonValue {
+    BadSettingValue {
         key: String,
         value: String,
         allowed: String,
@@ -70,6 +74,12 @@ pub enum ValidationError {
     QuotaIntervalRequiresOfficialCodex,
     #[error("订阅额度自动刷新间隔须为 1–{0} 分钟；未设置表示关闭")]
     OfficialQuotaRefreshIntervalOutOfRange(u32),
+    #[error("子 agent 的{field}必须是{allowed}，当前值为 {value:?}")]
+    SubagentBadValue {
+        field: &'static str,
+        allowed: String,
+        value: String,
+    },
 }
 
 /// Metadata fields shared by draft and profile; kept short and local-only.

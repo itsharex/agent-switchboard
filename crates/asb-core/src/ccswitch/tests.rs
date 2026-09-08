@@ -1,6 +1,10 @@
 use super::*;
 
-use crate::contracts::{ModelOptions, RouteMode, UpstreamProtocol, UsageQuery};
+mod responses;
+
+use crate::contracts::{
+    ConfigValue, ModelOptions, RouteMode, SettingValue, UpstreamProtocol, UsageQuery,
+};
 
 // Mapping keeps credentials in the backend-only proposal so import can
 // persist them; the scan-response boundary is tested at the scan layer.
@@ -309,4 +313,70 @@ fn unsupported_client_skips() {
     assert!(outcome.reason.contains("gemini"));
     let outcome = map_row(&row("claude-desktop", "id-13", "桌面", "{}")).unwrap_err();
     assert!(outcome.reason.contains("claude-desktop"));
+}
+
+#[test]
+fn imported_claude_parameters_are_kept_and_excluded_from_unimported_warnings() {
+    let mut config: serde_json::Value = serde_json::from_str(&claude_custom()).unwrap();
+    config["effortLevel"] = "high".into();
+    config["autoCompactEnabled"] = false.into();
+    config["spinnerTipsEnabled"] = true.into();
+    let outcome = map_row(&row(
+        "claude",
+        "parameters",
+        "独立参数",
+        &config.to_string(),
+    ))
+    .unwrap();
+    assert_eq!(
+        outcome.draft.parameters.value("effortLevel"),
+        Some(&SettingValue::Explicit {
+            value: ConfigValue::Str("high".into())
+        })
+    );
+    assert_eq!(
+        outcome.draft.parameters.value("autoCompactEnabled"),
+        Some(&SettingValue::Explicit {
+            value: ConfigValue::Bool(false)
+        })
+    );
+    assert!(!outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("effortLevel") || warning.contains("autoCompactEnabled")));
+    assert!(outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("spinnerTipsEnabled")));
+}
+
+#[test]
+fn imported_codex_parameters_belong_to_each_source_provider() {
+    for (id, effort) in [("a", "high"), ("b", "low")] {
+        let config = serde_json::json!({
+            "auth": { "OPENAI_API_KEY": TOKEN },
+            "config": format!("model_reasoning_effort = '{effort}'\n[features]\nfast_mode = false\n[model_providers.relay]\nbase_url = 'https://relay.internal/v1'\nwire_api = 'responses'\n"),
+        });
+        let outcome = map_row(&row("codex", id, id, &config.to_string())).unwrap();
+        assert_eq!(
+            outcome.draft.parameters.value("model_reasoning_effort"),
+            Some(&SettingValue::Explicit {
+                value: ConfigValue::Str(effort.into())
+            })
+        );
+        assert_eq!(
+            outcome.draft.parameters.value("features.fast_mode"),
+            Some(&SettingValue::Explicit {
+                value: ConfigValue::Bool(false)
+            })
+        );
+        outcome.draft.validate().unwrap();
+    }
+}
+
+#[test]
+fn invalid_ccswitch_parameter_values_are_rejected() {
+    let config = serde_json::json!({"effortLevel": "unsupported"}).to_string();
+    let skipped = map_row(&row("claude", "invalid-parameters", "无效参数", &config)).unwrap_err();
+    assert!(skipped.reason.contains("effortLevel"));
 }

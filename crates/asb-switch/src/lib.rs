@@ -6,6 +6,7 @@
 //! indeterminate), backups carry hashes, and every failure reports whether
 //! and how the live file was restored.
 
+mod config_journal;
 mod display;
 pub mod executor;
 pub mod extensions;
@@ -14,12 +15,12 @@ pub mod lockfile;
 pub mod pids;
 mod prompt_documents;
 mod restore;
+mod subagent_settings;
 
 pub use executor::{
-    execute, execute_codex, execute_rendered, read_codex_preview, read_preview, restore,
-    restore_codex, sha256_digest, sha256_hex, CodexSwitchRequest, FilePreview, RecoveryOutcome,
-    RenderedWriteOutcome, RenderedWriteRequest, RestoreOutcome, SwitchError, SwitchOutcome,
-    SwitchRequest,
+    execute, execute_rendered, read_preview, restore, restore_projected, sha256_digest, sha256_hex,
+    FilePreview, RecoveryOutcome, RenderedWriteOutcome, RenderedWriteRequest, RestoreOutcome,
+    SwitchError, SwitchOutcome, SwitchRequest,
 };
 pub use extensions::{
     apply_extension_plan, journal_lock_targets, recover_pending, ExtensionApplyRequest,
@@ -35,3 +36,12 @@ pub use prompt_documents::{
     GlobalPromptDocumentRequest,
 };
 pub use restore::list_backups;
+pub use subagent_settings::{
+    preview_codex_subagent_settings, read_codex_subagent_settings, recovery_label,
+    write_codex_subagent_settings, SubagentSettingsRequest,
+};
+
+pub use config_journal::{
+    config_journal_path, finish_config_recovery, pending_config_write, rollback_pending_config,
+    PendingConfigWrite,
+};

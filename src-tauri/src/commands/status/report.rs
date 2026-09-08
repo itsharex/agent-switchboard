@@ -35,7 +35,7 @@ pub(super) fn classify_match_status(
             profile_name: record
                 .profile_name
                 .clone()
-                .unwrap_or_else(|| "通用设置".to_string()),
+                .unwrap_or_else(|| "客户端设置".to_string()),
         },
         Some(record) => MatchStatus::ExternallyModified {
             at: record.at.clone(),
@@ -47,12 +47,11 @@ pub(super) fn classify_match_status(
 /// Decides whether the live content still matches a current profile, a
 /// restored backup, or the app's last record. Requires the file to be readable
 /// and syntactically valid.
-fn match_status_for(
+pub(super) fn match_status_for(
     state: &crate::local_state::LocalState,
     gateway: Option<&crate::gateway::GatewayController>,
     kind: AppKind,
     text: &str,
-    codex_auth: Option<&str>,
 ) -> Result<MatchStatus, CommandError> {
     let configuration = state.configuration();
     let hash = sha256_hex(text);
@@ -60,8 +59,8 @@ fn match_status_for(
         .latest_config_write(kind)
         .map_err(store_error)?;
 
-    let common = configuration
-        .get_common_settings(kind)
+    let client_settings = configuration
+        .get_client_settings(kind)
         .map_err(store_error)?
         .settings;
     let profiles = configuration
@@ -71,25 +70,32 @@ fn match_status_for(
         .filter(|record| record.profile.app == kind)
         .collect::<Vec<_>>();
     let gateway_profile_id = gateway
-        .map(|gateway| gateway.active_profile_id(kind, text, codex_auth))
+        .map(|gateway| gateway.active_profile_id(kind, text))
         .transpose()
         .map_err(|error| CommandError::new("provider-identity-unavailable", error))?
         .flatten();
-    let matching_profile = gateway_profile_id
-        .as_deref()
-        .and_then(|id| profiles.iter().find(|record| record.profile.id == id))
-        .or_else(|| {
-            profiles.iter().find(|record| {
-                let plan = SwitchPlan::direct(record.profile.clone(), common.clone());
-                let unchanged = asb_core::validate_plan(&plan.profile, &plan.common).is_ok()
-                    && matches!(
-                            adapter::preview(text, &plan, ""),
-                            Ok(preview) if preview.changes.is_empty()
-                    );
-                unchanged
-            })
-        })
-        .map(|record| record.profile.clone());
+    let mut matching_profile = None;
+    for record in &profiles {
+        if record.profile.requires_gateway()
+            && gateway_profile_id.as_deref() != Some(&record.profile.id)
+        {
+            continue;
+        }
+        let mut plan = SwitchPlan::direct(record.profile.clone(), client_settings.clone());
+        if gateway_profile_id.as_deref() == Some(&record.profile.id) {
+            if let Some(projected) = gateway
+                .expect("gateway identity has a controller")
+                .active_route_projection(&plan)
+                .map_err(|error| CommandError::new("provider-identity-unavailable", error))?
+            {
+                plan = projected;
+            }
+        }
+        if projection_matches(text, &plan) {
+            matching_profile = Some(record.profile.clone());
+            break;
+        }
+    }
 
     Ok(classify_match_status(
         last.as_ref(),
@@ -98,16 +104,20 @@ fn match_status_for(
     ))
 }
 
+fn projection_matches(text: &str, plan: &SwitchPlan) -> bool {
+    asb_core::validate_plan(&plan.profile, &plan.client_settings).is_ok()
+        && matches!(adapter::preview(text, plan, ""), Ok(preview) if preview.changes.is_empty())
+}
+
 pub(super) fn active_profile_id(
     profiles: &[ProviderProfile],
     gateway: Option<&crate::gateway::GatewayController>,
     kind: AppKind,
     text: &str,
-    codex_auth: Option<&str>,
     last: Option<&ConfigWriteRecord>,
 ) -> Result<Option<String>, CommandError> {
     if let Some(profile_id) = gateway
-        .map(|gateway| gateway.active_profile_id(kind, text, codex_auth))
+        .map(|gateway| gateway.active_profile_id(kind, text))
         .transpose()
         .map_err(|error| CommandError::new("provider-identity-unavailable", error))?
         .flatten()
@@ -115,12 +125,15 @@ pub(super) fn active_profile_id(
         return Ok(Some(profile_id));
     }
     let mut candidates = Vec::new();
-    for profile in profiles.iter().filter(|profile| profile.app == kind) {
+    for profile in profiles
+        .iter()
+        .filter(|profile| profile.app == kind && !profile.requires_gateway())
+    {
         let plan = SwitchPlan::direct(
             profile.clone(),
-            asb_core::ownership::default_common_settings(kind),
+            asb_core::ownership::default_client_settings(kind),
         );
-        if adapter::matches_provider_identity(text, codex_auth, &plan).map_err(|error| {
+        if adapter::matches_provider_identity(text, &plan).map_err(|error| {
             CommandError::new("provider-identity-unavailable", error.to_string())
         })? {
             candidates.push(profile.id.clone());
@@ -142,7 +155,6 @@ pub(crate) fn config_status_report(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
 ) -> Result<Vec<ConfigFileStatus>, CommandError> {
-    let io = FsIo;
     let profiles = state
         .configuration()
         .list_providers()
@@ -150,90 +162,65 @@ pub(crate) fn config_status_report(
         .into_iter()
         .map(|record| record.profile)
         .collect::<Vec<_>>();
-    let auth_path = crate::local_state::LocalState::codex_auth_path()
-        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    let codex_auth = match io.read_file(&auth_path) {
-        Ok(text) => Some(text),
-        Err(error) if error.kind() == ErrorKind::NotFound => None,
-        Err(_) => {
-            return Err(CommandError::new(
-                "provider-identity-unavailable",
-                "无法读取 Codex 登录缓存",
-            ))
-        }
-    };
     [AppKind::Codex, AppKind::Claude]
         .into_iter()
-        .map(|kind| {
-            let target = state
-                .target(kind)
-                .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-            let last_switch = state
-                .configuration()
-                .latest_config_write(kind)
-                .map_err(store_error)?;
-            let status = match io.read_file(&target) {
-                Ok(text) => match adapter::validate_syntax(kind, &text) {
-                    Ok(()) => ConfigFileStatus {
-                        app: kind,
-                        path: target.to_string_lossy().to_string(),
-                        exists: true,
-                        syntax_ok: true,
-                        route: Some(adapter::route_state(kind, &text)),
-                        read_error: None,
-                        match_status: match_status_for(
-                            state,
-                            Some(gateway),
-                            kind,
-                            &text,
-                            codex_auth.as_deref(),
-                        )?,
-                        active_profile_id: active_profile_id(
-                            &profiles,
-                            Some(gateway),
-                            kind,
-                            &text,
-                            codex_auth.as_deref(),
-                            last_switch.as_ref(),
-                        )?,
-                        last_switch,
-                    },
-                    Err(_) => ConfigFileStatus {
-                        app: kind,
-                        path: target.to_string_lossy().to_string(),
-                        exists: true,
-                        syntax_ok: false,
-                        route: None,
-                        read_error: None,
-                        match_status: MatchStatus::Unknown,
-                        active_profile_id: None,
-                        last_switch,
-                    },
-                },
-                Err(error) if error.kind() == ErrorKind::NotFound => ConfigFileStatus {
-                    app: kind,
-                    path: target.to_string_lossy().to_string(),
-                    exists: false,
-                    syntax_ok: false,
-                    route: None,
-                    read_error: None,
-                    match_status: MatchStatus::Unknown,
-                    active_profile_id: None,
-                    last_switch,
-                },
-                Err(_) => ConfigFileStatus {
-                    app: kind,
-                    path: target.to_string_lossy().to_string(),
-                    exists: true,
-                    syntax_ok: false,
-                    route: None,
-                    read_error: Some("无法读取配置文件".to_string()),
-                    match_status: MatchStatus::Unknown,
-                    active_profile_id: None,
-                    last_switch,
-                },
-            };
-            Ok(status)
-        })
+        .map(|kind| observe_client_file(state, gateway, &profiles, kind))
         .collect()
+}
+
+fn observe_client_file(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+    profiles: &[ProviderProfile],
+    kind: AppKind,
+) -> Result<ConfigFileStatus, CommandError> {
+    let target = state
+        .target(kind)
+        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+    let mut status = ConfigFileStatus {
+        app: kind,
+        path: target.to_string_lossy().to_string(),
+        exists: false,
+        syntax_ok: false,
+        route: None,
+        read_error: None,
+        match_status: MatchStatus::Unknown,
+        active_profile_id: None,
+        last_switch: state
+            .configuration()
+            .latest_config_write(kind)
+            .map_err(store_error)?,
+    };
+    let text = match FsIo.read_file(&target) {
+        Ok(text) => {
+            status.exists = true;
+            text
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(status),
+        Err(_) => {
+            status.exists = true;
+            status.read_error = Some("无法读取配置文件".to_string());
+            return Ok(status);
+        }
+    };
+    if adapter::validate_syntax(kind, &text).is_err() {
+        return Ok(status);
+    }
+    status.syntax_ok = true;
+    let mut route = adapter::route_state(kind, &text);
+    if kind == AppKind::Codex {
+        route.base_url = route
+            .base_url
+            .map(|url| asb_core::redact::redact("openai_base_url", &url));
+    }
+    status.route = Some(route);
+    status.match_status = match_status_for(state, Some(gateway), kind, &text)?;
+    status.active_profile_id = active_profile_id(
+        profiles,
+        Some(gateway),
+        kind,
+        &text,
+        status.last_switch.as_ref(),
+    )?;
+    Ok(status)
 }

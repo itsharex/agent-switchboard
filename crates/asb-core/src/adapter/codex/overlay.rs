@@ -1,17 +1,12 @@
-use crate::adapter::codex::OFFICIAL_PROVIDER;
 use crate::adapter::OverlayEntry;
 use crate::contracts::{
-    AppKind, CommonSettingValue, CommonSettings, ConfigValue, ModelOptions, RouteMode, SwitchPlan,
+    AppKind, ConfigValue, ModelOptions, SettingValue, SettingsValues, SwitchPlan,
 };
 use crate::ownership::{
-    provider_absent_action, setting_specs, ProviderAbsentAction, SettingOwner,
-    CODEX_LEGACY_PROVIDER_BASE_URL_KEY, CODEX_LEGACY_PROVIDER_ID, CODEX_LEGACY_PROVIDER_NAME_KEY,
-    CODEX_LEGACY_PROVIDER_TOKEN_KEY, CODEX_LEGACY_PROVIDER_WIRE_API_KEY, CODEX_WEB_SEARCH_KEY,
+    provider_absent_action, setting_specs, ProviderAbsentAction, SettingControl, SettingOwner,
+    CODEX_PROVIDER_BASE_URL_KEY, CODEX_PROVIDER_ID, CODEX_WEB_SEARCH_KEY,
 };
 
-/// Builds the overlay entries implied by `plan`. Every route uses Codex's
-/// built-in `openai` provider, so session history remains in one provider
-/// bucket while the selected third-party endpoint and API-key cache vary.
 fn absent_provider_entry(key: &str) -> OverlayEntry {
     match provider_absent_action(AppKind::Codex, key) {
         Some(ProviderAbsentAction::Remove) => OverlayEntry::RemoveIfPresent,
@@ -19,16 +14,14 @@ fn absent_provider_entry(key: &str) -> OverlayEntry {
     }
 }
 
-fn provider_value(profile: &crate::contracts::ProviderProfile, key: &str) -> Option<ConfigValue> {
+fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
+    let profile = &plan.profile;
     match key {
         "model" => profile.model.clone().map(ConfigValue::Str),
-        "model_provider" => Some(ConfigValue::Str(OFFICIAL_PROVIDER.into())),
-        "openai_base_url" => profile.base_url.clone().map(ConfigValue::Str),
-        "experimental_bearer_token"
-        | CODEX_LEGACY_PROVIDER_NAME_KEY
-        | CODEX_LEGACY_PROVIDER_BASE_URL_KEY
-        | CODEX_LEGACY_PROVIDER_WIRE_API_KEY
-        | CODEX_LEGACY_PROVIDER_TOKEN_KEY => None,
+        "model_provider" => Some(ConfigValue::Str(CODEX_PROVIDER_ID.into())),
+        CODEX_PROVIDER_BASE_URL_KEY => plan
+            .client_base_url()
+            .map(|url| ConfigValue::Str(url.into())),
         "model_context_window" => match &profile.model_options {
             Some(ModelOptions::Codex(settings)) => settings
                 .context_window
@@ -42,48 +35,43 @@ fn provider_value(profile: &crate::contracts::ProviderProfile, key: &str) -> Opt
     }
 }
 
-/// One common setting's overlay entry: an explicit non-default value is
-/// written, while the directory default is expressed by omitting the line.
-/// Common-setting intent is explicit: automatic keys leave the host value
-/// alone only after removing a previously managed line; explicit values are
-/// always written, even when they resemble a documented client default.
-fn common_entry(value: &CommonSettingValue) -> OverlayEntry {
+/// Automatic removes the managed key; explicit values are always written.
+fn setting_entry(value: &SettingValue) -> OverlayEntry {
     match value {
-        CommonSettingValue::Automatic => OverlayEntry::RemoveIfPresent,
-        CommonSettingValue::Explicit { value } => OverlayEntry::Set(value.clone()),
+        SettingValue::Automatic => OverlayEntry::RemoveIfPresent,
+        SettingValue::Explicit { value } => OverlayEntry::Set(value.clone()),
     }
 }
 
-/// Resolves a stored common preference against the selected provider's
+/// Resolves a stored provider parameter against the selected provider's
 /// protocol capability. Codex server-side web search is a Responses-only
 /// service tool; a Chat Completions or Anthropic upstream cannot execute it.
 /// The client file therefore receives an explicit disabled value only for the
-/// routed configuration, while the stored common preference remains intact
+/// routed configuration, while the stored provider parameter remains intact
 /// and is restored on the next native Responses projection.
-fn effective_common_entry(
+fn effective_parameter_entry(
     profile: &crate::contracts::ProviderProfile,
     key: &str,
-    value: &CommonSettingValue,
+    value: &SettingValue,
 ) -> OverlayEntry {
-    let requires_protocol_guard = profile.route_mode == RouteMode::Custom
-        && profile
-            .upstream_protocol
-            .is_some_and(|protocol| protocol != crate::contracts::UpstreamProtocol::Responses);
+    let requires_protocol_guard = profile.requires_protocol_translation();
     if key == CODEX_WEB_SEARCH_KEY && requires_protocol_guard {
         return OverlayEntry::Set(ConfigValue::Str("disabled".to_string()));
     }
-    common_entry(value)
+    setting_entry(value)
 }
 
-pub(super) fn common_overlay(common: &CommonSettings) -> Vec<(String, OverlayEntry)> {
+pub(super) fn client_settings_overlay(
+    client_settings: &SettingsValues,
+) -> Vec<(String, OverlayEntry)> {
     setting_specs(AppKind::Codex)
         .into_iter()
-        .filter(|spec| spec.owner == SettingOwner::Common)
+        .filter(|spec| spec.owner == SettingOwner::Client)
         .map(|spec| {
-            let value = common
+            let value = client_settings
                 .value(spec.key)
-                .expect("common-settings validation guarantees every catalog key");
-            (spec.key.to_string(), common_entry(value))
+                .expect("client-settings validation guarantees every catalog key");
+            (spec.key.to_string(), setting_entry(value))
         })
         .collect()
 }
@@ -92,28 +80,32 @@ pub(super) fn common_overlay(common: &CommonSettings) -> Vec<(String, OverlayEnt
 /// names below map declared slots to plan data; no second managed-key list
 /// exists in the adapter.
 pub(super) fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
-    let mut entries: Vec<(String, OverlayEntry)> = setting_specs(AppKind::Codex)
+    let entries: Vec<(String, OverlayEntry)> = setting_specs(AppKind::Codex)
         .into_iter()
         .map(|spec| {
             let entry = match spec.owner {
-                SettingOwner::Provider => provider_value(&plan.profile, spec.key)
+                SettingOwner::Provider if spec.control != SettingControl::None => {
+                    let value = plan
+                        .profile
+                        .parameters
+                        .value(spec.key)
+                        .expect("plan validation guarantees complete provider parameters");
+                    effective_parameter_entry(&plan.profile, spec.key, value)
+                }
+                SettingOwner::Provider => provider_value(plan, spec.key)
                     .map(OverlayEntry::Set)
                     .unwrap_or_else(|| absent_provider_entry(spec.key)),
-                SettingOwner::Common => {
+                SettingOwner::Client => {
                     let value = plan
-                        .common
+                        .client_settings
                         .value(spec.key)
-                        .expect("plan validation guarantees complete common settings");
-                    effective_common_entry(&plan.profile, spec.key, value)
+                        .expect("plan validation guarantees complete client settings");
+                    setting_entry(value)
                 }
                 SettingOwner::Host => unreachable!("host keys never appear in the directory"),
             };
             (spec.key.to_string(), entry)
         })
         .collect();
-    entries.push((
-        format!("model_providers.{CODEX_LEGACY_PROVIDER_ID}"),
-        OverlayEntry::RemoveTableIfEmpty,
-    ));
     entries
 }

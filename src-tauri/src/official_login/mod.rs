@@ -7,6 +7,7 @@
 pub(crate) mod claude;
 pub(crate) mod codex;
 pub(crate) mod credentials;
+pub(crate) mod observation;
 
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};

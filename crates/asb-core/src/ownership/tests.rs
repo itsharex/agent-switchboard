@@ -1,31 +1,31 @@
 use super::*;
 
-use crate::contracts::{AppKind, CommonSettingValue};
+use crate::contracts::{AppKind, SettingValue};
 
 #[test]
-fn every_catalog_key_is_common_owned_in_the_directory() {
+fn every_editor_key_declares_its_directory_owner() {
     for app in [AppKind::Codex, AppKind::Claude] {
-        for toggle in common_toggles(app) {
+        for toggle in setting_toggles(app) {
             assert!(
                 is_owned(app, toggle.key),
                 "{} toggle key must be app-owned",
                 toggle.key
             );
             assert!(
-                owner_for(app, toggle.key) == SettingOwner::Common,
-                "{} toggle key must be common-owned",
+                owner_for(app, toggle.key) == toggle.owner,
+                "{} toggle key must preserve its explicit owner",
                 toggle.key
             );
         }
-        for choice in common_choices(app) {
+        for choice in setting_choices(app) {
             assert!(
                 is_owned(app, choice.key),
                 "{} choice key must be app-owned",
                 choice.key
             );
             assert!(
-                owner_for(app, choice.key) == SettingOwner::Common,
-                "{} choice key must be common-owned",
+                owner_for(app, choice.key) == choice.owner,
+                "{} choice key must preserve its explicit owner",
                 choice.key
             );
             assert!(
@@ -54,7 +54,10 @@ fn official_directory_exposes_direct_and_preserved_boundaries() {
             .iter()
             .filter(|entry| entry.disposition == OfficialSettingDisposition::Direct)
         {
-            assert_eq!(owner_for(app, entry.path), SettingOwner::Common);
+            assert_ne!(
+                setting_spec(app, entry.path).unwrap().control,
+                SettingControl::None
+            );
         }
     }
 }
@@ -62,31 +65,31 @@ fn official_directory_exposes_direct_and_preserved_boundaries() {
 #[test]
 fn every_catalog_group_is_declared_and_non_empty() {
     for app in [AppKind::Codex, AppKind::Claude] {
-        let groups = common_groups(app);
+        let groups = setting_groups(app);
         for group in groups {
             let group = *group;
-            let members = common_toggles(app)
+            let members = setting_toggles(app)
                 .iter()
                 .filter(|t| t.group == group)
                 .count()
-                + common_choices(app)
+                + setting_choices(app)
                     .iter()
                     .filter(|c| c.group == group)
                     .count();
             assert!(members > 0, "分组 {group} 必须至少有一个选项");
         }
-        for spec in common_toggles(app) {
+        for spec in setting_toggles(app) {
             assert!(
                 groups.contains(&spec.group),
-                "开关 {} 的分组 {} 未在 common_groups 声明",
+                "开关 {} 的分组 {} 未在 setting_groups 声明",
                 spec.key,
                 spec.group
             );
         }
-        for spec in common_choices(app) {
+        for spec in setting_choices(app) {
             assert!(
                 groups.contains(&spec.group),
-                "档位 {} 的分组 {} 未在 common_groups 声明",
+                "档位 {} 的分组 {} 未在 setting_groups 声明",
                 spec.key,
                 spec.group
             );
@@ -95,31 +98,87 @@ fn every_catalog_group_is_declared_and_non_empty() {
 }
 
 #[test]
-fn automatic_common_settings_cover_exactly_the_catalog_keys() {
+fn automatic_values_cover_exactly_each_ownership_scope() {
     for app in [AppKind::Codex, AppKind::Claude] {
-        let defaults = default_common_settings(app);
-        let catalog_keys: Vec<&str> = setting_specs(app)
-            .into_iter()
-            .filter(|spec| spec.owner == SettingOwner::Common)
-            .map(|spec| spec.key)
-            .collect();
-        assert_eq!(defaults.settings.len(), catalog_keys.len());
-        for key in catalog_keys {
-            let value = defaults
-                .value(key)
-                .expect("every catalog key has an automatic value");
-            assert!(matches!(value, CommonSettingValue::Automatic));
+        for (owner, defaults) in [
+            (SettingOwner::Client, default_client_settings(app)),
+            (SettingOwner::Provider, default_provider_parameters(app)),
+        ] {
+            let catalog_keys: Vec<&str> = setting_specs(app)
+                .into_iter()
+                .filter(|spec| spec.owner == owner && spec.control != SettingControl::None)
+                .map(|spec| spec.key)
+                .collect();
+            assert_eq!(defaults.settings.len(), catalog_keys.len());
+            for key in catalog_keys {
+                assert!(matches!(defaults.value(key), Some(SettingValue::Automatic)));
+            }
         }
     }
 }
 
 #[test]
-fn codex_routing_keys_include_the_builtin_openai_override() {
+fn provider_parameters_always_remove_prior_values_when_automatic() {
+    for app in [AppKind::Codex, AppKind::Claude] {
+        for key in default_provider_parameters(app).settings.keys() {
+            assert_eq!(owner_for(app, key), SettingOwner::Provider);
+            assert_eq!(
+                provider_absent_action(app, key),
+                Some(ProviderAbsentAction::Remove)
+            );
+        }
+    }
+    for key in [
+        "features.fast_mode",
+        "features.enable_request_compression",
+        "features.personality",
+    ] {
+        assert_eq!(owner_for(AppKind::Codex, key), SettingOwner::Provider);
+    }
+    assert_eq!(
+        owner_for(AppKind::Codex, "tui.animations"),
+        SettingOwner::Client
+    );
+    assert_eq!(
+        owner_for(AppKind::Codex, "sandbox_mode"),
+        SettingOwner::Client
+    );
+}
+
+#[test]
+fn codex_routing_keys_own_custom_provider_capabilities_and_retired_override() {
     assert!(is_owned(AppKind::Codex, "model"));
     assert!(is_owned(AppKind::Codex, "model_provider"));
     assert!(is_owned(AppKind::Codex, "openai_base_url"));
+    assert!(is_owned(AppKind::Codex, CODEX_PROVIDER_BASE_URL_KEY));
+    assert!(!is_owned(AppKind::Codex, "model_providers.agent_switchboard.name"));
+    assert!(!is_owned(AppKind::Codex, "model_providers.OpenAi.base_url"));
     assert!(is_owned(AppKind::Codex, "model_reasoning_effort"));
     assert!(is_owned(AppKind::Codex, "model_context_window"));
+}
+
+#[test]
+fn codex_subagent_defaults_are_provider_owned_and_catalogued_for_their_controls() {
+    let model = setting_spec(AppKind::Codex, CODEX_SUBAGENT_MODEL_KEY).expect("subagent model");
+    assert_eq!(model.owner, SettingOwner::Provider);
+    assert_eq!(model.control, SettingControl::ModelPicker);
+    assert_eq!(model.group, Some("子 agent"));
+
+    let reasoning = choice_spec(AppKind::Codex, CODEX_SUBAGENT_REASONING_EFFORT_KEY)
+        .expect("subagent reasoning");
+    assert_eq!(reasoning.owner, SettingOwner::Provider);
+    assert_eq!(reasoning.group, "子 agent");
+    assert_eq!(reasoning.control, ChoiceControl::Slider);
+
+    let defaults = default_provider_parameters(AppKind::Codex);
+    assert_eq!(
+        defaults.value(CODEX_SUBAGENT_MODEL_KEY),
+        Some(&SettingValue::Automatic)
+    );
+    assert_eq!(
+        defaults.value(CODEX_SUBAGENT_REASONING_EFFORT_KEY),
+        Some(&SettingValue::Automatic)
+    );
 }
 
 #[test]

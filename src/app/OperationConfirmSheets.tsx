@@ -69,7 +69,7 @@ export function OperationConfirmSheets({
         <ConfirmSheet
           title="清空旧供应商档案"
           details={[
-            "将清空供应商档案、通用配置覆盖和切换记录。",
+            "将清空供应商档案（含运行参数）、客户端设置和切换记录。",
             "会保留备份、应用设置，以及 Codex / Claude Code 的实际配置和凭据。",
             "旧格式不会迁移；确认后请重新创建供应商档案。",
           ]}

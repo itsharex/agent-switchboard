@@ -1,37 +1,45 @@
 use std::collections::BTreeMap;
 
-use crate::contracts::{AppKind, CommonSettingValue, CommonSettings};
+use crate::contracts::{AppKind, SettingValue, SettingsValues};
 use crate::ownership::directory::{CLAUDE_DIRECTORY_FAMILIES, CODEX_DIRECTORY_FAMILIES};
+use crate::ownership::models::MODEL_SPECS;
 use crate::ownership::provider::PROVIDER_SETTINGS;
 use crate::ownership::spec::{
-    ChoiceSpec, OfficialSettingDisposition, OfficialSettingEntry, ProviderAbsentAction,
+    ChoiceSpec, ModelSpec, OfficialSettingDisposition, OfficialSettingEntry, ProviderAbsentAction,
     SettingControl, SettingOwner, SettingSpec, SettingValueType, ToggleSpec,
 };
 use crate::ownership::{CLAUDE_CHOICES, CLAUDE_TOGGLES, CODEX_CHOICES, CODEX_TOGGLES};
 
-/// The common toggle entries for one client. They are a projection of the
+/// The editable toggle entries for one client. They are a projection of the
 /// ownership directory, not a second owned-key list.
-pub fn common_toggles(app: AppKind) -> &'static [ToggleSpec] {
+pub fn setting_toggles(app: AppKind) -> &'static [ToggleSpec] {
     match app {
         AppKind::Codex => CODEX_TOGGLES,
         AppKind::Claude => CLAUDE_TOGGLES,
     }
 }
 
-/// The common choice entries for one client. Values are the authority the
-/// common-settings validator checks string entries against.
-pub fn common_choices(app: AppKind) -> &'static [ChoiceSpec] {
+/// The editable choice entries for one client. Values are the authority the
+/// scoped settings validator checks string entries against.
+pub fn setting_choices(app: AppKind) -> &'static [ChoiceSpec] {
     match app {
         AppKind::Codex => CODEX_CHOICES,
         AppKind::Claude => CLAUDE_CHOICES,
     }
 }
 
+/// Model-id fields are catalogued separately because their choices come from
+/// the selected provider rather than a static client-wide enum.
+pub fn setting_models(app: AppKind) -> impl Iterator<Item = &'static ModelSpec> {
+    MODEL_SPECS.iter().filter(move |spec| spec.app == app)
+}
+
 /// Section order on the settings page, the single owner of grouping.
-pub fn common_groups(app: AppKind) -> &'static [&'static str] {
+pub fn setting_groups(app: AppKind) -> &'static [&'static str] {
     match app {
         AppKind::Codex => &[
             "模型行为",
+            "子 agent",
             "安全与审批",
             "隐私与数据",
             "终端界面",
@@ -50,15 +58,21 @@ pub fn common_groups(app: AppKind) -> &'static [&'static str] {
 pub fn official_setting_directory(app: AppKind) -> Vec<OfficialSettingEntry> {
     let mut entries: Vec<OfficialSettingEntry> = setting_specs(app)
         .into_iter()
-        .filter(|spec| spec.owner == SettingOwner::Common)
+        .filter(|spec| spec.control != SettingControl::None)
         .map(|spec| OfficialSettingEntry {
             title: spec
                 .label
-                .expect("common setting must have a visible label"),
+                .expect("editable setting must have a visible label"),
             path: spec.key,
             related_paths: &[],
             disposition: OfficialSettingDisposition::Direct,
-            detail: "通过“基础参数”编辑，保存后随供应商重新应用写入用户级配置。",
+            detail: match spec.owner {
+                SettingOwner::Provider => {
+                    "在供应商编辑页的“运行参数”中独立保存，切换时随档案应用。"
+                }
+                SettingOwner::Client => "在设置页的“客户端设置”中保存，所有供应商共用。",
+                SettingOwner::Host => unreachable!("host settings have no editor control"),
+            },
         })
         .collect();
     entries.extend_from_slice(match app {
@@ -70,12 +84,12 @@ pub fn official_setting_directory(app: AppKind) -> Vec<OfficialSettingEntry> {
 
 /// The catalog spec for a choice key, if the key is one.
 pub fn choice_spec(app: AppKind, key: &str) -> Option<&'static ChoiceSpec> {
-    common_choices(app).iter().find(|spec| spec.key == key)
+    setting_choices(app).iter().find(|spec| spec.key == key)
 }
 
 /// The catalog spec for a toggle key, if the key is one.
 pub fn toggle_spec(app: AppKind, key: &str) -> Option<&'static ToggleSpec> {
-    common_toggles(app).iter().find(|spec| spec.key == key)
+    setting_toggles(app).iter().find(|spec| spec.key == key)
 }
 
 /// Returns every managed spec for one client. This is the single typed
@@ -99,21 +113,22 @@ pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
                 provider_absent_action: Some(ProviderAbsentAction::Remove),
             }),
     );
-    specs.extend(common_toggles(app).iter().map(|spec| SettingSpec {
+    specs.extend(setting_toggles(app).iter().map(|spec| SettingSpec {
         app,
         key: spec.key,
-        owner: SettingOwner::Common,
+        owner: spec.owner,
         value_type: SettingValueType::Bool,
         allowed_values: &[],
         control: SettingControl::Toggle,
         label: Some(spec.label),
         group: Some(spec.group),
-        provider_absent_action: None,
+        provider_absent_action:
+            (spec.owner == SettingOwner::Provider).then_some(ProviderAbsentAction::Remove),
     }));
-    specs.extend(common_choices(app).iter().map(|spec| SettingSpec {
+    specs.extend(setting_choices(app).iter().map(|spec| SettingSpec {
         app,
         key: spec.key,
-        owner: SettingOwner::Common,
+        owner: spec.owner,
         value_type: SettingValueType::String,
         allowed_values: spec.options,
         control: SettingControl::Choice {
@@ -121,7 +136,20 @@ pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
         },
         label: Some(spec.label),
         group: Some(spec.group),
-        provider_absent_action: None,
+        provider_absent_action:
+            (spec.owner == SettingOwner::Provider).then_some(ProviderAbsentAction::Remove),
+    }));
+    specs.extend(setting_models(app).map(|spec| SettingSpec {
+        app,
+        key: spec.key,
+        owner: spec.owner,
+        value_type: SettingValueType::String,
+        allowed_values: &[],
+        control: SettingControl::ModelPicker,
+        label: Some(spec.label),
+        group: Some(spec.group),
+        provider_absent_action:
+            (spec.owner == SettingOwner::Provider).then_some(ProviderAbsentAction::Remove),
     }));
     specs
 }
@@ -149,29 +177,35 @@ pub fn provider_absent_action(app: AppKind, key: &str) -> Option<ProviderAbsentA
 }
 
 /// Compatibility-free semantic spelling for adapter collectors: a key is
-/// managed when the directory says it is common or provider-owned.
+/// managed when the directory says it is client or provider-owned.
 pub fn is_owned(app: AppKind, key: &str) -> bool {
     owner_for(app, key) != SettingOwner::Host
 }
 
 /// Whether a key belongs to the selected provider profile rather than the
-/// common settings. The client argument is required: the same spelling can
+/// client settings. The client argument is required: the same spelling can
 /// have different ownership in different configuration formats.
 pub fn is_provider_owned(app: AppKind, key: &str) -> bool {
     owner_for(app, key) == SettingOwner::Provider
 }
 
-/// The complete automatic common-settings intent for one client, built from
-/// this directory. A fresh installation and every "恢复默认值" action leave
-/// each client key to the host and active model rather than writing a guessed
-/// value into the real configuration file.
-pub fn default_common_settings(app: AppKind) -> CommonSettings {
+/// Automatic client preferences for one client, derived from this directory.
+pub fn default_client_settings(app: AppKind) -> SettingsValues {
+    automatic_values(app, SettingOwner::Client)
+}
+
+/// Automatic parameters for one provider, derived from this directory.
+pub fn default_provider_parameters(app: AppKind) -> SettingsValues {
+    automatic_values(app, SettingOwner::Provider)
+}
+
+fn automatic_values(app: AppKind, owner: SettingOwner) -> SettingsValues {
     let mut settings = BTreeMap::new();
     for spec in setting_specs(app)
         .into_iter()
-        .filter(|spec| spec.owner == SettingOwner::Common)
+        .filter(|spec| spec.owner == owner && spec.control != SettingControl::None)
     {
-        settings.insert(spec.key.to_string(), CommonSettingValue::Automatic);
+        settings.insert(spec.key.to_string(), SettingValue::Automatic);
     }
-    CommonSettings { settings }
+    SettingsValues { settings }
 }

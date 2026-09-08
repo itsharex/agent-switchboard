@@ -1,21 +1,12 @@
 import type { ReactNode } from "react";
 import type { CommandError } from "../api/client";
-import { NavMoreMenu } from "../components/NavMoreMenu";
+import { PAGES, type Page } from "./navigation";
 import { PinTopButton } from "../components/PinTopButton";
 import { UpdateButton } from "../components/UpdateButton";
 import { Button } from "../components/Button";
 import { WindowControls } from "../components/WindowControls";
 import appIcon from "../assets/app-icon.png";
 import { isBrowserDevelopment } from "../lib/runtime";
-
-/** Topbar residents, then the pages housed behind the 更多 disclosure
- * (2026-09-07 用户指令，方案 A). The two lists are the page inventory's
- * only owner: the Page union and the rendered nav both derive from them. */
-const PRIMARY_PAGES = ["概览", "供应商", "通用设置", "会话", "设置"] as const;
-const OVERFLOW_PAGES = ["扩展", "用量", "网关", "日志", "备份", "发现"] as const;
-
-const PAGES = [...PRIMARY_PAGES, ...OVERFLOW_PAGES] as const;
-export type Page = (typeof PAGES)[number];
 
 interface AppShellProps {
   page: Page;
@@ -36,6 +27,43 @@ interface AppShellProps {
   /** Update indicator; present only while a newer release is known. */
   update: { latestVersion: string; onOpen: () => void } | null;
   children: ReactNode;
+}
+
+function OperationNotices({ error, settingsError, busy, onResetStore, onRepairSettings }:
+  Pick<AppShellProps, "error" | "settingsError" | "busy" | "onResetStore" | "onRepairSettings">) {
+  return (
+    <div className="asb-banner-stack" aria-label="操作状态">
+      {/* Persistent decision errors only: the banner carries the store
+          reset entry. One-shot operation feedback lives in the global
+          toaster (DESIGN.md §7/§8). */}
+      {error && (
+        <div className="asb-banner asb-banner-error" role="alert" aria-label="操作错误">
+          <span>{error.message}</span>
+          {error.code === "profile-store-unsupported" && (
+            <Button
+              variant="danger"
+              disabled={busy}
+              onClick={onResetStore}
+            >
+              清空旧档案并重新开始
+            </Button>
+          )}
+        </div>
+      )}
+      {settingsError && (
+        <div className="asb-banner asb-banner-error" role="alert" aria-label="应用设置不可用">
+          <span>应用设置不可用：{settingsError}</span>
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={onRepairSettings}
+          >
+            一键修复
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Application frame: brand, primary navigation, the persistent-error
@@ -63,10 +91,13 @@ export function AppShell({
             <h1 className="asb-topbar-title" data-tauri-drag-region>
               Agent Switchboard
             </h1>
+            <span className="asb-topbar-beta" aria-label="Beta 版本" data-tauri-drag-region>
+              Beta
+            </span>
           </span>
           <nav aria-label="主导航">
             <ul className="asb-nav">
-              {PRIMARY_PAGES.map((item) => (
+              {PAGES.map((item) => (
                 <li key={item}>
                   <button
                     type="button"
@@ -77,7 +108,6 @@ export function AppShell({
                   </button>
                 </li>
               ))}
-              <NavMoreMenu items={OVERFLOW_PAGES} page={page} onPageChange={onPageChange} />
             </ul>
           </nav>
           {isBrowserDevelopment ? <span className="asb-web-development-badge">浏览器开发 · 本机后端</span> : null}
@@ -90,37 +120,8 @@ export function AppShell({
           {!isBrowserDevelopment && <WindowControls />}
         </header>
         <div className="asb-workspace">
-          <div className="asb-banner-stack" aria-label="操作状态">
-            {/* Persistent decision errors only: the banner carries the store
-                reset entry. One-shot operation feedback lives in the global
-                toaster (DESIGN.md §7/§8). */}
-            {error && (
-              <div className="asb-banner asb-banner-error" role="alert" aria-label="操作错误">
-                <span>{error.message}</span>
-                {error.code === "profile-store-unsupported" && (
-                  <Button
-                    variant="danger"
-                    disabled={busy}
-                    onClick={onResetStore}
-                  >
-                    清空旧档案并重新开始
-                  </Button>
-                )}
-              </div>
-            )}
-            {settingsError && (
-              <div className="asb-banner asb-banner-error" role="alert" aria-label="应用设置不可用">
-                <span>应用设置不可用：{settingsError}</span>
-                <Button
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={onRepairSettings}
-                >
-                  一键修复
-                </Button>
-              </div>
-            )}
-          </div>
+          <OperationNotices error={error} settingsError={settingsError} busy={busy}
+            onResetStore={onResetStore} onRepairSettings={onRepairSettings} />
           {children}
         </div>
       </div>

@@ -52,8 +52,8 @@ describe("site-content 契约", () => {
     expect(configurationAssembly.claude.codeLines).toContain('    "ANTHROPIC_AUTH_TOKEN": "••••••••",');
   });
 
-  it("通用设置展示由桌面端目录提供控件与档位", () => {
-    expect(configurationAssembly.codex.commonFields).toEqual(
+  it("供应商运行参数由桌面端目录提供控件与档位", () => {
+    expect(configurationAssembly.codex.parameterFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ control: "toggle", options: ["automatic", "true", "false"] }),
         expect.objectContaining({ control: "slider", options: expect.arrayContaining(["automatic", "high"]) }),

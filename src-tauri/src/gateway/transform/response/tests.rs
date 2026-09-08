@@ -85,7 +85,7 @@ fn unknown_response_field_is_rejected_not_hidden() {
 
 #[test]
 fn chat_reasoning_is_opaque_to_responses_and_restores_for_the_next_turn() {
-    let transport = ReasoningTransport::from_client_token("sandbox-route-token");
+    let transport = ReasoningTransport::from_continuation_key([7; 32]);
     let upstream = json!({
         "id": "chat_1",
         "object": "chat.completion",
@@ -149,7 +149,7 @@ fn chat_reasoning_is_opaque_to_responses_and_restores_for_the_next_turn() {
 
 #[test]
 fn chat_reasoning_is_opaque_to_anthropic_and_restores_for_the_next_turn() {
-    let transport = ReasoningTransport::from_client_token("sandbox-route-token");
+    let transport = ReasoningTransport::from_continuation_key([7; 32]);
     let upstream = json!({
         "id": "chat_1",
         "object": "chat.completion",

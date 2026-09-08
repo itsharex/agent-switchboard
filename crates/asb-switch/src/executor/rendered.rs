@@ -20,6 +20,7 @@ pub fn execute_rendered<Io: SwitchIo, Commit>(
 where
     Commit: FnOnce(&RenderedWriteOutcome) -> Result<(), String>,
 {
+    crate::config_journal::require_clear(io, req.backup_dir, req.app)?;
     if let Some(parent) = req.target.parent() {
         io.ensure_dir(parent)
             .map_err(|error| SwitchError::CommitFailed {

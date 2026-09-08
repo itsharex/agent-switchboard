@@ -1,9 +1,8 @@
-import type { AppKind, UpstreamProtocol } from "../api/client";
+import type { AppKind, ProviderDraft, UpstreamProtocol } from "../api/client";
 
 /** TS mirror of the routing contract owned by asb-core
  * `UpstreamProtocol::native_for`: the wire protocol each client speaks
- * natively. The local gateway converts only when a provider's upstream
- * protocol differs from this. */
+ * natively. */
 export const NATIVE_PROTOCOL: Record<AppKind, UpstreamProtocol> = {
   codex: "responses",
   claude: "anthropicMessages",
@@ -15,3 +14,12 @@ export const PROTOCOL_LABELS: Record<UpstreamProtocol, string> = {
   chatCompletions: "Chat Completions",
   anthropicMessages: "Anthropic Messages",
 };
+
+/** Mirrors asb-core's routing decision, including Responses field filtering. */
+export function requiresGateway(profile: Pick<ProviderDraft,
+  "app" | "routeMode" | "upstreamProtocol" | "responsesOptions">): boolean {
+  return profile.routeMode === "custom" && profile.upstreamProtocol !== null && (
+    profile.app === "codex" || profile.upstreamProtocol !== NATIVE_PROTOCOL[profile.app]
+    || (profile.upstreamProtocol === "responses" && profile.responsesOptions?.requestMode === "minimal")
+  );
+}

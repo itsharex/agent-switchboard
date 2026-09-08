@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agent Switchboard E2E",
+  "mainBinaryName": "Agent Switchboard E2E",
+  "identifier": "dev.agent-switchboard.desktop.e2e",
+  "bundle": { "active": false },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://127.0.0.1:47833/latest.json"]
+    }
+  }
+}

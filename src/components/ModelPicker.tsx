@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderModel } from "../api/client";
+import { Input } from "./Input";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 /** Group label for models the endpoint did not attribute to a vendor. */
@@ -82,6 +83,13 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
   }, [open]);
 
   useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+      setQuery("");
+    }
+  }, [disabled]);
+
+  useEffect(() => {
     if (!open) return;
     const current = options.current?.querySelector<HTMLButtonElement>(
       'button[aria-selected="true"]',
@@ -127,7 +135,7 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
         ref={trigger}
         className="asb-model-trigger"
         aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-expanded={open && !disabled}
         aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => (open ? close(false) : setOpen(true))}
@@ -137,11 +145,11 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
         </span>
       </button>
 
-      {open ? (
+      {open && !disabled ? (
         <div className="asb-model-menu" onKeyDown={onMenuKeyDown}>
           <label className="asb-model-search">
             <SearchIcon />
-            <input
+            <Input
               type="search"
               aria-label={`搜索${ariaLabel}`}
               placeholder="搜索模型"

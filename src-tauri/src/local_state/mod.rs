@@ -1,6 +1,6 @@
 //! Application-owned local state: desktop preferences, optional cloud-backup
 //! connection coordinates, and the Codex reset-signal cache. Provider,
-//! common-settings, and write-history storage live in [`crate::config_store`];
+//! client-settings, and write-history storage live in [`crate::config_store`];
 //! this struct only hands out its store and resolves the real client paths,
 //! which are never created here.
 
@@ -28,26 +28,30 @@ pub struct LocalState {
 
 impl LocalState {
     pub fn from_app(app: &tauri::AppHandle) -> Result<Self, String> {
-        use tauri::Manager;
-
-        let app_data_dir = app
-            .path()
-            .app_data_dir()
-            .map_err(|_| "无法定位应用数据目录".to_string())?;
-        let state = Self::from_app_data_dir(app_data_dir);
-        state.ensure_extension_schema()?;
-        Ok(state)
+        Self::from_identifier(&app.config().identifier)
     }
 
-    /// Resolves the same app-data location Tauri uses before an AppHandle
-    /// exists, so startup-only WebView preferences can be read in time.
-    pub(crate) fn from_startup_identifier(identifier: &str) -> Result<Self, String> {
-        let app_data_dir = dirs::data_dir()
-            .ok_or_else(|| "无法定位应用数据目录".to_string())?
-            .join(identifier);
-        let state = Self::from_app_data_dir(app_data_dir);
-        state.ensure_extension_schema()?;
-        Ok(state)
+    /// Uses the same path before and after an AppHandle exists, including
+    /// process-level Windows directory overrides.
+    pub(crate) fn from_identifier(identifier: &str) -> Result<Self, String> {
+        let app_data_dir = crate::app_paths::data_directory(identifier)?;
+        Ok(Self::from_app_data_dir(app_data_dir))
+    }
+
+    /// Runs after the single-instance guard and before commands or the
+    /// gateway are published. Runtime state lookup never migrates a store.
+    #[cfg(test)]
+    pub(crate) fn initialize_schemas(&self) -> Result<(), String> {
+        self.initialize_configuration_schema()?;
+        self.initialize_extension_schema()
+    }
+
+    pub(crate) fn initialize_configuration_schema(&self) -> Result<(), String> {
+        self.configuration().upgrade_if_needed().map(|_| ())
+    }
+
+    pub(crate) fn initialize_extension_schema(&self) -> Result<(), String> {
+        self.ensure_extension_schema()
     }
 
     /// Brings the persisted extension library to the current schema once at
@@ -72,7 +76,7 @@ impl LocalState {
     }
 
     /// The application configuration store rooted at this state directory.
-    /// Every provider, common-settings, and history operation goes through
+    /// Every provider, client-settings, and history operation goes through
     /// it; this struct keeps no second copy of that data.
     pub fn configuration(&self) -> ConfigStore {
         ConfigStore::new(self.root.clone())

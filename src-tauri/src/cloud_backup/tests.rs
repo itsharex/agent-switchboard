@@ -1,14 +1,12 @@
+mod round_trip;
+
 use super::crypto::{decrypt, encrypt, encrypt_cleartext};
 use super::remote::{restore_with_request, test_connection_with_request, upload_with_request};
 use super::*;
 use crate::config_store::snapshot::{
     decode_cloud_backup_snapshot, read_configuration_snapshot, ConfigurationSnapshot,
 };
-use asb_core::contracts::{
-    AppKind, ClaudeModelSettings, CodexModelSettings, CommonSettingValue, ConfigValue,
-    ConfigWriteRecord, ModelOptions, ProviderDraft, RouteMode, UpstreamProtocol, UsageQuery,
-    WriteOperation,
-};
+use asb_core::contracts::{AppKind, ProviderDraft, RouteMode, UpstreamProtocol};
 use std::cell::RefCell;
 
 fn connection_settings() -> CloudBackupSettings {
@@ -21,6 +19,7 @@ fn connection_settings() -> CloudBackupSettings {
 
 fn custom_draft(app: AppKind, name: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(app),
         app,
         route_mode: RouteMode::Custom,
         name: name.to_string(),
@@ -31,6 +30,13 @@ fn custom_draft(app: AppKind, name: &str) -> ProviderDraft {
             AppKind::Codex => UpstreamProtocol::Responses,
             AppKind::Claude => UpstreamProtocol::AnthropicMessages,
         }),
+        responses_options: (Some(match app {
+            AppKind::Codex => UpstreamProtocol::Responses,
+            AppKind::Claude => UpstreamProtocol::AnthropicMessages,
+        }) == Some(asb_core::contracts::UpstreamProtocol::Responses))
+        .then_some(asb_core::contracts::ResponsesOptions {
+            request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+        }),
         max_output_tokens: None.into(),
         model_options: None,
         notes: None,
@@ -38,34 +44,6 @@ fn custom_draft(app: AppKind, name: &str) -> ProviderDraft {
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
     }
-}
-
-fn v2_snapshot_bytes(snapshot: &ConfigurationSnapshot) -> Vec<u8> {
-    let mut value = serde_json::to_value(snapshot).expect("snapshot JSON");
-    let root = value.as_object_mut().expect("snapshot object");
-    root.insert("schemaVersion".to_string(), serde_json::Value::from(2));
-    let providers = root
-        .get_mut("providers")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("provider groups");
-    for files in providers.values_mut() {
-        for file in files.as_array_mut().expect("provider files") {
-            let provider = file.as_object_mut().expect("provider object");
-            let authentication = match provider
-                .get("upstreamProtocol")
-                .and_then(serde_json::Value::as_str)
-            {
-                Some("anthropicMessages") => "xApiKey",
-                Some(_) => "bearer",
-                None => "none",
-            };
-            provider.insert(
-                "authScheme".to_string(),
-                serde_json::Value::String(authentication.to_string()),
-            );
-        }
-    }
-    serde_json::to_vec(&value).expect("v2 JSON")
 }
 
 fn migrated_payload(
@@ -84,237 +62,119 @@ fn auth_response() -> String {
 }
 
 #[test]
-fn upload_and_restore_round_trip_the_complete_configuration_snapshot() {
-    let directory = tempfile::tempdir().expect("temporary directory");
-    let source = LocalState::from_root(directory.path().join("source-state"));
-    source
-        .set_cloud_backup_settings(&connection_settings())
-        .expect("source connection settings");
-    let source_store = source.configuration();
-    let codex = source_store
-        .create_provider(ProviderDraft {
-            app: AppKind::Codex,
-            route_mode: RouteMode::Custom,
-            name: "Codex relay".to_string(),
-            model: Some("gpt-5.6-codex".to_string()),
-            base_url: Some("https://codex-relay.example/v1".to_string()),
-            api_key: "fixture-codex-value".to_string(),
-            upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
-            max_output_tokens: Some(8_192).into(),
-            model_options: Some(ModelOptions::Codex(CodexModelSettings {
-                context_window: Some(272_000),
-            })),
-            notes: Some("primary coding route".to_string()),
-            website_url: Some("https://codex-relay.example".to_string()),
-            usage_query: Some(UsageQuery::Declarative {
-                url: "{{baseUrl}}/usage".to_string(),
-                remaining_path: Some("data/remaining".to_string()),
-                used_path: Some("data/used".to_string()),
-                total_path: Some("data/total".to_string()),
-                unit: Some("credits".to_string()),
-                refresh_interval_minutes: 15,
-            }),
-            official_quota_refresh_interval_minutes: None,
-        })
-        .expect("codex provider");
-    source_store
-        .create_provider(ProviderDraft {
-            app: AppKind::Codex,
-            route_mode: RouteMode::Official,
-            name: "Codex official".to_string(),
-            model: None,
-            base_url: None,
-            api_key: String::new(),
-            upstream_protocol: None,
-            max_output_tokens: None.into(),
-            model_options: None,
-            notes: None,
-            website_url: None,
-            usage_query: None,
-            official_quota_refresh_interval_minutes: None,
-        })
-        .expect("codex official provider");
-    let claude = source_store
-        .create_provider(ProviderDraft {
-            app: AppKind::Claude,
-            route_mode: RouteMode::Custom,
-            name: "Claude relay".to_string(),
-            model: Some("claude-opus-4-1".to_string()),
-            base_url: Some("https://claude-relay.example".to_string()),
-            api_key: "fixture-claude-value".to_string(),
-            upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
-            max_output_tokens: None.into(),
-            model_options: Some(ModelOptions::Claude(ClaudeModelSettings {
-                primary_one_m: true,
-                haiku_model: Some("claude-haiku-4".to_string()),
-                sonnet_model: Some("claude-sonnet-4-6".to_string()),
-                sonnet_one_m: true,
-                opus_model: Some("claude-opus-4-1".to_string()),
-                opus_one_m: true,
-                available_models: Some(vec![
-                    "claude-haiku-4".to_string(),
-                    "claude-opus-4-1".to_string(),
-                ]),
-            })),
-            notes: Some("primary analysis route".to_string()),
-            website_url: Some("https://claude-relay.example/docs".to_string()),
-            usage_query: None,
-            official_quota_refresh_interval_minutes: None,
-        })
-        .expect("claude provider");
-    let codex_common = source_store
-        .get_common_settings(AppKind::Codex)
-        .expect("codex common settings");
-    let mut codex_settings = codex_common.settings;
-    codex_settings.settings.insert(
-        "model_reasoning_effort".to_string(),
-        CommonSettingValue::Explicit {
-            value: ConfigValue::Str("xhigh".to_string()),
-        },
-    );
-    source_store
-        .save_common_settings(AppKind::Codex, codex_settings, &codex_common.settings_hash)
-        .expect("save codex common settings");
-    for (profile, at) in [
-        (&codex.profile, "2026-09-04T12:00:00Z"),
-        (&claude.profile, "2026-09-04T12:01:00Z"),
+fn empty_provider_groups_with_explicit_parameters_never_overwrite_cloud_or_local_data() {
+    for (app, key, value) in [
+        (
+            AppKind::Codex,
+            "features.fast_mode",
+            serde_json::json!(false),
+        ),
+        (
+            AppKind::Codex,
+            "model_reasoning_summary",
+            serde_json::json!("auto"),
+        ),
+        (
+            AppKind::Claude,
+            "alwaysThinkingEnabled",
+            serde_json::json!(false),
+        ),
+        (AppKind::Claude, "effortLevel", serde_json::json!("high")),
     ] {
-        source_store
-            .record_config_write(ConfigWriteRecord {
-                app: profile.app,
-                profile_id: Some(profile.id.clone()),
-                profile_name: Some(profile.name.clone()),
-                content_hash: "a".repeat(64),
-                backup_id: format!("backup-{}", profile.id),
-                at: at.to_string(),
-                operation: WriteOperation::Projection,
-            })
-            .expect("switch history");
-    }
-    let snapshot = read_configuration_snapshot(&source_store).expect("source snapshot");
-    assert_eq!(snapshot.providers[&AppKind::Codex].len(), 2);
-    assert_eq!(snapshot.providers[&AppKind::Claude].len(), 1);
-    assert_eq!(snapshot.history[&AppKind::Codex].len(), 1);
-    assert_eq!(snapshot.history[&AppKind::Claude].len(), 1);
-
-    let requests = RefCell::new(Vec::new());
-    let uploaded = upload_with_request(
-            &source,
-            "project-auth-password",
-            "cloud-backup-password",
-            &|method, url, headers, body| {
-                let index = requests.borrow().len();
-                requests.borrow_mut().push((
-                    method.to_string(),
-                    url.to_string(),
-                    headers.to_string(),
-                    body.to_vec(),
-                ));
-                match index {
-                    0 => Ok((
-                        200,
-                        r#"{"access_token":"session-value","user":{"id":"c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"}}"#
-                            .to_string(),
-                    )),
-                    1 => Ok((201, String::new())),
-                    _ => panic!("unexpected upload request"),
-                }
-            },
+        let directory = tempfile::tempdir().unwrap();
+        let target = LocalState::from_root(directory.path().join("restore-target"));
+        target
+            .set_cloud_backup_settings(&connection_settings())
+            .unwrap();
+        target
+            .configuration()
+            .create_provider(custom_draft(app, "retained-provider"))
+            .unwrap();
+        let before = read_configuration_snapshot(&target.configuration()).unwrap();
+        let empty = LocalState::from_root(directory.path().join("empty-source"));
+        let snapshot = read_configuration_snapshot(&empty.configuration()).unwrap();
+        let mut previous: serde_json::Value = serde_json::from_slice(
+            &crate::config_store::snapshot::previous::snapshot_bytes(&snapshot),
         )
-        .expect("upload");
-    assert_eq!(uploaded.profile_count, 3);
-    assert!(!uploaded.migrated);
-    let requests = requests.into_inner();
-    assert_eq!(requests.len(), 2);
-    assert_eq!(requests[1].0, "POST");
-    assert!(requests[1]
-        .1
-        .ends_with("/rest/v1/agent_switchboard_cloud_backups?on_conflict=user_id"));
-    let upload_body: serde_json::Value =
-        serde_json::from_slice(&requests[1].3).expect("encrypted upload JSON");
-    assert_eq!(
-        upload_body["user_id"],
-        "c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"
-    );
-    assert!(upload_body.get("userId").is_none());
-    let upload_text = String::from_utf8(requests[1].3.clone()).expect("upload text");
-    assert!(!upload_text.contains("fixture-codex-value"));
-    assert!(!upload_text.contains("fixture-claude-value"));
-    let payload: EncryptedBackup =
-        serde_json::from_value(upload_body["payload"].clone()).expect("encrypted payload");
+        .unwrap();
+        previous["common"][app.dir_name()]["settings"][key] =
+            serde_json::json!({"mode": "explicit", "value": value});
+        let mut cleartext = serde_json::to_vec(&previous).unwrap();
+        let payload = encrypt_cleartext(&mut cleartext, "backup-password").unwrap();
+        let response = serde_json::json!([{
+            "payload": payload, "updated_at": "2026-09-07T00:00:00Z",
+        }])
+        .to_string();
+        let requests = RefCell::new(Vec::new());
 
-    let target = LocalState::from_root(directory.path().join("target-state"));
-    target
-        .set_cloud_backup_settings(&connection_settings())
-        .expect("target connection settings");
-    target
-        .configuration()
-        .create_provider(ProviderDraft {
-            app: AppKind::Codex,
-            route_mode: RouteMode::Custom,
-            name: "stale route".to_string(),
-            model: None,
-            base_url: Some("https://stale.example".to_string()),
-            api_key: "stale-value".to_string(),
-            upstream_protocol: Some(UpstreamProtocol::Responses),
-            max_output_tokens: None.into(),
-            model_options: None,
-            notes: None,
-            website_url: None,
-            usage_query: None,
-            official_quota_refresh_interval_minutes: None,
-        })
-        .expect("stale target provider");
-    let restore_response = serde_json::json!([{
-        "payload": payload,
-        "updated_at": uploaded.updated_at,
-    }])
-    .to_string();
-    let restore_requests = RefCell::new(0usize);
-    let restored = restore_with_request(
+        let error = restore_with_request(
             &target,
-            "project-auth-password",
-            "cloud-backup-password",
-            &|_, _, _, _| {
-                let index = *restore_requests.borrow();
-                *restore_requests.borrow_mut() += 1;
+            "account-password",
+            "backup-password",
+            &|method, url, _, _| {
+                let index = requests.borrow().len();
+                requests
+                    .borrow_mut()
+                    .push((method.to_string(), url.to_string()));
                 match index {
-                    0 => Ok((
-                        200,
-                        r#"{"access_token":"session-value","user":{"id":"c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"}}"#
-                            .to_string(),
-                    )),
-                    1 => Ok((200, restore_response.clone())),
-                    _ => panic!("unexpected restore request"),
+                    0 => Ok((200, auth_response())),
+                    1 => Ok((200, response.clone())),
+                    _ => panic!("orphaned parameter must stop before any cloud overwrite"),
                 }
             },
         )
-        .expect("restore");
-    assert_eq!(restored.profile_count, 3);
-    assert!(!restored.migrated);
-    assert_eq!(*restore_requests.borrow(), 2);
-    assert_eq!(
-        read_configuration_snapshot(&target.configuration()).expect("restored snapshot"),
-        snapshot
-    );
+        .expect_err("unowned explicit parameters cannot be discarded");
+
+        assert!(error.contains(app.label()), "{error}");
+        assert!(error.contains(key), "{error}");
+        let requests = requests.into_inner();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].0, "POST");
+        assert!(requests[0]
+            .1
+            .ends_with("/auth/v1/token?grant_type=password"));
+        assert_eq!(requests[1].0, "GET");
+        assert_eq!(
+            read_configuration_snapshot(&target.configuration()).unwrap(),
+            before
+        );
+    }
 }
 
 #[test]
-fn restore_migrates_v2_cloud_snapshot_and_rewrites_remote_payload() {
+fn empty_provider_groups_with_automatic_parameters_still_decode_from_cloud() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().join("empty-source"));
+    let snapshot = read_configuration_snapshot(&state.configuration()).unwrap();
+
+    let decoded = decode_cloud_backup_snapshot(
+        &crate::config_store::snapshot::previous::snapshot_bytes(&snapshot),
+    )
+    .unwrap();
+
+    assert!(decoded.migrated);
+    assert_eq!(decoded.snapshot, snapshot);
+    assert_eq!(decoded.snapshot.provider_count(), 0);
+}
+
+#[test]
+fn restore_migrates_v3_cloud_snapshot_and_rewrites_remote_payload() {
     let directory = tempfile::tempdir().expect("temporary directory");
-    let source = LocalState::from_root(directory.path().join("v2-source"));
+    let source = LocalState::from_root(directory.path().join("v3-source"));
     source
         .configuration()
-        .create_provider(custom_draft(AppKind::Codex, "v2-codex"))
-        .expect("v2 codex");
+        .create_provider(custom_draft(AppKind::Codex, "v3-codex"))
+        .expect("v3 codex");
     source
         .configuration()
-        .create_provider(custom_draft(AppKind::Claude, "v2-claude"))
-        .expect("v2 claude");
+        .create_provider(custom_draft(AppKind::Claude, "v3-claude"))
+        .expect("v3 claude");
     let source_snapshot =
         read_configuration_snapshot(&source.configuration()).expect("source snapshot");
-    let (expected_snapshot, payload) =
-        migrated_payload(v2_snapshot_bytes(&source_snapshot), "backup-password");
+    let (expected_snapshot, payload) = migrated_payload(
+        crate::config_store::snapshot::previous::snapshot_bytes(&source_snapshot),
+        "backup-password",
+    );
     assert_eq!(
         expected_snapshot.providers[&AppKind::Codex][0].upstream_protocol,
         Some(UpstreamProtocol::Responses)
@@ -359,7 +219,7 @@ fn restore_migrates_v2_cloud_snapshot_and_rewrites_remote_payload() {
             }
         },
     )
-    .expect("v2 restore");
+    .expect("v3 restore");
 
     assert!(restored.migrated);
     assert_eq!(restored.profile_count, 2);
@@ -367,50 +227,23 @@ fn restore_migrates_v2_cloud_snapshot_and_rewrites_remote_payload() {
         read_configuration_snapshot(&target.configuration()).expect("restored snapshot"),
         expected_snapshot
     );
-    let requests = requests.into_inner();
-    assert_eq!(requests.len(), 3);
-    assert_eq!(requests[2].0, "POST");
-    assert!(requests[2]
-        .1
-        .ends_with("/rest/v1/agent_switchboard_cloud_backups?on_conflict=user_id"));
-    let remote_body: serde_json::Value =
-        serde_json::from_slice(&requests[2].3).expect("migration upload JSON");
-    assert_eq!(
-        remote_body["user_id"],
-        "c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"
-    );
-    assert_eq!(
-        remote_body["updated_at"].as_str(),
-        Some(restored.updated_at.as_str())
-    );
-    let upgraded_payload: EncryptedBackup =
-        serde_json::from_value(remote_body["payload"].clone()).expect("migration payload");
-    let mut upgraded_cleartext =
-        decrypt(&upgraded_payload, "backup-password").expect("migration payload decrypts");
-    let upgraded: ConfigurationSnapshot =
-        serde_json::from_slice(&upgraded_cleartext).expect("current snapshot JSON");
-    upgraded_cleartext.fill(0);
-    assert_eq!(upgraded, expected_snapshot);
-    assert_eq!(
-        upgraded.schema_version,
-        crate::config_store::snapshot::CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION
-    );
-    let upload_text = String::from_utf8(requests[2].3.clone()).expect("migration upload text");
-    assert!(!upload_text.contains("v2-codex-key"));
-    assert!(!upload_text.contains("v2-claude-key"));
+    assert_upgraded_remote_payload(&expected_snapshot, &restored, requests.into_inner());
 }
 
 #[test]
 fn legacy_restore_does_not_replace_local_data_when_remote_upgrade_fails() {
     let directory = tempfile::tempdir().expect("temporary directory");
-    let source = LocalState::from_root(directory.path().join("v2-source"));
+    let source = LocalState::from_root(directory.path().join("v3-source"));
     source
         .configuration()
-        .create_provider(custom_draft(AppKind::Codex, "v2-codex"))
-        .expect("v2 codex");
+        .create_provider(custom_draft(AppKind::Codex, "v3-codex"))
+        .expect("v3 codex");
     let source_snapshot =
         read_configuration_snapshot(&source.configuration()).expect("source snapshot");
-    let (_, payload) = migrated_payload(v2_snapshot_bytes(&source_snapshot), "backup-password");
+    let (_, payload) = migrated_payload(
+        crate::config_store::snapshot::previous::snapshot_bytes(&source_snapshot),
+        "backup-password",
+    );
 
     let target = LocalState::from_root(directory.path().join("restore-target"));
     target
@@ -461,7 +294,7 @@ fn incorrect_backup_password_never_decrypts_the_snapshot() {
     let snapshot = ConfigurationSnapshot {
         schema_version: crate::config_store::snapshot::CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION,
         providers: Default::default(),
-        common: Default::default(),
+        client_settings: Default::default(),
         history: Default::default(),
     };
     let encrypted = encrypt(&snapshot, "cloud-backup-password").expect("encrypt");
@@ -585,4 +418,41 @@ fn connection_test_reports_a_missing_or_unavailable_backup_table() {
         "云端备份表不可用，请确认已启用 Data API 并在 Supabase SQL Editor 执行初始化 SQL"
     );
     assert_eq!(*request_count.borrow(), 2);
+}
+
+fn assert_upgraded_remote_payload(
+    expected_snapshot: &ConfigurationSnapshot,
+    restored: &CloudBackupResult,
+    requests: Vec<(String, String, String, Vec<u8>)>,
+) {
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[2].0, "POST");
+    assert!(requests[2]
+        .1
+        .ends_with("/rest/v1/agent_switchboard_cloud_backups?on_conflict=user_id"));
+    let remote_body: serde_json::Value =
+        serde_json::from_slice(&requests[2].3).expect("migration upload JSON");
+    assert_eq!(
+        remote_body["user_id"],
+        "c9d2eeb1-425e-4f9d-8ff4-bd27e52103fb"
+    );
+    assert_eq!(
+        remote_body["updated_at"].as_str(),
+        Some(restored.updated_at.as_str())
+    );
+    let upgraded_payload: EncryptedBackup =
+        serde_json::from_value(remote_body["payload"].clone()).expect("migration payload");
+    let mut upgraded_cleartext =
+        decrypt(&upgraded_payload, "backup-password").expect("migration payload decrypts");
+    let upgraded: ConfigurationSnapshot =
+        serde_json::from_slice(&upgraded_cleartext).expect("current snapshot JSON");
+    upgraded_cleartext.fill(0);
+    assert_eq!(&upgraded, expected_snapshot);
+    assert_eq!(
+        upgraded.schema_version,
+        crate::config_store::snapshot::CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION
+    );
+    let upload_text = String::from_utf8(requests[2].3.clone()).expect("migration upload text");
+    assert!(!upload_text.contains("v3-codex-key"));
+    assert!(!upload_text.contains("v3-claude-key"));
 }

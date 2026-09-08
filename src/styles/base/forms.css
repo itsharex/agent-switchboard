@@ -295,13 +295,19 @@
 .asb-model-search input {
   flex: 1;
   min-width: 0;
+  padding: 0;
   border: none;
   background: transparent;
   color: var(--asb-text);
   font: var(--asb-text-body);
   outline: none;
-  /* The wrapping search label draws the focus border via :focus-within;
-     the global :focus-visible ring on the bare input would duplicate it. */
+}
+
+/* The embedded input is the global .asb-input field, but the wrapping search
+   label owns the chrome and draws the focus border via :focus-within; this
+   override keeps the global :focus-visible ring from duplicating it. */
+.asb-font-search input:focus-visible,
+.asb-model-search input:focus-visible {
   box-shadow: none;
 }
 
@@ -434,18 +440,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-3);
-}
-
-.asb-edit-header {
-  display: flex;
-  align-items: center;
-  gap: var(--asb-space-2);
-}
-
-/* The shared panel title's bottom margin would offset the text against the
-   centered back button; the flex header owns the spacing. */
-.asb-edit-header .asb-panel-title {
-  margin-bottom: 0;
 }
 
 .asb-edit-panel {

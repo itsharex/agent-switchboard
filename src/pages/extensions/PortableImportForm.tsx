@@ -17,7 +17,7 @@ export function PortableImportForm({
 }: Props) {
   return (
     <form
-      className="asb-form asb-ext-project-form"
+      className="asb-form"
       aria-label="导入便携包"
       onSubmit={(event) => {
         event.preventDefault();

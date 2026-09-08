@@ -1,0 +1,247 @@
+/* 变更预览复刻 */
+.preview-replica {
+  max-width: 980px;
+  margin-inline: auto;
+  overflow: hidden;
+  background: var(--site-content);
+  border: 1px solid var(--site-hairline);
+  border-radius: var(--site-radius-panel);
+}
+
+.preview-replica-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.preview-replica-head h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.preview-replica-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.preview-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--site-radius-action);
+  font: 600 13px/1 var(--site-font-ui);
+}
+
+.preview-chip-ghost {
+  border: 1px solid var(--site-hairline-strong);
+  background: var(--site-content);
+  color: var(--site-text);
+}
+
+.preview-chip-primary {
+  background: var(--site-action);
+  color: var(--site-text-on-action);
+}
+
+.preview-rows {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+.preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 9px 12px;
+  background: var(--site-content-muted);
+  border-radius: 10px;
+}
+
+.preview-key {
+  font: 400 13px/1.5 var(--site-font-code);
+  color: var(--site-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.preview-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-val {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font: 400 13px/1.5 var(--site-font-code);
+  overflow-wrap: anywhere;
+}
+
+.preview-val-old {
+  background: var(--site-diff-remove-bg);
+  color: var(--site-diff-remove-text);
+}
+
+.preview-val-new {
+  background: var(--site-diff-add-bg);
+  color: var(--site-diff-add-text);
+}
+
+.preview-arrow {
+  color: var(--site-text-muted);
+  font-size: 13px;
+}
+
+.preview-file {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 18px;
+  border-top: 1px solid var(--site-hairline);
+  font: 400 12.5px/1.5 var(--site-font-code);
+  color: var(--site-text-muted);
+}
+
+.preview-code {
+  display: grid;
+  gap: 4px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--site-hairline);
+}
+
+.preview-code-line {
+  display: flex;
+  gap: 12px;
+  font: 400 12.5px/1.6 var(--site-font-code);
+}
+
+.preview-code-no {
+  min-width: 18px;
+  color: var(--site-text-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.preview-code-line code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 事务写入复刻：沿用软件的实体预览面与状态行，不引入第二套卡片语言。 */
+.transaction-replica {
+  max-width: 980px;
+  margin: 16px auto 0;
+  overflow: hidden;
+  border: 1px solid var(--site-hairline);
+  border-radius: var(--site-radius-panel);
+  background: var(--site-content);
+}
+
+.transaction-replica-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.transaction-replica-head h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.transaction-flow {
+  display: flex;
+  align-items: stretch;
+  margin: 0;
+  padding: 14px 18px;
+  list-style: none;
+}
+
+.transaction-flow-item {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+}
+
+.transaction-step {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--site-hairline);
+  border-radius: var(--site-radius-control);
+  background: var(--site-code-surface);
+  color: var(--site-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.transaction-step-dot,
+.transaction-recovery > span {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--site-safe);
+}
+
+.transaction-connector {
+  flex: none;
+  width: 28px;
+  color: var(--site-text-muted);
+  font: 400 16px/1 var(--site-font-code);
+  text-align: center;
+}
+
+.transaction-recovery {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 11px 18px;
+  border-top: 1px solid var(--site-hairline);
+  color: var(--site-text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 639px) {
+  .route-card-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-row {
+    grid-template-columns: 1fr;
+  }
+
+  .transaction-flow {
+    display: grid;
+    gap: 6px;
+  }
+
+  .transaction-flow-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    gap: 6px;
+  }
+
+  .transaction-connector {
+    width: 20px;
+    align-self: center;
+    transform: rotate(90deg);
+  }
+
+  .transaction-flow-item:last-child {
+    grid-template-columns: 1fr;
+  }
+}

@@ -8,17 +8,18 @@
 //! - [`error`]: the typed error and shared command guards
 //! - [`window`]: title-bar window controls and the inspector toggle
 //! - [`status`]: read-only configuration status and lock observation
-//! - [`common_settings`]: general-configuration overlay commands
+//! - [`client_settings`]: general-configuration overlay commands
 //! - [`official_login`]: official client login start/poll/cancel commands
 //! - [`prompt_management`]: global AGENTS.md / CLAUDE.md document commands
+//! - [`subagent_settings`]: Codex `[agents]` default-setting commands
 //! - [`switching`]: switch, backup, restore, and undo commands
 //!
 //! Profile store CRUD, application settings, probing, discovery, sessions,
 //! and external-profile import live here as thin delegations to their owner modules.
 //!
-//! Every command whose work touches files, the external database, or the
-//! network runs through [`error::blocking`] so the main thread never stalls
-//! behind I/O. Only the fast native window controls stay synchronous.
+//! Filesystem and database work runs through [`error::blocking`]. Network
+//! commands use that pool or cancellable async I/O, keeping the main thread
+//! free while a provider responds.
 
 mod app_settings;
 mod discovery;
@@ -29,16 +30,18 @@ mod quota;
 #[cfg(test)]
 mod tests;
 
+pub(crate) mod client_settings;
 pub(crate) mod cloud_backup;
-pub(crate) mod common_settings;
 pub(crate) mod error;
 pub(crate) mod extensions;
 pub(crate) mod gateway;
 pub(crate) mod model_usage;
 pub(crate) mod official_login;
 pub(crate) mod prompt_management;
+pub(crate) mod provider_request;
 pub(crate) mod runtime_log;
 pub(crate) mod status;
+pub(crate) mod subagent_settings;
 pub(crate) mod switching;
 pub(crate) mod usage_history;
 pub(crate) mod window;

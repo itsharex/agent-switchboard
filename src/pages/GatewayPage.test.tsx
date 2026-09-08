@@ -1,3 +1,4 @@
+import { providerParameters } from "../test/provider-parameters";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +20,9 @@ function profileRecord(id: string, name: string): ProviderProfile {
     baseUrl: "http://127.0.0.1:9",
     apiKey: "fixture-key",
     upstreamProtocol: "chatCompletions",
+    responsesOptions: null,
     maxOutputTokens: null,
+    parameters: providerParameters("codex"),
     modelOptions: null,
     notes: null,
     websiteUrl: null,
@@ -342,7 +345,8 @@ describe("GatewayPage", () => {
     expect(
       await screen.findByText("当前没有经本机协议网关转换的供应商；客户端均在直连或官方登录。"),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("暂无网关请求记录。")).toHaveLength(2);
+    // 上游协议分布、最近请求与近 60 分钟趋势三处空态；趋势空态替代空坐标轴。
+    expect(screen.getAllByText("暂无网关请求记录。")).toHaveLength(3);
   });
 
   it("读取失败时给出重试入口并在重试后恢复", async () => {

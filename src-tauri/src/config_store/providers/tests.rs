@@ -1,3 +1,5 @@
+mod invalid;
+
 use crate::config_store::{ConfigStore, ProfileStoreError};
 use asb_core::contracts::RouteMode;
 use asb_core::contracts::{
@@ -10,6 +12,7 @@ use uuid::Uuid;
 
 fn codex_draft(name: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
         app: AppKind::Codex,
         route_mode: RouteMode::Custom,
         name: name.to_string(),
@@ -17,6 +20,9 @@ fn codex_draft(name: &str) -> ProviderDraft {
         base_url: Some("https://gateway.example/v1".to_string()),
         api_key: "OPENAI_API_KEY".to_string(),
         upstream_protocol: Some(UpstreamProtocol::Responses),
+        responses_options: Some(asb_core::contracts::ResponsesOptions {
+            request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+        }),
         max_output_tokens: None.into(),
         model_options: None,
         notes: None,
@@ -28,6 +34,7 @@ fn codex_draft(name: &str) -> ProviderDraft {
 
 fn claude_draft(name: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: name.to_string(),
@@ -35,6 +42,7 @@ fn claude_draft(name: &str) -> ProviderDraft {
         base_url: Some("https://claude-relay.example".to_string()),
         api_key: "test-api-key".to_string(),
         upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+        responses_options: None,
         max_output_tokens: None.into(),
         model_options: None,
         notes: None,
@@ -46,6 +54,7 @@ fn claude_draft(name: &str) -> ProviderDraft {
 
 fn official_draft(app: AppKind) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(app),
         app,
         route_mode: RouteMode::Official,
         name: match app {
@@ -57,6 +66,7 @@ fn official_draft(app: AppKind) -> ProviderDraft {
         base_url: None,
         api_key: String::new(),
         upstream_protocol: None,
+        responses_options: None,
         max_output_tokens: None.into(),
         model_options: None,
         notes: None,
@@ -103,61 +113,6 @@ fn revisions(records: &[ProviderRecord], app: AppKind) -> BTreeMap<String, Strin
         .filter(|record| record.profile.app == app)
         .map(|record| (record.profile.id.clone(), record.file_hash.clone()))
         .collect()
-}
-
-#[test]
-fn legacy_usage_query_files_are_rejected_without_a_write() {
-    let (directory, store) = store();
-    let mut draft = codex_draft("旧查询档案");
-    draft.usage_query = Some(UsageQuery::Declarative {
-        url: "{{baseUrl}}/usage".to_string(),
-        remaining_path: Some("/remaining".to_string()),
-        used_path: None,
-        total_path: None,
-        unit: None,
-        refresh_interval_minutes: 30,
-    });
-    store.create_provider(draft).expect("create provider");
-    let path = provider_files(&store, AppKind::Codex).remove(0);
-
-    // Rewind the stored file to the previous contract: the interval line
-    // simply did not exist.
-    let current = fs::read_to_string(&path).unwrap();
-    let legacy = current
-        .replace("  \"refreshIntervalMinutes\": 30,\n", "")
-        .replace(",\n    \"refreshIntervalMinutes\": 30", "");
-    assert_ne!(legacy, current, "fixture must remove the interval field");
-    fs::write(&path, &legacy).unwrap();
-
-    assert!(matches!(
-        store.list_providers().expect_err("legacy file must fail"),
-        ProfileStoreError::Unsupported
-    ));
-    assert_eq!(fs::read_to_string(&path).unwrap(), legacy);
-    drop(directory);
-}
-
-#[test]
-fn unknown_usage_query_shapes_stay_rejected_without_a_write() {
-    let (directory, store) = store();
-    let mut draft = codex_draft("坏查询档案");
-    draft.usage_query = Some(UsageQuery::Script {
-        source: "({ request() {}, extract() {} })".to_string(),
-        refresh_interval_minutes: 0,
-    });
-    store.create_provider(draft).expect("create provider");
-    let path = provider_files(&store, AppKind::Codex).remove(0);
-
-    let current = fs::read_to_string(&path).unwrap();
-    // An unknown key is not the previous shape; the upgrade must refuse
-    // to touch the file and the load must fail loudly.
-    let unknown = current.replace("\"refreshIntervalMinutes\": 0", "\"legacyTimer\": true");
-    assert_ne!(unknown, current);
-    fs::write(&path, &unknown).unwrap();
-
-    assert!(store.list_providers().is_err());
-    assert_eq!(fs::read_to_string(&path).unwrap(), unknown);
-    drop(directory);
 }
 
 #[test]
@@ -368,67 +323,16 @@ fn import_is_idempotent_and_enriches_a_routing_match_with_a_query() {
 }
 
 #[test]
-fn legacy_authentication_field_is_removed_before_the_provider_is_exposed() {
-    let (_directory, store) = store();
-    let created = store
-        .create_provider(codex_draft("旧认证字段"))
-        .expect("create provider");
-    let path = file_for(&store, AppKind::Codex, &created.profile.id);
-    let mut value: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&path).expect("provider file"))
-            .expect("provider JSON");
-    value.as_object_mut().expect("provider object").insert(
-        "authScheme".to_string(),
-        serde_json::Value::String("xApiKey".to_string()),
-    );
-    fs::write(
-        &path,
-        serde_json::to_string_pretty(&value).expect("legacy JSON"),
-    )
-    .expect("write legacy provider");
-
-    let records = store.list_providers().expect("migrate provider");
-    assert_eq!(records[0].profile, created.profile);
-    assert!(!fs::read_to_string(path)
-        .expect("current provider")
-        .contains("authScheme"));
-}
-
-#[test]
-fn invalid_legacy_provider_is_not_rewritten_during_migration() {
-    let (_directory, store) = store();
-    let created = store
-        .create_provider(codex_draft("无效旧认证字段"))
-        .expect("create provider");
-    let path = file_for(&store, AppKind::Codex, &created.profile.id);
-    let mut value: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&path).expect("provider file"))
-            .expect("provider JSON");
-    let provider = value.as_object_mut().expect("provider object");
-    provider.insert(
-        "upstreamProtocol".to_string(),
-        serde_json::Value::String("anthropicMessages".to_string()),
-    );
-    provider.insert(
-        "authScheme".to_string(),
-        serde_json::Value::String("xApiKey".to_string()),
-    );
-    let legacy = serde_json::to_string_pretty(&value).expect("legacy JSON");
-    fs::write(&path, &legacy).expect("write legacy provider");
-
-    assert_eq!(store.list_providers(), Err(ProfileStoreError::Unsupported));
-    assert_eq!(fs::read_to_string(path).expect("legacy provider"), legacy);
-}
-
-#[test]
 fn import_routing_identity_includes_protocol_and_output_limit() {
     let (_dir, store) = store();
     let mut direct = codex_draft("同名中继");
     direct.upstream_protocol = Some(UpstreamProtocol::ChatCompletions);
+    direct.responses_options = None;
     store.import_provider(direct.clone()).expect("direct route");
 
     let mut anthropic_limit_a = direct.clone();
     anthropic_limit_a.upstream_protocol = Some(UpstreamProtocol::AnthropicMessages);
+    anthropic_limit_a.responses_options = None;
     anthropic_limit_a.max_output_tokens = Some(1_024).into();
     store
         .import_provider(anthropic_limit_a.clone())

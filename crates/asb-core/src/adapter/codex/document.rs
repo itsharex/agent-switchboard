@@ -1,7 +1,7 @@
 use toml_edit::{DocumentMut, Item, TableLike, Value as TomlValue};
 
 use crate::adapter::AdapterError;
-use crate::contracts::ConfigValue;
+use crate::contracts::{ConfigValue, MAX_EXACT_CONFIG_INTEGER};
 
 pub(crate) fn parse(text: &str) -> Result<DocumentMut, AdapterError> {
     text.parse::<DocumentMut>()
@@ -132,7 +132,7 @@ fn to_toml_value(value: ConfigValue) -> TomlValue {
         ConfigValue::Str(s) => TomlValue::from(s),
         ConfigValue::Bool(b) => TomlValue::from(b),
         ConfigValue::Number(n) => {
-            if n.fract() == 0.0 && n.abs() < 9.0e15 {
+            if n.fract() == 0.0 && n.abs() <= MAX_EXACT_CONFIG_INTEGER as f64 {
                 TomlValue::from(n as i64)
             } else {
                 TomlValue::from(n)

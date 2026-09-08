@@ -1,8 +1,8 @@
 use crate::adapter::{AdapterError, OverlayEntry};
-use crate::contracts::{CommonSettings, SwitchPlan};
+use crate::contracts::{SettingsValues, SwitchPlan};
 
 use crate::adapter::claude::document::{parse, remove, set};
-use crate::adapter::claude::overlay::{common_overlay, overlay};
+use crate::adapter::claude::overlay::{client_settings_overlay, overlay};
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
     render_entries(current, overlay(plan))
@@ -21,8 +21,10 @@ pub(crate) fn render_gateway_base_url(
     )
 }
 
-pub(crate) fn render_common_settings(common: &CommonSettings) -> Result<String, AdapterError> {
-    render_entries("{}", common_overlay(common))
+pub(crate) fn render_client_settings(
+    client_settings: &SettingsValues,
+) -> Result<String, AdapterError> {
+    render_entries("{}", client_settings_overlay(client_settings))
 }
 
 pub(crate) fn render_entries(

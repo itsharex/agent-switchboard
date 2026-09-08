@@ -4,21 +4,23 @@
 use super::super::metrics::RequestSpan;
 use super::super::transform::{convert_error, convert_response, ReasoningTransport, SseTranscoder};
 use super::super::ActiveRoute;
+use super::diagnostics::{embedded_error, respond_diagnostic, response_diagnostic};
 use super::MAX_RESPONSE_BYTES;
+use crate::gateway::http::Request;
+use crate::provider_diagnostics::{read_http_diagnostic, ProviderDiagnostic, ProviderFailureKind};
 use asb_core::contracts::UpstreamProtocol;
 use reqwest::blocking::Response as UpstreamResponse;
 use reqwest::header::CONTENT_TYPE;
 use std::io::{Cursor, Read, Write};
-use tiny_http::{Header, Request, Response, StatusCode};
+use tiny_http::{Header, Response, StatusCode};
 
 pub(crate) fn respond_upstream(
     request: Request,
     span: RequestSpan,
     client_protocol: UpstreamProtocol,
     route: &ActiveRoute,
-    upstream_protocol: UpstreamProtocol,
     requested_stream: bool,
-    mut upstream: UpstreamResponse,
+    upstream: UpstreamResponse,
 ) {
     let status = upstream.status().as_u16();
     let upstream_stream = upstream
@@ -27,74 +29,69 @@ pub(crate) fn respond_upstream(
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| value.to_ascii_lowercase().starts_with("text/event-stream"));
     if !(200..300).contains(&status) {
+        let diagnostic = read_http_diagnostic(upstream, &[&route.api_key, &route.client_token]);
         span.finish(Some(status), 0);
-        respond_request_error(
-            request,
-            client_protocol,
-            status,
-            &format!("上游服务返回 HTTP {status}"),
-        );
+        respond_diagnostic(request, client_protocol, status, &diagnostic);
         return;
     }
+    let mut diagnostic = response_diagnostic(
+        &upstream,
+        ProviderFailureKind::ResponseParse,
+        "上游响应解析失败",
+        &[&route.api_key, &route.client_token],
+    );
     if requested_stream != upstream_stream {
         span.finish(Some(502), 0);
-        respond_request_error(
-            request,
-            client_protocol,
-            502,
-            if requested_stream {
-                "上游服务未按请求返回 SSE 流"
-            } else {
-                "上游服务返回了未请求的 SSE 流"
-            },
-        );
+        diagnostic.kind = ProviderFailureKind::StreamParse;
+        diagnostic.message = if requested_stream {
+            "上游服务未按请求返回 SSE 流"
+        } else {
+            "上游服务返回了未请求的 SSE 流"
+        }
+        .to_string();
+        respond_diagnostic(request, client_protocol, 502, &diagnostic);
         return;
     }
     if requested_stream {
-        let reasoning_transport = ReasoningTransport::from_client_token(&route.client_token);
-        let stream = match SseTranscoder::new(
-            upstream,
-            upstream_protocol,
-            client_protocol,
-            MAX_RESPONSE_BYTES,
-            Some(&reasoning_transport),
-        ) {
-            Ok(stream) => stream,
-            Err(error) => {
-                span.finish(Some(502), 0);
-                respond_request_error(
-                    request,
-                    client_protocol,
-                    502,
-                    &format!("无法转换上游 SSE：{error}"),
-                );
-                return;
-            }
-        };
-        respond_stream(request, span, stream);
+        respond_sse(request, span, client_protocol, route, upstream, diagnostic);
         return;
     }
+    respond_json(request, span, client_protocol, route, upstream, diagnostic);
+}
+
+fn respond_json(
+    request: Request,
+    span: RequestSpan,
+    client_protocol: UpstreamProtocol,
+    route: &ActiveRoute,
+    mut upstream: UpstreamResponse,
+    mut diagnostic: ProviderDiagnostic,
+) {
     let body = match read_limited(&mut upstream, MAX_RESPONSE_BYTES) {
         Ok(body) => body,
         Err(ReadLimitError::TooLarge) => {
             span.finish(Some(502), 0);
-            respond_request_error(
-                request,
-                client_protocol,
-                502,
-                "上游响应超过本机协议网关限制",
-            );
+            diagnostic.message = "上游响应超过本机协议网关限制".to_string();
+            respond_diagnostic(request, client_protocol, 502, &diagnostic);
             return;
         }
         Err(ReadLimitError::Io) => {
             span.finish(Some(502), 0);
-            respond_request_error(request, client_protocol, 502, "无法读取上游响应");
+            diagnostic.kind = ProviderFailureKind::Network;
+            diagnostic.message = "读取上游响应时连接中断".to_string();
+            respond_diagnostic(request, client_protocol, 502, &diagnostic);
             return;
         }
     };
-    let reasoning_transport = ReasoningTransport::from_client_token(&route.client_token);
+    if let Some(error) = embedded_error(&body, &diagnostic, &[&route.api_key, &route.client_token])
+    {
+        span.finish(Some(502), 0);
+        respond_diagnostic(request, client_protocol, 502, &error);
+        return;
+    }
+    let reasoning_transport = ReasoningTransport::from_continuation_key(route.continuation_key);
     let output = convert_response(
-        upstream_protocol,
+        route.upstream_protocol,
         client_protocol,
         &body,
         Some(&reasoning_transport),
@@ -106,12 +103,41 @@ pub(crate) fn respond_upstream(
         }
         Err(error) => {
             span.finish(Some(502), 0);
-            respond_request_error(
-                request,
-                client_protocol,
-                502,
+            diagnostic.message = crate::provider_diagnostics::redact_text(
                 &format!("无法转换上游响应：{error}"),
-            )
+                &[&route.api_key, &route.client_token],
+            );
+            respond_diagnostic(request, client_protocol, 502, &diagnostic);
+        }
+    }
+}
+
+fn respond_sse(
+    request: Request,
+    span: RequestSpan,
+    client_protocol: UpstreamProtocol,
+    route: &ActiveRoute,
+    upstream: UpstreamResponse,
+    mut diagnostic: ProviderDiagnostic,
+) {
+    diagnostic.kind = ProviderFailureKind::StreamParse;
+    let reasoning_transport = ReasoningTransport::from_continuation_key(route.continuation_key);
+    match SseTranscoder::new(
+        upstream,
+        route.upstream_protocol,
+        client_protocol,
+        MAX_RESPONSE_BYTES,
+        Some(&reasoning_transport),
+    ) {
+        Ok(stream) => respond_stream(
+            request,
+            span,
+            stream.with_diagnostics(diagnostic, &[&route.api_key, &route.client_token]),
+        ),
+        Err(error) => {
+            span.finish(Some(502), 0);
+            diagnostic.message = format!("无法转换上游 SSE：{error}");
+            respond_diagnostic(request, client_protocol, 502, &diagnostic);
         }
     }
 }
@@ -120,34 +146,32 @@ fn respond_stream<R>(request: Request, span: RequestSpan, mut stream: SseTransco
 where
     R: Read,
 {
-    // tiny_http's `Response` reader is flushed only after the whole body has
-    // been copied. SSE must flush every converted frame, so this narrow raw
-    // response writer is the HTTP boundary for streamed routes only.
-    let mut writer = request.into_writer();
-    if writer
-        .write_all(
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-cache\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n",
-        )
-        .and_then(|_| writer.flush())
-        .is_err()
-    {
-        span.finish(None, 0);
-        return;
-    }
+    let mut writer = match request.stream_response(
+        200,
+        &[
+            ("Content-Type", "text/event-stream; charset=utf-8"),
+            ("Cache-Control", "no-cache"),
+        ],
+    ) {
+        Ok(writer) => writer,
+        Err(_) => {
+            span.finish(None, 0);
+            return;
+        }
+    };
     let mut buffer = [0_u8; 8 * 1024];
     let mut written: u64 = 0;
     loop {
         let count = match stream.read(&mut buffer) {
             Ok(0) => break,
             Ok(count) => count,
-            Err(_) => {
-                span.finish(None, written);
-                return;
+            Err(error) => {
+                stream.fail_io(&error);
+                continue;
             }
         };
-        if write!(writer, "{count:x}\r\n")
-            .and_then(|_| writer.write_all(&buffer[..count]))
-            .and_then(|_| writer.write_all(b"\r\n"))
+        if writer
+            .write_all(&buffer[..count])
             .and_then(|_| writer.flush())
             .is_err()
         {
@@ -156,9 +180,8 @@ where
         }
         written += count as u64;
     }
-    let _ = writer.write_all(b"0\r\n\r\n");
     let _ = writer.flush();
-    span.finish(Some(200), written);
+    span.finish(Some(if stream.failed() { 502 } else { 200 }), written);
 }
 
 pub(crate) enum ReadLimitError {
@@ -191,15 +214,6 @@ pub(crate) fn respond_error(
         .with_status_code(StatusCode(status))
         .with_header(content_type("application/json; charset=utf-8"));
     let _ = request.respond(response);
-}
-
-fn respond_request_error(request: Request, protocol: UpstreamProtocol, status: u16, message: &str) {
-    respond_bytes(
-        request,
-        status,
-        "application/json; charset=utf-8",
-        convert_error(protocol, status, message),
-    );
 }
 
 fn respond_bytes(request: Request, status: u16, content_type_value: &str, body: Vec<u8>) {

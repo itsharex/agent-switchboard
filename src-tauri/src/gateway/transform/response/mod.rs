@@ -12,11 +12,14 @@ pub(crate) fn convert_response(
     body: &[u8],
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<Vec<u8>, TransformError> {
-    if from == to {
-        return Ok(body.to_vec());
-    }
     let value: Value = serde_json::from_slice(body)
         .map_err(|_| TransformError("上游响应不是有效 JSON".to_string()))?;
+    if from == to {
+        if !value.is_object() {
+            return Err(TransformError("上游响应必须是 JSON 对象".to_string()));
+        }
+        return Ok(body.to_vec());
+    }
     let mut response = parse_response(from, &value, reasoning_transport)?;
     if to == UpstreamProtocol::Responses {
         decode_target_tool_names(&mut response)?;
@@ -64,8 +67,8 @@ pub(super) fn render_response(
 }
 
 /// Generates the selected client protocol's normal error envelope. The error
-/// text is intentionally gateway-owned and never includes an upstream URL,
-/// header, body, or credential.
+/// text describes local gateway errors. Provider failures use the shared
+/// structured diagnostic envelope at the transport boundary.
 pub(crate) fn convert_error(to: UpstreamProtocol, status: u16, message: &str) -> Vec<u8> {
     let value = match to {
         UpstreamProtocol::AnthropicMessages => json!({

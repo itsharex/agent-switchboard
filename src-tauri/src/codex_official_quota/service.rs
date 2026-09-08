@@ -20,7 +20,6 @@ pub(super) fn cache() -> &'static Mutex<HashMap<String, CachedQuota>> {
 
 #[derive(Deserialize)]
 struct AuthFile {
-    auth_mode: Option<String>,
     tokens: Option<AuthTokens>,
 }
 
@@ -121,6 +120,13 @@ pub(crate) fn clear() {
 }
 
 pub(super) fn fetch(auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
+    if crate::official_login::observation::require_codex_login(
+        &auth_path.with_file_name("config.toml"),
+    )
+    .is_err()
+    {
+        return (empty(CodexOfficialQuotaStatus::SignInRequired), None);
+    }
     let credentials = match std::fs::read_to_string(auth_path)
         .ok()
         .and_then(|text| parse_credentials(&text))
@@ -147,18 +153,24 @@ pub(super) fn fetch(auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
 
 pub(super) fn parse_credentials(content: &str) -> Option<AuthCredentials> {
     let auth: AuthFile = serde_json::from_str(content).ok()?;
-    if auth.auth_mode.as_deref() != Some("chatgpt") {
-        return None;
-    }
+    crate::official_login::observation::parse_codex_login(content)
+        .require()
+        .ok()?;
     let tokens = auth.tokens?;
     let access_token = tokens.access_token?.trim().to_string();
     if access_token.is_empty() || has_header_control_characters(&access_token) {
         return None;
     }
-    let account_id = tokens.account_id.and_then(|value| {
-        let value = value.trim().to_string();
-        (!value.is_empty() && !has_header_control_characters(&value)).then_some(value)
-    });
+    let account_id = match tokens.account_id {
+        Some(value) => {
+            let value = value.trim().to_string();
+            if value.is_empty() || has_header_control_characters(&value) {
+                return None;
+            }
+            Some(value)
+        }
+        None => None,
+    };
     Some(AuthCredentials {
         access_token,
         account_id,
@@ -174,9 +186,7 @@ pub(super) fn account_marker(account_id: Option<&str>) -> Option<String> {
 }
 
 fn has_header_control_characters(value: &str) -> bool {
-    value
-        .chars()
-        .any(|character| character == '\r' || character == '\n' || character == '\0')
+    value.chars().any(char::is_control)
 }
 
 pub(super) fn quota_from_http_response(status: u16, body: &str, at: String) -> CodexOfficialQuota {

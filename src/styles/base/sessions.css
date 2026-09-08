@@ -22,6 +22,8 @@
 .asb-session-toolbar {
   display: grid;
   grid-template-columns: minmax(200px, 1fr) auto auto;
+  flex: 1;
+  min-width: 0;
   gap: var(--asb-space-2);
   align-items: center;
 }

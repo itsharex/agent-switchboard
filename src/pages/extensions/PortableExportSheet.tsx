@@ -1,70 +1,50 @@
+import { useState } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
+import { ExtensionDialog } from "../../components/extensions/ExtensionDialog";
+import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
-interface Props {
-  busy: boolean;
-  exportTarget: ExtensionListItem;
-  exportPath: string;
-  setExportPath: (value: string) => void;
-  submitPortableExport: () => void | Promise<void>;
-  closeExport: () => void;
-}
-
-/** Exports one library entry as a key-free portable package file. */
 export function PortableExportSheet({
-  busy,
-  exportTarget,
-  exportPath,
-  setExportPath,
-  submitPortableExport,
-  closeExport,
-}: Props) {
+  workspace: w,
+  item,
+}: {
+  workspace: ExtensionWorkspace;
+  item: ExtensionListItem;
+}) {
+  const [path, setPath] = useState("");
   return (
-    <div className="asb-sheet-backdrop">
+    <ExtensionDialog title={`导出便携包 ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog}>
       <form
-        className="asb-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`导出便携包 ${exportTarget.name}`}
+        className="asb-form"
         onSubmit={(event) => {
           event.preventDefault();
-          void submitPortableExport();
+          if (path.trim())
+            void w.ext.exportPortable(item.id, path.trim()).then((saved) => {
+              if (saved) w.nav.closeDialog();
+            });
         }}
       >
-        <h2 className="asb-panel-title">导出便携包 {exportTarget.name}</h2>
-        <ul className="asb-sheet-details">
-          <li>
-            便携包只包含库内容与非敏感来源信息；不含密钥、服务地址或本机路径
-            {exportTarget.kind === "mcp" && exportTarget.transport !== "stdio"
-              ? "。远程 MCP 无法导出"
-              : ""}
-          </li>
-        </ul>
+        <p className="asb-scope-note">便携包只包含库内容与非敏感来源信息；不含密钥、服务地址或本机路径。</p>
         <label className="asb-field">
           <span>导出文件路径</span>
           <Input
             required
-            placeholder="D:\\skills\\docs-portable.json"
-            value={exportPath}
-            disabled={busy}
-            onChange={(event) => setExportPath(event.target.value)}
+            placeholder="D:\skills\docs-portable.json"
+            value={path}
+            disabled={w.busy}
+            onChange={(event) => setPath(event.target.value)}
           />
         </label>
-        <div className="asb-sheet-actions">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy}
-            onClick={closeExport}
-          >
+        <div className="asb-form-actions">
+          <Button variant="secondary" disabled={w.busy} onClick={w.nav.closeDialog}>
             取消
           </Button>
-          <Button type="submit" variant="primary" disabled={busy || !exportPath.trim()}>
+          <Button type="submit" variant="primary" disabled={w.writeBlocked || !path.trim()}>
             导出到文件
           </Button>
         </div>
       </form>
-    </div>
+    </ExtensionDialog>
   );
 }

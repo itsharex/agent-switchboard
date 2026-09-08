@@ -2,23 +2,24 @@
 //! verified before it is enabled. The snapshot is data only — enabling it is
 //! a staging write plus a directory swap owned by this module.
 
-mod activation;
-mod legacy;
+pub(crate) mod activation;
+mod decode;
+pub(crate) mod previous;
 
 #[cfg(test)]
 mod tests;
 
 pub use activation::enable_snapshot;
-pub(crate) use legacy::decode_cloud_backup_snapshot;
+pub(crate) use decode::decode_cloud_backup_snapshot;
 
 use super::{history, providers, ConfigStore, ProfileStoreError};
-use asb_core::contracts::{AppKind, CommonSettings, ConfigWriteRecord, ProviderFile, RouteMode};
+use asb_core::contracts::{AppKind, ConfigWriteRecord, ProviderFile, RouteMode, SettingsValues};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// The only plaintext configuration snapshot format written to cloud backup.
 /// The AES-GCM envelope has its own version and is intentionally independent.
-pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 3;
+pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 5;
 
 /// The complete persisted configuration of both clients. Provider files are
 /// grouped by the directory that owns their client association; secrets stay
@@ -28,7 +29,7 @@ pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 3;
 pub struct ConfigurationSnapshot {
     pub schema_version: u8,
     pub providers: BTreeMap<AppKind, Vec<ProviderFile>>,
-    pub common: BTreeMap<AppKind, CommonSettings>,
+    pub client_settings: BTreeMap<AppKind, SettingsValues>,
     pub history: BTreeMap<AppKind, Vec<ConfigWriteRecord>>,
 }
 
@@ -44,23 +45,23 @@ pub fn read_configuration_snapshot(
     store: &ConfigStore,
 ) -> Result<ConfigurationSnapshot, ProfileStoreError> {
     let mut providers = BTreeMap::new();
-    let mut common = BTreeMap::new();
+    let mut client_settings = BTreeMap::new();
     let mut history_map = BTreeMap::new();
     for app in [AppKind::Codex, AppKind::Claude] {
         providers.insert(app, providers::load_provider_files(store, app)?);
-        common.insert(app, store.get_common_settings(app)?.settings);
+        client_settings.insert(app, store.get_client_settings(app)?.settings);
         history_map.insert(app, store.load_history(app)?);
     }
     Ok(ConfigurationSnapshot {
         schema_version: CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION,
         providers,
-        common,
+        client_settings,
         history: history_map,
     })
 }
 
 /// Validates a snapshot without touching the filesystem: UUID identifiers,
-/// provider contracts, common-settings completeness, and history records.
+/// provider contracts, client settings completeness, and history records.
 pub fn validate_snapshot(snapshot: &ConfigurationSnapshot) -> Result<(), String> {
     if snapshot.schema_version != CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION {
         return Err("云端备份配置快照版本不受支持".to_string());
@@ -85,6 +86,9 @@ pub fn validate_snapshot(snapshot: &ConfigurationSnapshot) -> Result<(), String>
                 .into_profile(app)
                 .validate()
                 .map_err(|error| error.to_string())?;
+            if let Some(query) = &file.usage_query {
+                crate::usage_query::validate_persisted(query)?;
+            }
             if file.route_mode == RouteMode::Official {
                 if has_official_route {
                     return Err(format!("{app:?} 存在重复的官方登录入口"));
@@ -93,11 +97,11 @@ pub fn validate_snapshot(snapshot: &ConfigurationSnapshot) -> Result<(), String>
             }
         }
         let settings = snapshot
-            .common
+            .client_settings
             .get(&app)
-            .ok_or_else(|| format!("快照缺少 {app:?} 通用设置"))?;
+            .ok_or_else(|| format!("快照缺少 {app:?} 客户端设置"))?;
         settings
-            .validate_for(app)
+            .validate_client_settings(app)
             .map_err(|error| error.to_string())?;
         for record in snapshot
             .history

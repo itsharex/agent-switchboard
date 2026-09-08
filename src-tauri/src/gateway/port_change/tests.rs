@@ -7,19 +7,21 @@ use asb_core::contracts::{
     ConfigWriteRecord, ExplicitMaxOutputTokens, ProviderDraft, RouteMode, SwitchPlan,
     UpstreamProtocol, WriteOperation,
 };
-use asb_core::ownership::default_common_settings;
+use asb_core::ownership::default_client_settings;
 use std::fs;
 use tiny_http::Server;
 use uuid::Uuid;
 
 fn claude_draft(model: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "测试中转".to_string(),
         base_url: Some("http://127.0.0.1:18080".to_string()),
         api_key: "test-upstream-key".to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
+        responses_options: None,
         max_output_tokens: ExplicitMaxOutputTokens::none(),
         model: Some(model.to_string()),
         model_options: None,
@@ -32,12 +34,14 @@ fn claude_draft(model: &str) -> ProviderDraft {
 
 fn codex_draft(model: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
         app: AppKind::Codex,
         route_mode: RouteMode::Custom,
         name: "测试中转".to_string(),
         base_url: Some("http://127.0.0.1:18080".to_string()),
         api_key: "test-upstream-key".to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
+        responses_options: None,
         max_output_tokens: ExplicitMaxOutputTokens::none(),
         model: Some(model.to_string()),
         model_options: None,
@@ -55,14 +59,14 @@ fn activate_claude(controller: &GatewayController, local: &LocalState, model: &s
         .unwrap();
     let plan = SwitchPlan::direct(
         record.profile.clone(),
-        default_common_settings(AppKind::Claude),
+        default_client_settings(AppKind::Claude),
     );
     let projection = controller.project(&plan).unwrap();
     let target = local.target(AppKind::Claude).unwrap();
     fs::create_dir_all(target.parent().unwrap()).unwrap();
     fs::write(&target, adapter::render("{}", &projection.plan).unwrap()).unwrap();
     controller.commit(&projection, || Ok(())).unwrap();
-    projection.plan.profile.api_key
+    projection.plan.client_api_key().to_string()
 }
 
 fn activate_codex(controller: &GatewayController, local: &LocalState, model: &str) {
@@ -72,7 +76,7 @@ fn activate_codex(controller: &GatewayController, local: &LocalState, model: &st
         .unwrap();
     let plan = SwitchPlan::direct(
         record.profile.clone(),
-        default_common_settings(AppKind::Codex),
+        default_client_settings(AppKind::Codex),
     );
     let projection = controller.project(&plan).unwrap();
     let target = local.target(AppKind::Codex).unwrap();
@@ -82,7 +86,7 @@ fn activate_codex(controller: &GatewayController, local: &LocalState, model: &st
     fs::write(&target, adapter::render("", &projection.plan).unwrap()).unwrap();
     fs::write(
         &auth_target,
-        adapter::render_codex_auth("", &projection.plan).unwrap(),
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"sandbox-access","refresh_token":"sandbox-refresh","id_token":"sandbox-id"}}"#,
     )
     .unwrap();
     controller.commit(&projection, || Ok(())).unwrap();
@@ -199,7 +203,7 @@ fn codex_endpoint_change_keeps_its_auth_snapshot_untouched() {
 
     let changed = fs::read_to_string(target).unwrap();
     assert!(changed.contains("user-selected-model"));
-    assert!(changed.contains(&format!("127.0.0.1:{}/v1", plan.to_port)));
+    assert!(changed.contains(&format!("127.0.0.1:{}/codex/", plan.to_port)));
     assert_eq!(fs::read_to_string(auth_target).unwrap(), auth_before);
     controller.shutdown();
 }

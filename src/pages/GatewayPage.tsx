@@ -130,7 +130,10 @@ export function GatewayPage({ active, profiles }: Props) {
         </span>
       }
     >
-      <div className="flex flex-col gap-2" aria-label="监听信息">
+      <div
+        className="flex flex-col gap-3 rounded-2xl bg-background-secondary-default px-4 py-3"
+        aria-label="监听信息"
+      >
         <div className="flex flex-wrap items-center gap-2 text-body-medium">
           <span className="w-20 shrink-0 text-text-secondary">监听地址</span>
           {status.baseUrl ? (
@@ -157,6 +160,9 @@ export function GatewayPage({ active, profiles }: Props) {
           <span className="w-20 shrink-0 text-text-secondary">使用客户端</span>
           <span className="text-text-primary">Codex、Claude Code</span>
         </div>
+        <p className="m-0 text-body-2-medium text-text-tertiary">
+          修改监听端口会同步更新正在使用本网关的客户端配置；修改完成后，请重新启动相关客户端或会话。
+        </p>
       </div>
 
       {status.failure && (
@@ -213,10 +219,6 @@ export function GatewayPage({ active, profiles }: Props) {
           <ConfirmGatewayRecoveryDiscard onConfirm={() => void discardRecovery()} />
         </div>
       )}
-
-      <p className="m-0 text-body-2-medium text-text-tertiary">
-        修改监听端口会同步更新正在使用本网关的客户端配置；修改完成后，请重新启动相关客户端或会话。
-      </p>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <GatewayStatTile label="累计请求" value={status.metrics.totalRequests} />

@@ -1,6 +1,6 @@
 use crate::contracts::{
     AppKind, ClaudeModelSettings, CodexModelSettings, ModelOptions, ProviderDraft, ProviderProfile,
-    RouteMode, UpstreamProtocol, UsageQuery,
+    ResponsesOptions,  RouteMode, UpstreamProtocol, UsageQuery,
 };
 
 use crate::validate::error::{ValidationError, MAX_AUTO_REFRESH_INTERVAL_MINUTES, MAX_NOTES_LEN};
@@ -11,6 +11,7 @@ impl ProviderProfile {
         if self.id.trim().is_empty() {
             return Err(ValidationError::EmptyId);
         }
+        self.parameters.validate_provider_parameters(self.app)?;
         validate_profile_fields(ProfileFields {
             app: self.app,
             route_mode: self.route_mode,
@@ -19,6 +20,7 @@ impl ProviderProfile {
             base_url: self.base_url.as_deref(),
             api_key: &self.api_key,
             upstream_protocol: self.upstream_protocol,
+            responses_options: self.responses_options,
             max_output_tokens: self.max_output_tokens,
             model_options: self.model_options.as_ref(),
             notes: self.notes.as_deref(),
@@ -31,6 +33,7 @@ impl ProviderProfile {
 
 impl ProviderDraft {
     pub fn validate(&self) -> Result<(), ValidationError> {
+        self.parameters.validate_provider_parameters(self.app)?;
         validate_profile_fields(ProfileFields {
             app: self.app,
             route_mode: self.route_mode,
@@ -39,6 +42,7 @@ impl ProviderDraft {
             base_url: self.base_url.as_deref(),
             api_key: &self.api_key,
             upstream_protocol: self.upstream_protocol,
+            responses_options: self.responses_options,
             max_output_tokens: self.max_output_tokens,
             model_options: self.model_options.as_ref(),
             notes: self.notes.as_deref(),
@@ -57,6 +61,7 @@ struct ProfileFields<'a> {
     base_url: Option<&'a str>,
     api_key: &'a str,
     upstream_protocol: Option<UpstreamProtocol>,
+    responses_options: Option<ResponsesOptions>,
     max_output_tokens: crate::contracts::ExplicitMaxOutputTokens,
     model_options: Option<&'a ModelOptions>,
     notes: Option<&'a str>,
@@ -66,72 +71,20 @@ struct ProfileFields<'a> {
 }
 
 fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationError> {
+    if fields.name.trim().is_empty() {
+        return Err(ValidationError::EmptyName);
+    }
+    validate_route_fields(&fields)?;
     let ProfileFields {
         app,
-        route_mode,
-        name,
         model,
-        base_url,
-        api_key,
-        upstream_protocol,
-        max_output_tokens,
         model_options,
         notes,
         website_url,
         usage_query,
         official_quota_refresh_interval,
+        ..
     } = fields;
-
-    if name.trim().is_empty() {
-        return Err(ValidationError::EmptyName);
-    }
-    match route_mode {
-        RouteMode::Official => {
-            if base_url.is_some()
-                || !api_key.trim().is_empty()
-                || upstream_protocol.is_some()
-                || max_output_tokens.is_some()
-                || model.is_some()
-                || model_options.is_some()
-                || usage_query.is_some()
-            {
-                return Err(ValidationError::OfficialRouteHasCustomFields);
-            }
-            if official_quota_refresh_interval.is_some() && app != AppKind::Codex {
-                return Err(ValidationError::QuotaIntervalRequiresOfficialCodex);
-            }
-        }
-        RouteMode::Custom => {
-            if official_quota_refresh_interval.is_some() {
-                return Err(ValidationError::QuotaIntervalRequiresOfficialCodex);
-            }
-            let Some(url) = base_url else {
-                return Err(ValidationError::CustomRequiresBaseUrl);
-            };
-            let ok = url.starts_with("https://") || url.starts_with("http://");
-            if !ok {
-                return Err(ValidationError::BadBaseUrl(url.to_string()));
-            }
-            if api_key.trim().is_empty() {
-                return Err(ValidationError::EmptyApiKey);
-            }
-            if upstream_protocol.is_none() {
-                return Err(ValidationError::CustomRequiresProtocol);
-            }
-            let requires_max_output_tokens = app == AppKind::Codex
-                && upstream_protocol == Some(UpstreamProtocol::AnthropicMessages);
-            if requires_max_output_tokens {
-                if !max_output_tokens.value().is_some_and(|value| value > 0) {
-                    return Err(ValidationError::CodexAnthropicRequiresMaxOutputTokens);
-                }
-            } else if max_output_tokens.is_some() {
-                return Err(ValidationError::UnexpectedMaxOutputTokens);
-            }
-            if api_key.chars().count() > 4_096 {
-                return Err(ValidationError::ApiKeyTooLong(4_096));
-            }
-        }
-    }
     validate_model_identifier(model, "主模型")?;
     if let Some(options) = model_options {
         validate_model_options(app, options, model)?;
@@ -158,6 +111,75 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
         }
     }
     Ok(())
+}
+
+fn validate_route_fields(fields: &ProfileFields<'_>) -> Result<(), ValidationError> {
+    match fields.route_mode {
+        RouteMode::Official => {
+            if fields.base_url.is_some()
+                || !fields.api_key.trim().is_empty()
+                || fields.upstream_protocol.is_some()
+                || fields.responses_options.is_some()
+                || fields.max_output_tokens.is_some()
+                || fields.model.is_some()
+                || fields.model_options.is_some()
+                || fields.usage_query.is_some()
+            {
+                return Err(ValidationError::OfficialRouteHasCustomFields);
+            }
+            if fields.official_quota_refresh_interval.is_some() && fields.app != AppKind::Codex {
+                return Err(ValidationError::QuotaIntervalRequiresOfficialCodex);
+            }
+        }
+        RouteMode::Custom => validate_custom_route(fields)?,
+    }
+    Ok(())
+}
+
+fn validate_custom_route(fields: &ProfileFields<'_>) -> Result<(), ValidationError> {
+    if fields.official_quota_refresh_interval.is_some() {
+        return Err(ValidationError::QuotaIntervalRequiresOfficialCodex);
+    }
+    let url = fields
+        .base_url
+        .ok_or(ValidationError::CustomRequiresBaseUrl)?;
+    let protocol = fields
+        .upstream_protocol
+        .ok_or(ValidationError::CustomRequiresProtocol)?;
+    crate::endpoint::validate_base_url(url, protocol).map_err(ValidationError::BadBaseUrl)?;
+    if fields.api_key.trim().is_empty() {
+        return Err(ValidationError::EmptyApiKey);
+    }
+    validate_responses_options(protocol, fields.responses_options)?;
+    let requires_max_output_tokens =
+        fields.app == AppKind::Codex && protocol == UpstreamProtocol::AnthropicMessages;
+    if requires_max_output_tokens {
+        if !fields
+            .max_output_tokens
+            .value()
+            .is_some_and(|value| value > 0)
+        {
+            return Err(ValidationError::CodexAnthropicRequiresMaxOutputTokens);
+        }
+    } else if fields.max_output_tokens.is_some() {
+        return Err(ValidationError::UnexpectedMaxOutputTokens);
+    }
+    if fields.api_key.chars().count() > 4_096 {
+        return Err(ValidationError::ApiKeyTooLong(4_096));
+    }
+    Ok(())
+}
+
+fn validate_responses_options(
+    protocol: UpstreamProtocol,
+    options: Option<ResponsesOptions>,
+) -> Result<(), ValidationError> {
+    match (protocol, options) {
+        (UpstreamProtocol::Responses, None) => Err(ValidationError::ResponsesRequiresOptions),
+        (UpstreamProtocol::Responses, Some(_)) => Ok(()),
+        (_, Some(_)) => Err(ValidationError::UnexpectedResponsesOptions),
+        (_, None) => Ok(()),
+    }
 }
 
 fn validate_model_options(

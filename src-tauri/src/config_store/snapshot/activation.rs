@@ -14,7 +14,10 @@ fn snapshot_history_file(records: &[ConfigWriteRecord]) -> Result<String, String
 
 /// Writes a validated snapshot into `target`, which must not exist yet, then
 /// reads every file back and checks the result equals the snapshot.
-fn stage_and_verify(target: &Path, snapshot: &ConfigurationSnapshot) -> Result<(), String> {
+pub(crate) fn stage_and_verify(
+    target: &Path,
+    snapshot: &ConfigurationSnapshot,
+) -> Result<(), String> {
     validate_snapshot(snapshot)?;
     for app in [AppKind::Codex, AppKind::Claude] {
         for file in &snapshot.providers[&app] {
@@ -28,13 +31,13 @@ fn stage_and_verify(target: &Path, snapshot: &ConfigurationSnapshot) -> Result<(
                 &json,
             )?;
         }
-        let common_json = serde_json::to_string_pretty(&snapshot.common[&app])
-            .map_err(|_| "通用设置序列化失败".to_string())?;
+        let settings_json = serde_json::to_string_pretty(&snapshot.client_settings[&app])
+            .map_err(|_| "客户端设置序列化失败".to_string())?;
         write_json_atomic(
             &target
-                .join("common")
+                .join("client-settings")
                 .join(format!("{}.json", app.dir_name())),
-            &common_json,
+            &settings_json,
         )?;
         let history_json = snapshot_history_file(&snapshot.history[&app])?;
         write_json_atomic(
@@ -61,7 +64,7 @@ fn stage_and_verify(target: &Path, snapshot: &ConfigurationSnapshot) -> Result<(
     Ok(())
 }
 
-pub(super) enum Activation {
+pub(crate) enum Activation {
     Enabled { retired: Option<PathBuf> },
     Restored(String),
     RecoveryRequired(String),
@@ -70,10 +73,10 @@ pub(super) enum Activation {
 /// Activates a staged directory without deleting either side before the live
 /// directory has been restored or replaced. The injectable rename operation
 /// keeps the failure boundary testable without a second filesystem contract.
-pub(super) fn activate_staged<F>(
+pub(crate) fn activate_staged<F>(
     live: &Path,
     staged: &Path,
-    state_root: &Path,
+    retired: &Path,
     rename: &mut F,
 ) -> Activation
 where
@@ -86,15 +89,14 @@ where
         };
     }
 
-    let retired = state_root.join(format!("retired-{}", Uuid::new_v4().simple()));
-    if let Err(error) = rename(live, &retired) {
+    if let Err(error) = rename(live, retired) {
         return Activation::Restored(format!("无法移出旧配置目录：{error}"));
     }
     match rename(staged, live) {
         Ok(()) => Activation::Enabled {
-            retired: Some(retired),
+            retired: Some(retired.to_path_buf()),
         },
-        Err(error) => match rename(&retired, live) {
+        Err(error) => match rename(retired, live) {
             Ok(()) => Activation::Restored(format!(
                 "无法启用新配置目录：{error}；已恢复原配置目录"
             )),
@@ -123,8 +125,11 @@ pub fn enable_snapshot(
     let mut preserve_staging = false;
     let result = stage_and_verify(&staged, snapshot).and_then(|()| {
         let live = store.configuration_dir();
+        let retired = store
+            .state_root
+            .join(format!("retired-{}", Uuid::new_v4().simple()));
         let mut rename = |from: &Path, to: &Path| fs::rename(from, to);
-        match activate_staged(&live, &staged, &store.state_root, &mut rename) {
+        match activate_staged(&live, &staged, &retired, &mut rename) {
             Activation::Enabled { retired } => {
                 if let Some(retired) = retired {
                     let _ = fs::remove_dir_all(retired);

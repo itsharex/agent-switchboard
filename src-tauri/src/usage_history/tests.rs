@@ -18,6 +18,7 @@ fn provider() -> ProviderProfile {
     ProviderProfile::from_draft(
         "provider-1".to_string(),
         ProviderDraft {
+            parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
             app: AppKind::Codex,
             route_mode: RouteMode::Custom,
             name: "示例中转".to_string(),
@@ -25,6 +26,9 @@ fn provider() -> ProviderProfile {
             base_url: Some("https://relay.example".to_string()),
             api_key: "test-api-key".to_string(),
             upstream_protocol: Some(UpstreamProtocol::Responses),
+            responses_options: Some(asb_core::contracts::ResponsesOptions {
+                request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+            }),
             max_output_tokens: None.into(),
             model_options: None,
             notes: None,

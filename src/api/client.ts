@@ -34,6 +34,7 @@ export const switchTrayProvider = (profileId: string): Promise<void> => invoke("
 export const quitTray = (): Promise<void> => invoke("tray_quit");
 export const resizeTray = (height: number): Promise<void> => invoke("tray_resize", { height });
 export function onTrayChanged(handler: () => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen("tray-changed", handler);
 }
 export function onTrayNavigate(handler: () => void): Promise<() => void> {
@@ -90,9 +91,11 @@ export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> 
 export * from "./shared";
 export * from "./usage";
 export * from "./providers";
+export * from "./provider-request";
 export * from "./switching";
 export * from "./status";
 export * from "./settings";
+export * from "./subagent-settings";
 export * from "./sessions";
 export * from "./discovery";
 export * from "./official-login";
@@ -101,7 +104,6 @@ export * from "./extensions/commands";
 
 /** One verified application update discovered by Tauri's updater plugin. */
 export interface UpdateCheck {
-  currentVersion: string;
   latestVersion: string;
   releaseNotes: string | null;
   checkedAt: string;
@@ -154,7 +156,6 @@ export async function checkUpdate(): Promise<UpdateCheck | null> {
     const update = await checkForUpdate();
     return update
       ? {
-          currentVersion: update.currentVersion,
           latestVersion: update.version,
           releaseNotes: update.body?.trim() || null,
           checkedAt: new Date().toISOString(),

@@ -7,8 +7,8 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use sha2::{Digest, Sha256};
 
-const CONTINUATION_PREFIX: &str = "asb-reasoning-v1.";
-const AAD: &[u8] = b"agent-switchboard/reasoning-continuation/v1";
+const CONTINUATION_PREFIX: &str = "asb-reasoning-v2.";
+const AAD: &[u8] = b"agent-switchboard/reasoning-continuation/v2";
 const NONCE_BYTES: usize = 12;
 
 /// The gateway-local representation of one upstream reasoning trace. The
@@ -20,21 +20,26 @@ pub(crate) struct Reasoning {
     pub(crate) continuation: String,
 }
 
-/// Encrypts reasoning continuations with the active profile's loopback
-/// capability token. The key is derived in memory and is never persisted.
+/// Uses a backend-bound continuation key independent of access capabilities.
 #[derive(Clone)]
 pub(crate) struct ReasoningTransport {
     key: [u8; 32],
+    continuation_key: [u8; 32],
 }
 
 impl ReasoningTransport {
-    pub(crate) fn from_client_token(client_token: &str) -> Self {
+    pub(crate) fn from_continuation_key(continuation_key: [u8; 32]) -> Self {
         let mut hasher = Sha256::new();
-        hasher.update(b"agent-switchboard/reasoning-key/v1:");
-        hasher.update(client_token.as_bytes());
+        hasher.update(b"agent-switchboard/reasoning-key/v2:");
+        hasher.update(continuation_key);
         Self {
             key: hasher.finalize().into(),
+            continuation_key,
         }
+    }
+
+    pub(crate) fn continuation_key(&self) -> &[u8; 32] {
+        &self.continuation_key
     }
 
     pub(crate) fn from_chat_content(&self, content: String) -> Result<Reasoning, TransformError> {
@@ -115,7 +120,7 @@ mod tests {
 
     #[test]
     fn continuation_round_trips_without_exposing_reasoning() {
-        let transport = ReasoningTransport::from_client_token("test-loopback-token");
+        let transport = ReasoningTransport::from_continuation_key([1; 32]);
         let reasoning = transport
             .from_chat_content("private chain of thought".to_string())
             .expect("encrypt reasoning");
@@ -132,8 +137,8 @@ mod tests {
 
     #[test]
     fn continuation_is_bound_to_its_loopback_route() {
-        let first = ReasoningTransport::from_client_token("first-token");
-        let second = ReasoningTransport::from_client_token("second-token");
+        let first = ReasoningTransport::from_continuation_key([2; 32]);
+        let second = ReasoningTransport::from_continuation_key([3; 32]);
         let reasoning = first
             .from_chat_content("private chain of thought".to_string())
             .expect("encrypt reasoning");

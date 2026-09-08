@@ -49,6 +49,7 @@ impl GatewayController {
                 }))),
                 maintenance: AtomicBool::new(false),
                 inflight: AtomicUsize::new(0),
+                websocket_connections: AtomicUsize::new(0),
                 stopping: AtomicBool::new(false),
                 state_available: AtomicBool::new(state_available),
                 blocked_recovery: Mutex::new(blocked),
@@ -67,20 +68,16 @@ impl GatewayController {
     fn bind_configured_port(&self) {
         let state_path = self.inner.state_path.clone();
         let mut port = self.configured_port();
-        let server = match Server::http(("127.0.0.1", port)) {
+        let listener = match BoundListener::bind(port) {
             Ok(server) => server,
             Err(error) => {
-                let report = bind_failure_report(port, error);
+                let report = bind_failure_report(port, Box::new(error));
                 log::warn!("{}", report.message);
                 self.set_listener(ListenerState::Failed(Box::new(report)));
                 return;
             }
         };
-        let bound_port = server
-            .server_addr()
-            .to_ip()
-            .map(|address| address.port())
-            .unwrap_or(port);
+        let bound_port = listener.port();
         if bound_port != port {
             if port != 0 {
                 self.set_listener(ListenerState::Failed(Box::new(GatewayFailureReport {
@@ -110,7 +107,6 @@ impl GatewayController {
                 log::warn!("无法持久化本机协议网关端口：{error}");
             }
         }
-        let listener = BoundListener::from_server(server);
         if let Err(error) = self.spawn_serve(listener.clone()) {
             log::warn!("{error}");
             self.set_listener(ListenerState::Failed(Box::new(GatewayFailureReport {
@@ -223,5 +219,56 @@ impl GatewayController {
         }
         self.inner.state_available.store(true, Ordering::Release);
         true
+    }
+}
+
+/// Classifies a bind error into the structured failure report, identifying
+/// the holder process only when the platform reports it reliably.
+pub(super) fn bind_failure_report(
+    port: u16,
+    error: Box<dyn std::error::Error + Send + Sync>,
+) -> GatewayFailureReport {
+    const WSAEADDRINUSE: i32 = 10048;
+    let io_error = error.downcast_ref::<std::io::Error>();
+    let os_code = io_error.and_then(|error| error.raw_os_error());
+    let in_use = matches!(
+        io_error.map(|error| error.kind()),
+        Some(std::io::ErrorKind::AddrInUse)
+    ) || os_code == Some(WSAEADDRINUSE);
+    let holder = if in_use {
+        port_probe::find_listener(port)
+    } else {
+        None
+    };
+    let (kind, message) = if in_use {
+        let holder_text = match &holder {
+            Some(info) => match &info.name {
+                Some(name) => format!("（占用进程 {}，PID {}）", name, info.pid),
+                None => format!("（占用进程 PID {}）", info.pid),
+            },
+            None => "（占用进程未知）".to_string(),
+        };
+        (
+            GatewayFailureKind::PortInUse,
+            format!("无法监听 127.0.0.1:{port}：端口已被占用{holder_text}。"),
+        )
+    } else {
+        let code_text = os_code
+            .map(|code| format!("（系统错误码 {code}）"))
+            .unwrap_or_default();
+        (
+            GatewayFailureKind::SystemRejected,
+            format!("无法监听 127.0.0.1:{port}：绑定请求被系统拒绝{code_text}。"),
+        )
+    };
+    GatewayFailureReport {
+        port,
+        kind,
+        os_code,
+        message,
+        process: holder.map(|info| GatewayPortProcess {
+            pid: info.pid,
+            name: info.name,
+        }),
     }
 }

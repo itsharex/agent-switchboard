@@ -2,11 +2,11 @@ use crate::contracts::AppKind;
 
 /// The one ownership decision for a client configuration key. Unknown keys
 /// are host-owned by default and therefore never enter a provider file or a
-/// common-settings projection.
+/// client-settings projection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingOwner {
     Provider,
-    Common,
+    Client,
     Host,
 }
 
@@ -60,13 +60,18 @@ pub enum ProviderAbsentAction {
     Remove,
 }
 
-/// Rendering metadata for a common-settings editor control. Provider and host
-/// settings have no common-settings control.
+/// Rendering metadata for an editable provider parameter or client setting.
+/// Routing fields and host-owned structures have no scalar editor control.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingControl {
     None,
     Toggle,
-    Choice { presentation: ChoiceControl },
+    Choice {
+        presentation: ChoiceControl,
+    },
+    /// A free-form model id with an optional picker fed by the selected
+    /// provider's live model catalog.
+    ModelPicker,
 }
 
 /// One strongly typed entry in the ownership directory. `setting_spec` and
@@ -97,6 +102,7 @@ pub(super) struct ProviderSettingSpec {
 #[derive(Debug, Clone, Copy)]
 pub struct ToggleSpec {
     pub key: &'static str,
+    pub owner: SettingOwner,
     pub label: &'static str,
     pub group: &'static str,
 }
@@ -121,8 +127,21 @@ pub enum ChoiceControl {
 #[derive(Debug, Clone, Copy)]
 pub struct ChoiceSpec {
     pub key: &'static str,
+    pub owner: SettingOwner,
     pub label: &'static str,
     pub group: &'static str,
     pub control: ChoiceControl,
     pub options: &'static [ChoiceOption],
+}
+
+/// One provider-scoped model setting. The provider exposes the selectable
+/// catalog at edit time, while a non-empty manually entered model id remains
+/// valid for endpoints that do not implement a models listing.
+#[derive(Debug, Clone, Copy)]
+pub struct ModelSpec {
+    pub app: AppKind,
+    pub key: &'static str,
+    pub owner: SettingOwner,
+    pub label: &'static str,
+    pub group: &'static str,
 }

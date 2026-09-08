@@ -1,0 +1,126 @@
+use super::*;
+
+fn native(input: Value, previous: Option<&str>) -> String {
+    let mut value = json!({"type":"response.create","model":"m","input":input,
+        "reasoning":{"effort":"high"},"store":false,"stream":true});
+    if let Some(id) = previous {
+        value["previous_response_id"] = json!(id);
+    }
+    value.to_string()
+}
+
+fn pending(result: PreparedResponse) -> PendingRequest {
+    match result {
+        PreparedResponse::Upstream(request) => request,
+        _ => panic!("expected upstream"),
+    }
+}
+
+#[test]
+fn native_replay_retains_native_tool_items_and_reasoning_settings() {
+    let mut context = ConversationContext::default();
+    let first = pending(
+        context
+            .prepare_native(&native(
+                json!([{"type":"message","role":"user","content":"search"}]),
+                None,
+            ))
+            .unwrap(),
+    );
+    let call = json!({"id":"ws_1","type":"web_search_call","status":"completed","action":{"type":"search","query":"rust"},"extra":{"native":true}});
+    context
+        .record_completed(
+            &first,
+            &json!({"id":"r1","status":"completed","output":[call],"created_at":9}),
+        )
+        .unwrap();
+    let second = pending(
+        context
+            .prepare_native(&native(json!([]), Some("r1")))
+            .unwrap(),
+    );
+    let body: Value = serde_json::from_slice(&second.body).unwrap();
+    assert_eq!(body["input"][1], call);
+    assert_eq!(body["reasoning"]["effort"], "high");
+    assert!(body.get("previous_response_id").is_none());
+}
+
+#[test]
+fn native_missing_reference_and_prewarm_are_local() {
+    let mut context = ConversationContext::default();
+    assert_eq!(
+        context
+            .prepare_native(&native(json!([]), Some("absent")))
+            .unwrap_err()
+            .code,
+        "previous_response_not_found"
+    );
+    let mut value: Value = serde_json::from_str(&native(json!([]), None)).unwrap();
+    value["generate"] = json!(false);
+    assert!(matches!(
+        context.prepare_native(&value.to_string()),
+        Ok(PreparedResponse::Prewarm(_))
+    ));
+}
+
+#[test]
+fn compaction_replaces_cached_history_instead_of_replaying_trigger() {
+    let mut context = ConversationContext::default();
+    let first = pending(context.prepare_native(&native(json!([{"type":"message","role":"user","content":"history"},{"type":"compaction_trigger"}]), None)).unwrap());
+    let compact = json!({"type":"compaction","encrypted_content":"opaque"});
+    context
+        .record_completed(
+            &first,
+            &json!({"id":"c1","status":"completed","output":[compact]}),
+        )
+        .unwrap();
+    let second = pending(
+        context
+            .prepare_native(&native(json!([]), Some("c1")))
+            .unwrap(),
+    );
+    let body: Value = serde_json::from_slice(&second.body).unwrap();
+    assert_eq!(body["input"], json!([compact]));
+}
+
+#[test]
+fn minimal_filters_only_after_previous_input_has_been_reconstructed() {
+    let mut context = ConversationContext::default();
+    let first = pending(
+        context
+            .prepare_native(&native(
+                json!([{"type":"message","role":"user","content":"first"}]),
+                None,
+            ))
+            .unwrap(),
+    );
+    context
+        .record_completed(
+            &first,
+            &json!({"id":"r1","status":"completed","output":[{
+        "type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]}]}),
+        )
+        .unwrap();
+    let second = pending(
+        context
+            .prepare_native(&native(
+                json!([{"type":"message","role":"user","content":"second"}]),
+                Some("r1"),
+            ))
+            .unwrap(),
+    );
+    let minimal = crate::gateway::transform::minimal::apply(
+        crate::gateway::transform::ConvertedRequest {
+            body: second.body,
+            stream: true,
+        },
+        Some(asb_core::contracts::ResponsesOptions {
+            request_mode: ResponsesRequestMode::Minimal,
+        }),
+    )
+    .unwrap();
+    let body: Value = serde_json::from_slice(&minimal.body).unwrap();
+    assert_eq!(body["input"].as_array().unwrap().len(), 3);
+    assert!(body.get("previous_response_id").is_none());
+    assert!(body.get("reasoning").is_none());
+}

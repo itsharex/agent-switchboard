@@ -1,15 +1,19 @@
 use super::activation::{activate_staged, Activation};
-use super::legacy::{decode_cloud_backup_snapshot, UNSUPPORTED_CLOUD_BACKUP_SNAPSHOT};
+use super::decode::{decode_cloud_backup_snapshot, UNSUPPORTED_CLOUD_BACKUP_SNAPSHOT};
 use super::*;
 use crate::config_store::ConfigStore;
 use asb_core::contracts::{
-    AppKind, CommonSettingValue, ConfigValue, ProviderDraft, RouteMode, UpstreamProtocol,
+    AppKind, ConfigValue, ProviderDraft, RouteMode, SettingValue, UpstreamProtocol,
 };
 use std::fs;
 use std::path::Path;
 
+#[path = "tests/responses_upgrade.rs"]
+mod responses_upgrade;
+
 fn draft(app: AppKind, name: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(app),
         app,
         route_mode: RouteMode::Custom,
         name: name.to_string(),
@@ -19,6 +23,13 @@ fn draft(app: AppKind, name: &str) -> ProviderDraft {
         upstream_protocol: Some(match app {
             AppKind::Codex => UpstreamProtocol::Responses,
             AppKind::Claude => UpstreamProtocol::AnthropicMessages,
+        }),
+        responses_options: (Some(match app {
+            AppKind::Codex => UpstreamProtocol::Responses,
+            AppKind::Claude => UpstreamProtocol::AnthropicMessages,
+        }) == Some(asb_core::contracts::UpstreamProtocol::Responses))
+        .then_some(asb_core::contracts::ResponsesOptions {
+            request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
         }),
         max_output_tokens: None.into(),
         model_options: None,
@@ -31,6 +42,7 @@ fn draft(app: AppKind, name: &str) -> ProviderDraft {
 
 fn official_draft(app: AppKind, name: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(app),
         app,
         route_mode: RouteMode::Official,
         name: name.to_string(),
@@ -38,6 +50,7 @@ fn official_draft(app: AppKind, name: &str) -> ProviderDraft {
         base_url: None,
         api_key: String::new(),
         upstream_protocol: None,
+        responses_options: None,
         max_output_tokens: None.into(),
         model_options: None,
         notes: None,
@@ -45,53 +58,6 @@ fn official_draft(app: AppKind, name: &str) -> ProviderDraft {
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
     }
-}
-
-fn legacy_snapshot_bytes(snapshot: &ConfigurationSnapshot) -> Vec<u8> {
-    let mut value = serde_json::to_value(snapshot).expect("snapshot JSON");
-    let root = value.as_object_mut().expect("snapshot object");
-    root.remove("schemaVersion");
-    let providers = root
-        .get_mut("providers")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("provider groups");
-    for files in providers.values_mut() {
-        for file in files.as_array_mut().expect("provider files") {
-            let provider = file.as_object_mut().expect("provider object");
-            provider.remove("upstreamProtocol");
-            provider.remove("authScheme");
-            provider.remove("maxOutputTokens");
-        }
-    }
-    serde_json::to_vec(&value).expect("legacy JSON")
-}
-
-fn v2_snapshot_bytes(snapshot: &ConfigurationSnapshot) -> Vec<u8> {
-    let mut value = serde_json::to_value(snapshot).expect("snapshot JSON");
-    let root = value.as_object_mut().expect("snapshot object");
-    root.insert("schemaVersion".to_string(), serde_json::Value::from(2));
-    let providers = root
-        .get_mut("providers")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("provider groups");
-    for files in providers.values_mut() {
-        for file in files.as_array_mut().expect("provider files") {
-            let provider = file.as_object_mut().expect("provider object");
-            let authentication = match provider
-                .get("upstreamProtocol")
-                .and_then(serde_json::Value::as_str)
-            {
-                Some("anthropicMessages") => "xApiKey",
-                Some(_) => "bearer",
-                None => "none",
-            };
-            provider.insert(
-                "authScheme".to_string(),
-                serde_json::Value::String(authentication.to_string()),
-            );
-        }
-    }
-    serde_json::to_vec(&value).expect("v2 JSON")
 }
 
 fn live_snapshot() -> (tempfile::TempDir, ConfigStore, ConfigurationSnapshot) {
@@ -107,12 +73,12 @@ fn live_snapshot() -> (tempfile::TempDir, ConfigStore, ConfigurationSnapshot) {
 #[test]
 fn snapshot_round_trips_through_enable() {
     let (directory, store, mut snapshot) = live_snapshot();
-    snapshot.common.insert(AppKind::Codex, {
-        let mut settings = snapshot.common[&AppKind::Codex].clone();
+    snapshot.client_settings.insert(AppKind::Codex, {
+        let mut settings = snapshot.client_settings[&AppKind::Codex].clone();
         settings.settings.insert(
-            "model_reasoning_effort".into(),
-            CommonSettingValue::Explicit {
-                value: ConfigValue::Str("high".into()),
+            "approval_policy".into(),
+            SettingValue::Explicit {
+                value: ConfigValue::Str("on-request".into()),
             },
         );
         settings
@@ -130,105 +96,92 @@ fn snapshot_round_trips_through_enable() {
 }
 
 #[test]
-fn legacy_cloud_snapshot_migrates_the_historical_routes_deterministically() {
+fn previous_cloud_snapshot_distributes_shared_values_to_each_provider() {
     let (_directory, store, _) = live_snapshot();
     store
-        .create_provider(official_draft(AppKind::Codex, "Codex official"))
-        .expect("codex official");
+        .create_provider(draft(AppKind::Codex, "second"))
+        .unwrap();
     store
-        .create_provider(draft(AppKind::Claude, "Claude relay"))
-        .expect("claude custom");
-    store
-        .create_provider(official_draft(AppKind::Claude, "Claude official"))
-        .expect("claude official");
-    let snapshot = read_configuration_snapshot(&store).expect("current snapshot");
-
-    let decoded = decode_cloud_backup_snapshot(&legacy_snapshot_bytes(&snapshot))
-        .expect("historical snapshot migrates");
-
-    assert!(decoded.migrated);
-    assert_eq!(decoded.snapshot, snapshot);
-    let codex_custom = &decoded.snapshot.providers[&AppKind::Codex][0];
-    assert_eq!(
-        codex_custom.upstream_protocol,
-        Some(UpstreamProtocol::Responses)
-    );
-    assert_eq!(codex_custom.max_output_tokens.value(), None);
-    let codex_official = &decoded.snapshot.providers[&AppKind::Codex][1];
-    assert_eq!(codex_official.upstream_protocol, None);
-    let claude_custom = &decoded.snapshot.providers[&AppKind::Claude][0];
-    assert_eq!(
-        claude_custom.upstream_protocol,
-        Some(UpstreamProtocol::AnthropicMessages)
-    );
-    assert_eq!(claude_custom.max_output_tokens.value(), None);
-    let claude_official = &decoded.snapshot.providers[&AppKind::Claude][1];
-    assert_eq!(claude_official.upstream_protocol, None);
-}
-
-#[test]
-fn v2_cloud_snapshot_drops_the_obsolete_authentication_field() {
-    let (_directory, _store, snapshot) = live_snapshot();
+        .create_provider(official_draft(AppKind::Claude, "official"))
+        .unwrap();
+    let mut snapshot = read_configuration_snapshot(&store).unwrap();
+    for file in snapshot.providers.get_mut(&AppKind::Codex).unwrap() {
+        file.parameters.settings.insert(
+            "model_reasoning_effort".into(),
+            SettingValue::Explicit {
+                value: ConfigValue::Str("high".into()),
+            },
+        );
+    }
     let decoded =
-        decode_cloud_backup_snapshot(&v2_snapshot_bytes(&snapshot)).expect("v2 snapshot migrates");
-
+        decode_cloud_backup_snapshot(&super::previous::snapshot_bytes(&snapshot)).unwrap();
     assert!(decoded.migrated);
     assert_eq!(decoded.snapshot, snapshot);
-    assert!(serde_json::to_string(&decoded.snapshot)
-        .expect("current snapshot")
-        .contains("\"schemaVersion\":3"));
+    let json = serde_json::to_value(decoded.snapshot).unwrap();
+    assert_eq!(json["schemaVersion"], 5);
+    assert!(json.get("common").is_none());
+    assert!(json["clientSettings"].is_object());
 }
 
 #[test]
-fn unversioned_current_cloud_snapshot_is_rewritten_without_losing_protocol_fields() {
-    let (_directory, _store, mut snapshot) = live_snapshot();
-    let provider = &mut snapshot.providers.get_mut(&AppKind::Codex).unwrap()[0];
-    provider.upstream_protocol = Some(UpstreamProtocol::AnthropicMessages);
-    provider.max_output_tokens = Some(8_192).into();
-    validate_snapshot(&snapshot).expect("current protocol route");
-    let mut value = serde_json::to_value(&snapshot).expect("snapshot JSON");
-    value
+fn current_cloud_snapshot_requires_provider_parameters_and_rejects_old_fields() {
+    let (_directory, _store, snapshot) = live_snapshot();
+    let bytes = serde_json::to_vec(&snapshot).unwrap();
+    assert!(!decode_cloud_backup_snapshot(&bytes).unwrap().migrated);
+    let mut value = serde_json::to_value(&snapshot).unwrap();
+    value["providers"]["codex"][0]
         .as_object_mut()
-        .expect("snapshot object")
-        .remove("schemaVersion");
-
-    let decoded = decode_cloud_backup_snapshot(
-        &serde_json::to_vec(&value).expect("unversioned current JSON"),
-    )
-    .expect("current snapshot migrates");
-
-    assert!(decoded.migrated);
-    assert_eq!(decoded.snapshot, snapshot);
+        .unwrap()
+        .remove("parameters");
     assert_eq!(
-        decoded.snapshot.providers[&AppKind::Codex][0]
-            .max_output_tokens
-            .value(),
-        Some(8_192)
-    );
-}
-
-#[test]
-fn cloud_snapshot_rejects_an_unsupported_version_or_unknown_legacy_shape() {
-    let (_directory, _store, mut snapshot) = live_snapshot();
-    snapshot.schema_version = 1;
-    let wrong_version = serde_json::to_vec(&snapshot).expect("wrong-version JSON");
-    assert_eq!(
-        decode_cloud_backup_snapshot(&wrong_version).expect_err("version must fail"),
-        "云端备份配置快照版本不受支持"
-    );
-
-    let current = read_configuration_snapshot(&_store).expect("current snapshot");
-    let mut legacy: serde_json::Value =
-        serde_json::from_slice(&legacy_snapshot_bytes(&current)).expect("legacy JSON");
-    legacy
-        .as_object_mut()
-        .expect("legacy object")
-        .insert("unexpected".to_string(), serde_json::Value::Bool(true));
-    assert_eq!(
-        decode_cloud_backup_snapshot(&serde_json::to_vec(&legacy).expect("unknown JSON"))
-            .expect_err("unknown legacy field must fail"),
+        decode_cloud_backup_snapshot(&serde_json::to_vec(&value).unwrap()).unwrap_err(),
         UNSUPPORTED_CLOUD_BACKUP_SNAPSHOT
     );
+}
+
+#[test]
+fn snapshot_without_responses_capabilities_cannot_replace_local_data() {
+    let (_directory, store, snapshot) = live_snapshot();
+    let mut value = serde_json::to_value(&snapshot).unwrap();
+    value["providers"]["codex"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("responsesOptions");
+    assert!(decode_cloud_backup_snapshot(&serde_json::to_vec(&value).unwrap()).is_err());
+    let invalid: ConfigurationSnapshot = serde_json::from_value(value).unwrap();
+    assert!(enable_snapshot(&store, &invalid).is_err());
+    assert_eq!(read_configuration_snapshot(&store).unwrap(), snapshot);
+}
+
+#[test]
+fn cloud_snapshot_rejects_older_unversioned_and_malformed_previous_shapes() {
+    let (_directory, _store, snapshot) = live_snapshot();
+    for version in [Some(1), Some(2), None] {
+        let mut value = serde_json::to_value(&snapshot).unwrap();
+        match version {
+            Some(version) => {
+                value["schemaVersion"] = serde_json::json!(version);
+            }
+            None => {
+                value.as_object_mut().unwrap().remove("schemaVersion");
+            }
+        }
+        assert_eq!(
+            decode_cloud_backup_snapshot(&serde_json::to_vec(&value).unwrap()).unwrap_err(),
+            "云端备份配置快照版本不受支持"
+        );
+    }
+    let mut previous: serde_json::Value =
+        serde_json::from_slice(&super::previous::snapshot_bytes(&snapshot)).unwrap();
+    previous["common"]["codex"]["settings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("model_reasoning_effort");
+    assert!(decode_cloud_backup_snapshot(&serde_json::to_vec(&previous).unwrap()).is_err());
+    let mut previous: serde_json::Value =
+        serde_json::from_slice(&super::previous::snapshot_bytes(&snapshot)).unwrap();
+    previous["providers"]["codex"][0]["authScheme"] = serde_json::json!("bearer");
+    assert!(decode_cloud_backup_snapshot(&serde_json::to_vec(&previous).unwrap()).is_err());
 }
 
 #[test]
@@ -301,7 +254,12 @@ fn failed_swap_restores_the_original_live_directory() {
         }
         fs::rename(from, to)
     };
-    let result = activate_staged(&live, &staged, &state_root, &mut rename);
+    let result = activate_staged(
+        &live,
+        &staged,
+        &state_root.join("retired-original"),
+        &mut rename,
+    );
 
     assert!(matches!(result, Activation::Restored(_)));
     assert_eq!(fs::read_to_string(live.join("marker")).unwrap(), "old");
@@ -326,7 +284,12 @@ fn failed_rollback_reports_the_preserved_recovery_paths() {
         }
         fs::rename(from, to)
     };
-    let result = activate_staged(&live, &staged, &state_root, &mut rename);
+    let result = activate_staged(
+        &live,
+        &staged,
+        &state_root.join("retired-original"),
+        &mut rename,
+    );
 
     let Activation::RecoveryRequired(error) = result else {
         panic!("rollback failure must remain observable")
@@ -343,4 +306,24 @@ fn failed_rollback_reports_the_preserved_recovery_paths() {
         .expect("retired original remains");
     assert_eq!(fs::read_to_string(retired.join("marker")).unwrap(), "old");
     assert_eq!(fs::read_to_string(staged.join("marker")).unwrap(), "new");
+}
+
+#[test]
+fn explicit_schema_three_transport_conversion_never_weakens_current_schema() {
+    let (_directory, _store, snapshot) = live_snapshot();
+    let mut old: serde_json::Value =
+        serde_json::from_slice(&super::previous::snapshot_bytes(&snapshot)).unwrap();
+    old["providers"]["codex"][0]["responsesOptions"]["supportsWebsockets"] =
+        serde_json::json!(true);
+    let converted = decode_cloud_backup_snapshot(&serde_json::to_vec(&old).unwrap()).unwrap();
+    assert!(converted.migrated);
+    assert_eq!(converted.snapshot, snapshot);
+    assert_eq!(converted.snapshot.schema_version, 5);
+    let mut current = serde_json::to_value(&snapshot).unwrap();
+    current["providers"]["codex"][0]["responsesOptions"]["supportsWebsockets"] =
+        serde_json::json!(false);
+    assert!(decode_cloud_backup_snapshot(&serde_json::to_vec(&current).unwrap()).is_err());
+    old["providers"]["codex"][0]["responsesOptions"]["supportsWebsockets"] =
+        serde_json::json!("true");
+    assert!(decode_cloud_backup_snapshot(&serde_json::to_vec(&old).unwrap()).is_err());
 }

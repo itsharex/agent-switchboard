@@ -23,7 +23,7 @@ const SUPPORTED_APPS: readonly AppKind[] = ["codex", "claude"];
 /**
  * Owns prompt-management drafts independently from model configuration. Each
  * document has its own request generation so a delayed response can never
- * replace a newer save. The selected client follows the common-settings page.
+ * replace a newer save. The selected client follows the configuration context.
  */
 export function usePromptDocuments({
   active,

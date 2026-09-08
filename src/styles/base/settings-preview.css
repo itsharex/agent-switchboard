@@ -1,4 +1,4 @@
-/* General-config preview below the selection controls */
+/* Client-preference preview below the selection controls */
 .asb-settings-preview {
   margin-top: var(--asb-space-3);
   padding-top: var(--asb-space-3);
@@ -7,41 +7,41 @@
 
 /* One page-owned footer gives whole-form reset, save status, and save action
    a shared alignment line. Individual groups keep their own local reset. */
-.asb-general-settings-actions,
-.asb-general-settings-actions-main {
+.asb-settings-actions,
+.asb-settings-actions-main {
   display: flex;
   align-items: center;
   gap: var(--asb-space-2);
 }
 
-.asb-general-settings-actions {
+.asb-settings-actions {
   justify-content: space-between;
   margin-top: var(--asb-space-4);
 }
 
-.asb-general-settings-actions-main {
+.asb-settings-actions-main {
   min-width: 0;
   justify-content: flex-end;
 }
 
-.asb-general-settings-actions-main .asb-field-help,
-.asb-general-settings-actions-main .asb-field-error {
+.asb-settings-actions-main .asb-field-help,
+.asb-settings-actions-main .asb-field-error {
   margin: 0;
   text-align: right;
 }
 
 @media (max-width: 680px) {
-  .asb-general-settings-actions {
+  .asb-settings-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .asb-general-settings-actions-main {
+  .asb-settings-actions-main {
     justify-content: space-between;
   }
 
-  .asb-general-settings-actions-main .asb-field-help,
-  .asb-general-settings-actions-main .asb-field-error {
+  .asb-settings-actions-main .asb-field-help,
+  .asb-settings-actions-main .asb-field-error {
     text-align: left;
   }
 }

@@ -4,7 +4,7 @@
 use asb_core::{adapter, AppKind, BackupRecord, LockStatus, SwitchPlan, SwitchPreview};
 use std::path::Path;
 
-use super::preview::{plan_rejected, read_current_or_empty};
+use super::preview::read_current_or_empty;
 use super::{
     sha256_hex, timestamp_name, write_backup_metadata, RecoveryOutcome, RestoreOutcome,
     SwitchError, SwitchOutcome, SwitchRequest, PROCESS_NAME,
@@ -26,6 +26,7 @@ pub fn execute<Io: SwitchIo, Commit>(
 where
     Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
 {
+    crate::config_journal::require_clear(io, req.backup_dir, req.plan.app())?;
     if let Some(parent) = req.target.parent() {
         io.ensure_dir(parent)
             .map_err(|error| SwitchError::CommitFailed {
@@ -62,6 +63,25 @@ pub fn restore<Io: SwitchIo, Commit>(
 where
     Commit: FnOnce(&RestoreOutcome) -> Result<(), String>,
 {
+    restore_projected(io, backup, target, None, commit)
+}
+
+/// Restores a verified backup with a current typed endpoint projection.
+/// The original snapshot remains immutable and is always checked before this candidate.
+pub fn restore_projected<Io: SwitchIo, Commit>(
+    io: &Io,
+    backup: &BackupRecord,
+    target: &Path,
+    projected: Option<&str>,
+    commit: Commit,
+) -> Result<RestoreOutcome, SwitchError>
+where
+    Commit: FnOnce(&RestoreOutcome) -> Result<(), String>,
+{
+    let directory = Path::new(&backup.backup_path)
+        .parent()
+        .expect("backup directory");
+    crate::config_journal::require_clear(io, directory, backup.app)?;
     if let Some(parent) = target.parent() {
         io.ensure_dir(parent)
             .map_err(|error| SwitchError::CommitFailed {
@@ -73,7 +93,7 @@ where
     match lockfile::acquire(io, target, PROCESS_NAME) {
         AcquireOutcome::Busy(status) => Err(SwitchError::BlockedByLock { status }),
         AcquireOutcome::Acquired => {
-            let result = restore_locked(io, backup, target, commit);
+            let result = restore_locked(io, backup, target, projected, commit);
             match lockfile::release(io, target) {
                 Ok(()) => result,
                 Err(message) => match result {
@@ -147,8 +167,7 @@ fn plan_candidate(
     backup_dir: &str,
     expected_rendered_hash: &str,
 ) -> Result<(SwitchPreview, String), SwitchError> {
-    let preview = adapter::preview(current, plan, backup_dir).map_err(plan_rejected)?;
-    let rendered = adapter::render(current, plan).map_err(plan_rejected)?;
+    let (preview, rendered) = super::upgrade::candidate(current, plan, backup_dir)?;
     if sha256_hex(&rendered) != expected_rendered_hash {
         return Err(SwitchError::PlanChanged);
     }
@@ -268,10 +287,7 @@ pub(crate) fn commit_rendered<Io: SwitchIo>(
             recovery: RecoveryOutcome::NotNeeded,
         });
     }
-
-    // The temp is now known good. Check the live target once more before the
-    // irreversible replacement so a host edit made while creating the backup
-    // cannot be silently overwritten.
+    // Recheck after preparing the candidate so concurrent host edits are preserved.
     if let Err(error) =
         verify_live_snapshot(io, target, app, expected_current, backup.target_existed)
     {
@@ -287,9 +303,7 @@ pub(crate) fn commit_rendered<Io: SwitchIo>(
             recovery: RecoveryOutcome::NotNeeded,
         });
     }
-
-    // Post-write verification: the live file must equal the rendered
-    // candidate and parse cleanly. Otherwise restore the backup.
+    // Verify the actual replacement before committing application state.
     let verified = match io.read_file(target) {
         Ok(text) => text == rendered && adapter::validate_syntax(app, &text).is_ok(),
         Err(_) => false,
@@ -319,7 +333,72 @@ fn execute_locked<Io: SwitchIo, Commit>(
 where
     Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
 {
-    let finish = |result: Result<SwitchOutcome, SwitchError>| match lockfile::release(io, target) {
+    let backup_dir_label = backup_dir.to_string_lossy().to_string();
+    let (current, target_existed, found_hash) =
+        match read_unchanged_current(io, target, plan.app(), expected_hash) {
+            Ok(verified) => verified,
+            Err(error) => return finish_execution(io, target, Err(error)),
+        };
+    let (preview, rendered) =
+        match plan_candidate(plan, &current, &backup_dir_label, expected_rendered_hash) {
+            Ok(candidate) => candidate,
+            Err(error) => return finish_execution(io, target, Err(error)),
+        };
+    let backup = match back_up_current(
+        io,
+        target,
+        backup_dir,
+        &current,
+        &found_hash,
+        target_existed,
+        plan.app(),
+        "provider-projection",
+    ) {
+        Ok(backup) => backup,
+        Err(error) => return finish_execution(io, target, Err(error)),
+    };
+    let pending = crate::PendingConfigWrite {
+        version: 1,
+        app: plan.app(),
+        profile_id: Some(plan.profile.id.clone()),
+        backup: backup.clone(),
+        after_hash: sha256_hex(&rendered),
+        after_existed: true,
+    };
+    let result = crate::config_journal::track(io, pending, || {
+        if let Err(error) = commit_rendered(io, target, plan.app(), &rendered, &backup, &current) {
+            return Err(error);
+        }
+
+        let outcome = SwitchOutcome {
+            lock: LockStatus::Free,
+            acquired_at: backup.created_at.clone(),
+            changed: vec![target.to_string_lossy().to_string()],
+            warnings: preview.warnings.clone(),
+            backup,
+            preview,
+            recovery: RecoveryOutcome::NotNeeded,
+            final_hash: sha256_hex(&rendered),
+        };
+        if let Err(message) = commit(&outcome) {
+            let recovery = restore_backup_content(io, target, &outcome.backup);
+            return Err(SwitchError::CommitFailed {
+                stage: "state-save",
+                message,
+                recovery,
+            });
+        }
+        Ok(outcome)
+    });
+    finish_execution(io, target, result)
+}
+
+fn finish_execution<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    result: Result<SwitchOutcome, SwitchError>,
+) -> Result<SwitchOutcome, SwitchError> {
+    match lockfile::release(io, target) {
         Ok(()) => result,
         Err(message) => match result {
             Ok(mut outcome) => {
@@ -333,65 +412,5 @@ where
                 prior: Box::new(prior),
             }),
         },
-    };
-
-    let (initial_current, initial_target_existed, _) =
-        match read_unchanged_current(io, target, plan.app(), expected_hash) {
-            Ok(verified) => verified,
-            Err(error) => return finish(Err(error)),
-        };
-    let backup_dir_label = backup_dir.to_string_lossy().to_string();
-    let (current, target_existed, found_hash) =
-        match read_unchanged_current(io, target, plan.app(), expected_hash) {
-            Ok(verified) => verified,
-            Err(error) => return finish(Err(error)),
-        };
-    if current != initial_current || target_existed != initial_target_existed {
-        return finish(Err(SwitchError::ExternalChange {
-            expected_hash: sha256_hex(&initial_current),
-            found_hash,
-        }));
     }
-    let (preview, rendered) =
-        match plan_candidate(plan, &current, &backup_dir_label, expected_rendered_hash) {
-            Ok(candidate) => candidate,
-            Err(error) => return finish(Err(error)),
-        };
-    let backup = match back_up_current(
-        io,
-        target,
-        backup_dir,
-        &current,
-        &found_hash,
-        target_existed,
-        plan.app(),
-        "provider-projection",
-    ) {
-        Ok(backup) => backup,
-        Err(error) => return finish(Err(error)),
-    };
-    if let Err(error) = commit_rendered(io, target, plan.app(), &rendered, &backup, &current) {
-        return finish(Err(error));
-    }
-
-    let outcome = SwitchOutcome {
-        lock: LockStatus::Free,
-        acquired_at: backup.created_at.clone(),
-        changed: vec![target.to_string_lossy().to_string()],
-        warnings: preview.warnings.clone(),
-        backup,
-        preview,
-        recovery: RecoveryOutcome::NotNeeded,
-        final_hash: sha256_hex(&rendered),
-    };
-    if let Err(message) = commit(&outcome) {
-        let recovery = restore_backup_content(io, target, &outcome.backup);
-        return finish(Err(SwitchError::CommitFailed {
-            stage: "state-save",
-            message,
-            recovery,
-        }));
-    }
-
-    finish(Ok(outcome))
 }

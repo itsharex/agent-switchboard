@@ -48,6 +48,7 @@ function formatProgress(progress: UpdateDownloadProgress): string {
  * download, verification and installation are explicit user actions. */
 export function UpdateSection({
   channel,
+  appVersion,
   result,
   busy,
   installing,
@@ -59,6 +60,8 @@ export function UpdateSection({
   onRestart,
 }: {
   channel: UpdateChannel | null;
+  /** Running build's version; null until the process reports it. */
+  appVersion: string | null;
   result: UpdateCheck | null;
   busy: boolean;
   installing: boolean;
@@ -88,7 +91,14 @@ export function UpdateSection({
         <div className="asb-app-setting-row">
           <div className="asb-app-setting-copy">
             <span className="asb-checkbox-label">由 Microsoft Store 管理更新</span>
-            <span className="asb-app-setting-detail">Store 会自动检查并安装新版本</span>
+            <span className="asb-app-setting-detail">
+              {[
+                appVersion ? `当前版本 v${appVersion}` : null,
+                "Store 会自动检查并安装新版本",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
           </div>
         </div>
       </section>
@@ -109,9 +119,15 @@ export function UpdateSection({
       : checkedAt
         ? "已是最新版本"
       : "检查新版本";
-  const detail: ReactNode = checkedAt ? (
+  const detail: ReactNode = appVersion || checkedAt ? (
     <>
-      {result ? `当前版本 ${result.currentVersion} · ` : null}检查于 <Time iso={checkedAt} />
+      {appVersion ? `当前版本 v${appVersion}` : null}
+      {appVersion && checkedAt ? " · " : null}
+      {checkedAt ? (
+        <>
+          检查于 <Time iso={checkedAt} />
+        </>
+      ) : null}
     </>
   ) : null;
   return (

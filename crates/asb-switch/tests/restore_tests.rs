@@ -89,7 +89,7 @@ fn first_switch_creates_a_file_and_undo_restores_its_absence() {
     .unwrap();
     assert!(!switched.backup.target_existed);
     let switched_content = fs::read_to_string(&target).expect("created target");
-    assert!(switched_content.contains("relay-b.internal"));
+    assert!(switched_content.contains("http://127.0.0.1:18900/codex/"));
 
     let restored = restore(&io, &switched.backup, &target).expect("restore original absence");
     assert!(!target.exists());

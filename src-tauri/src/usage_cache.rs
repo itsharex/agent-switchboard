@@ -185,6 +185,7 @@ mod tests {
         ProviderProfile::from_draft(
             "profile-1".to_string(),
             ProviderDraft {
+                parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
                 app: AppKind::Claude,
                 route_mode: RouteMode::Custom,
                 name: "查询供应商".to_string(),
@@ -192,6 +193,7 @@ mod tests {
                 base_url: Some("https://relay.example".to_string()),
                 api_key: "test-api-key".to_string(),
                 upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+                responses_options: None,
                 max_output_tokens: None.into(),
                 model_options: None,
                 notes: None,

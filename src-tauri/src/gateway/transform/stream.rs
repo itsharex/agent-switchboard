@@ -8,13 +8,16 @@
 mod anthropic;
 #[path = "stream/chat.rs"]
 mod chat;
+#[path = "stream/diagnostics.rs"]
+mod diagnostics;
 #[path = "stream/responses/mod.rs"]
 mod responses;
 
 use super::sse::render_event;
 use super::{CanonicalResponse, ReasoningTransport, StopReason, TransformError};
+use crate::provider_diagnostics::ProviderDiagnostic;
 use asb_core::contracts::UpstreamProtocol;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::io::{self, Read};
 
 const SOURCE_READ_CHUNK: usize = 8 * 1024;
@@ -33,6 +36,10 @@ pub(crate) struct SseTranscoder<R> {
     pending_offset: usize,
     source_finished: bool,
     terminal: bool,
+    direct_completed: bool,
+    diagnostic: Option<ProviderDiagnostic>,
+    secrets: Vec<String>,
+    failed: bool,
 }
 
 enum StreamMode {
@@ -120,6 +127,10 @@ where
             pending_offset: 0,
             source_finished: false,
             terminal: false,
+            direct_completed: false,
+            diagnostic: None,
+            secrets: Vec::new(),
+            failed: false,
         })
     }
 
@@ -135,30 +146,19 @@ where
         self.pending.extend(bytes);
     }
 
-    fn fail(&mut self, message: &str) {
-        if !self.terminal {
-            self.append(stream_error(self.target, message));
-            self.terminal = true;
-        }
-    }
-
-    fn consume_source(&mut self, bytes: &[u8]) -> Result<(), io::Error> {
+    fn consume_source(&mut self, bytes: &[u8]) {
         self.source_bytes = self.source_bytes.saturating_add(bytes.len() as u64);
         if self.source_bytes > self.max_source_bytes {
             self.fail("上游响应超过本机协议网关限制");
-            return Ok(());
+            return;
         }
         self.source_buffer.extend_from_slice(bytes);
         while let Some((index, delimiter_length)) = frame_boundary(&self.source_buffer) {
             let frame_bytes = self.source_buffer[..index].to_vec();
             self.source_buffer.drain(..index + delimiter_length);
-            match parse_frame(&frame_bytes).and_then(|frame| match frame {
-                Some(frame) => match &mut self.mode {
-                    StreamMode::Direct => Ok(Vec::new()),
-                    StreamMode::Converting(transformer) => transformer.on_frame(frame),
-                },
-                None => Ok(Vec::new()),
-            }) {
+            match parse_frame(&frame_bytes)
+                .and_then(|frame| self.convert_frame(frame, &frame_bytes))
+            {
                 Ok(bytes) => self.append(bytes),
                 Err(error) => {
                     self.fail(&format!("无法转换上游 SSE：{error}"));
@@ -169,7 +169,46 @@ where
                 break;
             }
         }
-        Ok(())
+    }
+
+    fn convert_frame(
+        &mut self,
+        frame: Option<Frame>,
+        bytes: &[u8],
+    ) -> Result<Vec<u8>, TransformError> {
+        let Some(frame) = frame else {
+            return Ok(if matches!(self.mode, StreamMode::Direct) {
+                [bytes, b"\n\n"].concat()
+            } else {
+                vec![]
+            });
+        };
+        if self.upstream_failed(&frame) {
+            return Ok(Vec::new());
+        }
+        match &mut self.mode {
+            StreamMode::Converting(transformer) => transformer.on_frame(frame),
+            StreamMode::Direct => {
+                let value = json_data(&frame, "上游 SSE data")?;
+                let kind = value
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| TransformError("上游 SSE 事件缺少 type".to_string()))?;
+                if frame.event.as_deref().is_some_and(|event| event != kind) {
+                    return Err(TransformError("上游 SSE event 与 type 不一致".to_string()));
+                }
+                if self.direct_completed {
+                    return Err(TransformError(
+                        "上游 SSE 在终止事件后继续发送数据".to_string(),
+                    ));
+                }
+                self.direct_completed = matches!(
+                    kind,
+                    "response.completed" | "response.incomplete" | "message_stop"
+                );
+                Ok([bytes, b"\n\n"].concat())
+            }
+        }
     }
 
     fn finish_source(&mut self) {
@@ -185,7 +224,8 @@ where
             return;
         }
         let result = match &mut self.mode {
-            StreamMode::Direct => Ok(Vec::new()),
+            StreamMode::Direct if self.direct_completed => Ok(Vec::new()),
+            StreamMode::Direct => Err(TransformError("上游 SSE 流未给出终止事件".to_string())),
             StreamMode::Converting(transformer) => transformer.finish(),
         };
         match result {
@@ -206,14 +246,6 @@ where
         if output.is_empty() {
             return Ok(0);
         }
-        if matches!(self.mode, StreamMode::Direct) {
-            let read = self.source.read(output)?;
-            self.source_bytes = self.source_bytes.saturating_add(read as u64);
-            if self.source_bytes > self.max_source_bytes {
-                return Err(io::Error::other("上游响应超过本机协议网关限制"));
-            }
-            return Ok(read);
-        }
         while self.pending_is_empty() && !self.terminal {
             if self.source_finished {
                 self.finish_source();
@@ -225,8 +257,8 @@ where
                     self.source_finished = true;
                     self.finish_source();
                 }
-                Ok(read) => self.consume_source(&buffer[..read])?,
-                Err(_) => self.fail("无法读取上游 SSE 流"),
+                Ok(read) => self.consume_source(&buffer[..read]),
+                Err(error) => self.fail_io(&error),
             }
         }
         if self.pending_is_empty() {
@@ -273,33 +305,6 @@ pub(super) fn anthropic_stop_reason(stop: StopReason) -> &'static str {
     }
 }
 
-fn stream_error(protocol: UpstreamProtocol, message: &str) -> Vec<u8> {
-    match protocol {
-        UpstreamProtocol::Responses => render_event(
-            "response.failed",
-            &json!({
-                "type": "response.failed",
-                "response": {
-                    "object": "response",
-                    "status": "failed",
-                    "error": { "code": "gateway_error", "message": message },
-                },
-            }),
-        ),
-        UpstreamProtocol::AnthropicMessages => render_event(
-            "error",
-            &json!({
-                "type": "error",
-                "error": { "type": "api_error", "message": message },
-            }),
-        ),
-        UpstreamProtocol::ChatCompletions => render_event(
-            "error",
-            &json!({ "error": { "type": "gateway_error", "message": message } }),
-        ),
-    }
-}
-
 fn frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
     let mut index = 0;
     while index < buffer.len() {
@@ -324,7 +329,11 @@ fn parse_frame(bytes: &[u8]) -> Result<Option<Frame>, TransformError> {
             event = Some(value.trim().to_string());
         } else if let Some(value) = line.strip_prefix("data:") {
             data.push(value.trim_start().to_string());
-        } else if line.starts_with(':') || line.trim().is_empty() {
+        } else if line.starts_with(':')
+            || line.starts_with("id:")
+            || line.starts_with("retry:")
+            || line.trim().is_empty()
+        {
             continue;
         } else {
             return Err(TransformError("上游 SSE 包含无效帧行".to_string()));
@@ -336,5 +345,8 @@ fn parse_frame(bytes: &[u8]) -> Result<Option<Frame>, TransformError> {
     }))
 }
 
+#[cfg(test)]
+#[path = "stream/diagnostic_tests.rs"]
+mod diagnostic_tests;
 #[cfg(test)]
 mod tests;

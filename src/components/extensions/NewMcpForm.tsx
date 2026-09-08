@@ -3,6 +3,7 @@ import type { ExtensionDraft, ExtensionPayload, SecretValue } from "../../api/cl
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
 import { Input } from "../Input";
+import { Textarea } from "../Textarea";
 import { Select } from "../Select";
 
 interface SecretRow {
@@ -216,8 +217,7 @@ export function NewMcpForm({ busy, onPutSecret, onSave }: Props) {
           </label>
           <label className="asb-field">
             <span>启动参数（每行一个）</span>
-            <textarea
-              className="asb-input asb-textarea"
+            <Textarea
               aria-label="启动参数"
               rows={3}
               value={argsText}

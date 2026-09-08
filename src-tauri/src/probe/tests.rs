@@ -1,4 +1,4 @@
-use super::models::{models_path_for, parse_models, provider_auth_headers};
+use super::models::{parse_models, provider_auth_headers};
 use super::transport::{
     classify_kind, failure_message, grade_for, http_request, parse_url, probe_with_client,
     probe_with_retries, FailureKind, ProbeFailure,
@@ -254,7 +254,7 @@ fn http_request_sends_nonempty_headers_and_body_to_a_loopback_server() {
 }
 
 #[test]
-fn model_fetch_uses_the_shared_transport() {
+fn model_fetch_uses_the_declared_api_prefix_and_authentication() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback server");
     let address = listener.local_addr().expect("loopback address");
     let server = thread::spawn(move || {
@@ -302,20 +302,8 @@ fn model_fetch_uses_the_shared_transport() {
     let request = String::from_utf8(server.join().expect("join loopback server"))
         .expect("UTF-8 loopback request")
         .to_ascii_lowercase();
-    assert!(request.starts_with("get /api/v1/models http/1.1\r\n"));
+    assert!(request.starts_with("get /api/models http/1.1\r\n"));
     assert!(request.contains("authorization: bearer test-credential\r\n"));
-}
-
-#[test]
-fn model_list_paths_follow_the_base_shape() {
-    assert_eq!(models_path_for("https://relay.example"), "/v1/models");
-    assert_eq!(models_path_for("https://relay.example/"), "/v1/models");
-    assert_eq!(models_path_for("https://relay.example/v1"), "/v1/models");
-    assert_eq!(models_path_for("https://relay.example/v2/"), "/v2/models");
-    assert_eq!(
-        models_path_for("https://relay.example/api/v3"),
-        "/api/v3/models"
-    );
 }
 
 #[test]
@@ -367,4 +355,36 @@ fn models_parse_in_order_and_dedupe_with_vendor() {
     );
     assert!(parse_models("[]").is_err());
     assert!(parse_models("{}").is_err());
+}
+
+#[test]
+fn invalid_model_list_retains_http_context_without_echoing_credentials() {
+    let upstream = tiny_http::Server::http(("127.0.0.1", 0)).unwrap();
+    let base = format!("http://{}", upstream.server_addr().to_ip().unwrap());
+    let server = thread::spawn(move || {
+        let request = upstream
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap()
+            .unwrap();
+        assert_eq!(request.url(), "/custom/models");
+        request
+            .respond(
+                tiny_http::Response::from_string("<html>not a model list</html>").with_header(
+                    tiny_http::Header::from_bytes(b"x-request-id", b"req-fixture-credential")
+                        .unwrap(),
+                ),
+            )
+            .unwrap();
+    });
+    let error = fetch_models(
+        &format!("{base}/custom"),
+        "fixture-credential",
+        UpstreamProtocol::Responses,
+    )
+    .unwrap_err();
+    assert!(error.contains("HTTP 200"));
+    assert!(error.contains(&format!("{base}/custom/models")));
+    assert!(error.contains(&format!("req-{}", asb_core::redact::REDACTED)));
+    assert!(!error.contains("fixture-credential"));
+    server.join().unwrap();
 }

@@ -61,9 +61,18 @@ internal static class Contracts
             Equal(true, surface.Background != null);
             var layout = (Grid)surface.Children[0];
             var header = (Grid)layout.Children[0];
+            var brand = (StackPanel)header.Children[0];
+            Equal("Agent Switchboard", ((TextBlock)brand.Children[1]).Text);
             var minimize = (Button)header.Children[1];
             Equal("MinimizeButton", minimize.Name);
+            Equal(44.0, minimize.MinWidth);
+            Equal(44.0, minimize.MinHeight);
             Equal(true, WindowChrome.GetIsHitTestVisibleInChrome(minimize));
+            var scroll = (ScrollViewer)layout.Children[1];
+            var body = (StackPanel)scroll.Content;
+            var intro = (StackPanel)body.Children[0];
+            Equal(false, ((TextBlock)intro.Children[0]).Text.Contains("Agent Switchboard"));
+            Equal(true, intro.Children[1] is TextBlock);
             minimize.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Equal(WindowState.Minimized, window.WindowState);
             window.Close();

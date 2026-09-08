@@ -1,3 +1,4 @@
+import { providerParameters } from "../test/provider-parameters";
 import { describe, expect, it } from "vitest";
 import type { ConfigFileStatus, ProviderProfile } from "../api/client";
 import { currentProviderName } from "./current-provider-name";
@@ -35,7 +36,9 @@ describe("currentProviderName", () => {
     id: "zhipu", app: "claude", name: "Zhipu GLM", routeMode: "custom",
     model: null, baseUrl: "https://open.bigmodel.cn", apiKey: "test-api-key",
     upstreamProtocol: "anthropicMessages",
+    responsesOptions: null,
     maxOutputTokens: null,
+    parameters: providerParameters("claude"),
     modelOptions: null, websiteUrl: null,
   }];
   it("uses the active matching profile name over the custom connection mode", () => {

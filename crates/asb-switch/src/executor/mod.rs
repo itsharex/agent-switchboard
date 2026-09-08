@@ -6,17 +6,16 @@
 //! replacement → post-write verification → lock release. Any failure after
 //! the file has been replaced restores the immediately preceding backup.
 
-mod codex;
 mod preview;
 mod rendered;
 mod switch;
+mod upgrade;
 
-pub use codex::{execute_codex, restore_codex};
 pub(crate) use preview::read_current_or_empty;
-pub use preview::{read_codex_preview, read_preview};
+pub use preview::read_preview;
 pub use rendered::execute_rendered;
 pub(crate) use switch::verify_live_snapshot;
-pub use switch::{execute, restore};
+pub use switch::{execute, restore, restore_projected};
 
 use asb_core::{BackupRecord, LockStatus, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
@@ -87,7 +86,7 @@ pub enum SwitchError {
         expected_hash: String,
         found_hash: String,
     },
-    /// The selected profile or common settings changed after preview. Nothing
+    /// The selected profile or client settings changed after preview. Nothing
     /// was changed because the user has not confirmed the new candidate.
     PlanChanged,
     /// A write-path stage failed; `recovery` says what happened to the file.
@@ -116,7 +115,7 @@ impl std::fmt::Display for SwitchError {
             SwitchError::ExternalChange { .. } => {
                 write!(f, "配置在预览之后被外部修改，已阻止切换")
             }
-            SwitchError::PlanChanged => write!(f, "供应商或通用设置已变更，请重新查看差异"),
+            SwitchError::PlanChanged => write!(f, "供应商或客户端设置已变更，请重新查看差异"),
             SwitchError::CommitFailed {
                 stage, recovery, ..
             } => {
@@ -168,6 +167,7 @@ fn stage_label(stage: &str) -> &'static str {
         "restore-temp-validate" => "校验恢复临时文件",
         "restore-replace" => "替换恢复内容",
         "restore-verify" => "验证恢复结果",
+        "transaction-recovery" => "补偿未完成配置事务",
         _ => "提交配置",
     }
 }
@@ -207,7 +207,7 @@ pub struct SwitchRequest<'a> {
 /// A narrow, executor-owned write of a pre-rendered current client document.
 /// It has the same lock, backup, validation, atomic replacement, and
 /// callback rollback contract as a provider projection, without recomputing
-/// unrelated provider or common-setting fields.
+/// unrelated provider or client-setting fields.
 pub struct RenderedWriteRequest<'a> {
     pub target: &'a Path,
     pub app: asb_core::AppKind,
@@ -225,21 +225,6 @@ pub struct RenderedWriteOutcome {
     pub warnings: Vec<String>,
 }
 
-/// The two files that form one Codex built-in-`openai` switch. The
-/// configuration directs requests to the selected endpoint; the credential
-/// cache supplies the selected API key.
-pub struct CodexSwitchRequest<'a> {
-    pub target: &'a Path,
-    pub auth_target: &'a Path,
-    pub plan: &'a SwitchPlan,
-    pub backup_dir: &'a Path,
-    /// Hash of both previewed files. A change to either blocks execution.
-    pub expected_hash: &'a str,
-    /// Hash of both private candidates. A changed profile requires a fresh
-    /// preview before either file can be replaced.
-    pub expected_rendered_hash: &'a str,
-}
-
 pub(crate) fn metadata_path(backup_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.meta.json", backup_path.to_string_lossy()))
 }
@@ -250,7 +235,12 @@ pub(crate) fn write_backup_metadata<Io: SwitchIo>(
     stage: &'static str,
 ) -> Result<(), SwitchError> {
     let meta = serde_json::to_string(record).expect("backup record serializes");
-    io.write_file_replace(&metadata_path(Path::new(&record.backup_path)), &meta)
+    let backup = Path::new(&record.backup_path);
+    let metadata = metadata_path(backup);
+    io.write_file_replace(&metadata, &meta)
+        .and_then(|_| io.sync_file(backup))
+        .and_then(|_| io.sync_file(&metadata))
+        .and_then(|_| io.sync_dir(backup.parent().expect("backup directory")))
         .map_err(|error| SwitchError::CommitFailed {
             stage,
             message: error.to_string(),

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listSystemFonts } from "../api/client";
 import { quotedFontFamily } from "../lib/font-family";
+import { Input } from "./Input";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 /** Web fonts bundled with the app: always offered and renderable, even when
@@ -143,7 +144,7 @@ export function FontPicker({ value, busy, onChange }: Props) {
         <div className="asb-font-menu" onKeyDown={onMenuKeyDown}>
           <label className="asb-font-search">
             <SearchIcon />
-            <input
+            <Input
               type="search"
               aria-label="搜索字体"
               placeholder="搜索字体"

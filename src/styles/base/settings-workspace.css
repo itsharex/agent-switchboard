@@ -1,0 +1,203 @@
+.asb-settings-workspace {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-settings-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-settings-sidebar-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--asb-space-2);
+  padding-inline: var(--asb-space-2);
+}
+
+.asb-settings-sidebar-heading .asb-panel-title {
+  margin: 0;
+}
+
+.asb-settings-navigation {
+  display: grid;
+  gap: var(--asb-space-unit);
+}
+
+.asb-settings-category {
+  min-height: var(--asb-touch-target);
+  padding: var(--asb-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+  text-align: left;
+}
+
+.asb-settings-category:hover {
+  background: var(--asb-content-muted);
+  color: var(--asb-text);
+}
+
+.asb-settings-category[aria-current="page"] {
+  background: var(--asb-content);
+  border-color: var(--asb-hairline);
+  color: var(--asb-text);
+  font-weight: 600;
+}
+
+.asb-settings-category:active {
+  background: var(--asb-surface-rail);
+}
+
+.asb-settings-category:focus-visible {
+  outline: none;
+  box-shadow: var(--asb-focus-ring);
+}
+
+.asb-settings-content {
+  min-width: 0;
+}
+
+.asb-client-preferences-toolbar,
+.asb-client-provider-help,
+.asb-client-preference-save {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-preferences-toolbar {
+  justify-content: space-between;
+  margin-bottom: var(--asb-space-4);
+}
+
+.asb-client-provider-help {
+  justify-content: flex-end;
+  margin-top: var(--asb-space-2);
+}
+
+.asb-client-provider-help .asb-field-help {
+  margin: 0;
+}
+
+.asb-client-preference-save {
+  justify-content: flex-end;
+}
+
+/* Codex subagent defaults form one direct-write resource between model
+   behavior and the remaining application-owned client preferences. */
+.asb-subagent-settings {
+  margin: var(--asb-space-4) 0;
+}
+
+.asb-subagent-heading {
+  display: grid;
+  gap: var(--asb-space-1);
+  min-width: 0;
+}
+
+.asb-subagent-heading .asb-field-help,
+.asb-subagent-error-actions .asb-field-error {
+  margin: 0;
+}
+
+.asb-subagent-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-subagent-input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 28rem;
+}
+
+.asb-subagent-input .asb-input {
+  width: 100%;
+}
+
+.asb-subagent-error-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-settings-content .asb-settings-actions-main {
+  flex-wrap: wrap;
+}
+
+.asb-about-product h3 {
+  margin: 0;
+  font: var(--asb-text-title);
+}
+
+.asb-about-product .asb-field-help {
+  margin-bottom: 0;
+}
+
+.asb-diagnostics:not([hidden]),
+.asb-diagnostics-configuration {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+}
+
+@media (max-width: 900px) {
+  .asb-settings-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asb-settings-sidebar {
+    position: static;
+  }
+
+  .asb-settings-sidebar-heading {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0;
+  }
+
+  .asb-settings-navigation {
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .asb-client-provider-help,
+  .asb-client-preference-save,
+  .asb-subagent-controls {
+    justify-content: flex-start;
+  }
+
+  .asb-subagent-input {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .asb-settings-content .asb-settings-actions-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .asb-diagnostics .asb-status-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

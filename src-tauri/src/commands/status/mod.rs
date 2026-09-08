@@ -5,6 +5,8 @@ mod overview;
 mod report;
 
 #[cfg(test)]
+mod parameter_tests;
+#[cfg(test)]
 mod tests;
 
 use super::error::{blocking, observe, state, CommandError};
@@ -44,9 +46,7 @@ pub async fn config_status(app: AppHandle) -> Result<Vec<ConfigFileStatus>, Comm
 
 #[tauri::command]
 pub async fn runtime_overview(app: AppHandle) -> Result<RuntimeOverview, CommandError> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
+    let app_data_dir = crate::app_paths::data_directory(&app.config().identifier)
         .map_err(|_| CommandError::new("runtime-path-unavailable", "无法定位应用数据目录"))?;
     Ok(runtime_overview_for(
         app.package_info().version.to_string(),

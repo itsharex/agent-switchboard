@@ -8,12 +8,14 @@
 
 pub mod claude;
 pub mod codex;
-pub mod codex_auth;
+mod parameters;
+
+pub use parameters::read_provider_parameters;
 
 #[cfg(test)]
 mod identity_tests;
 
-use crate::contracts::{AppKind, CommonSettings, SwitchPlan, SwitchPreview};
+use crate::contracts::{AppKind, SettingsValues, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
 
 /// An adapter failure with location hints, safe to show in the UI.
@@ -73,9 +75,11 @@ pub fn preview(
     plan: &SwitchPlan,
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
-    crate::validate::validate_plan(&plan.profile, &plan.common).map_err(|e| AdapterError {
-        message: scrub_message(e.to_string()),
-        line: None,
+    crate::validate::validate_plan(&plan.profile, &plan.client_settings).map_err(|e| {
+        AdapterError {
+            message: scrub_message(e.to_string()),
+            line: None,
+        }
     })?;
     match plan.app() {
         AppKind::Codex => codex::preview(current, plan, backup_dir),
@@ -85,9 +89,11 @@ pub fn preview(
 
 /// Renders the candidate file text for `plan` against `current`.
 pub fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
-    crate::validate::validate_plan(&plan.profile, &plan.common).map_err(|e| AdapterError {
-        message: scrub_message(e.to_string()),
-        line: None,
+    crate::validate::validate_plan(&plan.profile, &plan.client_settings).map_err(|e| {
+        AdapterError {
+            message: scrub_message(e.to_string()),
+            line: None,
+        }
     })?;
     match plan.app() {
         AppKind::Codex => codex::render(current, plan),
@@ -97,7 +103,7 @@ pub fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> 
 
 /// Rewrites only the loopback endpoint in an already-owned gateway client
 /// configuration. A gateway port change is deliberately narrower than a
-/// provider projection: model and common settings remain exactly as the user
+/// provider projection: model and client settings remain exactly as the user
 /// last wrote them.
 pub fn render_gateway_base_url(
     app: AppKind,
@@ -110,21 +116,23 @@ pub fn render_gateway_base_url(
     }
 }
 
-/// Renders only the current client's non-default common settings as a
+/// Renders only the current client's explicit settings as a
 /// self-contained TOML or JSON fragment. This is a read-only editor preview,
 /// not a candidate client file: provider and host-owned configuration remain
 /// intentionally absent.
-pub fn render_common_settings(
+pub fn render_client_settings(
     app: AppKind,
-    common: &CommonSettings,
+    client_settings: &SettingsValues,
 ) -> Result<String, AdapterError> {
-    common.validate_for(app).map_err(|error| AdapterError {
-        message: scrub_message(error.to_string()),
-        line: None,
-    })?;
+    client_settings
+        .validate_client_settings(app)
+        .map_err(|error| AdapterError {
+            message: scrub_message(error.to_string()),
+            line: None,
+        })?;
     match app {
-        AppKind::Codex => codex::render_common_settings(common),
-        AppKind::Claude => claude::render_common_settings(common),
+        AppKind::Codex => codex::render_client_settings(client_settings),
+        AppKind::Claude => claude::render_client_settings(client_settings),
     }
 }
 
@@ -138,27 +146,6 @@ pub fn validate_syntax(app: AppKind, text: &str) -> Result<(), AdapterError> {
     }
 }
 
-/// Produces the credential-cache candidate for Codex's built-in `openai`
-/// provider. The caller supplies and writes the cache through the switch
-/// executor; this adapter stays filesystem-free.
-pub fn render_codex_auth(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
-    codex_auth::render(current, plan)
-}
-
-/// Returns the redacted credential-cache changes implied by one Codex switch.
-pub fn preview_codex_auth(
-    current: &str,
-    plan: &SwitchPlan,
-) -> Result<Vec<crate::contracts::KeyChange>, AdapterError> {
-    codex_auth::preview(current, plan)
-}
-
-/// Validates Codex's file-backed credential cache before it is atomically
-/// replaced by the switch executor.
-pub fn validate_codex_auth(text: &str) -> Result<(), AdapterError> {
-    codex_auth::validate(text)
-}
-
 /// Reads the active routing facts from configuration text. Panics on invalid
 /// text; validate syntax first.
 pub fn route_state(app: AppKind, text: &str) -> crate::contracts::RouteState {
@@ -168,21 +155,19 @@ pub fn route_state(app: AppKind, text: &str) -> crate::contracts::RouteState {
     }
 }
 
-/// Matches provider routing and credentials, independently of model and common
+/// Matches provider routing and credentials, independently of model and client
 /// settings. Official identity describes the selected route, not OAuth validity.
 pub fn matches_provider_identity(
     current: &str,
-    codex_auth: Option<&str>,
     plan: &SwitchPlan,
 ) -> Result<bool, AdapterError> {
     validate_syntax(plan.profile.app, current)?;
     let route = route_state(plan.profile.app, current);
-    if route.route_mode != plan.profile.route_mode || route.base_url != plan.profile.base_url {
+    if route.route_mode != plan.profile.route_mode || route.base_url.as_deref() != plan.client_base_url() {
         return Ok(false);
     }
     match plan.profile.app {
-        AppKind::Codex => Ok(codex::uses_builtin_provider(current)?
-            && self::codex_auth::matches_provider_identity(codex_auth, &plan.profile)?),
+        AppKind::Codex => codex::matches_provider_settings(current, plan),
         AppKind::Claude => claude::matches_provider_credentials(current, plan),
     }
 }
@@ -233,8 +218,8 @@ pub(crate) fn diff_owned_maps(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{CommonSettingValue, ConfigValue};
-    use crate::ownership::default_common_settings;
+    use crate::contracts::{ConfigValue, SettingValue};
+    use crate::ownership::default_client_settings;
 
     #[test]
     fn scrub_message_removes_token_shaped_values() {
@@ -253,39 +238,51 @@ mod tests {
     }
 
     #[test]
-    fn common_fragment_contains_only_explicit_common_values() {
-        let mut settings = default_common_settings(AppKind::Codex);
+    fn client_fragment_contains_only_explicit_client_values() {
+        let mut settings = default_client_settings(AppKind::Codex);
         settings.settings.insert(
-            "hide_agent_reasoning".to_string(),
-            CommonSettingValue::Explicit {
+            "tui.animations".to_string(),
+            SettingValue::Explicit {
                 value: ConfigValue::Bool(true),
             },
         );
 
-        let rendered = render_common_settings(AppKind::Codex, &settings).expect("fragment");
+        let rendered = render_client_settings(AppKind::Codex, &settings).expect("fragment");
 
-        assert!(rendered.contains("hide_agent_reasoning = true"));
+        assert!(rendered.contains("animations = true"));
         assert!(!rendered.contains("experimental_bearer_token"));
     }
 
     #[test]
-    fn common_fragment_keeps_claude_automatic_values_empty() {
-        let settings = default_common_settings(AppKind::Claude);
+    fn client_fragment_keeps_claude_automatic_values_empty() {
+        let settings = default_client_settings(AppKind::Claude);
 
         assert_eq!(
-            render_common_settings(AppKind::Claude, &settings).expect("fragment"),
+            render_client_settings(AppKind::Claude, &settings).expect("fragment"),
             "{}"
         );
     }
 
     #[test]
     fn gateway_endpoint_renderer_changes_only_the_endpoint_slot() {
-        let codex = "model = \"user-selected\"\nopenai_base_url = \"http://127.0.0.1:47821/v1\"\nthreads = 8\n";
+        let codex = "model = \"user-selected\"
+threads = 8
+model_provider = \"openai\"
+openai_base_url = \"http://127.0.0.1:47821/codex/fixture/v1\"
+";
         let codex_rendered =
-            render_gateway_base_url(AppKind::Codex, codex, "http://127.0.0.1:47822/v1").unwrap();
+            render_gateway_base_url(AppKind::Codex, codex, "http://127.0.0.1:47822/codex/fixture/v1").unwrap();
         assert!(codex_rendered.contains("model = \"user-selected\""));
         assert!(codex_rendered.contains("threads = 8"));
-        assert!(codex_rendered.contains("47822/v1"));
+        assert!(codex_rendered.contains("47822/codex/fixture/v1"));
+        assert!(!codex_rendered.contains("47821"));
+        assert!(codex_rendered.contains("openai_base_url"));
+        assert_eq!(
+            owned_diff(AppKind::Codex, &codex_rendered, codex)
+                .unwrap()
+                .len(),
+            1
+        );
 
         let claude = r#"{"model":"user-selected","env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:47821","HOST_KEY":"keep"}}"#;
         let claude_rendered =

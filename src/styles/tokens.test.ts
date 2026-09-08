@@ -48,7 +48,7 @@ describe("token ownership", () => {
     expect(tokens).not.toMatch(/--asb-(blur|glass|saturation)-/);
     expect(base).not.toMatch(/(?:-webkit-)?backdrop-filter|filter:\s*blur\(/);
     expect(base).not.toMatch(
-      /button:not\(:disabled\):active|asb-(route-card-in|select-in|tooltip-in|sheet-in|toast-in|toast-out)|is-leaving/,
+      /button:not\(:disabled\):active|asb-(select-in|tooltip-in|sheet-in|toast-in|toast-out)|is-leaving/,
     );
   });
 

@@ -2,7 +2,8 @@ use super::http::{argument, as_json, InvokeRequest};
 use crate::commands::{self, error::CommandError};
 use crate::local_state::{AppSettings, CloudBackupSettings};
 use asb_core::contracts::{
-    AppKind, CommonSettings, ModelUsageRequest, ProviderDraft, UsageHistoryRequest,
+    AppKind, CodexSubagentSettings, ModelUsageRequest, ProviderDraft, SettingsValues,
+    SubagentSettingsPlan, UsageHistoryRequest,
 };
 use asb_core::extensions::contracts::ExtensionTarget;
 use serde_json::Value;
@@ -87,22 +88,49 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 app.clone(),
                 argument(&request.args, "keys")?,
             )),
-            "get_common_settings_editor" => {
-                command!(commands::common_settings::get_common_settings_editor(
+            "get_provider_parameters_catalog" => as_json(Ok::<_, CommandError>(
+                commands::client_settings::get_provider_parameters_catalog(argument::<AppKind>(
+                    &request.args,
+                    "target",
+                )?),
+            )),
+            "get_client_settings_editor" => {
+                command!(commands::client_settings::get_client_settings_editor(
                     app.clone(),
                     argument::<AppKind>(&request.args, "target")?,
                 ))
             }
-            "save_common_settings" => command!(commands::common_settings::save_common_settings(
+            "save_client_settings" => command!(commands::client_settings::save_client_settings(
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
-                argument::<CommonSettings>(&request.args, "settings")?,
+                argument::<SettingsValues>(&request.args, "settings")?,
                 argument::<String>(&request.args, "expectedSettingsHash")?,
             )),
-            "preview_common_settings" => {
-                command!(commands::common_settings::preview_common_settings(
+            "preview_client_settings" => {
+                command!(commands::client_settings::preview_client_settings(
                     argument::<AppKind>(&request.args, "target")?,
-                    argument::<CommonSettings>(&request.args, "settings")?,
+                    argument::<SettingsValues>(&request.args, "settings")?,
+                ))
+            }
+            "get_codex_subagent_settings" => {
+                command!(commands::subagent_settings::get_codex_subagent_settings(
+                    app.clone(),
+                ))
+            }
+            "preview_codex_subagent_settings_command" => {
+                command!(
+                    commands::subagent_settings::preview_codex_subagent_settings_command(
+                        app.clone(),
+                        argument::<CodexSubagentSettings>(&request.args, "settings")?,
+                        argument::<String>(&request.args, "expectedHash")?,
+                    )
+                )
+            }
+            "apply_codex_subagent_settings" => {
+                command!(commands::subagent_settings::apply_codex_subagent_settings(
+                    app.clone(),
+                    argument::<SubagentSettingsPlan>(&request.args, "plan")?,
+                    argument::<bool>(&request.args, "confirmWrite")?,
                 ))
             }
             "get_global_prompt_document" => {
@@ -192,10 +220,37 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             "probe_endpoint" => {
                 command!(commands::probe_endpoint(argument(&request.args, "url",)?))
             }
+            "resolve_provider_endpoints" => as_json(commands::resolve_provider_endpoints(
+                argument(&request.args, "request")?,
+            )),
             "fetch_provider_models" => command!(commands::fetch_provider_models(argument(
                 &request.args,
                 "request",
             )?)),
+            "prepare_provider_request" => {
+                command!(commands::provider_request::prepare_provider_request(
+                    app.clone(),
+                    argument(&request.args, "target")?,
+                ))
+            }
+            "fetch_provider_request_models" => {
+                command!(commands::provider_request::fetch_provider_request_models(
+                    app.clone(),
+                    argument(&request.args, "requestId")?,
+                ))
+            }
+            "execute_provider_request" => {
+                command!(commands::provider_request::execute_provider_request(
+                    app.clone(),
+                    argument(&request.args, "request")?,
+                ))
+            }
+            "cancel_provider_request" => {
+                command!(commands::provider_request::cancel_provider_request(
+                    app.clone(),
+                    argument(&request.args, "requestId")?,
+                ))
+            }
             "test_usage_query" => command!(commands::test_usage_query(argument(
                 &request.args,
                 "request",

@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Interop;
@@ -54,56 +55,62 @@ namespace AgentSwitchboard.Installer
             var frame = new Grid { Background = Brush("Surface") };
             Content = frame;
             SourceInitialized += delegate { ApplySystemMaterial(frame); };
-            var layout = new Grid { Margin = new Thickness(32, 20, 32, 28) };
+            var layout = new Grid { Margin = new Thickness(28, 8, 28, 24) };
             frame.Children.Add(layout);
             layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var header = new Grid { Background = Brushes.Transparent };
+            var header = new Grid { Height = 44, Background = Brushes.Transparent };
             header.ColumnDefinitions.Add(new ColumnDefinition());
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             layout.Children.Add(header);
-            var brand = Text("Agent Switchboard", "BodySize");
-            brand.FontWeight = FontWeights.SemiBold;
-            brand.VerticalAlignment = VerticalAlignment.Center;
+            var brand = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetName(brand, T("Agent Switchboard 安装程序", "Agent Switchboard installer"));
+            var brandMark = CreateBrandMark(22);
+            brandMark.Margin = new Thickness(0, 0, 10, 0);
+            brand.Children.Add(brandMark);
+            var brandName = Text("Agent Switchboard", "BodySize");
+            brandName.FontWeight = FontWeights.SemiBold;
+            brand.Children.Add(brandName);
+            var brandContext = Text(T("安装程序", "Installer"), "CaptionSize");
+            brandContext.Foreground = Brush("Muted");
+            brandContext.Margin = new Thickness(10, 1, 0, 0);
+            brand.Children.Add(brandContext);
             header.Children.Add(brand);
-            var minimize = MakeButton("−", false);
+            var minimize = MakeTitlebarButton("−", false);
             minimize.Name = "MinimizeButton";
-            minimize.MinWidth = 40;
-            minimize.Padding = new Thickness(0);
             AutomationProperties.SetName(minimize, T("最小化", "Minimize"));
+            minimize.ToolTip = T("最小化", "Minimize");
             WindowChrome.SetIsHitTestVisibleInChrome(minimize, true);
             minimize.Click += delegate { WindowState = WindowState.Minimized; };
             Grid.SetColumn(minimize, 1);
             header.Children.Add(minimize);
-            close = MakeButton("×", false);
-            close.Style = (Style)Resources["Danger"];
-            close.MinWidth = 40;
-            close.Padding = new Thickness(0);
+            close = MakeTitlebarButton("×", true);
             close.ToolTip = T("关闭", "Close");
             AutomationProperties.SetName(close, T("关闭安装程序", "Close installer"));
             close.Click += delegate { Close(); };
             WindowChrome.SetIsHitTestVisibleInChrome(close, true);
             Grid.SetColumn(close, 2);
             header.Children.Add(close);
-            var body = new StackPanel { Margin = new Thickness(0, 24, 0, 16) };
+            var body = new StackPanel { Margin = new Thickness(0, 26, 0, 20) };
             var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
             Grid.SetRow(scroll, 1);
             layout.Children.Add(scroll);
-            var logo = new Grid { Width = 48, Height = 48, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 16) };
-            logo.Children.Add(new ShapePath { Data = Geometry.Parse("M 23,0 C 9,4 1,14 1,24 C 1,34 9,44 23,48 Z"), Fill = Brush("Action") });
-            logo.Children.Add(new ShapePath { Data = Geometry.Parse("M 26,0 C 40,4 48,14 48,24 C 48,34 40,44 26,48 Z"), Fill = Brush("Violet") });
-            body.Children.Add(logo);
-            title = Text(T("安装 Agent Switchboard", "Install Agent Switchboard"), "TitleSize");
+            var intro = new StackPanel { Margin = new Thickness(0, 0, 0, 26) };
+            title = Text(T("准备安装", "Ready to install"), "TitleSize");
             title.FontWeight = FontWeights.SemiBold;
-            body.Children.Add(title);
+            intro.Children.Add(title);
             var versionText = Text(T("版本 ", "Version ") + version, "CaptionSize");
             versionText.Foreground = Brush("Muted");
-            versionText.Margin = new Thickness(0, 6, 0, 24);
-            body.Children.Add(versionText);
-            body.Children.Add(Text(T("安装位置", "Install location"), "BodySize"));
-            var pathRow = new Grid { Margin = new Thickness(0, 8, 0, 8) };
+            versionText.Margin = new Thickness(0, 6, 0, 0);
+            intro.Children.Add(versionText);
+            body.Children.Add(intro);
+            body.Children.Add(new Border { Height = 1, Background = Brush("Line"), Margin = new Thickness(0, 0, 0, 22) });
+            var locationLabel = Text(T("安装位置", "Install location"), "BodySize");
+            locationLabel.FontWeight = FontWeights.SemiBold;
+            body.Children.Add(locationLabel);
+            var pathRow = new Grid { Margin = new Thickness(0, 8, 0, 10) };
             pathRow.ColumnDefinitions.Add(new ColumnDefinition());
             pathRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             directory = new TextBox { Text = options.Directory ?? InstallerEngine.DetectDirectory() };
@@ -120,22 +127,31 @@ namespace AgentSwitchboard.Installer
             body.Children.Add(existing);
             directory.TextChanged += delegate { UpdateExisting(); };
             UpdateExisting();
-            progress = new ProgressBar { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 20, 0, 12) };
+            progress = new ProgressBar { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 24, 0, 0) };
             body.Children.Add(progress);
             status = Text("", "BodySize");
+            status.Visibility = Visibility.Collapsed;
             status.Margin = new Thickness(0, 12, 0, 0);
             AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
             body.Children.Add(status);
-            launch = new CheckBox { Content = T("完成后启动 Agent Switchboard", "Launch Agent Switchboard when finished"), IsChecked = false, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 8, 0, 0) };
+            launch = new CheckBox { Content = T("完成后启动应用", "Launch the application when finished"), IsChecked = false, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 12, 0, 0) };
             body.Children.Add(launch);
-            var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-            Grid.SetRow(actions, 2);
-            layout.Children.Add(actions);
+            var footer = new Grid { Margin = new Thickness(0, 16, 0, 0) };
+            footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            footer.Children.Add(new Border { Height = 1, Background = Brush("Line") });
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+            Grid.SetRow(actions, 1);
+            footer.Children.Add(actions);
+            Grid.SetRow(footer, 2);
+            layout.Children.Add(footer);
             cancel = MakeButton(T("取消", "Cancel"), false);
             cancel.Click += delegate { Close(); };
             actions.Children.Add(cancel);
             primary = MakeButton(T("安装", "Install"), true);
             primary.Margin = new Thickness(12, 0, 0, 0);
+            primary.MinWidth = 104;
+            primary.MinHeight = 44;
             primary.IsDefault = true;
             primary.Click += async delegate { if (completed) Finish(); else await Install(); };
             actions.Children.Add(primary);
@@ -148,6 +164,34 @@ namespace AgentSwitchboard.Installer
         private Brush Brush(string key) { return (Brush)Resources[key]; }
         private TextBlock Text(string value, string size) { return new TextBlock { Text = value, FontSize = (double)Resources[size] }; }
         private Button MakeButton(string label, bool main) { return new Button { Content = label, Style = (Style)Resources[main ? (object)"Primary" : typeof(Button)] }; }
+
+        private FrameworkElement CreateBrandMark(double size)
+        {
+            var artwork = new Grid { Width = 48, Height = 48, SnapsToDevicePixels = true };
+            artwork.Children.Add(new ShapePath { Data = Geometry.Parse("M 23,0 C 9,4 1,14 1,24 C 1,34 9,44 23,48 Z"), Fill = Brush("Action") });
+            artwork.Children.Add(new ShapePath { Data = Geometry.Parse("M 26,0 C 40,4 48,14 48,24 C 48,34 40,44 26,48 Z"), Fill = Brush("Violet") });
+            return new Viewbox { Width = size, Height = size, Stretch = Stretch.Uniform, Child = artwork };
+        }
+
+        private Button MakeTitlebarButton(string glyph, bool isClose)
+        {
+            var icon = Text(glyph, "BodySize");
+            icon.FontFamily = new FontFamily("Segoe UI Symbol");
+            icon.FontSize = 16;
+            icon.FontWeight = FontWeights.SemiBold;
+            icon.HorizontalAlignment = HorizontalAlignment.Center;
+            icon.VerticalAlignment = VerticalAlignment.Center;
+            icon.TextAlignment = TextAlignment.Center;
+            icon.SetBinding(TextBlock.ForegroundProperty, new Binding("Foreground")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Button), 1)
+            });
+            return new Button
+            {
+                Content = icon,
+                Style = (Style)Resources[isClose ? "TitlebarCloseButton" : "TitlebarButton"]
+            };
+        }
 
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
@@ -193,6 +237,7 @@ namespace AgentSwitchboard.Installer
             directory.IsEnabled = browse.IsEnabled = primary.IsEnabled = cancel.IsEnabled = close.IsEnabled = false;
             progress.Visibility = Visibility.Visible;
             progress.IsIndeterminate = SystemParameters.ClientAreaAnimation;
+            status.Visibility = Visibility.Visible;
             status.Foreground = Brush("Muted");
             status.Text = T("正在安装，请保持此窗口打开。", "Installing. Keep this window open until setup finishes.");
             try
@@ -203,7 +248,7 @@ namespace AgentSwitchboard.Installer
                 if (ExitCode != 0) throw new InvalidOperationException(T("安装程序退出代码：", "Installer exit code: ") + ExitCode);
                 completed = true;
                 title.Text = T("安装完成", "Installation complete");
-                status.Text = T("Agent Switchboard 已准备就绪。", "Agent Switchboard is ready.");
+                status.Text = T("应用已准备就绪。", "The application is ready.");
                 restartFailed = result.LaunchError != null;
                 if (restartFailed) status.Text = T("已安装，但自动启动失败：", "Installed, but automatic launch failed: ") + result.LaunchError;
                 primary.Content = T("完成", "Finish");

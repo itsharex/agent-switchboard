@@ -43,7 +43,7 @@ describe("App", () => {
     render(<App />);
     expect(screen.getAllByText(siteContent.preview.title).length).toBe(2);
     expect(screen.getAllByText("GPT-6 Astra").length).toBeGreaterThan(1);
-    expect(screen.getAllByText("••••••••").length).toBe(2);
+    expect(screen.getAllByText("••••••••").length).toBe(3);
   });
 
   it("预览后展示与桌面执行器一致的事务写入阶段", () => {
@@ -54,23 +54,23 @@ describe("App", () => {
     expect(screen.getByText(siteContent.writeLifecycle.recovery)).toBeTruthy();
   });
 
-  it("配置积木台默认组合 Codex 的通用与供应商设置到 TOML", () => {
+  it("配置积木台默认组合 Codex 档案的运行参数与连接信息到 TOML", () => {
     render(<App />);
-    expect(screen.getByText("Codex 通用配置")).toBeTruthy();
-    expect(screen.getByText("Amazon Bedrock 设置")).toBeTruthy();
+    expect(screen.getByText("Codex 运行参数")).toBeTruthy();
+    expect(screen.getByText("Amazon Bedrock 连接")).toBeTruthy();
     expect(screen.getByText("config.toml")).toBeTruthy();
     expect(screen.getAllByText('model_provider = "openai"').length).toBeGreaterThan(0);
     expect(document.querySelector(".assembly-control-segments")).toBeTruthy();
     expect(document.querySelector(".assembly-control-slider")).toBeTruthy();
     expect(document.querySelectorAll(".assembly-slider-particle")).toHaveLength(9);
     expect(screen.getByText("未受管字段")).toBeTruthy();
-    expect(screen.getByText("mcp_servers.<id> · hooks")).toBeTruthy();
+    expect(screen.getByText("hooks · permissions.<name>")).toBeTruthy();
   });
 
   it("配置积木台切换 Claude Code 后展示 JSON 目标文件", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("tab", { name: "Claude Code" }));
-    expect(screen.getByText("Claude Code 通用配置")).toBeTruthy();
+    expect(screen.getByText("Claude Code 运行参数")).toBeTruthy();
     expect(screen.getByText("settings.json")).toBeTruthy();
     expect(screen.getByText('"autoCompactEnabled": true,')).toBeTruthy();
   });

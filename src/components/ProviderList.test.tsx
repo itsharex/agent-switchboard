@@ -1,3 +1,4 @@
+import { providerParameters } from "../test/provider-parameters";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
@@ -41,7 +42,9 @@ const profiles: ProviderProfile[] = [
     websiteUrl: "https://relay-a.example",
     apiKey: "ASB_RELAY_A_KEY",
     upstreamProtocol: "responses",
+    responsesOptions: { requestMode: "standard" as const },
     maxOutputTokens: null,
+    parameters: providerParameters("codex"),
     modelOptions: null,
   },
   {
@@ -54,7 +57,9 @@ const profiles: ProviderProfile[] = [
     websiteUrl: "https://openai.com",
     apiKey: "test-api-key",
     upstreamProtocol: "responses",
+    responsesOptions: { requestMode: "standard" as const },
     maxOutputTokens: null,
+    parameters: providerParameters("codex"),
     modelOptions: null,
   },
 ];
@@ -171,7 +176,9 @@ describe("ProviderList", () => {
             baseUrl: null,
             apiKey: "",
             upstreamProtocol: null,
+            responsesOptions: null,
             maxOutputTokens: null,
+            parameters: providerParameters("codex"),
             modelOptions: null,
             websiteUrl: null,
           },
@@ -211,7 +218,6 @@ describe("ProviderList", () => {
     expect(selectedRow).toHaveAttribute("aria-selected", "true");
     const selectedCard = selectedRow.closest("li");
     expect(selectedCard).not.toHaveClass("is-selected");
-    expect(selectedCard?.querySelector(".asb-starlight")).toBeNull();
   });
 
   it("swaps the preview eye for a closed-eye toggle when that row's preview is open", async () => {
@@ -631,7 +637,7 @@ describe("ProviderList", () => {
     expect(labels).toEqual([
       "编辑 中继 A",
       "预览 中继 A 变更",
-      "测试 中继 A 连通性",
+      "测试 中继 A 供应商",
       "配置 中继 A 用量",
       "更多 中继 A 操作",
     ]);
@@ -657,26 +663,29 @@ describe("ProviderList", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "测试 中继 A 连通性" });
+    const button = screen.getByRole("button", { name: "测试 中继 A 供应商" });
     expect(button).toHaveClass("asb-btn-icon");
     expect(button).not.toHaveTextContent("连通");
     expect(button.closest(".asb-iconcluster")).toBeTruthy();
 
     await user.click(button);
+    expect(invokeMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "开始检测" }));
 
     expect(invokeMock).toHaveBeenCalledWith("probe_endpoint", { url: "https://relay-a.internal/v1" });
     expect(await screen.findByText(/连通正常 · HTTP 204 · 320 毫秒/)).toBeInTheDocument();
-    expect(button).toHaveAttribute("aria-describedby", "provider-probe-codex-relay-a");
+    expect(button).toHaveAttribute("aria-controls", "provider-test-codex-relay-a");
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(onSelect).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "收起 中继 A 连通性结果" }));
+    await user.click(screen.getByRole("button", { name: "收起 中继 A 供应商测试" }));
     expect(screen.queryByText(/连通正常 · HTTP 204 · 320 毫秒/)).not.toBeInTheDocument();
     expect(button).toHaveAttribute("aria-expanded", "false");
     expect(button).not.toHaveAttribute("aria-describedby");
     expect(invokeMock).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "测试 中继 A 连通性" }));
+    await user.click(screen.getByRole("button", { name: "测试 中继 A 供应商" }));
+    await user.click(screen.getByRole("button", { name: "开始检测" }));
     expect(await screen.findByText(/连通正常 · HTTP 204 · 320 毫秒/)).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledTimes(2);
   });
@@ -688,10 +697,11 @@ describe("ProviderList", () => {
       <ProviderList profiles={profiles} activeProfileId={null} selectedId={null} onSelect={() => {}} />,
     );
 
-    await user.click(screen.getByRole("button", { name: "测试 中继 A 连通性" }));
+    await user.click(screen.getByRole("button", { name: "测试 中继 A 供应商" }));
+    await user.click(screen.getByRole("button", { name: "开始检测" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("连接超时");
 
-    await user.click(screen.getByRole("button", { name: "收起 中继 A 连通性结果" }));
+    await user.click(screen.getByRole("button", { name: "收起 中继 A 供应商测试" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

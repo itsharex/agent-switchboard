@@ -1,7 +1,7 @@
 use crate::commands::error::CommandError;
 use asb_core::contracts::{AppKind, BackupRecord, ConfigWriteRecord, WriteOperation};
-use asb_switch::io::FsIo;
-use asb_switch::{list_backups as scan_backups, restore, restore_codex, RestoreOutcome};
+use asb_switch::io::{FsIo, SwitchIo};
+use asb_switch::{list_backups as scan_backups, restore_projected, RestoreOutcome};
 use std::path::PathBuf;
 
 pub(super) fn local_backups(
@@ -35,35 +35,6 @@ pub(super) fn find_backup(
         .into_iter()
         .find(|record| record.id == backup_id)
         .ok_or_else(|| CommandError::new("backup-not-found", "找不到指定备份"))
-}
-
-/// Credential backups are hidden from the standalone backup list because they
-/// are meaningful only with their linked Codex configuration snapshot.
-fn linked_codex_auth_backup(
-    state: &crate::local_state::LocalState,
-    record: &BackupRecord,
-) -> Result<BackupRecord, CommandError> {
-    if record.app != AppKind::Codex {
-        return Err(CommandError::new(
-            "codex-auth-backup-invalid",
-            "只有 Codex 配置备份可以关联 auth.json 快照",
-        ));
-    }
-    let auth_target = crate::local_state::LocalState::codex_auth_path()
-        .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
-    scan_backups(&FsIo, &state.backup_dir())
-        .into_iter()
-        .find(|candidate| {
-            candidate.app == AppKind::Codex
-                && candidate.linked_backup_id.as_deref() == Some(record.id.as_str())
-                && PathBuf::from(&candidate.target_path) == auth_target
-        })
-        .ok_or_else(|| {
-            CommandError::new(
-                "codex-auth-backup-missing",
-                "Codex 配置备份缺少同次切换的 auth.json 快照，已拒绝只恢复配置以避免端点与密钥错配",
-            )
-        })
 }
 
 /// Shared restore path: validates the target, restores, and records the
@@ -100,44 +71,78 @@ pub(super) fn run_restore(
         at: String::new(),
         operation: WriteOperation::Restore,
     };
-    let outcome = match record.app {
-        AppKind::Codex => {
-            let auth_backup = linked_codex_auth_backup(state, record)?;
-            let auth_target = crate::local_state::LocalState::codex_auth_path()
-                .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
-            restore_codex(
-                &FsIo,
-                record,
-                &auth_backup,
-                &target,
-                &auth_target,
-                move |outcome| {
-                    gateway.reconcile_restored(state, AppKind::Codex, || {
-                        state
-                            .configuration()
-                            .record_config_write(ConfigWriteRecord {
-                                content_hash: outcome.restored_hash.clone(),
-                                backup_id: outcome.pre_restore_backup.id.clone(),
-                                at: chrono::Utc::now()
-                                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                                ..write_record
-                            })
-                    })
-                },
-            )
-        }
-        AppKind::Claude => restore(&FsIo, record, &target, move |outcome| {
-            gateway.reconcile_restored(state, AppKind::Claude, || {
-                state
-                    .configuration()
-                    .record_config_write(ConfigWriteRecord {
-                        content_hash: outcome.restored_hash.clone(),
-                        backup_id: outcome.pre_restore_backup.id.clone(),
-                        at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                        ..write_record
-                    })
-            })
-        }),
+    let app = record.app;
+    let candidate = validate_restore_source(state, gateway, record, &target)?;
+    super::transaction::begin(
+        state,
+        gateway,
+        app,
+        None,
+        &asb_switch::sha256_hex(&candidate),
+        record.target_existed,
+    )?;
+    let execution = restore_projected(&FsIo, record, &target, Some(&candidate), |outcome| {
+        gateway.reconcile_restored(state, app, || {
+            state
+                .configuration()
+                .record_config_write(ConfigWriteRecord {
+                    content_hash: outcome.restored_hash.clone(),
+                    backup_id: outcome.pre_restore_backup.id.clone(),
+                    at: outcome.pre_restore_backup.created_at.clone(),
+                    ..write_record
+                })
+        })
+    });
+    super::transaction::finish(state, gateway, execution)
+}
+
+fn validate_restore_source(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+    record: &BackupRecord,
+    target: &std::path::Path,
+) -> Result<String, CommandError> {
+    let app = record.app;
+    if app == AppKind::Codex
+        && scan_backups(&FsIo, &state.backup_dir())
+            .iter()
+            .any(|candidate| candidate.linked_backup_id.as_deref() == Some(record.id.as_str()))
+    {
+        return Err(CommandError::new(
+            "backup-contract-retired",
+            "旧版认证联动备份只能查看或导出，当前切换器不会恢复登录缓存",
+        ));
+    }
+    let candidate = FsIo
+        .read_file(PathBuf::from(&record.backup_path).as_path())
+        .map_err(|_| CommandError::new("backup-unreadable", "无法读取备份"))?;
+    if asb_switch::sha256_hex(&candidate) != record.content_hash {
+        return Err(CommandError::new(
+            "backup-hash-mismatch",
+            "备份内容与记录不一致",
+        ));
+    }
+    let candidate = if record.target_existed {
+        gateway
+            .prepare_restored(state, app, &candidate)
+            .map_err(|error| CommandError::new("backup-route-invalid", error))?
+    } else {
+        candidate
     };
-    outcome.map_err(CommandError::from)
+    if app == AppKind::Codex
+        && candidate
+            .parse::<toml_edit::DocumentMut>()
+            .ok()
+            .and_then(|doc| {
+                doc.get("openai_base_url")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned)
+            })
+            .is_some()
+    {
+        crate::official_login::observation::observe_codex_login_for_config(target, &candidate)
+            .require()
+            .map_err(|error| CommandError::new("codex-official-login-required", error))?;
+    }
+    Ok(candidate)
 }

@@ -7,6 +7,7 @@ import {
   type GatewayPortChangePlan,
 } from "../api/client";
 import { Button } from "./Button";
+import { Input } from "./Input";
 
 const MIN_PORT = 1024;
 const MAX_PORT = 65535;
@@ -103,7 +104,7 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
           <>
             <label className="asb-field">
               <span>新监听端口（当前 {configuredPort}）</span>
-              <input
+              <Input
                 type="number"
                 min={MIN_PORT}
                 max={MAX_PORT}

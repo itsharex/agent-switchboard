@@ -10,8 +10,8 @@ describe("ClientLogo", () => {
     expect(codexImg).not.toBeNull();
     expect(codexImg?.getAttribute("src")?.length ?? 0).toBeGreaterThan(0);
 
-    const claude = render(<ClientLogo app="claude" className="asb-route-logo" />);
-    const claudeImg = claude.container.querySelector("img.asb-route-logo");
+    const claude = render(<ClientLogo app="claude" className="asb-edit-logo" />);
+    const claudeImg = claude.container.querySelector("img.asb-edit-logo");
     expect(claudeImg).not.toBeNull();
     expect(claudeImg?.getAttribute("src")).not.toBe(codexImg?.getAttribute("src"));
   });

@@ -80,7 +80,7 @@ function SegmentSetting<T extends string>({
   );
 }
 
-/** Application-runtime preferences. Unlike GeneralSettingsForm, these values
+/** Application-runtime preferences. Unlike SettingsFields, these values
     describe Agent Switchboard itself and never write client configuration. */
 export function AppSettingsForm({
   settings,

@@ -15,21 +15,18 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import type { ProviderProfile } from "../api/client";
+import type { ProviderProfile, ProviderRequestTarget } from "../api/client";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ConnectivityIcon,
   EditIcon,
   EyeOffIcon,
   GripIcon,
-  MoreIcon,
   PlayIcon,
   PreviewIcon,
-  TrashIcon,
   UsageIcon,
 } from "./icons";
-import { ProbeFeedback, useEndpointProbe } from "./ProbePanel";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
@@ -38,6 +35,8 @@ import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
 import { formatUsageSummary } from "../lib/usage-format";
 import { cx } from "@/utils/cx";
 import { Tooltip } from "./Tooltip";
+import { ProviderMoreActions } from "./ProviderMoreActions";
+import { ProviderTestPanel } from "./ProviderTestPanel";
 
 interface Props {
   profiles: ProviderProfile[];
@@ -137,14 +136,13 @@ function ProviderRow({
   const initial = profile.name.trim().charAt(0).toUpperCase() || "?";
   const baseUrl = profile.baseUrl;
   const websiteUrl = profile.websiteUrl;
-  const probe = useEndpointProbe(baseUrl ?? null);
-  const [probeOpen, setProbeOpen] = useState(false);
   const [reloginOpen, setReloginOpen] = useState(false);
   /** Bumped on each completed re-login so the quota panel re-queries. */
   const [quotaNonce, setQuotaNonce] = useState(0);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLSpanElement>(null);
-  const moreTriggerRef = useRef<HTMLButtonElement>(null);
+  const [testOpen, setTestOpen] = useState(false);
+  const testTriggerRef = useRef<HTMLButtonElement>(null);
+  const target = useMemo<ProviderRequestTarget>(() => ({ kind: "saved", profileId: profile.id }),
+    [profile.id, profile.baseUrl, profile.apiKey, profile.upstreamProtocol, profile.model, profile.responsesOptions?.requestMode]);
   const official = profile.routeMode === "official";
   const officialQuota = official && profile.app === "codex";
   const displayedModel = active ? userConfigModel : profile.model;
@@ -160,14 +158,8 @@ function ProviderRow({
   const quotaLabel = quotaOpen
     ? `收起 ${profile.name} 订阅额度`
     : `查看 ${profile.name} 订阅额度`;
-  const hasProbeFeedback = probe.result !== null || probe.error !== null;
-  const probeFeedbackId = `provider-probe-${profile.id}`;
-  const probeVisible = probeOpen && hasProbeFeedback;
-  const probeLabel = probe.busy
-    ? `正在测试 ${profile.name} 连通性`
-    : probeVisible
-      ? `收起 ${profile.name} 连通性结果`
-      : `测试 ${profile.name} 连通性`;
+  const testId = `provider-test-${profile.id}`;
+  const testLabel = testOpen ? `收起 ${profile.name} 供应商测试` : `测试 ${profile.name} 供应商`;
   const hasClusterActions = Boolean(
     baseUrl ||
       hasUsageQuery ||
@@ -178,16 +170,6 @@ function ProviderRow({
       onDelete,
   );
 
-  // Destructive entries live behind the three-dot trigger; the menu follows
-  // the app's popup idioms (FontPicker): outside pointerdown and Escape close.
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [moreOpen]);
   return (
     <li
       ref={setNodeRef}
@@ -306,25 +288,16 @@ function ProviderRow({
               </Button>
             </Tooltip>
           )}
-          {baseUrl && (
-            <Tooltip label={probeLabel}>
+          {!official && baseUrl && (
+            <Tooltip label={testLabel}>
               <Button
+                ref={testTriggerRef}
                 variant="icon"
-                className={probeVisible ? "is-active" : undefined}
-                aria-label={probeLabel}
-                aria-busy={probe.busy}
-                aria-controls={probeFeedbackId}
-                aria-expanded={probeVisible}
-                aria-describedby={probeVisible ? probeFeedbackId : undefined}
-                disabled={probe.busy}
-                onClick={() => {
-                  if (probeVisible) {
-                    setProbeOpen(false);
-                    return;
-                  }
-                  setProbeOpen(true);
-                  void probe.run();
-                }}
+                className={testOpen ? "is-active" : undefined}
+                aria-label={testLabel}
+                aria-controls={testId}
+                aria-expanded={testOpen}
+                onClick={() => setTestOpen((open) => !open)}
               >
                 <ConnectivityIcon size={20} />
               </Button>
@@ -361,62 +334,13 @@ function ProviderRow({
               </Button>
             </Tooltip>
           )}
-          {onDelete && (
-            <span
-              className="asb-row-more"
-              ref={moreRef}
-              onKeyDown={(event) => {
-                // Escape is handled on the wrapper so it closes the menu even
-                // while focus stays on the trigger, like FontPicker.
-                if (event.key === "Escape" && moreOpen) {
-                  event.preventDefault();
-                  setMoreOpen(false);
-                  moreTriggerRef.current?.focus();
-                }
-              }}
-            >
-              <Tooltip label={`更多 ${profile.name} 操作`}>
-                <Button
-                  variant="icon"
-                  ref={moreTriggerRef}
-                  className={moreOpen ? "is-active" : undefined}
-                  aria-label={`更多 ${profile.name} 操作`}
-                  aria-haspopup="menu"
-                  aria-expanded={moreOpen}
-                  onClick={() => setMoreOpen((open) => !open)}
-                >
-                  <MoreIcon size={20} />
-                </Button>
-              </Tooltip>
-              {moreOpen && (
-                <span className="asb-row-menu" role="menu" aria-label={`${profile.name} 更多操作`}>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="asb-row-menu-item"
-                    aria-label={`删除 ${profile.name}`}
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onDelete(profile);
-                    }}
-                  >
-                    <TrashIcon size={15} />
-                    删除
-                  </button>
-                </span>
-              )}
-            </span>
-          )}
+          {onDelete && <ProviderMoreActions name={profile.name} onDelete={() => onDelete(profile)} />}
         </span>
       )}
       </div>
-      {probeVisible && (
-        <ProbeFeedback
-          id={probeFeedbackId}
-          className="asb-provider-probe-feedback"
-          result={probe.result}
-          error={probe.error}
-        />
+      {!official && baseUrl && testOpen && (
+        <ProviderTestPanel id={testId} name={profile.name} url={baseUrl} target={target}
+          onClose={() => { setTestOpen(false); testTriggerRef.current?.focus(); }} />
       )}
       {usageOpen && usage && (
         <ProviderUsagePanel

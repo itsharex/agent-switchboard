@@ -5,9 +5,12 @@
 //! warnings only — no raw file content — and anything secret-shaped is
 //! redacted.
 
+mod codex;
 mod import;
 mod inspect;
 mod report;
+#[cfg(test)]
+mod responses_tests;
 #[cfg(test)]
 mod tests;
 
@@ -33,10 +36,11 @@ pub fn discover(
         route,
         warnings,
         importable,
-        ..
+        managed,
     } = &mut codex.state
     {
-        if route.route_mode == RouteMode::Custom
+        if !*managed
+            && route.route_mode == RouteMode::Custom
             && codex_auth_api_key(codex_auth.as_ref().ok().and_then(|text| text.as_deref()))
                 .is_none()
         {

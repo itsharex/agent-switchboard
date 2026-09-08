@@ -4,6 +4,7 @@
 //! representation. Unknown or lossy fields fail before the upstream request
 //! is made instead of being silently discarded.
 
+pub(crate) mod minimal;
 mod reasoning;
 mod request;
 mod response;

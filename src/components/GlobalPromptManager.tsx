@@ -69,7 +69,6 @@ export function GlobalPromptManager({
         <Textarea
           ref={editorRef}
           code
-          className="asb-input asb-code asb-textarea asb-prompt-editor"
           aria-label={`${fileName} 内容`}
           value={draft}
           disabled={busy || !document}

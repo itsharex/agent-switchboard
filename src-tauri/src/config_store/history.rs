@@ -1,6 +1,6 @@
 //! Configuration write history: one JSON file per client under
 //! `history/{client}.json`. Only real client-file writes append here; saving
-//! providers or common settings never does.
+//! providers or client settings never does.
 
 use super::{parse_strict, read_optional, write_json_atomic, ConfigStore, ProfileStoreError};
 use asb_core::contracts::{AppKind, ConfigWriteRecord, WriteOperation};
@@ -74,7 +74,7 @@ impl ConfigStore {
         }
     }
 
-    /// Appends one completed real client-file write. Provider and common
+    /// Appends one completed real client-file write. Provider and client
     /// settings saves deliberately never call this method.
     pub fn record_config_write(&self, entry: ConfigWriteRecord) -> Result<(), String> {
         let app = entry.app;

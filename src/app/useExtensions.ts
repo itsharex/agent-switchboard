@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CommandError, ExtensionsWorkspace } from "../api/client";
 import { listExtensions } from "../api/client";
 import { useExtensionImport } from "./extensions/useExtensionImport";
@@ -11,6 +11,7 @@ import type { ExtensionsDeps } from "./extensions/extension-ops";
 export function useExtensions({ busy, setBusy, clearError, onError }: ExtensionsDeps) {
   const [workspace, setWorkspace] = useState<ExtensionsWorkspace | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const operationInFlight = useRef(false);
 
   useEffect(() => {
     let current = true;
@@ -42,7 +43,8 @@ export function useExtensions({ busy, setBusy, clearError, onError }: Extensions
 
   const runExclusive = useCallback(
     async <T>(action: () => Promise<T>): Promise<T | null> => {
-      if (busy) return null;
+      if (busy || operationInFlight.current) return null;
+      operationInFlight.current = true;
       setBusy(true);
       clearError();
       try {
@@ -51,6 +53,7 @@ export function useExtensions({ busy, setBusy, clearError, onError }: Extensions
         onError(caught as CommandError);
         return null;
       } finally {
+        operationInFlight.current = false;
         setBusy(false);
       }
     },

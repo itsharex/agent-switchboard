@@ -19,7 +19,7 @@ interface AppSettingsDeps {
 /**
  * Application-runtime settings (window behavior, appearance) and their
  * live-appearance application. Deliberately separate from the Codex / Claude
- * common configuration contract.
+ * client configuration contract.
  */
 export function useAppSettings({ busy, onError, clearError, setBusy }: AppSettingsDeps) {
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);

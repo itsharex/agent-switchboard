@@ -119,6 +119,7 @@ fn start_api(root: &Path) -> Api {
         .unwrap();
     assert_eq!(app.path().app_data_dir().unwrap(), root.join("app-data"));
     let state = crate::local_state::LocalState::from_app(app.handle()).unwrap();
+    state.initialize_schemas().unwrap();
     app.manage(crate::gateway::GatewayController::start(&state));
     app.manage(crate::gateway::PortChangePreparations::default());
     app.manage(crate::commands::ConfigWriteGate::default());

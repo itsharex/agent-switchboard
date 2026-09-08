@@ -1,20 +1,25 @@
 use toml_edit::{DocumentMut, Item, TableLike};
 
 use crate::adapter::AdapterError;
-use crate::contracts::{CodexModelSettings, KeyChange, RouteMode, RouteState};
-use crate::ownership::is_owned;
+use crate::contracts::{CodexModelSettings, KeyChange, RouteMode, RouteState, SwitchPlan};
+use crate::ownership::{is_owned, CODEX_PROVIDER_ID};
 use crate::AppKind;
 
 use crate::adapter::codex::document::{item_at, item_repr, parse};
 
 /// Codex's built-in provider id.
-pub const OFFICIAL_PROVIDER: &str = "openai";
+pub const OFFICIAL_PROVIDER: &str = CODEX_PROVIDER_ID;
 
-pub(crate) fn uses_builtin_provider(text: &str) -> Result<bool, AdapterError> {
+pub(crate) fn matches_provider_settings(
+    text: &str,
+    plan: &SwitchPlan,
+) -> Result<bool, AdapterError> {
     let doc = parse(text)?;
-    Ok(item_at(&doc, "model_provider")
+    let provider = item_at(&doc, "model_provider")
         .and_then(item_repr)
-        .is_none_or(|provider| provider == OFFICIAL_PROVIDER))
+        .unwrap_or_else(|| OFFICIAL_PROVIDER.to_string());
+    Ok(provider == CODEX_PROVIDER_ID
+        && (plan.profile.route_mode == RouteMode::Official || plan.is_gateway()))
 }
 
 /// Collects every owned scalar path and its textual value.
@@ -92,9 +97,7 @@ pub fn route_state(text: &str) -> RouteState {
         } else {
             RouteMode::Official
         },
-        provider_name: custom_provider
-            .then(|| get(&format!("model_providers.{provider_id}.name")))
-            .flatten(),
+        provider_name: if custom_provider { get(&format!("model_providers.{provider_id}.name")) } else { Some(CODEX_PROVIDER_ID.into()) },
         model: get("model"),
         base_url,
         wire_api,

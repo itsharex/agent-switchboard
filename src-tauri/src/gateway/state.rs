@@ -127,17 +127,8 @@ pub(super) fn quarantine_invalid_state(path: &Path) -> Result<(), String> {
 }
 
 pub(super) fn write_state(path: &Path, state: &GatewayStateFile) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| "本机协议网关状态路径无效".to_string())?;
-    fs::create_dir_all(parent).map_err(|_| "无法创建本机协议网关状态目录".to_string())?;
-    let temporary = parent.join(format!("gateway.{}.tmp", Uuid::new_v4().simple()));
     let content = serde_json::to_string_pretty(state)
         .map_err(|_| "无法序列化本机协议网关状态".to_string())?;
-    fs::write(&temporary, content).map_err(|_| "无法写入本机协议网关状态".to_string())?;
-    if fs::rename(&temporary, path).is_err() {
-        let _ = fs::remove_file(&temporary);
-        return Err("无法原子保存本机协议网关状态".to_string());
-    }
-    Ok(())
+    crate::config_store::write_json_atomic(path, &content)
+        .map_err(|error| format!("无法持久化本机协议网关状态：{error}"))
 }

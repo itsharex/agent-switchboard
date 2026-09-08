@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { onTrayError, onTrayNavigate, openBackupDir, type AppKind, type CommandError } from "../api/client";
-import type { Page } from "./AppShell";
+import type { Page } from "./navigation";
 import { useAppSettings } from "./useAppSettings";
 import { useCcImport } from "./useCcImport";
 import { useCloudBackup } from "./useCloudBackup";
-import { useCommonSettings } from "./useCommonSettings";
+import { useClientSettings } from "./useClientSettings";
+import { useCodexSubagentSettings } from "./useCodexSubagentSettings";
 import { useConfigSnapshot } from "./useConfigSnapshot";
 import { useDiscovery } from "./useDiscovery";
 import { useOperationFrame } from "./useOperationFrame";
@@ -13,18 +14,9 @@ import { useProviders } from "./useProviders";
 import { latestOverall, useSwitchOperations } from "./useSwitchOperations";
 import { useSwitchPreview } from "./useSwitchPreview";
 import { useUpdateCheck } from "./useUpdateCheck";
+import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 
-/**
- * Root model composition: wires the domain hooks together. Contains no
- * logic of its own — each domain (snapshot, previews, common settings,
- * provider store, switch operations, discovery, CC import, app settings)
- * owns its state and handlers in its own hook.
- */
-export function useSwitchboardModel() {
-  const [page, setPage] = useState<Page>("概览");
-  const [appFilter, setAppFilter] = useState<AppKind>("codex");
-  const frame = useOperationFrame();
-  const { busy, reportError, clearError } = frame;
+function useTrayEvents(setPage: (page: Page) => void, reportError: (error: CommandError) => void) {
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
@@ -33,7 +25,7 @@ export function useSwitchboardModel() {
       else stop = unlisten;
     }).catch((error: unknown) => reportError({ code: "TRAY_EVENT", message: error instanceof Error ? error.message : String(error) }));
     return () => { disposed = true; stop?.(); };
-  }, [reportError]);
+  }, [reportError, setPage]);
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
@@ -43,138 +35,76 @@ export function useSwitchboardModel() {
     }).catch((error: unknown) => reportError({ code: "TRAY_EVENT", message: error instanceof Error ? error.message : String(error) }));
     return () => { disposed = true; stop?.(); };
   }, [reportError]);
+}
 
+/** Composes domain hooks; each domain owns its state and typed operations. */
+export function useSwitchboardModel() {
+  const navigation = useWorkspaceNavigation();
+  const { page, setPage, settingsSection, extensionSection } = navigation;
+  const [appFilter, setAppFilter] = useState<AppKind>("codex");
+  const frame = useOperationFrame();
+  const { busy, reportError, clearError, setBusy } = frame;
+  useTrayEvents(setPage, reportError);
+  const operationContext = { busy, onError: reportError, clearError, setBusy };
   const snapshot = useConfigSnapshot({ onError: reportError });
-  const { selectedId, setSelectedId, refresh, activeProfileId, records } = snapshot;
-  const switchPreview = useSwitchPreview({
-    busy,
-    setSelectedId,
-    onError: reportError,
-    clearError,
+  const { selectedId, setSelectedId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
+  const refresh = useCallback(async () => { await refreshSnapshot(); }, [refreshSnapshot]);
+  const switchPreview = useSwitchPreview({ ...operationContext, setSelectedId });
+  const { invalidateSwitchCandidates: invalidateCandidates, selectProfile } = switchPreview;
+  const clientSettings = useClientSettings({
+    ...operationContext, app: appFilter, active: page === "设置" && settingsSection === "client",
+    invalidateSwitchCandidates: invalidateCandidates, refresh,
   });
-  const { invalidateSwitchCandidates, selectProfile } = switchPreview;
-  const commonSettings = useCommonSettings({
-    active: page === "通用设置",
-    invalidateSwitchCandidates,
+  const codexSubagentSettings = useCodexSubagentSettings({
+    ...operationContext,
+    active: page === "设置" && settingsSection === "client" && appFilter === "codex",
+    invalidateSwitchCandidates: invalidateCandidates,
     refresh,
-    busy,
-    onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
   });
   const promptDocuments = usePromptDocuments({
-    active: page === "通用设置",
-    busy,
-    onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
+    ...operationContext, active: page === "扩展" && extensionSection === "instructions",
   });
-  /** Supplier drafts and app-store changes invalidate supplier candidates.
-   * Common-base drafts never carry client-file candidates; their separate
-   * read-only fragment preview does not participate in switching. */
-  const invalidateCandidates = useCallback(
-    () => invalidateSwitchCandidates(),
-    [invalidateSwitchCandidates],
-  );
-
-  const appSettingsState = useAppSettings({
-    busy,
-    onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
-  });
-  const cloudBackup = useCloudBackup({
-    busy,
-    setBusy: frame.setBusy,
-    onError: reportError,
-    clearError,
-    invalidateCandidates,
-    refresh,
-  });
-  const updateCheck = useUpdateCheck({
-    onError: reportError,
-  });
+  const appSettingsState = useAppSettings(operationContext);
+  const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });
+  const updateCheck = useUpdateCheck({ onError: reportError });
   const discoveryState = useDiscovery({
-    busy,
-    onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
-    invalidateCandidates,
-    refresh,
-    selectProfile,
-    setAppFilter,
-    setPage,
+    ...operationContext, invalidateCandidates, refresh: refreshSnapshot, selectProfile, setAppFilter, setPage,
   });
-  const ccImport = useCcImport({
-    busy,
-    onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
-    invalidateCandidates,
-    refresh,
-  });
+  const ccImport = useCcImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
+    records, preferredApp: appFilter, selectProfile, setAppFilter });
   const selectedRecord = records.find((record) => record.profile.id === selectedId) ?? null;
   const selectedProfile = selectedRecord?.profile ?? null;
   const operations = useSwitchOperations({
-    busy,
-    onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
-    preview: switchPreview.preview,
-    retractPreview: switchPreview.retractPreview,
-    invalidateCandidates,
-    selectProfile,
-    selectedId,
-    selectedProfile,
-    refresh,
+    ...operationContext, preview: switchPreview.preview, retractPreview: switchPreview.retractPreview,
+    invalidateCandidates, selectProfile, selectedId, selectedProfile, refresh,
     refreshDiscoveryOrAppend: discoveryState.refreshDiscoveryOrAppend,
   });
   const providers = useProviders({
-    busy,
-    appFilter,
-    setAppFilter,
-    selectedRecord,
-    records,
-    selectedId,
-    onError: reportError,
-    clearError,
-    setBusy: frame.setBusy,
-    invalidateCandidates,
-    retractPreview: switchPreview.retractPreview,
-    refresh,
-    selectProfile,
-    setRecords: snapshot.setRecords,
-    setSelectedId,
+    ...operationContext, appFilter, setAppFilter, records, selectedId,
+    invalidateCandidates, retractPreview: switchPreview.retractPreview, refresh, selectProfile,
+    setRecords: snapshot.setRecords, setSelectedId,
   });
-
-  const lastSwitchOverall = useMemo(
-    () => latestOverall(snapshot.statuses ?? []),
-    [snapshot.statuses],
-  );
+  const lastSwitchOverall = useMemo(() => latestOverall(snapshot.statuses ?? []), [snapshot.statuses]);
   const openBackupFolder = useCallback(
-    () => openBackupDir().catch((caught) => reportError(caught as CommandError)),
-    [reportError],
+    () => openBackupDir().catch((caught) => reportError(caught as CommandError)), [reportError],
   );
-
-  return {
-    page,
-    setPage,
-    appFilter,
-    ...frame,
-    snapshot,
-    activeProfileId,
-    switchPreview,
-    commonSettings,
-    promptDocuments,
-    appSettingsState,
-    cloudBackup,
-    updateCheck,
-    discoveryState,
-    ccImport,
-    selectedProfile,
-    operations,
-    providers,
-    lastSwitchOverall,
-    openBackupFolder,
-  };
+  const saveClientSettingsAndPreview = useCallback(async (app: AppKind) => {
+    if (busy) return;
+    if (providers.editorSession || navigation.providerView.kind === "usage") {
+      reportError({ code: "provider-editor-open", message: "请先保存或取消供应商或用量查询编辑，再预览应用" });
+      return;
+    }
+    const profile = snapshot.profiles.find((item) => item.app === app && item.id === activeProfileId(app));
+    if (!profile || !await clientSettings.saveSettings(app)) return;
+    setAppFilter(app);
+    navigation.setProviderView({ kind: "list" });
+    setPage("供应商");
+    await switchPreview.previewProfile(profile);
+  }, [busy, providers.editorSession, navigation.providerView.kind, navigation.setProviderView, reportError, snapshot.profiles, activeProfileId,
+    clientSettings.saveSettings, setPage, switchPreview.previewProfile]);
+  return { ...navigation, appFilter, ...frame, snapshot, activeProfileId, switchPreview,
+    clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
+    ccImport, selectedProfile, operations, providers, lastSwitchOverall, openBackupFolder, saveClientSettingsAndPreview };
 }
+
+export type SwitchboardModel = ReturnType<typeof useSwitchboardModel>;

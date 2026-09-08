@@ -9,10 +9,12 @@
 @import "./base/buttons.css";
 @import "./base/panels.css";
 @import "./base/provider-cards.css";
+@import "./base/provider-request.css";
 @import "./base/diff-inspector.css";
-@import "./base/overview.css";
+@import "./base/configuration-status.css";
 @import "./base/app-settings.css";
 @import "./base/settings-preview.css";
+@import "./base/settings-workspace.css";
 @import "./base/forms.css";
 @import "./base/tooltip-feedback.css";
 @import "./base/usage-workspace.css";
@@ -22,6 +24,22 @@
 @import "./base/overlays.css";
 @import "./base/behavior-responsive.css";
 @import "./base/discovery-extensions.css";
+@import "./base/extension-library.css";
+@import "./base/extension-management.css";
+@import "./base/extension-instructions.css";
+
+.asb-page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-client-picker .asb-seg-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
 
 .asb-nav {
   display: flex;
@@ -52,52 +70,6 @@
 .asb-nav button[aria-current="page"] {
   color: var(--asb-text);
   font-weight: 700;
-}
-
-/* Overflow disclosure (更多): low-frequency pages collapse behind one trigger
-   (DESIGN.md §3). While the current page is in the menu, the trigger carries
-   the page name and the same current-page treatment. */
-.asb-nav-more {
-  position: relative;
-}
-
-.asb-nav-more > button[data-active] {
-  color: var(--asb-text);
-  font-weight: 700;
-}
-
-.asb-nav-more-chevron {
-  display: inline-flex;
-  margin-left: var(--asb-space-1);
-  color: var(--asb-text-muted);
-  transition: transform var(--asb-motion-press) var(--asb-easing);
-}
-
-.asb-nav-more > button[aria-expanded="true"] .asb-nav-more-chevron {
-  transform: rotate(180deg);
-}
-
-.asb-nav-more-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  min-width: 8rem;
-  margin: 0;
-  padding: var(--asb-space-1);
-  list-style: none;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-surface-menu);
-  box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
-}
-
-.asb-nav-more-menu button {
-  display: block;
-  width: 100%;
-  border-radius: var(--asb-radius-action);
 }
 
 
@@ -356,8 +328,10 @@
 
 /* Reveal rules sit after the shared primary rules so the hidden default
    wins at equal specificity. Row actions stay hidden until the card is
-   hovered; the cluster also reveals on :focus-within so its icon buttons
-   remain reachable by keyboard. */
+   hovered; the cluster also reveals on keyboard-driven :focus-within so
+   its icon buttons remain reachable by keyboard — pointer clicks focus
+   the row too, so they must not pin the reveal (2026-09-08 user report).
+   启用 stays pointer-only by contract (ProviderList.test.tsx). */
 .asb-row-item .asb-row-activate {
   display: none;
 }
@@ -373,7 +347,7 @@
 }
 
 .asb-row-item:hover .asb-iconcluster,
-.asb-row-item:focus-within .asb-iconcluster {
+:root[data-focus-source="key"] .asb-row-item:focus-within .asb-iconcluster {
   display: inline-flex;
 }
 

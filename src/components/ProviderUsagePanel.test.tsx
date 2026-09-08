@@ -1,3 +1,4 @@
+import { providerParameters } from "../test/provider-parameters";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -46,7 +47,9 @@ const profile = {
   baseUrl: "https://relay.example/v1",
   apiKey: "test-key",
   upstreamProtocol: "responses" as const,
+  responsesOptions: { requestMode: "standard" as const },
   maxOutputTokens: null,
+  parameters: providerParameters("codex"),
   modelOptions: null,
   websiteUrl: null,
   usageQuery,

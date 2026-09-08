@@ -237,33 +237,36 @@ export function SessionManager({ active }: { active: boolean }) {
 
   return (
     <div className="asb-sessions">
-      <div className="asb-session-toolbar">
-        <Input
-          aria-label="搜索会话"
-          value={query}
-          placeholder="搜索标题、摘要、目录或会话 ID"
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <div className="asb-segments" role="radiogroup" aria-label="会话客户端筛选">
-          {(["all", "codex", "claude"] as const).map((item) => {
-            const active = filter === item;
-            const label = item === "all" ? "全部" : clientName(item);
-            return (
-              <label className={`asb-seg-opt${active ? " is-active" : ""}`} key={item}>
-                <input
-                  type="radio"
-                  name="session-provider"
-                  checked={active}
-                  onChange={() => setFilter(item)}
-                />
-                {label}
-              </label>
-            );
-          })}
+      <div className="asb-panel-heading">
+        <h2 className="asb-panel-title">会话</h2>
+        <div className="asb-session-toolbar">
+          <Input
+            aria-label="搜索会话"
+            value={query}
+            placeholder="搜索标题、摘要、目录或会话 ID"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <div className="asb-segments" role="radiogroup" aria-label="会话客户端筛选">
+            {(["all", "codex", "claude"] as const).map((item) => {
+              const active = filter === item;
+              const label = item === "all" ? "全部" : clientName(item);
+              return (
+                <label className={`asb-seg-opt${active ? " is-active" : ""}`} key={item}>
+                  <input
+                    type="radio"
+                    name="session-provider"
+                    checked={active}
+                    onChange={() => setFilter(item)}
+                  />
+                  {label}
+                </label>
+              );
+            })}
+          </div>
+          <Button variant="secondary" disabled={scanning} onClick={() => void refresh()}>
+            刷新会话
+          </Button>
         </div>
-        <Button variant="secondary" disabled={scanning} onClick={() => void refresh()}>
-          刷新会话
-        </Button>
       </div>
       {issues.length > 0 && (
         <ul className="asb-session-issues" aria-label="会话扫描提示">

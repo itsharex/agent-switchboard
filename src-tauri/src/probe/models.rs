@@ -1,27 +1,11 @@
-use super::transport::{http_get, parse_url};
+use crate::provider_diagnostics::{
+    http_diagnostic, network_diagnostic, read_http_diagnostic, ProviderFailureKind,
+};
 use asb_core::contracts::UpstreamProtocol;
 use serde::Serialize;
+use std::time::Duration;
 
-/// Builds the OpenAI-compatible model-list path for a provider base URL:
-/// a base already ending in a `/v{digits}` segment gets `/models` appended,
-/// anything else gets `/v1/models`.
-pub(super) fn models_path_for(base_url: &str) -> String {
-    let mut path = parse_url(base_url)
-        .map(|parsed| parsed.path)
-        .unwrap_or_else(|| "/".to_string());
-    let trimmed = path.trim_end_matches('/');
-    let versioned = trimmed.rsplit('/').next().is_some_and(|segment| {
-        let digits = segment.strip_prefix('v').unwrap_or("");
-        !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
-    });
-    if !path.ends_with('/') {
-        path.push('/');
-    }
-    path.push_str(if versioned { "models" } else { "v1/models" });
-    path
-}
-
-/// One model from the provider's standard `/v1/models` list: the requestable
+/// One model from the provider's configured API root: the requestable
 /// id plus the optional `owned_by` vendor used to group the picker menu.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +14,7 @@ pub struct ProviderModel {
     pub owned_by: Option<String>,
 }
 
-/// Fetches a provider's standard `GET /v1/models` list with the exact
+/// Fetches the model list beneath the same API root as model requests, with the exact
 /// protocol-derived authentication scheme. The profile API key travels only in
 /// the selected request header and is never logged or echoed in errors.
 /// Nothing is cached.
@@ -39,27 +23,47 @@ pub fn fetch_models(
     api_key: &str,
     protocol: UpstreamProtocol,
 ) -> Result<Vec<ProviderModel>, String> {
-    let parsed = parse_url(base_url).ok_or_else(|| "服务地址必须是 http(s) URL".to_string())?;
-    let path = models_path_for(base_url);
-    let url = format!(
-        "{}://{}:{}{path}",
-        if parsed.secure { "https" } else { "http" },
-        parsed.host,
-        parsed.port
-    );
-    let (status, body) = http_get(&url, &provider_auth_headers(api_key, protocol))?;
-
-    if !(200..300).contains(&status) {
-        if status == 401 || status == 403 {
-            return Err(format!(
-                "服务地址拒绝了 API 密钥（HTTP {status}），请确认密钥仍然有效；可手动填写模型名"
-            ));
-        }
-        return Err(format!(
-            "服务地址返回 HTTP {status}，无法获取模型列表；可手动填写模型名"
-        ));
+    let url = asb_core::endpoint::models_endpoint(base_url, protocol)?;
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("Agent Switchboard")
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "无法初始化模型列表请求".to_string())?;
+    let request = match protocol.authentication_scheme() {
+        asb_core::AuthenticationScheme::Bearer => client.get(&url).bearer_auth(api_key),
+        asb_core::AuthenticationScheme::XApiKey => client
+            .get(&url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01"),
+    };
+    let response = request
+        .send()
+        .map_err(|error| network_diagnostic(&url, &error).summary())?;
+    if !response.status().is_success() {
+        return Err(read_http_diagnostic(response, &[api_key]).summary());
     }
-    parse_models(&body)
+    let mut diagnostic = http_diagnostic(
+        &url,
+        response.status().as_u16(),
+        response.headers(),
+        &[],
+        false,
+        &[api_key],
+    );
+    diagnostic.kind = ProviderFailureKind::ResponseParse;
+    diagnostic.message = "模型列表响应无法解析".to_string();
+    let body = response.bytes().map_err(|error| {
+        let mut failure = network_diagnostic(&url, &error);
+        failure.status = diagnostic.status;
+        failure.request_id = diagnostic.request_id.clone();
+        failure.summary()
+    })?;
+    parse_models(&String::from_utf8_lossy(&body)).map_err(|error| {
+        diagnostic.message = error;
+        diagnostic.summary()
+    })
 }
 
 /// Builds only the credential headers selected in the provider contract.

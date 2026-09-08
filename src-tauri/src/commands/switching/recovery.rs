@@ -1,9 +1,6 @@
-use super::plan::{build_plan_for_profile, preview_projection};
+use super::plan::{build_plan_for_profile, execute_projection, preview_projection};
 use super::profile_save::invalidate_provider_readings;
 use crate::commands::error::CommandError;
-use asb_core::contracts::{AppKind, ConfigWriteRecord, WriteOperation};
-use asb_switch::io::FsIo;
-use asb_switch::{execute, execute_codex};
 use tauri::{AppHandle, Manager};
 
 /// Finishes the only kind of interrupted provider save that can leave a
@@ -16,6 +13,7 @@ pub(crate) fn recover_pending_profile_save(app: &AppHandle) -> Result<(), String
         .state::<crate::gateway::GatewayController>()
         .inner()
         .clone();
+    super::transaction::recover(&state, &gateway)?;
     let Some(pending) = state
         .configuration()
         .pending_profile_save()
@@ -34,82 +32,33 @@ pub(crate) fn recover_pending_profile_save(app: &AppHandle) -> Result<(), String
     // recovery must discard the marker without touching client configuration.
     if record.file_hash == pending.previous_file_hash {
         state.configuration().clear_profile_save()?;
+        super::profile_rollback::clear(&state)?;
         return Ok(());
     }
+    super::profile_rollback::validate_saved_revision(
+        &state,
+        &pending.profile_id,
+        &record.file_hash,
+    )?;
     let profile = record.profile;
     let projection =
         build_plan_for_profile(&state, &gateway, profile).map_err(|error| error.message)?;
     let preview = preview_projection(&state, &projection).map_err(|error| error.message)?;
-    let plan = &projection.plan;
-    let target = state
-        .target(plan.app())
-        .map_err(|error| error.to_string())?;
-    let backup_dir = state.backup_dir();
-    let write = ConfigWriteRecord {
-        app: plan.app(),
-        profile_id: Some(plan.profile.id.clone()),
-        profile_name: Some(plan.profile.name.clone()),
-        content_hash: String::new(),
-        backup_id: String::new(),
-        at: String::new(),
-        operation: WriteOperation::Projection,
-    };
-    match plan.app() {
-        AppKind::Codex => {
-            let auth_target = crate::local_state::LocalState::codex_auth_path()?;
-            let commit_projection = projection.clone();
-            execute_codex(
-                &FsIo,
-                &asb_switch::CodexSwitchRequest {
-                    target: &target,
-                    auth_target: &auth_target,
-                    plan,
-                    backup_dir: &backup_dir,
-                    expected_hash: &preview.content_hash,
-                    expected_rendered_hash: &preview.rendered_hash,
-                },
-                |outcome| {
-                    gateway.commit(&commit_projection, || {
-                        state
-                            .configuration()
-                            .record_config_write(ConfigWriteRecord {
-                                content_hash: outcome.final_hash.clone(),
-                                backup_id: outcome.backup.id.clone(),
-                                at: outcome.backup.created_at.clone(),
-                                ..write
-                            })
-                    })
-                },
-            )
-        }
-        AppKind::Claude => {
-            let commit_projection = projection.clone();
-            execute(
-                &FsIo,
-                &asb_switch::SwitchRequest {
-                    target: &target,
-                    plan,
-                    backup_dir: &backup_dir,
-                    expected_hash: &preview.content_hash,
-                    expected_rendered_hash: &preview.rendered_hash,
-                },
-                |outcome| {
-                    gateway.commit(&commit_projection, || {
-                        state
-                            .configuration()
-                            .record_config_write(ConfigWriteRecord {
-                                content_hash: outcome.final_hash.clone(),
-                                backup_id: outcome.backup.id.clone(),
-                                at: outcome.backup.created_at.clone(),
-                                ..write
-                            })
-                    })
-                },
-            )
-        }
+    if already_committed(&state, &pending.profile_id, pending.app, &preview)? {
+        state.configuration().clear_profile_save()?;
+        return super::profile_rollback::clear(&state);
     }
-    .map_err(|error| error.to_string())?;
+    super::profile_rollback::validate_projection(&state, pending.app, &preview)?;
+    execute_projection(
+        &state,
+        &gateway,
+        &projection,
+        &preview.content_hash,
+        &preview.rendered_hash,
+    )
+    .map_err(|error| error.message)?;
     state.configuration().clear_profile_save()?;
+    super::profile_rollback::clear(&state)?;
     invalidate_provider_readings(app, &pending.profile_id);
     Ok(())
 }
@@ -120,4 +69,22 @@ pub(crate) fn recover_pending_profile_save(app: &AppHandle) -> Result<(), String
 pub(crate) fn ensure_profile_save_recovered(app: &AppHandle) -> Result<(), CommandError> {
     recover_pending_profile_save(app)
         .map_err(|error| CommandError::new("profile-save-recovery-required", error))
+}
+
+fn already_committed(
+    state: &crate::local_state::LocalState,
+    profile_id: &str,
+    app: asb_core::AppKind,
+    preview: &asb_switch::FilePreview,
+) -> Result<bool, String> {
+    let last = state
+        .configuration()
+        .latest_config_write(app)
+        .map_err(|e| e.to_string())?;
+    Ok(preview.content_hash == preview.rendered_hash
+        && last.is_some_and(|record| {
+            record.profile_id.as_deref() == Some(profile_id)
+                && record.content_hash == preview.content_hash
+                && record.operation == asb_core::WriteOperation::Projection
+        }))
 }

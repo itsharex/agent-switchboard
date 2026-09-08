@@ -6,7 +6,9 @@ import {
   type AppKind,
   type CommandError,
   type DiscoveryReport,
+  type ProviderRecord,
 } from "../api/client";
+import { toast } from "../components/use-toast";
 
 interface DiscoveryDeps {
   busy: boolean;
@@ -14,7 +16,7 @@ interface DiscoveryDeps {
   clearError: () => void;
   setBusy: (busy: boolean) => void;
   invalidateCandidates: () => void;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<ProviderRecord[] | undefined>;
   selectProfile: (profileId: string) => Promise<void> | void;
   setAppFilter: (app: AppKind) => void;
   setPage: (page: "供应商") => void;
@@ -23,7 +25,7 @@ interface DiscoveryDeps {
 /**
  * Local configuration discovery: read-only scanning plus importing a
  * discovered provider into the profile store. Switch operations refresh the
- * discovery result after each write so the 发现 page never goes stale.
+ * discovery result after each write so the import view never goes stale.
  */
 export function useDiscovery({
   busy,
@@ -85,19 +87,23 @@ export function useDiscovery({
 
   const runImport = useCallback(
     async (app: AppKind) => {
-      if (busy) return;
+      if (busy) return false;
       invalidateCandidates();
       setBusy(true);
       clearError();
       try {
         const record = await importDiscoveredProfile(app);
+        setDiscovery(null);
+        toast({ kind: "success", title: `已导入供应商「${record.profile.name}」` });
+        const refreshed = await refresh();
+        if (!refreshed) return false;
         setAppFilter(record.profile.app);
         setPage("供应商");
-        setDiscovery(null);
-        await refresh();
         await selectProfile(record.profile.id);
+        return true;
       } catch (caught) {
         onError(caught as CommandError);
+        return false;
       } finally {
         setBusy(false);
       }

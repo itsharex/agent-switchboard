@@ -98,6 +98,7 @@ mod tests {
         let profile = ProviderProfile::from_draft(
             "p".into(),
             ProviderDraft {
+                parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
                 app: AppKind::Codex,
                 route_mode: RouteMode::Custom,
                 name: "供应商".into(),
@@ -105,6 +106,9 @@ mod tests {
                 base_url: Some("https://example.invalid".into()),
                 api_key: "private-test-key".into(),
                 upstream_protocol: Some(UpstreamProtocol::Responses),
+                responses_options: Some(asb_core::contracts::ResponsesOptions {
+                    request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+                }),
                 max_output_tokens: None.into(),
                 model_options: None,
                 notes: None,

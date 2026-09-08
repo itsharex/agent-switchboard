@@ -23,19 +23,4 @@ describe("primary navigation state", () => {
     expect(current).not.toMatch(/(?:background|border|text-decoration)/);
   });
 
-  it("gives the overflow trigger the same current-page treatment", () => {
-    const active = rule(/\.asb-nav-more > button\[data-active\]\s*\{([^}]*)\}/);
-
-    expect(active).toContain("color: var(--asb-text)");
-    expect(active).toContain("font-weight: 700");
-    expect(active).not.toMatch(/(?:background|border|text-decoration)/);
-  });
-
-  it("renders the collapsed panel as a menu surface above workspace layers", () => {
-    const panel = rule(/\.asb-nav-more-menu\s*\{([^}]*)\}/);
-
-    expect(panel).toContain("position: absolute");
-    expect(panel).toContain("background: var(--asb-surface-menu)");
-    expect(panel).toContain("z-index: 60");
-  });
 });

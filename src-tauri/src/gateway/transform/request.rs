@@ -18,15 +18,27 @@ pub(crate) fn convert_request(
     default_max_output_tokens: Option<u64>,
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<ConvertedRequest, TransformError> {
-    let value: Value = serde_json::from_slice(body)
+    let mut value: Value = serde_json::from_slice(body)
         .map_err(|_| TransformError("请求体不是有效 JSON".to_string()))?;
+    let expanded = if from == UpstreamProtocol::Responses {
+        crate::gateway::compaction::expand_input(
+            &mut value,
+            reasoning_transport.map(|t| t.continuation_key()),
+        )?
+    } else {
+        false
+    };
     if from == to {
         let stream = value
             .get("stream")
             .and_then(Value::as_bool)
             .unwrap_or(false);
         return Ok(ConvertedRequest {
-            body: body.to_vec(),
+            body: if expanded {
+                serde_json::to_vec(&value).map_err(|_| TransformError("无法编码请求".into()))?
+            } else {
+                body.to_vec()
+            },
             stream,
         });
     }

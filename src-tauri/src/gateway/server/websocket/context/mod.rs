@@ -3,6 +3,7 @@
 //! completed response in this connection and reconstructs its visible context
 //! before crossing protocol boundaries.
 
+use asb_core::contracts::ResponsesRequestMode;
 use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
@@ -23,6 +24,7 @@ struct CachedResponse {
 pub(super) struct PendingRequest {
     pub(super) body: Vec<u8>,
     pub(super) stream: bool,
+    native: bool,
     template: Map<String, Value>,
     full_input: Vec<Value>,
 }
@@ -61,13 +63,31 @@ impl ContextError {
 }
 
 impl ConversationContext {
-    pub(super) fn prepare(&mut self, text: &str) -> Result<PreparedResponse, ContextError> {
-        let normalized = normalize_request(text)?;
+    pub(super) fn prepare(
+        &mut self,
+        mode: ResponsesRequestMode,
+        text: &str,
+    ) -> Result<PreparedResponse, ContextError> {
+        self.prepare_normalized(normalize_request(mode, text)?, false)
+    }
+
+    pub(super) fn prepare_native(&mut self, text: &str) -> Result<PreparedResponse, ContextError> {
+        self.prepare_normalized(native::normalize(text)?, true)
+    }
+
+    fn prepare_normalized(
+        &mut self,
+        normalized: NormalizedRequest,
+        native: bool,
+    ) -> Result<PreparedResponse, ContextError> {
         let full_input = if let Some(previous_response_id) = normalized.previous_response_id {
             let Some(previous) = self.latest.as_ref() else {
                 return Err(ContextError::missing_previous());
             };
-            if previous.id != previous_response_id || previous.template != normalized.template {
+            if previous.id != previous_response_id
+                || (!native && previous.template != normalized.template)
+                || (native && previous.template.get("model") != normalized.template.get("model"))
+            {
                 return Err(ContextError::missing_previous());
             }
             let mut input = previous.full_input.clone();
@@ -112,6 +132,7 @@ impl ConversationContext {
         Ok(PreparedResponse::Upstream(PendingRequest {
             body,
             stream: normalized.stream,
+            native,
             template: normalized.template,
             full_input,
         }))
@@ -124,11 +145,19 @@ impl ConversationContext {
         request: &PendingRequest,
         response: &Value,
     ) -> Result<(), ContextError> {
-        let (id, output) = normalize_completed_response(response)?;
+        let (id, output) = if request.native {
+            native::completed(response)?
+        } else {
+            normalize_completed_response(response)?
+        };
         self.latest = Some(CachedResponse {
             id,
             template: request.template.clone(),
-            full_input: request.full_input.clone(),
+            full_input: if output.iter().any(|item| item["type"] == "compaction") {
+                Vec::new()
+            } else {
+                request.full_input.clone()
+            },
             output,
         });
         Ok(())
@@ -144,11 +173,18 @@ struct NormalizedRequest {
     previous_response_id: Option<String>,
 }
 
+mod completed;
+mod input;
 mod json;
+mod native;
 mod normalize;
 
 #[cfg(test)]
+mod native_tests;
+#[cfg(test)]
 mod tests;
 
+use completed::normalize_completed_response;
+use input::normalize_input;
 use json::*;
 use normalize::*;

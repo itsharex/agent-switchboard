@@ -1,12 +1,9 @@
-use super::plan::{build_plan_for_profile, preview_projection};
+use super::plan::{build_plan_for_profile, execute_projection, preview_projection};
 use crate::commands::error::{require_write_confirmation, CommandError};
 use crate::config_store::PendingProfileSave;
 use asb_core::contracts::{
-    classify_profile_save, AppKind, ConfigWriteRecord, ProfileSaveKind, ProviderDraft,
-    ProviderProfile, ProviderRecord, WriteOperation,
+    classify_profile_save, ProfileSaveKind, ProviderDraft, ProviderProfile, ProviderRecord,
 };
-use asb_switch::io::FsIo;
-use asb_switch::{execute, execute_codex};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -213,15 +210,19 @@ fn apply_prepared_profile_save(
     let profile_id = stored.profile.id.clone();
     let candidate = ProviderProfile::from_draft(profile_id.clone(), draft.clone());
     let projection = build_plan_for_profile(state, gateway, candidate)?;
-    let plan = &projection.plan;
-    let target = state
-        .target(plan.app())
-        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    let backup_dir = state.backup_dir();
     let (original_app, original_file) = state
         .configuration()
         .load_provider_file(&profile_id)
         .map_err(|error| CommandError::new("profile-save-failed", error))?;
+    super::profile_rollback::save(
+        state,
+        original_app,
+        &original_file,
+        &projection.plan.profile,
+        &preview.content_hash,
+        &preview.rendered_hash,
+    )
+    .map_err(|e| CommandError::new("profile-save-recovery-required", e))?;
     state
         .configuration()
         .begin_profile_save(&PendingProfileSave {
@@ -237,7 +238,11 @@ fn apply_prepared_profile_save(
         {
             Ok(saved) => saved,
             Err(error) => {
-                return match state.configuration().clear_profile_save() {
+                return match state
+                    .configuration()
+                    .clear_profile_save()
+                    .and_then(|_| super::profile_rollback::clear(state))
+                {
                     Ok(()) => Err(CommandError::new("profile-save-failed", error)),
                     Err(clear_error) => Err(CommandError::new(
                         "profile-save-recovery-required",
@@ -246,99 +251,60 @@ fn apply_prepared_profile_save(
                 };
             }
         };
-    let write = ConfigWriteRecord {
-        app: plan.app(),
-        profile_id: Some(profile_id.clone()),
-        profile_name: Some(plan.profile.name.clone()),
-        content_hash: String::new(),
-        backup_id: String::new(),
-        at: String::new(),
-        operation: WriteOperation::Projection,
-    };
-    let execution = match plan.app() {
-        AppKind::Codex => crate::local_state::LocalState::codex_auth_path()
-            .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))
-            .and_then(|auth_target| {
-                let commit_projection = projection.clone();
-                let commit_write = write.clone();
-                execute_codex(
-                    &FsIo,
-                    &asb_switch::CodexSwitchRequest {
-                        target: &target,
-                        auth_target: &auth_target,
-                        plan,
-                        backup_dir: &backup_dir,
-                        expected_hash: &preview.content_hash,
-                        expected_rendered_hash: &preview.rendered_hash,
-                    },
-                    |outcome| {
-                        gateway.commit(&commit_projection, || {
-                            state
-                                .configuration()
-                                .record_config_write(ConfigWriteRecord {
-                                    content_hash: outcome.final_hash.clone(),
-                                    backup_id: outcome.backup.id.clone(),
-                                    at: outcome.backup.created_at.clone(),
-                                    ..commit_write
-                                })
-                        })
-                    },
-                )
-                .map_err(CommandError::from)
-            }),
-        AppKind::Claude => {
-            let commit_projection = projection.clone();
-            execute(
-                &FsIo,
-                &asb_switch::SwitchRequest {
-                    target: &target,
-                    plan,
-                    backup_dir: &backup_dir,
-                    expected_hash: &preview.content_hash,
-                    expected_rendered_hash: &preview.rendered_hash,
-                },
-                |outcome| {
-                    gateway.commit(&commit_projection, || {
-                        state
-                            .configuration()
-                            .record_config_write(ConfigWriteRecord {
-                                content_hash: outcome.final_hash.clone(),
-                                backup_id: outcome.backup.id.clone(),
-                                at: outcome.backup.created_at.clone(),
-                                ..write
-                            })
-                    })
-                },
-            )
-            .map_err(CommandError::from)
-        }
-    };
+    let execution = execute_projection(
+        state,
+        gateway,
+        &projection,
+        &preview.content_hash,
+        &preview.rendered_hash,
+    );
     if let Err(command) = execution {
-        return match state
-            .configuration()
-            .overwrite_provider_file(original_app, original_file)
-        {
-            Ok(_) => match state.configuration().clear_profile_save() {
-                Ok(()) => Err(command),
-                Err(clear_error) => Err(CommandError::new(
-                    "profile-save-recovery-required",
-                    format!("{}；供应商档案已回滚，但{clear_error}", command.message),
-                )),
-            },
-            Err(restore_error) => Err(CommandError::new(
-                "profile-save-recovery-required",
-                format!(
-                    "{}；供应商档案未能回滚：{restore_error}；已保留恢复记录以继续完成已确认的保存",
-                    command.message
-                ),
-            )),
-        };
+        if command.code == "config-recovery-required" {
+            return Err(command);
+        }
+        return Err(rollback_profile_save(
+            state,
+            gateway,
+            &profile_id,
+            &saved.file_hash,
+            command,
+        ));
     }
     state
         .configuration()
         .clear_profile_save()
         .map_err(|error| CommandError::new("profile-save-recovery-required", error))?;
+    super::profile_rollback::clear(state)
+        .map_err(|e| CommandError::new("profile-save-recovery-required", e))?;
     Ok(saved)
+}
+
+fn rollback_profile_save(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+    profile_id: &str,
+    saved_hash: &str,
+    command: CommandError,
+) -> CommandError {
+    match super::profile_rollback::restore(state, profile_id, saved_hash) {
+        Ok(_) => match super::transaction::recover(state, gateway)
+            .and_then(|_| state.configuration().clear_profile_save())
+            .and_then(|_| super::profile_rollback::clear(state))
+        {
+            Ok(()) => command,
+            Err(clear_error) => CommandError::new(
+                "profile-save-recovery-required",
+                format!("{}；供应商档案已回滚，但{clear_error}", command.message),
+            ),
+        },
+        Err(restore_error) => CommandError::new(
+            "profile-save-recovery-required",
+            format!(
+                "{}；供应商档案未能回滚：{restore_error}；已保留恢复记录以继续完成已确认的保存",
+                command.message
+            ),
+        ),
+    }
 }
 
 pub(super) fn commit_prepared_profile_save(
@@ -378,7 +344,7 @@ pub(super) fn commit_prepared_profile_save(
     if actual_kind != prepared.kind {
         return Err(CommandError::new(
             "profile-save-stale",
-            "供应商、通用设置或当前客户端配置已变更，请重新保存并查看最新差异",
+            "供应商、客户端设置或当前客户端配置已变更，请重新保存并查看最新差异",
         ));
     }
     match prepared.kind {

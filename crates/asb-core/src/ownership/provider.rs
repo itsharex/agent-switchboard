@@ -2,15 +2,9 @@ use crate::contracts::AppKind;
 
 use crate::ownership::spec::{ProviderSettingSpec, SettingValueType};
 
-/// The retired custom-provider table written by the preceding routing
-/// contract. Its individual keys remain owned only so the next projection
-/// removes them without touching unrelated host entries in the same table.
-pub const CODEX_LEGACY_PROVIDER_ID: &str = "OpenAi";
-pub const CODEX_LEGACY_PROVIDER_NAME_KEY: &str = "model_providers.OpenAi.name";
-pub const CODEX_LEGACY_PROVIDER_BASE_URL_KEY: &str = "model_providers.OpenAi.base_url";
-pub const CODEX_LEGACY_PROVIDER_WIRE_API_KEY: &str = "model_providers.OpenAi.wire_api";
-pub const CODEX_LEGACY_PROVIDER_TOKEN_KEY: &str =
-    "model_providers.OpenAi.experimental_bearer_token";
+/// The built-in identity shared by official and gateway Codex routes.
+pub const CODEX_PROVIDER_ID: &str = "openai";
+pub const CODEX_PROVIDER_BASE_URL_KEY: &str = "openai_base_url";
 /// Codex's server-side web-search mode. A cross-protocol route cannot carry
 /// this Responses-only server tool, so the Codex adapter derives its effective
 /// value from the selected route at render time.
@@ -29,32 +23,7 @@ pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     },
     ProviderSettingSpec {
         app: AppKind::Codex,
-        key: "openai_base_url",
-        value_type: SettingValueType::String,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: "experimental_bearer_token",
-        value_type: SettingValueType::Secret,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: CODEX_LEGACY_PROVIDER_NAME_KEY,
-        value_type: SettingValueType::String,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: CODEX_LEGACY_PROVIDER_BASE_URL_KEY,
-        value_type: SettingValueType::String,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: CODEX_LEGACY_PROVIDER_WIRE_API_KEY,
-        value_type: SettingValueType::String,
-    },
-    ProviderSettingSpec {
-        app: AppKind::Codex,
-        key: CODEX_LEGACY_PROVIDER_TOKEN_KEY,
+        key: CODEX_PROVIDER_BASE_URL_KEY,
         value_type: SettingValueType::Secret,
     },
     ProviderSettingSpec {

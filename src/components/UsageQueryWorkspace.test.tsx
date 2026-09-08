@@ -36,12 +36,16 @@ describe("UsageQueryWorkspace", () => {
     renderWorkspace();
 
     expect(screen.getByRole("region", { name: "用量查询" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "字段提取" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    const declarativeTab = screen.getByRole("tab", { name: "字段提取" });
+    const scriptTab = screen.getByRole("tab", { name: "自编脚本" });
+    expect(declarativeTab).toHaveAttribute("aria-selected", "true");
+    const declarativePanel = document.getElementById(declarativeTab.getAttribute("aria-controls")!)!;
+    const scriptPanel = document.getElementById(scriptTab.getAttribute("aria-controls")!)!;
+    expect(declarativePanel).toHaveAttribute("aria-labelledby", declarativeTab.id);
+    expect(scriptPanel).toHaveAttribute("aria-labelledby", scriptTab.id);
+    expect(scriptPanel).toHaveAttribute("hidden");
 
-    await user.click(screen.getByRole("tab", { name: "自编脚本" }));
+    await user.click(scriptTab);
     expect(screen.getByRole("textbox", { name: "用量查询脚本" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "自编脚本" })).toHaveAttribute(
       "aria-selected",

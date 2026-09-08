@@ -4,6 +4,7 @@ import type { Update } from "@tauri-apps/plugin-updater";
 import {
   checkUpdate,
   closeUpdate,
+  getRuntimeOverview,
   getUpdateChannel,
   installUpdate,
   restartApplication,
@@ -14,6 +15,7 @@ import { useUpdateCheck } from "./useUpdateCheck";
 vi.mock("../api/client", () => ({
   checkUpdate: vi.fn(),
   closeUpdate: vi.fn(),
+  getRuntimeOverview: vi.fn(),
   getUpdateChannel: vi.fn(),
   installUpdate: vi.fn(),
   restartApplication: vi.fn(),
@@ -21,7 +23,6 @@ vi.mock("../api/client", () => ({
 
 const nativeUpdate = {} as Update;
 const discoveredUpdate: UpdateCheck = {
-  currentVersion: "0.1.1",
   latestVersion: "0.2.0",
   releaseNotes: null,
   checkedAt: "2026-09-01T00:00:00Z",
@@ -32,12 +33,39 @@ describe("useUpdateCheck", () => {
   beforeEach(() => {
     vi.mocked(checkUpdate).mockReset();
     vi.mocked(closeUpdate).mockReset();
+    vi.mocked(getRuntimeOverview).mockReset();
     vi.mocked(getUpdateChannel).mockReset();
     vi.mocked(installUpdate).mockReset();
     vi.mocked(restartApplication).mockReset();
     vi.mocked(closeUpdate).mockResolvedValue();
+    vi.mocked(getRuntimeOverview).mockResolvedValue({
+      appVersion: "0.1.15",
+      buildMode: "release",
+      platform: "windows",
+      architecture: "x86_64",
+      transport: { kind: "desktopProtocol" },
+      appDataPath: "C:\\Users\\dev\\AppData\\Roaming\\agent-switchboard",
+    });
     vi.mocked(getUpdateChannel).mockResolvedValue("github");
     vi.mocked(restartApplication).mockResolvedValue();
+  });
+
+  it("publishes the running build's version from the process itself", async () => {
+    const { result } = renderHook(() => useUpdateCheck({ onError: vi.fn() }));
+
+    await waitFor(() => expect(result.current.appVersion).toBe("0.1.15"));
+  });
+
+  it("keeps the version null when the process report cannot be read", async () => {
+    vi.mocked(getRuntimeOverview).mockRejectedValue(new Error("backend unavailable"));
+    vi.mocked(checkUpdate).mockResolvedValue(null);
+    const onError = vi.fn();
+    const { result } = renderHook(() => useUpdateCheck({ onError }));
+
+    await waitFor(() => expect(result.current.lastCheckedAt).not.toBeNull());
+
+    expect(result.current.appVersion).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("checks once on startup and keeps a signed update for installation", async () => {

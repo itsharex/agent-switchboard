@@ -21,13 +21,13 @@ pub(crate) fn matches_provider_credentials(
         RouteMode::Official => token.is_none_or(str::is_empty) && api_key.is_none_or(str::is_empty),
         RouteMode::Custom => match plan.client_authentication() {
             Some(AuthenticationScheme::Bearer) => {
-                !profile.api_key.is_empty()
-                    && token == Some(profile.api_key.as_str())
+                !plan.client_api_key().is_empty()
+                    && token == Some(plan.client_api_key())
                     && api_key.is_none_or(str::is_empty)
             }
             Some(AuthenticationScheme::XApiKey) => {
-                !profile.api_key.is_empty()
-                    && api_key == Some(profile.api_key.as_str())
+                !plan.client_api_key().is_empty()
+                    && api_key == Some(plan.client_api_key())
                     && token.is_none_or(str::is_empty)
             }
             None => false,

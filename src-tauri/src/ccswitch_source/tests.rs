@@ -195,6 +195,7 @@ fn import_enriches_a_matching_profile_with_the_source_usage_script() {
     let existing = state
         .configuration()
         .import_provider(ProviderDraft {
+            parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
             app: AppKind::Claude,
             route_mode: asb_core::RouteMode::Custom,
             name: "中继 A".to_string(),
@@ -202,6 +203,7 @@ fn import_enriches_a_matching_profile_with_the_source_usage_script() {
             base_url: Some("https://relay.internal".to_string()),
             api_key: SOURCE_TOKEN.to_string(),
             upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+            responses_options: None,
             max_output_tokens: None.into(),
             model_options: None,
             notes: Some("主力中继".to_string()),

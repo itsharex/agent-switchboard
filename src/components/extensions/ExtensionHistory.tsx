@@ -15,34 +15,30 @@ interface Props {
  * per-target outcomes; each one can be re-planned as a restore through the
  * standard preview flow. */
 export function ExtensionHistory({ records, items, busy, projectNames, onRestore }: Props) {
-  if (records.length === 0) return null;
+  if (records.length === 0) return <p className="asb-empty">还没有扩展操作记录</p>;
   const nameOf = (definitionId: string) =>
     items.find((item) => item.id === definitionId)?.name ?? definitionId;
 
   return (
     <section className="asb-ext-history" aria-label="操作历史">
-      <h3>操作历史</h3>
       <ul className="asb-ext-history-list">
         {records.slice(0, 10).map((record) => (
           <li key={record.id} className="asb-ext-history-item">
             <div className="asb-ext-history-head">
               <span className="asb-pill-status">
-                {OPERATION_LABELS[
-                  record.resources.find(
-                    (resource) =>
-                      resource.operation === "install" || resource.operation === "remove",
-                  )?.operation ?? record.resources[0]?.operation ?? "update"
-                ]}
+                {
+                  OPERATION_LABELS[
+                    record.resources.find(
+                      (resource) => resource.operation === "install" || resource.operation === "remove",
+                    )?.operation ??
+                      record.resources[0]?.operation ??
+                      "update"
+                  ]
+                }
               </span>
-              <span>
-                {record.resources.map((resource) => nameOf(resource.definitionId)).join("、")}
-              </span>
+              <span>{record.resources.map((resource) => nameOf(resource.definitionId)).join("、")}</span>
               <Time iso={record.createdAt} />
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() => onRestore(record.id)}
-              >
+              <Button variant="secondary" disabled={busy} onClick={() => onRestore(record.id)}>
                 恢复
               </Button>
             </div>
@@ -57,7 +53,8 @@ export function ExtensionHistory({ records, items, busy, projectNames, onRestore
             </ul>
             {record.rollback && (
               <p className="asb-scope-note">
-                回滚：已恢复 {record.rollback.restored.length} 个目标，失败 {record.rollback.failed.length} 个。
+                回滚：已恢复 {record.rollback.restored.length} 个目标，失败 {record.rollback.failed.length}{" "}
+                个。
               </p>
             )}
           </li>

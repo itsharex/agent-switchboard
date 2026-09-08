@@ -53,6 +53,7 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
           ? current
           : null,
       );
+      return nextRecords;
     } catch (caught) {
       if (refreshVersion.current !== version) return;
       onError(caught as CommandError);

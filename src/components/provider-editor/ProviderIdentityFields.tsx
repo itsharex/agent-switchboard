@@ -1,0 +1,105 @@
+import { useState } from "react";
+import type { AppKind } from "../../api/client";
+import { clientName } from "../../lib/client-name";
+import { ClientLogo } from "../ClientLogo";
+import { ChevronDownIcon } from "../icons";
+import { Input } from "../Input";
+import { RadioOption } from "../RadioOption";
+import { Select } from "../Select";
+import { Textarea } from "../Textarea";
+import { defaultConnection, draftFrom } from "./draft";
+import type { ProviderEditorState } from "./useProviderEditor";
+
+interface Props {
+  editor: ProviderEditorState;
+  busy: boolean;
+  editing: boolean;
+  officialTakenApps: AppKind[];
+  onOpenOfficial: (app: AppKind) => void;
+}
+
+function AccessMode({ editor, busy, officialTakenApps, onOpenOfficial }: Props) {
+  const { draft, setDraft, setLoginDone } = editor;
+  return (
+    <div className="asb-field">
+      <span>接入方式</span>
+      <div className="asb-segments" role="radiogroup" aria-label="接入方式">
+        <RadioOption name="access-mode" checked={draft.routeMode === "custom"}
+          disabled={busy} label="自定义 API 中继" onChange={() => {
+            setDraft((current) => ({ ...current, routeMode: "custom", ...defaultConnection(current.app) }));
+            setLoginDone(false);
+          }} />
+        <RadioOption name="access-mode" checked={draft.routeMode === "official"}
+          disabled={busy} label="官方登录" onChange={() => {
+            if (officialTakenApps.includes(draft.app)) { onOpenOfficial(draft.app); return; }
+            // Official profiles retain parameters but own no custom connection or model override.
+            setDraft((current) => ({
+              ...current, routeMode: "official",
+              name: current.name.trim() || `${clientName(current.app)} 官方登录`,
+              model: null, baseUrl: null, apiKey: "", upstreamProtocol: null,
+              responsesOptions: null,
+              maxOutputTokens: null, modelOptions: null, usageQuery: null,
+              officialQuotaRefreshIntervalMinutes: null,
+            }));
+            setLoginDone(false);
+          }} />
+      </div>
+    </div>
+  );
+}
+
+export function ProviderIdentityFields(props: Props) {
+  const { editor, busy, editing } = props;
+  const { draft, setDraft, setLoginDone } = editor;
+  return (
+    <section className="asb-provider-section" aria-label="基本资料">
+      <h3>基本资料</h3>
+      <div className="asb-provider-section-fields">
+        <div className="asb-provider-field-grid">
+      <label className="asb-field">
+        <span>客户端</span>
+        <div className="asb-client-control">
+          <ClientLogo app={draft.app} className="asb-edit-logo" />
+          <Select ariaLabel="客户端" value={draft.app} disabled={editing || busy}
+            options={[{ value: "codex", label: "Codex" }, { value: "claude", label: "Claude" }]}
+            onChange={(app) => {
+              if (app === draft.app) return;
+              setDraft(draftFrom(null, app as AppKind));
+              setLoginDone(false);
+            }} />
+        </div>
+      </label>
+      {!editing && <AccessMode {...props} />}
+        </div>
+        <div className="asb-provider-field-grid">
+      <label className="asb-field">
+        <span>名称</span>
+        <Input value={draft.name} required disabled={busy}
+          onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+      </label>
+      <label className="asb-field">
+        <span>官网地址</span>
+        <Input type="url" value={draft.websiteUrl ?? ""} disabled={busy} placeholder="（可选）"
+          onChange={(event) => setDraft((current) => ({ ...current, websiteUrl: event.target.value }))} />
+      </label>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ProviderNotesField({ editor, busy }: Pick<Props, "editor" | "busy">) {
+  const { draft, setDraft } = editor;
+  const [expanded, setExpanded] = useState(() => Boolean(draft.notes?.trim()));
+  return (
+    <details className="asb-provider-disclosure" open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary><span>备注</span><span className="asb-provider-disclosure-value">{draft.notes?.trim() ? "已填写" : "可选"}</span><ChevronDownIcon /></summary>
+      <div className="asb-provider-disclosure-body">
+        <Textarea aria-label="备注" rows={3} value={draft.notes ?? ""} disabled={busy}
+          placeholder="仅保存在本应用，便于区分供应商"
+          onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} />
+      </div>
+    </details>
+  );
+}

@@ -71,9 +71,9 @@ describe("CloudBackupPanel", () => {
     expect(guide).not.toHaveTextContent("成功后会清空项目 Auth 密码");
     expect(guide).toHaveTextContent("恢复必须使用同一条密码");
     expect(
-      screen.getByText(/完整的供应商档案（包括端点、模型、API 格式、最大输出 token 和 API 密钥；认证请求头会按 API 格式自动推导）/),
+      screen.getByText(/完整的供应商档案（包括端点、模型、运行参数、API 格式、最大输出 token 和 API 密钥；认证请求头会按 API 格式自动推导）/),
     ).toBeInTheDocument();
-    expect(guide).toHaveTextContent("完整的供应商档案（含 API 格式和最大输出 token）");
+    expect(guide).toHaveTextContent("完整的供应商档案（含运行参数、API 格式和最大输出 token）");
     expect(within(guide).getByRole("link", { name: "项目 Dashboard" })).toHaveAttribute(
       "href",
       "https://supabase.com/dashboard/project/example",

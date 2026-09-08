@@ -1,0 +1,88 @@
+import type { AppKind, DiscoveredFile, DiscoveryReport, ImportProposal } from "../../api/client";
+import { Button } from "../../components/Button";
+import { clientName } from "../../lib/client-name";
+
+interface LocalConfigImportProps {
+  app: AppKind;
+  discovery: DiscoveryReport | null;
+  busy: boolean;
+  onScan: () => void;
+  onImport: (app: AppKind) => void;
+}
+
+function stateLabel(file: DiscoveredFile): string {
+  switch (file.state.kind) {
+    case "ok": return "配置可读取";
+    case "missing": return "未找到配置文件";
+    case "readError": return "读取失败";
+    case "parseError": return "语法错误";
+  }
+}
+
+function LocalRouteFacts({ file }: { file: DiscoveredFile }) {
+  if (file.state.kind !== "ok") return null;
+  const { route, managed, warnings, importable } = file.state;
+  return (
+    <>
+      <div className="asb-status-row"><dt>当前服务</dt><dd>
+        {route.routeMode === "official" ? "官方登录" : "自定义服务"} · {route.model ?? "默认模型"}
+      </dd></div>
+      {route.providerName && <div className="asb-status-row"><dt>供应商</dt><dd>{route.providerName}</dd></div>}
+      {route.baseUrl && <div className="asb-status-row"><dt>服务地址</dt><dd className="asb-code">{route.baseUrl}</dd></div>}
+      {route.apiKey && <div className="asb-status-row"><dt>凭据变量</dt><dd className="asb-code">{route.apiKey}</dd></div>}
+      <div className="asb-status-row"><dt>管理状态</dt><dd>{managed ? "已由本应用管理" : "未由本应用管理"}</dd></div>
+      {(warnings.length > 0 || (!importable && !managed)) && (
+        <div className="asb-status-row"><dt>警告</dt><dd>
+          {warnings.map((warning) => <span key={warning} className="asb-warn-text asb-status-warn">{warning}</span>)}
+          {!importable && !managed && <span className="asb-warn-text asb-status-warn">当前配置包含无法安全导入的设置。</span>}
+        </dd></div>
+      )}
+    </>
+  );
+}
+
+function LocalConfigCard({ file, proposal, busy, onImport }: {
+  file: DiscoveredFile;
+  proposal: ImportProposal | undefined;
+  busy: boolean;
+  onImport: (app: AppKind) => void;
+}) {
+  return (
+    <article className="asb-status-card" aria-label={`${clientName(file.app)} 扫描结果`}>
+      <header className="asb-status-head">
+        <h3 className="asb-status-name">{clientName(file.app)}</h3>
+        <span className="asb-status-pill">{stateLabel(file)}</span>
+      </header>
+      <dl className="asb-status-rows">
+        <div className="asb-status-row"><dt>配置文件</dt><dd className="asb-code">{file.path}</dd></div>
+        {file.state.kind === "readError" && (
+          <div className="asb-status-row"><dt>读取错误</dt><dd className="asb-warn-text">{file.state.message}</dd></div>
+        )}
+        {file.state.kind === "parseError" && (
+          <div className="asb-status-row"><dt>语法错误</dt><dd className="asb-warn-text">
+            {file.state.line !== null ? `第 ${file.state.line} 行 · ` : ""}{file.state.message}
+          </dd></div>
+        )}
+        <LocalRouteFacts file={file} />
+      </dl>
+      {proposal && <div className="asb-discovery-import">
+        <p className="asb-discovery-basis">{proposal.basis}</p>
+        <Button variant="secondary" disabled={busy} onClick={() => onImport(proposal.app)}>导入供应商</Button>
+      </div>}
+    </article>
+  );
+}
+
+export function LocalConfigImport({ app, discovery, busy, onScan, onImport }: LocalConfigImportProps) {
+  return (
+    <section className="asb-panel" aria-label="从本机配置导入">
+      <div className="asb-panel-heading">
+        <h2 className="asb-panel-title">本机配置</h2>
+        <Button variant="secondary" disabled={busy} onClick={onScan}>{discovery ? "刷新配置" : "扫描配置"}</Button>
+      </div>
+      {discovery ? <LocalConfigCard file={discovery[app]} busy={busy} onImport={onImport}
+        proposal={discovery.importProposals.find((item) => item.app === app)} />
+        : <p className="asb-empty">尚未扫描 {clientName(app)} 配置。</p>}
+    </section>
+  );
+}

@@ -107,7 +107,7 @@ describe("BackupHistory", () => {
 
     expect(screen.queryByRole("button", { name: "恢复" })).not.toBeInTheDocument();
     expect(screen.getByText("网关端口修改前备份")).toBeInTheDocument();
-    expect(screen.getByText("请在网关页修改端口")).toBeInTheDocument();
+    expect(screen.getByText("请在设置的本机网关中修改端口")).toBeInTheDocument();
   });
 
   it("does not offer an isolated restore for a gateway port rollback backup", () => {

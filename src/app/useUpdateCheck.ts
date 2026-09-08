@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   checkUpdate,
   closeUpdate,
+  getRuntimeOverview,
   getUpdateChannel,
   installUpdate,
   restartApplication,
@@ -22,6 +23,7 @@ interface UpdateCheckDeps {
 /** The sole frontend state owner for signed update checks and installation. */
 export function useUpdateCheck({ onError }: UpdateCheckDeps) {
   const [updateChannel, setUpdateChannel] = useState<UpdateChannel | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [updateCheck, setUpdateCheck] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -88,6 +90,16 @@ export function useUpdateCheck({ onError }: UpdateCheckDeps) {
       .catch(() => undefined);
   }, [runUpdateCheck]);
 
+  // The running build's version is read from the process itself so the
+  // settings page can show it before any update check has run.
+  useEffect(() => {
+    void getRuntimeOverview()
+      .then((overview) => {
+        if (!disposed.current) setAppVersion(overview.appVersion);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const installAvailableUpdate = useCallback(async () => {
     const availableUpdate = activeUpdate.current;
     if (!availableUpdate || installing || restartRequired) return;
@@ -136,6 +148,7 @@ export function useUpdateCheck({ onError }: UpdateCheckDeps) {
 
   return {
     updateChannel,
+    appVersion,
     updateCheck,
     checking,
     installing,

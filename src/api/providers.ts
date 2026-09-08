@@ -1,7 +1,8 @@
 import { invoke } from "./client";
-import type { AppKind, ModelOptions, UpstreamProtocol } from "./shared";
+import type { AppKind, ModelOptions, ResponsesOptions, UpstreamProtocol } from "./shared";
 import type { UsageQuery } from "./usage";
 import type { FilePreview } from "./switching";
+import type { SettingsValues } from "./settings";
 
 export interface ProviderProfile {
   id: string;
@@ -12,8 +13,10 @@ export interface ProviderProfile {
   baseUrl: string | null;
   apiKey: string;
   upstreamProtocol: UpstreamProtocol | null;
+  responsesOptions: ResponsesOptions | null;
   maxOutputTokens: number | null;
   modelOptions: ModelOptions | null;
+  parameters: SettingsValues;
   /** Local-only note; never written into any client configuration. */
   notes?: string | null;
   /** Provider homepage, used for navigation only. */
@@ -42,8 +45,10 @@ export interface ProviderDraft {
   baseUrl: string | null;
   apiKey: string;
   upstreamProtocol: UpstreamProtocol | null;
+  responsesOptions: ResponsesOptions | null;
   maxOutputTokens: number | null;
   modelOptions: ModelOptions | null;
+  parameters: SettingsValues;
   notes?: string | null;
   websiteUrl: string | null;
   usageQuery?: UsageQuery | null;
@@ -120,14 +125,27 @@ export function probeEndpoint(url: string): Promise<ProbeResult> {
   return invoke<ProbeResult>("probe_endpoint", { url });
 }
 
-/** One model from the provider's configured /v1/models endpoint; the
+export interface ProviderEndpoints {
+  requestUrl: string;
+  modelsUrl: string;
+}
+
+/** Pure backend resolution, without contacting the provider or reading credentials. */
+export function resolveProviderEndpoints(
+  baseUrl: string,
+  upstreamProtocol: UpstreamProtocol,
+): Promise<ProviderEndpoints> {
+  return invoke("resolve_provider_endpoints", { request: { baseUrl, upstreamProtocol } });
+}
+
+/** One model from the provider's configured models endpoint; the
  * optional vendor groups the editor's model picker. */
 export interface ProviderModel {
   id: string;
   ownedBy: string | null;
 }
 
-/** Models from the provider's configured /v1/models endpoint. */
+/** Models from the provider's configured API root. */
 export function fetchProviderModels(
   baseUrl: string,
   apiKey: string,

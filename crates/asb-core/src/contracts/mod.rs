@@ -8,7 +8,9 @@ mod kinds;
 mod model;
 mod plan;
 mod provider;
+mod responses;
 mod settings;
+mod subagents;
 #[cfg(test)]
 mod tests;
 mod usage;
@@ -23,8 +25,14 @@ pub use provider::{
     classify_profile_save, ProfileSaveKind, ProviderDraft, ProviderFile, ProviderProfile,
     ProviderRecord,
 };
+pub use responses::{ResponsesOptions, ResponsesRequestMode};
 pub use settings::{
-    CommonSettingValue, CommonSettings, CommonSettingsPreview, CommonSettingsSnapshot, ConfigValue,
+    ClientSettingsPreview, ClientSettingsSnapshot, ConfigValue, SettingValue, SettingsValues,
+    MAX_EXACT_CONFIG_INTEGER,
+};
+pub use subagents::{
+    CodexSubagentKey, CodexSubagentSettings, CodexSubagentSettingsPreview,
+    CodexSubagentSettingsSnapshot, SubagentSettingsPlan,
 };
 pub use usage::{
     CodexOfficialQuota, CodexOfficialQuotaReset, CodexOfficialQuotaResetKind,

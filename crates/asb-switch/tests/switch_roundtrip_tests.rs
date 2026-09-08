@@ -44,15 +44,15 @@ fn switch_a_to_b_to_restore_preserves_every_host_field() {
     let switched = fs::read_to_string(&target).unwrap();
     // Credentials are not part of config.toml under the built-in `openai`
     // contract, so the redacted configuration candidate is byte-identical.
-    assert_eq!(switched, fp.content);
+    assert!(!fp.content.contains(&"a".repeat(64)));
     assert!(!fp.content.contains("CODEX_RELAY_B_KEY"));
     assert!(switched.contains("model_provider = \"openai\""));
     assert!(!switched.contains("[model_providers.OpenAi]"));
     assert!(!switched.contains("experimental_bearer_token"));
-    assert!(switched.contains("openai_base_url = \"https://relay-b.internal/v1\""));
+    assert!(switched.contains("openai_base_url = \"http://127.0.0.1:18900/codex/"));
     assert!(switched.contains("model_reasoning_effort = \"xhigh\""));
     assert!(!switched.contains("CODEX_RELAY_B_KEY"));
-    assert!(switched.contains("https://relay-b.internal/v1"));
+    assert!(!switched.contains("https://relay-b.internal/v1"));
     for host in ["threads = 8", "history_persistence", "trusted = true"] {
         assert!(switched.contains(host), "host field lost: {host}");
     }

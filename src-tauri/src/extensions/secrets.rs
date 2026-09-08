@@ -7,7 +7,12 @@
 //! documents, which the preview then redacts.
 
 /// The system credential service name for extension secrets.
+#[cfg(not(feature = "desktop-e2e"))]
 pub const SECRET_SERVICE: &str = "Agent Switchboard";
+
+/// Desktop E2E uses the real OS store with a separate service namespace.
+#[cfg(feature = "desktop-e2e")]
+pub const SECRET_SERVICE: &str = "Agent Switchboard E2E";
 
 /// Errors from the secret store.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -29,18 +34,31 @@ pub trait SecretBackend {
 /// The system credential store implementation.
 pub struct SystemSecrets;
 
+fn system_entry(reference: &str) -> Result<keyring::Entry, SecretError> {
+    // Windows enumeration supports prefix filters only. The E2E namespace
+    // lets the external runner find orphaned saves without reading production
+    // credential metadata or blobs.
+    #[cfg(all(windows, feature = "desktop-e2e"))]
+    let entry = keyring::Entry::new_with_target(
+        &format!("{SECRET_SERVICE}.{reference}"),
+        SECRET_SERVICE,
+        reference,
+    );
+    #[cfg(not(all(windows, feature = "desktop-e2e")))]
+    let entry = keyring::Entry::new(SECRET_SERVICE, reference);
+    entry.map_err(|error| SecretError::Unavailable(error.to_string()))
+}
+
 impl SecretBackend for SystemSecrets {
     fn put(&self, reference: &str, value: &str) -> Result<(), SecretError> {
-        let entry = keyring::Entry::new(SECRET_SERVICE, reference)
-            .map_err(|error| SecretError::Unavailable(error.to_string()))?;
+        let entry = system_entry(reference)?;
         entry
             .set_password(value)
             .map_err(|error| SecretError::Unavailable(error.to_string()))
     }
 
     fn get(&self, reference: &str) -> Result<String, SecretError> {
-        let entry = keyring::Entry::new(SECRET_SERVICE, reference)
-            .map_err(|error| SecretError::Unavailable(error.to_string()))?;
+        let entry = system_entry(reference)?;
         entry.get_password().map_err(|error| match error {
             keyring::Error::NoEntry => SecretError::Missing(reference.to_string()),
             other => SecretError::Unavailable(other.to_string()),

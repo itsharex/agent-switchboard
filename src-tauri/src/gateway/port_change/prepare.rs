@@ -1,7 +1,7 @@
 //! Read-only port-change preparation and stale-preview snapshots.
 
+use super::super::lifecycle::bind_failure_report;
 use super::*;
-use tiny_http::Server;
 
 pub(crate) fn prepare(
     controller: &GatewayController,
@@ -20,8 +20,8 @@ pub(crate) fn prepare(
     if controller.blocked_recovery().is_some() || journal_path(local).exists() {
         return Err("存在未完成的端口修改恢复，请先处理后再发起新的修改".to_string());
     }
-    let server = Server::http(("127.0.0.1", new_port))
-        .map_err(|error| bind_failure_report(new_port, error).message)?;
+    let listener = BoundListener::bind(new_port)
+        .map_err(|error| bind_failure_report(new_port, Box::new(error)).message)?;
     let observed = observe_clients(controller, local, from_port, new_port)?;
     let clients = observed
         .iter()
@@ -37,7 +37,7 @@ pub(crate) fn prepare(
     preparations.issue(PreparedPortChange {
         created_at: Instant::now(),
         plan,
-        listener: BoundListener::from_server(server),
+        listener,
         snapshots,
     })
 }
@@ -69,27 +69,23 @@ fn observe_client(
         adapter::validate_syntax(app, text)
             .map_err(|_| "客户端配置格式无效，无法安全修改端口；请先修复该配置".to_string())?;
     }
-    let (auth_text, codex_auth) = if app == AppKind::Codex {
-        let auth_path = LocalState::codex_auth_path()
-            .map_err(|error| format!("无法解析 Codex 登录缓存路径：{error}"))?;
-        let (text, snapshot) = read_optional_text(&auth_path, "Codex 登录缓存")?;
-        (text, Some(snapshot))
-    } else {
-        (None, None)
-    };
     let candidates = route_candidates(controller, local, app)?;
     let mut matching = Vec::new();
     if let Some(text) = configuration.as_deref() {
         for candidate in candidates {
-            if controller.route_matches_config(&candidate.route, text, auth_text.as_deref())? {
+            if controller.route_matches_config(&candidate.route, text)? {
                 matching.push(candidate);
             }
         }
     }
     let (route, client) = match matching.as_slice() {
         [candidate] => {
-            let current_base_url = endpoint_for(app, from_port);
-            let new_base_url = endpoint_for(app, to_port);
+            let current_base_url = candidate
+                .route
+                .client_endpoint(&format!("http://127.0.0.1:{from_port}"));
+            let new_base_url = candidate
+                .route
+                .client_endpoint(&format!("http://127.0.0.1:{to_port}"));
             let client = GatewayPortChangeClient {
                 app,
                 profile_id: candidate.route.profile_id.clone(),
@@ -106,9 +102,10 @@ fn observe_client(
             )
         }
         [] => {
-            if configuration.as_deref().is_some_and(|text| {
-                routing::config_points_at_gateway(app, text, auth_text.as_deref())
-            }) {
+            if configuration
+                .as_deref()
+                .is_some_and(|text| routing::config_points_at_gateway(app, text))
+            {
                 return Err(
                     "客户端配置指向本机协议网关，但无法确认所属供应商；请先重新应用该供应商，再修改端口"
                         .to_string(),
@@ -119,12 +116,7 @@ fn observe_client(
         _ => return Err("客户端配置匹配多个本机协议网关供应商，无法安全修改端口".to_string()),
     };
     Ok(ObservedClient {
-        snapshot: ClientSnapshot {
-            app,
-            config,
-            codex_auth,
-            route,
-        },
+        snapshot: ClientSnapshot { app, config, route },
         configuration,
         client,
     })
@@ -182,13 +174,5 @@ fn read_optional_text(
             },
         )),
         Err(_) => Err(format!("无法读取{label}，已取消本次修改")),
-    }
-}
-
-fn endpoint_for(app: AppKind, port: u16) -> String {
-    let base = format!("http://127.0.0.1:{port}");
-    match app {
-        AppKind::Codex => format!("{base}/v1"),
-        AppKind::Claude => base,
     }
 }

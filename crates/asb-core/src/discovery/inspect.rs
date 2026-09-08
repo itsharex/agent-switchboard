@@ -34,35 +34,8 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
         AppKind::Codex => inspect_codex(text),
         AppKind::Claude => inspect_claude(text),
     };
-    let claude_import_error = (app == AppKind::Claude)
-        .then(|| claude_import_model_fields(&route).err())
-        .flatten();
-    let importable = if route.route_mode == RouteMode::Official {
-        true
-    } else {
-        match app {
-            AppKind::Codex => codex_import_is_supported(text, &route),
-            AppKind::Claude => route.base_url.is_some() && claude_import_error.is_none(),
-        }
-    };
-    if app == AppKind::Codex && route.route_mode == RouteMode::Custom && !importable {
-        if matches!(
-            route.wire_api.as_deref(),
-            Some("anthropic") | Some("anthropic_messages")
-        ) {
-            warnings.push(
-                "当前 Codex 配置使用 Anthropic Messages；新供应商必须明确设置最大输出 token，不能直接导入"
-                    .to_string(),
-            );
-        } else {
-            warnings.push("当前 Codex 配置无法作为供应商档案导入".to_string());
-        }
-    }
-    if app == AppKind::Claude && route.route_mode == RouteMode::Custom {
-        if let Some(error) = claude_import_error {
-            warnings.push(format!("当前 Claude 配置无法作为供应商档案导入：{error}"));
-        }
-    }
+    let importable =
+        !(app == AppKind::Codex && managed) && import_supported(app, text, &route, &mut warnings);
     DiscoveredFile {
         app,
         path: path.to_string(),
@@ -76,25 +49,39 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
     }
 }
 
-fn codex_import_is_supported(text: &str, route: &RouteState) -> bool {
-    if route.route_mode != RouteMode::Custom || route.base_url.is_none() {
-        return false;
-    }
-    if matches!(
-        route.wire_api.as_deref(),
-        Some("anthropic") | Some("anthropic_messages")
-    ) {
-        return false;
-    }
-    let Ok(doc) = text.parse::<toml_edit::DocumentMut>() else {
-        return false;
+fn import_supported(
+    app: AppKind,
+    text: &str,
+    route: &RouteState,
+    warnings: &mut Vec<String>,
+) -> bool {
+    let claude_import_error = (app == AppKind::Claude)
+        .then(|| claude_import_model_fields(route).err())
+        .flatten();
+    let mut importable = if route.route_mode == RouteMode::Official {
+        true
+    } else {
+        match app {
+            AppKind::Codex => match super::codex::import_route(text, route) {
+                Ok(_) => true,
+                Err(error) => {
+                    warnings.push(format!("当前 Codex 配置无法导入：{error}"));
+                    false
+                }
+            },
+            AppKind::Claude => route.base_url.is_some() && claude_import_error.is_none(),
+        }
     };
-    let provider_id = doc
-        .as_table()
-        .get("model_provider")
-        .and_then(Item::as_value)
-        .and_then(|value| value.as_str());
-    provider_id == Some(crate::adapter::codex::OFFICIAL_PROVIDER)
+    if app == AppKind::Claude && route.route_mode == RouteMode::Custom {
+        if let Some(error) = claude_import_error {
+            warnings.push(format!("当前 Claude 配置无法作为供应商档案导入：{error}"));
+        }
+    }
+    if let Err(error) = crate::adapter::read_provider_parameters(app, text) {
+        importable = false;
+        warnings.push(format!("供应商运行参数无法导入：{error}"));
+    }
+    importable
 }
 
 fn inspect_codex(text: &str) -> (bool, Vec<String>) {
@@ -108,13 +95,12 @@ fn inspect_codex(text: &str) -> (bool, Vec<String>) {
         .and_then(Item::as_value)
         .and_then(|value| value.as_str())
         .unwrap_or(crate::adapter::codex::OFFICIAL_PROVIDER);
-    let managed = provider_id == crate::adapter::codex::OFFICIAL_PROVIDER
+    let managed = provider_id == crate::ownership::CODEX_PROVIDER_ID
         && doc
             .as_table()
             .get("openai_base_url")
-            .and_then(Item::as_value)
-            .and_then(|value| value.as_str())
-            .is_some();
+            .and_then(Item::as_str)
+            .is_some_and(|value| crate::adapter::codex::is_gateway_base_url(value));
 
     (managed, vec![])
 }

@@ -71,9 +71,9 @@ pub enum RouteMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UpstreamProtocol {
-    /// OpenAI Responses (`/v1/responses`).
+    /// OpenAI Responses (`/responses` beneath the declared API root).
     Responses,
-    /// OpenAI-compatible Chat Completions (`/v1/chat/completions`).
+    /// OpenAI-compatible Chat Completions (`/chat/completions` beneath the API root).
     ChatCompletions,
     /// Anthropic Messages (`/v1/messages`).
     AnthropicMessages,

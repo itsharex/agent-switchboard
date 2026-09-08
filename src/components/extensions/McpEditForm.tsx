@@ -10,6 +10,7 @@ import type {
 } from "../../api/client";
 import { Button } from "../Button";
 import { Input } from "../Input";
+import { Textarea } from "../Textarea";
 import { Select, type SelectOption } from "../Select";
 import { BearerCredentialField } from "./mcp-edit/BearerCredentialField";
 import { CodexOptionsSection } from "./mcp-edit/CodexOptionsSection";
@@ -392,8 +393,7 @@ export function McpEditForm({ envelope, busy, onPutSecret, onSave, onCancel }: P
           </label>
           <label className="asb-field">
             <span>启动参数（每行一个）</span>
-            <textarea
-              className="asb-input asb-textarea"
+            <Textarea
               aria-label="启动参数"
               rows={3}
               value={argsText}

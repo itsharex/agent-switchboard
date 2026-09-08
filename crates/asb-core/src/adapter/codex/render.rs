@@ -1,10 +1,11 @@
 use crate::adapter::{AdapterError, OverlayEntry};
-use crate::contracts::{CommonSettings, SwitchPlan};
+use crate::contracts::{SettingsValues, SwitchPlan};
 
 use crate::adapter::codex::document::{parse, remove_empty_table_path, remove_path, set_path};
-use crate::adapter::codex::overlay::{common_overlay, overlay};
+use crate::adapter::codex::overlay::{client_settings_overlay, overlay};
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
+    super::validate_projection(plan)?;
     render_entries(current, overlay(plan))
 }
 
@@ -12,19 +13,24 @@ pub(crate) fn render_gateway_base_url(
     current: &str,
     base_url: &str,
 ) -> Result<String, AdapterError> {
+    if !super::is_gateway_base_url(base_url) {
+        return Err(AdapterError { message: "Codex 网关地址必须是本机带路由凭证的入口".into(), line: None });
+    }
     render_entries(
         current,
         vec![(
-            "openai_base_url".to_string(),
+            crate::ownership::CODEX_PROVIDER_BASE_URL_KEY.to_string(),
             OverlayEntry::Set(crate::contracts::ConfigValue::Str(base_url.to_string())),
         )],
     )
 }
 
-pub(crate) fn render_common_settings(common: &CommonSettings) -> Result<String, AdapterError> {
-    let rendered = render_entries("", common_overlay(common))?;
+pub(crate) fn render_client_settings(
+    client_settings: &SettingsValues,
+) -> Result<String, AdapterError> {
+    let rendered = render_entries("", client_settings_overlay(client_settings))?;
     Ok(if rendered.trim().is_empty() {
-        "# 所有通用设置均为自动\n".to_string()
+        "# 所有客户端设置均为自动\n".to_string()
     } else {
         rendered
     })

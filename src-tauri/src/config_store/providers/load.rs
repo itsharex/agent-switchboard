@@ -7,7 +7,7 @@ use asb_core::contracts::{
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 pub(super) const POSITION_STEP: u64 = 100;
@@ -15,50 +15,6 @@ pub(super) const POSITION_STEP: u64 = 100;
 pub(super) struct LoadedProvider {
     pub(super) file: ProviderFile,
     pub(super) hash: String,
-}
-
-/// Converts exactly the immediately preceding provider-file contract into the
-/// current one. The removed field carried no business meaning once protocol
-/// owns credential delivery, so every historical value maps to the same
-/// current provider. The canonical file is written before it is exposed to
-/// callers; no runtime path consumes both contracts.
-fn parse_provider_file(
-    app: AppKind,
-    path: &Path,
-    text: &str,
-) -> Result<(ProviderFile, String), ProfileStoreError> {
-    if let Ok(file) = parse_strict::<ProviderFile>(text) {
-        return Ok((file, text.to_string()));
-    }
-
-    let mut value: serde_json::Value =
-        serde_json::from_str(text).map_err(|_| ProfileStoreError::Unsupported)?;
-    let fields = value
-        .as_object_mut()
-        .ok_or(ProfileStoreError::Unsupported)?;
-    let legacy_authentication = fields
-        .remove("authScheme")
-        .ok_or(ProfileStoreError::Unsupported)?;
-    if !matches!(
-        legacy_authentication,
-        serde_json::Value::String(ref value)
-            if matches!(value.as_str(), "none" | "bearer" | "xApiKey")
-    ) {
-        return Err(ProfileStoreError::Unsupported);
-    }
-    let file: ProviderFile =
-        serde_json::from_value(value).map_err(|_| ProfileStoreError::Unsupported)?;
-    file.clone()
-        .into_profile(app)
-        .validate()
-        .map_err(|_| ProfileStoreError::Unsupported)?;
-    if let Some(query) = &file.usage_query {
-        crate::usage_query::validate_persisted(query)
-            .map_err(|_| ProfileStoreError::Unsupported)?;
-    }
-    let current = serde_json::to_string_pretty(&file).map_err(|_| ProfileStoreError::Unreadable)?;
-    write_json_atomic(path, &current).map_err(|_| ProfileStoreError::Unreadable)?;
-    Ok((file, current))
 }
 
 fn load_client(
@@ -85,7 +41,7 @@ fn load_client(
             .ok_or(ProfileStoreError::Unsupported)?
             .to_string();
         let text = read_optional(&path)?.ok_or(ProfileStoreError::Unsupported)?;
-        let (file, text) = parse_provider_file(app, &path, &text)?;
+        let file: ProviderFile = parse_strict(&text)?;
         if Uuid::parse_str(&file.id).is_err() || file.id != stem {
             return Err(ProfileStoreError::Unsupported);
         }
@@ -190,6 +146,7 @@ pub(super) fn write_provider_file(
     let json =
         serde_json::to_string_pretty(file).map_err(|_| "供应商文件序列化失败".to_string())?;
     let path = provider_path(store, app, &file.id);
+    store.initialize_current_layout()?;
     write_json_atomic(&path, &json)?;
     Ok(content_revision(json.as_bytes()))
 }
@@ -211,6 +168,9 @@ pub(super) fn next_position(loaded: &[LoadedProvider]) -> u64 {
 /// a selected source import may add a missing optional usage query without
 /// overwriting the existing provider's notes, website, or configured query.
 pub(super) fn same_provider_routing(profile: &ProviderProfile, draft: &ProviderDraft) -> bool {
+    if profile.parameters != draft.parameters {
+        return false;
+    }
     if draft.route_mode == RouteMode::Official {
         return profile.app == draft.app && profile.route_mode == RouteMode::Official;
     }

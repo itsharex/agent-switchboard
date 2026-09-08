@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import {
   commitProfileSave,
   deleteProfile,
@@ -14,15 +14,18 @@ import {
   type UsageQuery,
 } from "../api/client";
 
-export type EditorMode = "new" | "edit" | null;
+export interface ProviderEditorSession {
+  app: AppKind;
+  /** The record and storage revision captured when this editor opened. */
+  record: ProviderRecord | null;
+}
+
+type SetEditorSession = Dispatch<SetStateAction<ProviderEditorSession | null>>;
 
 interface ProvidersDeps {
   busy: boolean;
   appFilter: AppKind;
   setAppFilter: (app: AppKind) => void;
-  /** Storage revision of the provider file being edited; a save refuses to
-   * overwrite a file changed outside the application. */
-  selectedRecord: ProviderRecord | null;
   records: ProviderRecord[];
   selectedId: string | null;
   onError: (error: CommandError) => void;
@@ -36,47 +39,27 @@ interface ProvidersDeps {
   setSelectedId: (id: string | null) => void;
 }
 
-/**
- * Provider-profile store operations: editor navigation, create, update,
- * delete, reset, and drag reorder. Store writes never touch live client
- * configuration.
- */
-export function useProviders({
-  busy,
-  appFilter,
-  setAppFilter,
-  selectedRecord,
-  records,
-  selectedId,
-  onError,
-  clearError,
-  setBusy,
-  invalidateCandidates,
-  retractPreview,
-  refresh,
-  selectProfile,
-  setRecords,
-  setSelectedId,
-}: ProvidersDeps) {
-  const [editorMode, setEditorMode] = useState<EditorMode>(null);
-  const [deletePending, setDeletePending] = useState<ProviderProfile | null>(null);
-  const [resetStorePending, setResetStorePending] = useState(false);
-  const [pendingSave, setPendingSave] = useState<{
-    preparationId: string;
-    preview: FilePreview;
-  } | null>(null);
+function useProviderEditorSession(deps: ProvidersDeps) {
+  const { appFilter, records, retractPreview, setAppFilter, setSelectedId } = deps;
+  const [editorSession, setEditorSession] = useState<ProviderEditorSession | null>(null);
 
   const openEditor = useCallback(
     (profile: ProviderProfile) => {
+      const record = records.find((item) => item.profile.id === profile.id);
+      if (!record) return;
       retractPreview();
       setSelectedId(profile.id);
-      setEditorMode("edit");
+      setEditorSession({ app: profile.app, record });
     },
-    [retractPreview, setSelectedId],
+    [records, retractPreview, setSelectedId],
   );
+  const newEditor = useCallback(() => {
+    retractPreview();
+    setEditorSession({ app: appFilter, record: null });
+  }, [appFilter, retractPreview]);
+  const closeEditor = useCallback(() => setEditorSession(null), []);
 
-  /** Switching the visible client retracts the preview and clears the
-   * selection; nothing is carried across clients. */
+  /** Changing the list client clears its selection and preview, not the editor session. */
   const selectApp = useCallback(
     (app: AppKind) => {
       retractPreview();
@@ -86,76 +69,47 @@ export function useProviders({
     [retractPreview, setAppFilter, setSelectedId],
   );
 
-  /** Persists a drag reorder of the visible client's provider files. Each
-   * file carries its own sort position; the returned list is the same source
-   * of truth after the write. */
-  const dragReorderProfiles = useCallback(
-    async (orderedIds: string[]) => {
-      if (busy) return;
-      const expectedFileHashes = Object.fromEntries(
-        records
-          .filter((record) => record.profile.app === appFilter)
-          .map((record) => [record.profile.id, record.fileHash]),
-      );
-      setBusy(true);
-      clearError();
-      try {
-        setRecords(await reorderProfiles(appFilter, orderedIds, expectedFileHashes));
-      } catch (caught) {
-        onError(caught as CommandError);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [appFilter, busy, clearError, onError, records, setBusy, setRecords],
-  );
+  return { editorSession, setEditorSession, openEditor, newEditor, closeEditor, selectApp };
+}
 
-  const saveProfile = useCallback(
-    async (draft: ProviderDraft) => {
-      if (busy) return;
-      setBusy(true);
-      clearError();
-      try {
-        const editing = editorMode === "edit" && selectedRecord;
-        const prepared = await prepareProfileSave(
-          editing ? selectedRecord.profile.id : null,
-          draft,
-          editing ? selectedRecord.fileHash : null,
-        );
-        if (prepared.kind === "saveAndApply") {
-          if (!prepared.preview) {
-            throw { code: "profile-preview-missing", message: "无法生成供应商变更预览" };
-          }
-          setPendingSave({ preparationId: prepared.preparationId, preview: prepared.preview });
-          return;
+function useProviderSaves(
+  deps: ProvidersDeps, editorSession: ProviderEditorSession | null, setEditorSession: SetEditorSession,
+) {
+  const { busy, clearError, invalidateCandidates, onError, refresh, selectProfile, setAppFilter, setBusy } = deps;
+  const [pendingSave, setPendingSave] = useState<{ preparationId: string; preview: FilePreview } | null>(null);
+  const saveProfile = useCallback(async (draft: ProviderDraft) => {
+    if (busy || !editorSession) return;
+    setBusy(true);
+    clearError();
+    try {
+      const record = editorSession.record;
+      const prepared = await prepareProfileSave(
+        record?.profile.id ?? null,
+        draft,
+        record?.fileHash ?? null,
+      );
+      if (prepared.kind === "saveAndApply") {
+        if (!prepared.preview) {
+          throw { code: "profile-preview-missing", message: "无法生成供应商变更预览" };
         }
-        const saved = await commitProfileSave(prepared.preparationId, false);
-        if (prepared.kind !== "noChange") {
-          invalidateCandidates();
-        }
-        setAppFilter(saved.profile.app);
-        setEditorMode(null);
-        await refresh();
-        await selectProfile(saved.profile.id);
-      } catch (caught) {
-        onError(caught as CommandError);
-      } finally {
-        setBusy(false);
+        setPendingSave({ preparationId: prepared.preparationId, preview: prepared.preview });
+        return;
       }
-    },
-    [
-      busy,
-      clearError,
-      editorMode,
-      invalidateCandidates,
-      onError,
-      refresh,
-      selectProfile,
-      selectedRecord,
-      setAppFilter,
-      setBusy,
-    ],
-  );
+      const saved = await commitProfileSave(prepared.preparationId, false);
+      if (prepared.kind !== "noChange") {
+        invalidateCandidates();
+      }
+      setAppFilter(saved.profile.app);
+      setEditorSession(null);
+      await refresh();
+      await selectProfile(saved.profile.id);
+    } catch (caught) {
+      onError(caught as CommandError);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, clearError, editorSession, invalidateCandidates, onError, refresh,
+    selectProfile, setAppFilter, setBusy, setEditorSession]);
 
   const runPendingSave = useCallback(async () => {
     if (busy || !pendingSave) return;
@@ -167,7 +121,7 @@ export function useProviders({
       const saved = await commitProfileSave(pending.preparationId, true);
       invalidateCandidates();
       setAppFilter(saved.profile.app);
-      setEditorMode(null);
+      setEditorSession(null);
       await refresh();
       await selectProfile(saved.profile.id);
     } catch (caught) {
@@ -175,18 +129,27 @@ export function useProviders({
     } finally {
       setBusy(false);
     }
-  }, [
-    busy,
-    clearError,
-    invalidateCandidates,
-    onError,
-    pendingSave,
-    refresh,
-    selectProfile,
-    setAppFilter,
-    setBusy,
-  ]);
+  }, [busy, clearError, invalidateCandidates, onError, pendingSave, refresh,
+    selectProfile, setAppFilter, setBusy, setEditorSession]);
+  return { pendingSave, setPendingSave, saveProfile, runPendingSave };
+}
 
+function useProviderMetadata(deps: ProvidersDeps) {
+  const { appFilter, busy, clearError, onError, records, refresh, setBusy, setRecords } = deps;
+  const dragReorderProfiles = useCallback(async (orderedIds: string[]) => {
+    if (busy) return;
+    const expectedFileHashes = Object.fromEntries(records.filter((record) => record.profile.app === appFilter)
+      .map((record) => [record.profile.id, record.fileHash]));
+    setBusy(true);
+    clearError();
+    try {
+      setRecords(await reorderProfiles(appFilter, orderedIds, expectedFileHashes));
+    } catch (caught) {
+      onError(caught as CommandError);
+    } finally {
+      setBusy(false);
+    }
+  }, [appFilter, busy, clearError, onError, records, setBusy, setRecords]);
   /** Persists one metadata-only patch (usage query, quota interval) over a
    * stored profile. Only application-side fields may flow through here: a
    * patch must never re-apply the client configuration. */
@@ -230,7 +193,13 @@ export function useProviders({
       saveProfilePatch(profile, { officialQuotaRefreshIntervalMinutes: minutes > 0 ? minutes : null }),
     [saveProfilePatch],
   );
+  return { dragReorderProfiles, saveProfileUsageQuery, saveOfficialQuotaInterval };
+}
 
+function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSession) {
+  const { busy, clearError, invalidateCandidates, onError, records, refresh, selectedId, setBusy, setSelectedId } = deps;
+  const [deletePending, setDeletePending] = useState<ProviderProfile | null>(null);
+  const [resetStorePending, setResetStorePending] = useState(false);
   const runDelete = useCallback(async () => {
     if (busy || !deletePending) return;
     const target = deletePending;
@@ -248,25 +217,15 @@ export function useProviders({
       if (selectedId === target.id) {
         setSelectedId(null);
       }
-      setEditorMode(null);
+      setEditorSession((current) => current?.record?.profile.id === target.id ? null : current);
       await refresh();
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
-  }, [
-    busy,
-    clearError,
-    deletePending,
-    invalidateCandidates,
-    onError,
-    records,
-    refresh,
-    selectedId,
-    setBusy,
-    setSelectedId,
-  ]);
+  }, [busy, clearError, deletePending, invalidateCandidates, onError, records,
+    refresh, selectedId, setBusy, setSelectedId, setEditorSession]);
 
   const runResetStore = useCallback(async () => {
     if (busy || !resetStorePending) return;
@@ -275,7 +234,7 @@ export function useProviders({
     setBusy(true);
     clearError();
     setSelectedId(null);
-    setEditorMode(null);
+    setEditorSession(null);
     try {
       await resetProfileStore(true);
       await refresh();
@@ -284,34 +243,16 @@ export function useProviders({
     } finally {
       setBusy(false);
     }
-  }, [
-    busy,
-    clearError,
-    invalidateCandidates,
-    onError,
-    refresh,
-    resetStorePending,
-    setBusy,
-    setSelectedId,
-  ]);
+  }, [busy, clearError, invalidateCandidates, onError, refresh,
+    resetStorePending, setBusy, setSelectedId, setEditorSession]);
+  return { deletePending, setDeletePending, resetStorePending, setResetStorePending, runDelete, runResetStore };
+}
 
-  return {
-    editorMode,
-    setEditorMode,
-    deletePending,
-    setDeletePending,
-    resetStorePending,
-    setResetStorePending,
-    pendingSave,
-    setPendingSave,
-    openEditor,
-    selectApp,
-    dragReorderProfiles,
-    saveProfile,
-    runPendingSave,
-    saveProfileUsageQuery,
-    saveOfficialQuotaInterval,
-    runDelete,
-    runResetStore,
-  };
+/** Editor identity remains independent of the current list selection and refreshed records. */
+export function useProviders(deps: ProvidersDeps) {
+  const { setEditorSession, ...editor } = useProviderEditorSession(deps);
+  const saves = useProviderSaves(deps, editor.editorSession, setEditorSession);
+  const metadata = useProviderMetadata(deps);
+  const removal = useProviderRemoval(deps, setEditorSession);
+  return { ...editor, ...saves, ...metadata, ...removal };
 }

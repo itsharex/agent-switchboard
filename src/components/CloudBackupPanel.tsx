@@ -7,6 +7,8 @@ import {
 } from "../api/client";
 import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { Input } from "./Input";
+import { Textarea } from "./Textarea";
 import { toast } from "./use-toast";
 
 type PendingOperation = "upload" | "restore" | null;
@@ -139,7 +141,7 @@ export function CloudBackupPanel({
   return (
     <section className="asb-cloud-backup">
       <p className="asb-scope-note">
-        完整的供应商档案（包括端点、模型、API 格式、最大输出 token 和 API 密钥；认证请求头会按 API 格式自动推导）、通用配置与切换记录会先在本机加密，再上传到你自己的 Supabase 项目。不会备份或直接改写 Codex / Claude Code 原始配置；Dashboard 登录凭据和自行设置的备份密码都不会保存。
+        完整的供应商档案（包括端点、模型、运行参数、API 格式、最大输出 token 和 API 密钥；认证请求头会按 API 格式自动推导）、客户端设置与切换记录会先在本机加密，再上传到你自己的 Supabase 项目。不会备份或直接改写 Codex / Claude Code 原始配置；Dashboard 登录凭据和自行设置的备份密码都不会保存。
       </p>
       <section className="asb-cloud-backup-guide" aria-labelledby="cloud-backup-guide-title">
         <div className="asb-cloud-backup-guide-heading">
@@ -190,7 +192,7 @@ export function CloudBackupPanel({
             <li>
               <h4>保存并备份</h4>
               <p>
-                测试成功后点击「保存连接」。首次备份会加密完整的供应商档案（含 API 格式和最大输出 token）、通用配置和切换记录；认证请求头会在使用时按 API 格式自动推导。设置至少 8 位的备份密码，恢复必须使用同一条密码，应用不会保存它。
+                测试成功后点击「保存连接」。首次备份会加密完整的供应商档案（含运行参数、API 格式和最大输出 token）、客户端设置和切换记录；认证请求头会在使用时按 API 格式自动推导。设置至少 8 位的备份密码，恢复必须使用同一条密码，应用不会保存它。
               </p>
             </li>
           </ol>
@@ -211,8 +213,7 @@ export function CloudBackupPanel({
           >
             <label className="asb-field">
               <span>Supabase 项目地址</span>
-              <input
-                className="asb-input"
+              <Input
                 type="url"
                 required
                 placeholder="https://your-project.supabase.co"
@@ -225,8 +226,7 @@ export function CloudBackupPanel({
             </label>
             <label className="asb-field">
               <span>Publishable key</span>
-              <input
-                className="asb-input"
+              <Input
                 type="password"
                 required
                 autoComplete="off"
@@ -239,8 +239,7 @@ export function CloudBackupPanel({
             </label>
             <label className="asb-field">
               <span>项目 Auth 登录邮箱</span>
-              <input
-                className="asb-input"
+              <Input
                 type="email"
                 required
                 autoComplete="username"
@@ -253,8 +252,7 @@ export function CloudBackupPanel({
             </label>
             <label className="asb-field">
               <span>项目 Auth 登录密码</span>
-              <input
-                className="asb-input"
+              <Input
                 type="password"
                 autoComplete="current-password"
                 value={accountPassword}
@@ -286,8 +284,7 @@ export function CloudBackupPanel({
           {setupSql !== null && (
             <label className="asb-field">
               <span>在 Supabase SQL Editor 执行一次</span>
-              <textarea
-                className="asb-input asb-textarea"
+              <Textarea
                 readOnly
                 aria-label="Supabase 初始化 SQL"
                 value={setupSql}
@@ -298,8 +295,7 @@ export function CloudBackupPanel({
             <legend>备份或恢复</legend>
             <label className="asb-field">
               <span>备份密码（自行设置）</span>
-              <input
-                className="asb-input"
+              <Input
                 type="password"
                 autoComplete="new-password"
                 minLength={8}
@@ -331,7 +327,7 @@ export function CloudBackupPanel({
         <ConfirmSheet
           title="确认上传加密云端备份"
           details={[
-            "将加密当前供应商档案、通用配置和切换记录。",
+            "将加密当前供应商档案、客户端设置和切换记录。",
             "将替换此 Supabase 账户已有的云端备份。",
             "项目 Auth 登录密码和备份密码不会保存。",
           ]}
@@ -344,7 +340,7 @@ export function CloudBackupPanel({
         <ConfirmSheet
           title="确认从云端恢复"
           details={[
-            "将以云端加密备份替换本机供应商档案、通用配置和切换记录，包含 API 格式和最大输出 token；认证请求头会按 API 格式自动推导。",
+            "将以云端加密备份替换本机供应商档案、客户端设置和切换记录，包含运行参数、API 格式和最大输出 token；认证请求头会按 API 格式自动推导。",
             "若备份来自三协议升级前的版本，会先升级并重新加密保存到云端。",
             "不会修改 Codex 或 Claude Code 当前实际配置，也不会删除本地文件备份。",
             "恢复后需要重新预览，才能把任一档案应用到客户端配置。",

@@ -2,9 +2,9 @@
 //! token extraction, header passthrough, and upstream URL/header assembly.
 
 use super::super::ActiveRoute;
+use crate::gateway::http::Request;
 use asb_core::contracts::UpstreamProtocol;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
-use tiny_http::Request;
 
 pub(crate) fn upstream_headers(
     route: &ActiveRoute,
@@ -42,22 +42,12 @@ pub(crate) fn upstream_headers(
 }
 
 pub(crate) fn upstream_url(route: &ActiveRoute, gateway_base: &str) -> Result<String, String> {
-    let base = route.upstream_base_url.trim_end_matches('/');
-    let path = match route.upstream_protocol {
-        UpstreamProtocol::Responses => "/v1/responses",
-        UpstreamProtocol::ChatCompletions => "/v1/chat/completions",
-        UpstreamProtocol::AnthropicMessages => "/v1/messages",
-    };
-    let url = if base.ends_with(path) {
-        base.to_string()
-    } else if base.ends_with("/v1") {
-        format!("{base}{}", path.trim_start_matches("/v1"))
-    } else {
-        format!("{base}{path}")
-    };
-    let parsed =
-        reqwest::Url::parse(&url).map_err(|_| "供应商服务地址无法形成有效上游请求".to_string())?;
-    if !matches!(parsed.scheme(), "http" | "https") || url.starts_with(gateway_base) {
+    let url =
+        asb_core::endpoint::upstream_endpoint(&route.upstream_base_url, route.upstream_protocol)?;
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "供应商上游请求地址无效".to_string())?;
+    let gateway =
+        reqwest::Url::parse(gateway_base).map_err(|_| "本机协议网关地址无效".to_string())?;
+    if parsed.origin() == gateway.origin() {
         return Err("供应商服务地址不能指向本机协议网关自身".to_string());
     }
     Ok(url)
@@ -65,14 +55,33 @@ pub(crate) fn upstream_url(route: &ActiveRoute, gateway_base: &str) -> Result<St
 
 pub(crate) fn client_protocol(path: &str) -> Option<UpstreamProtocol> {
     let path = path.split('?').next().unwrap_or(path);
+    if codex_path(path).is_some() {
+        return Some(UpstreamProtocol::Responses);
+    }
     match path {
-        "/v1/responses" | "/responses" => Some(UpstreamProtocol::Responses),
         "/v1/messages" | "/messages" => Some(UpstreamProtocol::AnthropicMessages),
         _ => None,
     }
 }
 
-pub(crate) fn client_token(request: &Request) -> Option<String> {
+pub(crate) fn codex_path(path: &str) -> Option<(&str, bool)> {
+    let path = path.split('?').next()?;
+    let (token, operation) = path.strip_prefix("/codex/")?.split_once('/')?;
+    let secret = token.strip_prefix("asb_local_")?;
+    if secret.len() != 64 || !secret.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    match operation {
+        "v1/responses" => Some((token, false)),
+        "v1/responses/compact" => Some((token, true)),
+        _ => None,
+    }
+}
+
+pub(crate) fn request_capability(request: &Request, protocol: UpstreamProtocol) -> Option<String> {
+    if protocol == UpstreamProtocol::Responses {
+        return codex_path(request.url()).map(|(token, _)| token.to_string());
+    }
     let mut token = None;
     for header in request.headers() {
         let candidate = if header.field.equiv("Authorization") {

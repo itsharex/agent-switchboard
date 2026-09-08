@@ -8,6 +8,7 @@ use std::path::Path;
 fn profile() -> ProviderProfile {
     ProviderProfile {
         id: "p1".to_string(),
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
         app: AppKind::Codex,
         route_mode: asb_core::RouteMode::Custom,
         name: "当前档案".to_string(),
@@ -15,6 +16,9 @@ fn profile() -> ProviderProfile {
         base_url: Some("https://gateway.example/v1".to_string()),
         api_key: "test-api-key".into(),
         upstream_protocol: Some(asb_core::UpstreamProtocol::Responses),
+        responses_options: Some(asb_core::contracts::ResponsesOptions {
+            request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+        }),
         max_output_tokens: None.into(),
         model_options: None,
         notes: None,
@@ -76,10 +80,12 @@ fn active_identity_is_independent_of_config_match_and_restores() {
     for app in [AppKind::Codex, AppKind::Claude] {
         let mut official = profile();
         official.app = app;
+        official.parameters = asb_core::ownership::default_provider_parameters(app);
         official.route_mode = asb_core::RouteMode::Official;
         official.base_url = None;
         official.api_key.clear();
         official.upstream_protocol = None;
+        official.responses_options = None;
         let text = match app {
             AppKind::Codex => "model = \"different-model\"\nmodel_reasoning_effort = \"high\"\n",
             AppKind::Claude => r#"{"model":"different-model","effortLevel":"high"}"#,
@@ -87,45 +93,23 @@ fn active_identity_is_independent_of_config_match_and_restores() {
         let mut restored = log("same", None, None);
         restored.operation = WriteOperation::Restore;
         assert_eq!(
-            active_profile_id(&[official], None, app, text, None, Some(&restored)).unwrap(),
+            active_profile_id(&[official], None, app, text, Some(&restored)).unwrap(),
             Some("p1".into())
         );
     }
 }
 
 #[test]
-fn identical_connections_require_a_unique_match_or_matching_history() {
-    let first = profile();
-    let mut second = first.clone();
-    second.id = "p2".into();
-    second.model = Some("another-model".into());
-    let profiles = [first, second];
-    let text = "openai_base_url = \"https://gateway.example/v1\"\n";
-    let auth = Some(r#"{"auth_mode":"apikey","OPENAI_API_KEY":"test-api-key"}"#);
-    assert_eq!(
-        active_profile_id(&profiles, None, AppKind::Codex, text, auth, None).unwrap(),
-        None
-    );
+fn retired_custom_identity_never_activates_a_profile() {
+    let profiles = [profile()];
+    let text = "model_provider = \"agent_switchboard\"\n";
     assert_eq!(
         active_profile_id(
             &profiles,
             None,
             AppKind::Codex,
             text,
-            auth,
-            Some(&log("old", Some("p2"), None))
-        )
-        .unwrap(),
-        Some("p2".into())
-    );
-    assert_eq!(
-        active_profile_id(
-            &profiles,
-            None,
-            AppKind::Codex,
-            text,
-            auth,
-            Some(&log("old", Some("removed"), None))
+            Some(&log("old", Some("p1"), None))
         )
         .unwrap(),
         None

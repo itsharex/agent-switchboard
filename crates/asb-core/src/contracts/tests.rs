@@ -1,5 +1,7 @@
 use super::*;
 
+mod responses;
+
 #[test]
 fn model_usage_report_serializes_as_a_read_only_client_model_summary() {
     let report = ModelUsageReport {
@@ -169,8 +171,10 @@ fn provider_files_carry_no_client_field_and_round_trip_through_profiles() {
         base_url: Some("https://relay.example".into()),
         api_key: "test-api-key".into(),
         upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+        responses_options: None,
         max_output_tokens: None.into(),
         model_options: None,
+        parameters: crate::ownership::default_provider_parameters(AppKind::Claude),
         notes: None,
         website_url: None,
         usage_query: None,
@@ -196,7 +200,8 @@ fn provider_file_requires_the_explicit_output_limit_field() {
             "upstreamProtocol":null,
             "baseUrl":null,
             "model":null,
-            "websiteUrl":null
+            "websiteUrl":null,
+            "parameters":{"settings":{}}
         }"#;
     assert!(serde_json::from_str::<ProviderFile>(legacy).is_err());
 
@@ -232,26 +237,27 @@ fn codex_model_settings_reject_unknown_persisted_members() {
 }
 
 #[test]
-fn common_settings_store_automatic_or_explicit_values_only() {
+fn settings_store_automatic_or_explicit_values_only() {
     let json = r#"{
             "settings": {
                 "model_reasoning_effort": { "mode": "explicit", "value": "high" },
                 "hide_agent_reasoning": { "mode": "automatic" }
             }
         }"#;
-    let settings: CommonSettings = serde_json::from_str(json).expect("common settings");
+    let settings: SettingsValues = serde_json::from_str(json).expect("settings values");
     assert_eq!(
         settings.value("model_reasoning_effort"),
-        Some(&CommonSettingValue::Explicit {
+        Some(&SettingValue::Explicit {
             value: ConfigValue::Str("high".into())
         })
     );
     assert_eq!(
         settings.value("hide_agent_reasoning"),
-        Some(&CommonSettingValue::Automatic)
+        Some(&SettingValue::Automatic)
     );
     // The file shape is fixed: no extra members are accepted.
-    assert!(serde_json::from_str::<CommonSettings>(r#"{ "settings": {}, "extra": 1 }"#).is_err());
+    assert!(serde_json::from_str::<SettingsValues>(r#"{ "settings": {}, "extra": 1 }"#).is_err());
+    assert!(serde_json::from_str::<SettingValue>(r#"{"mode":"automatic","value":false}"#).is_err());
 }
 
 fn classification_draft() -> ProviderDraft {
@@ -262,9 +268,11 @@ fn classification_draft() -> ProviderDraft {
         base_url: Some("https://relay.example/v1".to_string()),
         api_key: "sk-test".to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
+        responses_options: None,
         max_output_tokens: ExplicitMaxOutputTokens::none(),
         model: Some("gpt-test".to_string()),
         model_options: None,
+        parameters: crate::ownership::default_provider_parameters(AppKind::Codex),
         notes: None,
         website_url: None,
         usage_query: None,
@@ -330,6 +338,51 @@ fn profile_save_kind_serializes_as_camel_case_tags() {
     assert_eq!(
         serde_json::to_value(ProfileSaveKind::NoChange).expect("kind serializes"),
         serde_json::json!("noChange")
+    );
+}
+
+#[test]
+fn provider_parameters_are_required_in_every_provider_shape() {
+    let draft = classification_draft();
+    let profile = ProviderProfile::from_draft("p1".into(), draft.clone());
+    let file = ProviderFile::from_profile(&profile, 100);
+    let mut draft_json = serde_json::to_value(&draft).unwrap();
+    draft_json.as_object_mut().unwrap().remove("parameters");
+    let mut profile_json = serde_json::to_value(&profile).unwrap();
+    profile_json.as_object_mut().unwrap().remove("parameters");
+    let mut file_json = serde_json::to_value(&file).unwrap();
+    file_json.as_object_mut().unwrap().remove("parameters");
+    assert!(serde_json::from_value::<ProviderDraft>(draft_json).is_err());
+    assert!(serde_json::from_value::<ProviderProfile>(profile_json).is_err());
+    assert!(serde_json::from_value::<ProviderFile>(file_json).is_err());
+}
+
+#[test]
+fn provider_parameter_edits_round_trip_and_reapply_only_when_active() {
+    let profile = ProviderProfile::from_draft("p1".into(), classification_draft());
+    let mut draft = classification_draft();
+    draft.parameters.settings.insert(
+        "model_reasoning_effort".into(),
+        SettingValue::Explicit {
+            value: ConfigValue::Str("high".into()),
+        },
+    );
+    assert!(profile.draft_touches_live_configuration(&draft));
+    assert_eq!(
+        classify_profile_save(Some(&profile), &draft, true),
+        ProfileSaveKind::SaveAndApply
+    );
+    assert_eq!(
+        classify_profile_save(Some(&profile), &draft, false),
+        ProfileSaveKind::SaveOnly
+    );
+    let updated = ProviderProfile::from_draft(profile.id.clone(), draft.clone());
+    let stored = ProviderFile::from_profile(&updated, 100);
+    let parsed: ProviderFile =
+        serde_json::from_str(&serde_json::to_string(&stored).unwrap()).unwrap();
+    assert_eq!(
+        parsed.into_profile(AppKind::Codex).parameters,
+        draft.parameters
     );
 }
 

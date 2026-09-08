@@ -3,328 +3,22 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import * as client from "./api/client";
-import type {
-  ConfigWriteRecord,
-  ConfigFileStatus,
-  FilePreview,
-  ProviderRecord,
-  RuntimeLogEntry,
-} from "./api/client";
+import { invokeMock, runtimeLogs, statuses, profiles, defaultSettings, deferred, openDiagnostics, openSettingsSection, openProviderImport, runtimeOverview, primeBackend } from "./test/app-fixtures";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ onResized: () => Promise.resolve(() => {}) }),
-}));
-vi.mock("@tauri-apps/plugin-updater", () => ({
-  check: vi.fn(() => Promise.resolve(null)),
-}));
-import { invoke } from "@tauri-apps/api/core";
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onResized: () => Promise.resolve(() => {}) }) }));
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn(() => Promise.resolve(null)) }));
 
-const invokeMock = vi.mocked(invoke);
+describe("App", () => {
+  it("marks the upper-left product brand as beta", async () => {
+    primeBackend();
+    render(<App />);
 
-const codexSwitch: ConfigWriteRecord = {
-  app: "codex",
-  profileId: "codex-gateway",
-  profileName: "备用网关",
-  contentHash: "hash-after",
-  backupId: "b1",
-  at: "2026-08-26T08:00:00Z",
-  operation: "projection",
-};
-
-const runtimeLogs: RuntimeLogEntry[] = [
-  {
-    at: "2026-08-26T08:00:00Z",
-    level: "info",
-    action: "configurationSwitched",
-  },
-];
-
-const statuses: ConfigFileStatus[] = [
-  {
-    app: "codex",
-    path: "C:/Users/test/.codex/config.toml",
-    exists: true,
-    syntaxOk: true,
-    route: {
-      app: "codex",
-      routeMode: "custom",
-      providerName: "本机网关",
-      model: "gpt-5.3-codex",
-      baseUrl: "https://gateway.internal/v1",
-      apiKey: "OPENAI_API_KEY",
-      wireApi: "responses",
-      codexModelOptions: null,
-      haikuModel: null,
-      sonnetModel: null,
-      opusModel: null,
-      availableModels: null,
-      scopeWarnings: [],
-    },
-    readError: null,
-    activeProfileId: null,
-    matchStatus: { kind: "externallyModified", at: "2026-08-26T08:00:00Z" },
-    lastSwitch: codexSwitch,
-  },
-  {
-    app: "claude",
-    path: "C:/Users/test/.claude/settings.json",
-    exists: true,
-    syntaxOk: true,
-    route: {
-      app: "claude",
-      routeMode: "official",
-      providerName: null,
-      model: "claude-sonnet-4",
-      baseUrl: null,
-      apiKey: "test-api-key",
-      wireApi: null,
-      codexModelOptions: null,
-      haikuModel: null,
-      sonnetModel: null,
-      opusModel: null,
-      availableModels: null,
-      scopeWarnings: [],
-    },
-    readError: null,
-    activeProfileId: null,
-    matchStatus: { kind: "unmanaged" },
-    lastSwitch: null,
-  },
-];
-
-const profiles: ProviderRecord[] = [
-  {
-    profile: {
-      id: "codex-gateway",
-      app: "codex",
-      routeMode: "custom",
-      name: "备用网关",
-      model: "gpt-5.4",
-      baseUrl: "https://backup.internal/v1",
-      apiKey: "OPENAI_API_KEY",
-      upstreamProtocol: "responses",
-      maxOutputTokens: null,
-      modelOptions: null,
-      websiteUrl: null,
-    },
-    fileHash: "provider-file-hash",
-  },
-];
-
-const filePreview: FilePreview = {
-  contentHash: "hash1",
-  renderedHash: "rendered-hash1",
-  content: 'model = "gpt-5.4"\nthreads = 8\n',
-  preview: {
-    app: "codex",
-    target: "C:/Users/test/.codex/config.toml",
-    changes: [{ key: "model", kind: "set", before: "gpt-5.3-codex", after: "gpt-5.4" }],
-    warnings: [],
-    backupDir: "C:/Users/test/AppData/Roaming/Agent Switchboard/state/backups",
-  },
-};
-
-const defaultSettings = {
-  closeBehavior: "hideToTray",
-  theme: "system",
-  motion: "system",
-  alwaysOnTop: false,
-  launchAtLogin: false,
-  hardwareAcceleration: true,
-  interfaceFont: "Noto Sans SC",
-  runtimeLogLevel: "info",
-  collapsedUsageIds: [] as string[],
-};
-
-function targetFrom(args: unknown): "codex" | "claude" {
-  if (
-    typeof args === "object" &&
-    args !== null &&
-    "target" in args &&
-    (args as { target?: unknown }).target === "claude"
-  ) {
-    return "claude";
-  }
-  return "codex";
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
+    const badge = await screen.findByText("Beta");
+    expect(badge).toHaveAttribute("aria-label", "Beta 版本");
+    expect(badge.closest(".asb-topbar-brand")).toBeInTheDocument();
   });
-  return { promise, resolve };
-}
 
-/** Overflow nav pages live behind the 更多 disclosure (DESIGN.md §3). */
-async function openOverflowPage(
-  user: ReturnType<typeof userEvent.setup>,
-  name: string,
-) {
-  await user.click(await screen.findByRole("button", { name: "更多" }));
-  await user.click(screen.getByRole("button", { name }));
-}
-
-const runtimeOverview = {
-  appVersion: "0.1.5",
-  buildMode: "debug",
-  platform: "windows",
-  architecture: "x86_64",
-  transport: { kind: "desktopProtocol" },
-  appDataPath: "C:/Users/test/AppData/Roaming/Agent Switchboard",
-} satisfies client.RuntimeOverview;
-
-function primeBackend(logEntries: RuntimeLogEntry[] = []) {
-  invokeMock.mockImplementation((command: string, args?: unknown) => {
-    switch (command) {
-      case "config_status":
-        return Promise.resolve(statuses);
-      case "runtime_overview":
-        return Promise.resolve(runtimeOverview);
-      case "list_profiles":
-        return Promise.resolve(profiles);
-      case "list_backups":
-        return Promise.resolve([]);
-      case "list_runtime_logs":
-        return Promise.resolve(logEntries);
-      case "lock_status":
-        return Promise.resolve({ state: "free" });
-      case "get_app_settings":
-        return Promise.resolve(defaultSettings);
-      case "set_app_settings":
-        return Promise.resolve((args as { settings: unknown }).settings);
-      case "list_system_fonts":
-        return Promise.resolve(["Microsoft YaHei", "Noto Sans SC"]);
-      case "get_common_settings_editor":
-        return Promise.resolve({
-          app: targetFrom(args),
-          settings: { settings: { hide_agent_reasoning: { mode: "automatic" } } },
-          settingsHash: `${targetFrom(args)}-settings-hash`,
-          groups: ["模型行为", "安全与审批", "隐私与数据"],
-          specs: [
-            {
-              key: "hide_agent_reasoning",
-              label: "隐藏推理摘要",
-              group: "模型行为",
-              control: "toggle",
-              options: [],
-            },
-          ],
-          directory: [],
-        });
-      case "save_common_settings":
-        return Promise.resolve({
-          settings: (args as { settings: unknown }).settings,
-          settingsHash: "saved-settings-hash",
-        });
-      case "get_global_prompt_document": {
-        const target = targetFrom(args);
-        return Promise.resolve({
-          app: target,
-          fileName: target === "codex" ? "AGENTS.md" : "CLAUDE.md",
-          content: target === "codex" ? "# Codex global instructions\n" : "# Claude global instructions\n",
-          contentHash: `${target}-prompt-hash`,
-          exists: true,
-        });
-      }
-      case "save_global_prompt_document": {
-        const target = targetFrom(args);
-        const payload = args as { content: string };
-        return Promise.resolve({
-          app: target,
-          fileName: target === "codex" ? "AGENTS.md" : "CLAUDE.md",
-          content: payload.content,
-          contentHash: `${target}-saved-prompt-hash`,
-          exists: true,
-        });
-      }
-      case "preview_switch":
-        return Promise.resolve(filePreview);
-      case "execute_switch":
-        return Promise.resolve({
-          lock: { state: "free" },
-          acquiredAt: "2026-08-26T08:00:00Z",
-          changed: ["C:/Users/test/.codex/config.toml"],
-          warnings: [],
-          backup: {
-            id: "b1",
-            app: "codex",
-            targetPath: "C:/Users/test/.codex/config.toml",
-            backupPath: "C:/backups/config.toml.bak",
-            createdAt: "2026-08-26T08:00:00Z",
-            contentHash: "h",
-            targetExisted: true,
-            linkedBackupId: null,
-            reason: "switch",
-          },
-          preview: filePreview.preview,
-          recovery: { outcome: "not_needed" },
-          finalHash: "hash-after",
-        });
-      case "prepare_profile_save":
-        return Promise.resolve({ preparationId: "prepared-save", kind: "saveAndApply", preview: filePreview });
-      case "commit_profile_save":
-        return Promise.resolve(profiles[0]);
-      case "discover_local":
-        return Promise.resolve({ codex: {}, claude: {}, importProposals: [] });
-      case "discover_cached":
-        return Promise.resolve(null);
-      case "window_is_maximized":
-        return Promise.resolve(false);
-      case "update_channel":
-        return Promise.resolve("github");
-      case "get_cached_codex_official_reset":
-        return Promise.resolve(null);
-      case "list_extensions":
-        return Promise.resolve({
-          generation: 1,
-          items: [],
-          projects: [],
-          history: [],
-          capabilities: [],
-          recoveryRequired: [],
-        });
-      default:
-        return Promise.resolve([]);
-    }
-  });
-}
-
-const ccScan = {
-  dbPath: "C:/Users/test/.cc-switch/cc-switch.db",
-  providers: [
-    {
-      key: "claude:id-1",
-      app: "claude",
-      routeMode: "custom",
-      name: "中继 A",
-      model: "claude-x",
-      baseUrl: "https://relay.internal",
-      usageScriptImportable: true,
-      usageScriptUpdatesExisting: false,
-      warnings: [],
-      existing: false,
-    },
-    {
-      key: "codex:id-2",
-      app: "codex",
-      routeMode: "official",
-      name: "Codex 官方登录",
-      model: null,
-      baseUrl: null,
-      usageScriptImportable: false,
-      usageScriptUpdatesExisting: false,
-      warnings: [],
-      existing: false,
-    },
-  ],
-  skipped: [
-    { key: "gemini:id-3", appType: "gemini", name: "双子", reason: "客户端 gemini 超出本应用支持范围" },
-  ],
-};
-
-describe("App integration with the typed client boundary", () => {
   it("opens suppliers from the tray and releases its event listener", async () => {
     primeBackend();
     let navigate: (() => void) | undefined;
@@ -341,6 +35,7 @@ describe("App integration with the typed client boundary", () => {
     expect(stop).toHaveBeenCalledOnce();
     subscribe.mockRestore();
   });
+
   it("shows the tray window failure in the main recovery surface", async () => {
     primeBackend();
     let report: ((message: string) => void) | undefined;
@@ -357,57 +52,6 @@ describe("App integration with the typed client boundary", () => {
     expect(stop).toHaveBeenCalledOnce();
     subscribe.mockRestore();
   });
-  it("loads actual status, renders lanes, and completes a confirmed switch", async () => {
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await waitFor(() => expect(screen.getByText("本机网关")).toBeInTheDocument());
-    expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("option", { name: /备用网关/ }));
-    // Selection alone shows no diff; the diff appears on explicit request.
-    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
-    const previewPanel = await screen.findByRole("region", { name: "变更预览" });
-    // The user-level configuration model shows twice here: the summary and
-    // the diff's before-value.
-    expect(within(previewPanel).getByText("当前用户级配置模型")).toBeInTheDocument();
-    expect(within(previewPanel).getAllByText("gpt-5.3-codex").length).toBeGreaterThan(0);
-    expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
-
-    // The preview unfolds under the provider list, inside the same panel,
-    // and the eye button retracts it (user decision 2026-08-28).
-    expect(screen.getByRole("region", { name: "供应商工作区" })).toContainElement(previewPanel);
-    await user.click(screen.getByRole("button", { name: "收起 备用网关 预览" }));
-    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
-
-    // The preview header's cancel button retracts it without switching.
-    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
-    await screen.findByRole("region", { name: "变更预览" });
-    await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
-    expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain("execute_switch");
-
-    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
-    await screen.findByRole("region", { name: "变更预览" });
-
-    // The switch confirms from the provider page's inline preview.
-    await user.click(screen.getByRole("button", { name: "确认切换" }));
-    const sheet = await screen.findByRole("dialog", { name: "确认切换" });
-    await user.click(within(sheet).getByRole("button", { name: "确认切换" }));
-
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("execute_switch", {
-        profileId: "codex-gateway",
-        expectedHash: "hash1",
-        expectedRenderedHash: "rendered-hash1",
-        confirmWrite: true,
-      }),
-    );
-    expect(await screen.findByText(/已切换到「备用网关」/)).toBeInTheDocument();
-  });
 
   it("opens the logs tab through the typed application-log command", async () => {
     primeBackend(runtimeLogs);
@@ -415,39 +59,49 @@ describe("App integration with the typed client boundary", () => {
     render(<App />);
 
     await screen.findByText("本机网关");
-    await openOverflowPage(user, "日志");
+    await openDiagnostics(user, "运行日志");
 
     expect(await screen.findByText("已切换配置")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("list_runtime_logs");
   });
 
-  it("saves the selected runtime-log threshold through the one app-settings path", async () => {
+  it("applies Codex subagent runtime controls through a separate preview and confirmation", async () => {
     primeBackend();
     const user = userEvent.setup();
     render(<App />);
 
-    await openOverflowPage(user, "日志");
-    await screen.findByText("暂无应用运行日志");
-    const levelControl = screen.getByRole("combobox", { name: "记录级别" });
-    await waitFor(() => expect(levelControl).not.toBeDisabled());
-    await user.click(levelControl);
-    await user.click(screen.getByRole("option", { name: "静默" }));
+    await openSettingsSection(user, "偏好设置");
+    await screen.findByText("子 agent 运行");
+    const enabled = screen.getByRole("radiogroup", { name: "启用子 agent" });
+    await user.click(within(enabled).getByRole("radio", { name: "开启" }));
+    await user.click(screen.getByRole("button", { name: "生成写入预览" }));
+    await screen.findByRole("button", { name: "应用子 agent 设置" });
+    await user.click(screen.getByRole("button", { name: "应用子 agent 设置" }));
+    const dialog = screen.getByRole("dialog", { name: "确认应用子 agent 设置" });
+    await user.click(within(dialog).getByRole("button", { name: "确认应用" }));
 
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("apply_codex_subagent_settings", {
+      plan: {
         settings: {
-          ...defaultSettings,
-          runtimeLogLevel: "silent",
+          enabled: { mode: "explicit", value: true },
+          maxConcurrentThreadsPerSession: { mode: "automatic" },
+          interruptMessage: { mode: "automatic" },
         },
-      }),
-    );
+        expectedHash: "codex-subagent-config-hash",
+        expectedTargetExisted: true,
+        renderedHash: "codex-subagent-rendered-hash",
+      },
+      confirmWrite: true,
+    }));
   });
 
-  it("reports match state, last switch time, and the user-config scope on the overview", async () => {
+  it("reports match state, last switch time, and scope in configuration diagnostics", async () => {
     primeBackend();
+    const user = userEvent.setup();
     render(<App />);
+    await openDiagnostics(user);
 
-    expect(await screen.findByText(/与上次切换 .* 不符，配置可能被外部修改/)).toBeInTheDocument();
+    expect(await screen.findByText(/与上次切换.*不符，配置可能被外部修改/)).toBeInTheDocument();
     const lastSwitchRow = screen.getByText("上次切换").closest(".asb-status-row");
     expect(lastSwitchRow).toHaveTextContent("2026年08月26日 16：00");
     expect(screen.getAllByText("本机网关 · gpt-5.3-codex").length).toBeGreaterThan(0);
@@ -490,7 +144,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await openOverflowPage(user, "备份");
+    await openSettingsSection(user, "备份与恢复");
     await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
     const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
     const diff = await screen.findByLabelText("撤回后写入的差异");
@@ -520,7 +174,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await openOverflowPage(user, "备份");
+    await openSettingsSection(user, "备份与恢复");
     await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
     const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
     expect(within(dialog).getByRole("button", { name: "确认撤回" })).toBeDisabled();
@@ -541,7 +195,7 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await openOverflowPage(user, "备份");
+    await openSettingsSection(user, "备份与恢复");
     invokeMock.mockClear();
     await user.click(await screen.findByRole("button", { name: "撤回上一次切换" }));
     const dialog = await screen.findByRole("dialog", { name: "撤回上一次切换" });
@@ -557,408 +211,16 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await openOverflowPage(user, "备份");
+    await openSettingsSection(user, "备份与恢复");
     await user.click(await screen.findByRole("button", { name: "打开备份文件夹" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("open_backup_dir"));
   });
 
-  it("saves general settings without a client-file write and invalidates supplier previews", async () => {
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("option", { name: /备用网关/ }));
-    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
-    const previewPanel = await screen.findByRole("region", { name: "变更预览" });
-    expect(within(previewPanel).getAllByText("gpt-5.3-codex").length).toBeGreaterThan(0);
-    expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "通用设置" }));
-    await user.click((await screen.findAllByRole("radio", { name: "开启" }))[0]);
-    expect(screen.getByText("有未保存修改")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "保存通用设置" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("save_common_settings", {
-        target: "codex",
-        settings: {
-          settings: { hide_agent_reasoning: { mode: "explicit", value: true } },
-        },
-        expectedSettingsHash: "codex-settings-hash",
-      }),
-    );
-    expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain("execute_switch");
-
-    // Saving general settings invalidated the supplier preview, so the
-    // switch entry point is gone until a new preview is generated.
-    await user.click(screen.getByRole("button", { name: "供应商" }));
-    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "确认切换" })).not.toBeInTheDocument();
-  });
-
-  it("loads, applies, and saves complete application settings", async () => {
-    // The hardware-acceleration section renders only on Windows.
-    vi.stubGlobal("navigator", {
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    });
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "设置" }));
-    expect(await screen.findByRole("radio", { name: "最小化到托盘" })).toBeChecked();
-    expect(document.documentElement.dataset.theme).toBeUndefined();
-    expect(document.documentElement.dataset.motion).toBeUndefined();
-
-    await user.click(screen.getByRole("radio", { name: "深色" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
-        settings: {
-          closeBehavior: "hideToTray",
-          theme: "dark",
-          motion: "system",
-          alwaysOnTop: false,
-          launchAtLogin: false,
-          hardwareAcceleration: true,
-          interfaceFont: "Noto Sans SC",
-          runtimeLogLevel: "info",
-          collapsedUsageIds: [],
-        },
-      }),
-    );
-    expect(document.documentElement.dataset.theme).toBe("dark");
-
-    await user.click(screen.getByRole("switch", { name: "窗口始终置顶" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
-        settings: {
-          closeBehavior: "hideToTray",
-          theme: "dark",
-          motion: "system",
-          alwaysOnTop: true,
-          launchAtLogin: false,
-          hardwareAcceleration: true,
-          interfaceFont: "Noto Sans SC",
-          runtimeLogLevel: "info",
-          collapsedUsageIds: [],
-        },
-      }),
-    );
-
-    await user.click(screen.getByRole("switch", { name: "启用硬件加速" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
-        settings: {
-          closeBehavior: "hideToTray",
-          theme: "dark",
-          motion: "system",
-          alwaysOnTop: true,
-          launchAtLogin: false,
-          hardwareAcceleration: false,
-          interfaceFont: "Noto Sans SC",
-          runtimeLogLevel: "info",
-          collapsedUsageIds: [],
-        },
-      }),
-    );
-
-    await user.click(screen.getByRole("button", { name: "重启应用" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("restart_application"));
-    vi.unstubAllGlobals();
-  });
-
-  it("顶栏置顶钮经同一保存路径提交完整设置对象", async () => {
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    const pin = await screen.findByRole("button", { name: "置顶窗口" });
-    expect(pin.getAttribute("aria-pressed")).toBe("false");
-    await user.click(pin);
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
-        settings: {
-          closeBehavior: "hideToTray",
-          theme: "system",
-          motion: "system",
-          alwaysOnTop: true,
-          launchAtLogin: false,
-          hardwareAcceleration: true,
-          interfaceFont: "Noto Sans SC",
-          runtimeLogLevel: "info",
-          collapsedUsageIds: [],
-        },
-      }),
-    );
-    expect(await screen.findByRole("button", { name: "取消置顶" })).toBeDefined();
-  });
-
-  const usageProfileRecord: ProviderRecord = {
-    profile: {
-      ...profiles[0].profile,
-      usageQuery: {
-        kind: "declarative",
-        url: "{{baseUrl}}/balance",
-        remainingPath: "balance",
-        usedPath: null,
-        totalPath: null,
-        refreshIntervalMinutes: 0,
-        unit: "USD",
-      },
-    },
-    fileHash: "provider-file-hash",
-  };
-
-  /** Primes the shared backend with one usage-configured provider and the
-   * given application settings, so collapse state can be exercised end to
-   * end through the one save path. */
-  function primeUsageCollapseBackend(settings: typeof defaultSettings) {
-    primeBackend();
-    const backend = invokeMock.getMockImplementation();
-    expect(backend).toBeDefined();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
-      if (command === "list_profiles") return Promise.resolve([usageProfileRecord]);
-      if (command === "get_app_settings") return Promise.resolve(settings);
-      if (command === "query_profile_usage") {
-        return Promise.resolve({
-          readings: [{ remaining: 18.5, used: 7, total: 25.5, unit: "USD" }],
-          at: "2026-09-01T08:00:00Z",
-        });
-      }
-      return backend!(command, args as never);
-    });
-    invokeMock.mockClear();
-  }
-
-  it("供应商用量面板的收起选择经应用设置持久化", async () => {
-    primeUsageCollapseBackend(defaultSettings);
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    expect(await screen.findByRole("region", { name: "备用网关 用量" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "收起 备用网关 用量" }));
-
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
-        settings: { ...defaultSettings, collapsedUsageIds: ["codex-gateway"] },
-      }),
-    );
-    expect(await screen.findByRole("button", { name: "查看 备用网关 用量" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "备用网关 用量" })).not.toBeInTheDocument();
-  });
-
-  it("重启后保持用量收起状态并查询显示摘要", async () => {
-    primeUsageCollapseBackend({ ...defaultSettings, collapsedUsageIds: ["codex-gateway"] });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    const toggle = await screen.findByRole("button", { name: "查看 备用网关 用量" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("region", { name: "备用网关 用量" })).not.toBeInTheDocument();
-    const usageQueries = invokeMock.mock.calls.filter(
-      ([command]) => command === "query_profile_usage",
-    );
-    expect(usageQueries).toHaveLength(1);
-    expect(await screen.findByLabelText("备用网关 用量摘要")).toHaveTextContent("余额 18.5 USD");
-  });
-
-  it("keeps the applied appearance when saving a replacement setting fails", async () => {
-    primeBackend();
-    invokeMock.mockImplementation((command: string) => {
-      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
-      if (command === "get_app_settings") {
-        return Promise.resolve({
-          closeBehavior: "hideToTray",
-          theme: "dark",
-          motion: "reduce",
-          alwaysOnTop: false,
-          launchAtLogin: false,
-          hardwareAcceleration: true,
-          interfaceFont: "Noto Sans SC",
-          runtimeLogLevel: "info",
-          collapsedUsageIds: [],
-        });
-      }
-      if (command === "set_app_settings") return Promise.reject({ message: "保存失败" });
-      if (command === "config_status") return Promise.resolve(statuses);
-      if (command === "list_profiles") return Promise.resolve(profiles);
-      if (command === "list_backups") return Promise.resolve([]);
-      if (command === "lock_status") return Promise.resolve({ state: "free" });
-      if (command === "get_common_settings_editor") {
-        return Promise.resolve({
-          app: "codex",
-          settings: { settings: {} },
-          settingsHash: "settings-hash",
-          groups: [],
-          specs: [],
-          directory: [],
-        });
-      }
-      return Promise.resolve([]);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "设置" }));
-    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
-    expect(document.documentElement.dataset.motion).toBe("reduce");
-    await user.click(screen.getByRole("radio", { name: "浅色" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("保存失败");
-    expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(document.documentElement.dataset.motion).toBe("reduce");
-  });
-
-  it("界面字体经完整设置对象保存并立即应用到界面", async () => {
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "设置" }));
-    const trigger = await screen.findByRole("button", { name: "选择界面字体" });
-    expect(trigger.textContent).toContain("Noto Sans SC");
-    expect(document.documentElement.style.getPropertyValue("--asb-font-user")).toBe(
-      '"Noto Sans SC"',
-    );
-
-    await user.click(trigger);
-    await user.click(screen.getByRole("option", { name: /Microsoft YaHei/ }));
-
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
-        settings: {
-          closeBehavior: "hideToTray",
-          theme: "system",
-          motion: "system",
-          alwaysOnTop: false,
-          launchAtLogin: false,
-          hardwareAcceleration: true,
-          interfaceFont: "Microsoft YaHei",
-          runtimeLogLevel: "info",
-          collapsedUsageIds: [],
-        },
-      }),
-    );
-    await waitFor(() =>
-      expect(document.documentElement.style.getPropertyValue("--asb-font-user")).toBe(
-        '"Microsoft YaHei"',
-      ),
-    );
-  });
-
-  it("设置加载失败时固定显示原因并支持重试", async () => {
-    primeBackend();
-    let failSettings = true;
-    const backend = invokeMock.getMockImplementation();
-    invokeMock.mockImplementation((command: string, args?: Parameters<typeof invoke>[1]) => {
-      if (command === "get_app_settings" && failSettings) {
-        return Promise.reject({ code: "app-settings-unavailable", message: "应用设置格式无效" });
-      }
-      return backend?.(command, args) ?? Promise.resolve([]);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "设置" }));
-    expect(await screen.findByText("设置加载失败：应用设置格式无效")).toBeInTheDocument();
-    expect(screen.queryByText("加载中")).toBeNull();
-    expect(screen.queryByRole("radiogroup", { name: "界面主题" })).toBeNull();
-
-    failSettings = false;
-    await user.click(screen.getByRole("button", { name: "重试" }));
-    expect(await screen.findByRole("radiogroup", { name: "界面主题" })).toBeInTheDocument();
-  });
-
-  it("设置加载失败时一键修复以默认值重建设置", async () => {
-    primeBackend();
-    const defaults = {
-      closeBehavior: "hideToTray",
-      theme: "system",
-      motion: "system",
-      alwaysOnTop: false,
-      launchAtLogin: false,
-      hardwareAcceleration: true,
-      interfaceFont: "Noto Sans SC",
-      runtimeLogLevel: "info",
-      collapsedUsageIds: [],
-    };
-    const backend = invokeMock.getMockImplementation();
-    invokeMock.mockImplementation((command: string, args?: Parameters<typeof invoke>[1]) => {
-      if (command === "get_app_settings") {
-        return Promise.reject({ code: "app-settings-unavailable", message: "应用设置格式无效" });
-      }
-      if (command === "repair_app_settings") return Promise.resolve(defaults);
-      return backend?.(command, args) ?? Promise.resolve([]);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "设置" }));
-    expect(await screen.findByText("设置加载失败：应用设置格式无效")).toBeInTheDocument();
-
-    // Both the settings-page failure row and the global banner offer the
-    // same repair; this test exercises the settings-page view of it.
-    const failureRow = screen
-      .getByText("设置加载失败：应用设置格式无效")
-      .closest('[role="alert"]') as HTMLElement;
-    await user.click(within(failureRow).getByRole("button", { name: "一键修复" }));
-
-    expect(await screen.findByRole("radiogroup", { name: "界面主题" })).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("repair_app_settings");
-    expect(
-      document.documentElement.style.getPropertyValue("--asb-font-user"),
-    ).toBe('"Noto Sans SC"');
-  });
-
-  it("在任意页面显示设置失败横幅并支持一键修复", async () => {
-    primeBackend();
-    const defaults = {
-      closeBehavior: "hideToTray" as const,
-      theme: "system" as const,
-      motion: "system" as const,
-      alwaysOnTop: false,
-      launchAtLogin: false,
-      hardwareAcceleration: true,
-      interfaceFont: "Noto Sans SC",
-      runtimeLogLevel: "info" as const,
-      collapsedUsageIds: [] as string[],
-    };
-    let settingsBroken = true;
-    const backend = invokeMock.getMockImplementation();
-    invokeMock.mockImplementation((command: string, args?: Parameters<typeof invoke>[1]) => {
-      if (command === "get_app_settings" && settingsBroken) {
-        return Promise.reject({ code: "app-settings-unavailable", message: "应用设置格式无效" });
-      }
-      if (command === "repair_app_settings") {
-        settingsBroken = false;
-        return Promise.resolve(defaults);
-      }
-      return backend?.(command, args) ?? Promise.resolve([]);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    // The banner appears without leaving the default providers page, where
-    // settings-backed actions (usage collapse) silently wait.
-    expect(
-      await screen.findByRole("alert", { name: "应用设置不可用" }),
-    ).toHaveTextContent("应用设置不可用：应用设置格式无效");
-
-    await user.click(screen.getByRole("button", { name: "一键修复" }));
-
-    expect(invokeMock).toHaveBeenCalledWith("repair_app_settings");
-    await waitFor(() =>
-      expect(screen.queryByRole("alert", { name: "应用设置不可用" })).not.toBeInTheDocument(),
-    );
-  });
-
   it("marks keyboard focus and clears it on pointer interaction", async () => {
     primeBackend();
     render(<App />);
-    await screen.findByRole("button", { name: "概览" });
+    await screen.findByRole("button", { name: "供应商" });
     const root = document.documentElement;
     expect(root.dataset.focusSource).toBeUndefined();
 
@@ -1009,314 +271,9 @@ describe("App integration with the typed client boundary", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await openOverflowPage(user, "发现");
+    await openProviderImport(user);
     await user.click(screen.getByRole("button", { name: "扫描配置" }));
     expect(await screen.findByText("无法读取配置文件")).toBeInTheDocument();
-  });
-
-  it("shows scan results as per-client status cards with route facts and in-card import", async () => {
-    primeBackend();
-    invokeMock.mockImplementation((command: string) => {
-      if (command === "config_status") return Promise.resolve(statuses);
-      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
-      if (command === "list_profiles") return Promise.resolve(profiles);
-      if (command === "list_backups") return Promise.resolve([]);
-      if (command === "lock_status") return Promise.resolve({ state: "free" });
-      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
-      if (command === "discover_cached") return Promise.resolve(null);
-      if (command === "discover_local") {
-        return Promise.resolve({
-          codex: {
-            app: "codex",
-            path: "C:/Users/test/.codex/config.toml",
-            exists: true,
-            state: {
-              kind: "ok",
-              route: statuses[0].route,
-              managed: true,
-              warnings: ["存在托管键但未识别到供应商名称"],
-              importable: false,
-            },
-          },
-          claude: {
-            app: "claude",
-            path: "C:/Users/test/.claude/settings.json",
-            exists: true,
-            state: {
-              kind: "ok",
-              route: {
-                ...statuses[1].route,
-                routeMode: "custom",
-                baseUrl: "https://relay.internal",
-              },
-              managed: false,
-              warnings: ["settings.json 的 env 中存在明文 ANTHROPIC_AUTH_TOKEN"],
-              importable: true,
-            },
-          },
-          importProposals: [
-            {
-              app: "claude",
-              draft: {
-                app: "claude",
-                name: "当前 Claude 配置",
-                model: "claude-sonnet-4",
-                baseUrl: "https://relay.internal",
-                apiKey: "test-api-key",
-                modelOptions: null,
-              },
-              basis: "由当前 Claude 配置的模型与服务地址生成",
-            },
-          ],
-        });
-      }
-      if (command === "import_discovered_profile") {
-        return Promise.resolve(profiles[0]);
-      }
-      return Promise.resolve([]);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await openOverflowPage(user, "发现");
-    await user.click(screen.getByRole("button", { name: "扫描配置" }));
-
-    const codexCard = await screen.findByLabelText("Codex 扫描结果");
-    expect(within(codexCard).getByText("配置正常")).toBeInTheDocument();
-    expect(within(codexCard).getByText("自定义服务 · gpt-5.3-codex")).toBeInTheDocument();
-    expect(within(codexCard).getByText("本机网关")).toBeInTheDocument();
-    expect(within(codexCard).getByText("https://gateway.internal/v1")).toBeInTheDocument();
-    expect(within(codexCard).getByText("OPENAI_API_KEY")).toBeInTheDocument();
-    expect(within(codexCard).getByText("已由本应用管理")).toBeInTheDocument();
-    expect(within(codexCard).getByText(/托管键但未识别到供应商名称/)).toBeInTheDocument();
-    expect(within(codexCard).queryByRole("button", { name: "导入供应商" })).not.toBeInTheDocument();
-
-    const claudeCard = screen.getByLabelText("Claude 扫描结果");
-    expect(within(claudeCard).getByText("自定义服务 · claude-sonnet-4")).toBeInTheDocument();
-    expect(within(claudeCard).getByText("未由本应用管理")).toBeInTheDocument();
-    expect(within(claudeCard).getByText(/ANTHROPIC_AUTH_TOKEN/)).toBeInTheDocument();
-    expect(within(claudeCard).getByText("由当前 Claude 配置的模型与服务地址生成")).toBeInTheDocument();
-
-    await user.click(within(claudeCard).getByRole("button", { name: "导入供应商" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("import_discovered_profile", { target: "claude" }),
-    );
-  });
-
-  it("shows the previous scan from cache and relabels the action to refresh", async () => {
-    primeBackend();
-    invokeMock.mockImplementation((command: string) => {
-      if (command === "config_status") return Promise.resolve(statuses);
-      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
-      if (command === "list_profiles") return Promise.resolve(profiles);
-      if (command === "list_backups") return Promise.resolve([]);
-      if (command === "lock_status") return Promise.resolve({ state: "free" });
-      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
-      if (command === "discover_cached") {
-        return Promise.resolve({
-          codex: {
-            app: "codex",
-            path: "C:/Users/test/.codex/config.toml",
-            exists: true,
-            state: {
-              kind: "ok",
-              route: statuses[0].route,
-              managed: true,
-              warnings: [],
-              importable: false,
-            },
-          },
-          claude: {
-            app: "claude",
-            path: "C:/Users/test/.claude/settings.json",
-            exists: false,
-            state: { kind: "missing" },
-          },
-          importProposals: [],
-        });
-      }
-      if (command === "discover_local") {
-        return Promise.resolve({
-          codex: {
-            app: "codex",
-            path: "C:/Users/test/.codex/config.toml",
-            exists: true,
-            state: {
-              kind: "ok",
-              route: statuses[0].route,
-              managed: true,
-              warnings: [],
-              importable: false,
-            },
-          },
-          claude: {
-            app: "claude",
-            path: "C:/Users/test/.claude/settings.json",
-            exists: false,
-            state: { kind: "missing" },
-          },
-          importProposals: [],
-        });
-      }
-      return Promise.resolve([]);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-    expect(invokeMock).toHaveBeenCalledWith("discover_cached");
-
-    await openOverflowPage(user, "发现");
-    // The cached scan renders without any user scan in this session.
-    const codexCard = await screen.findByLabelText("Codex 扫描结果");
-    expect(within(codexCard).getByText("配置正常")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "刷新配置" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "刷新配置" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("discover_local"));
-  });
-
-  it("scans CC Switch read-only, previews providers, and imports the selection", async () => {
-    primeBackend();
-    invokeMock.mockImplementation((command: string) => {
-      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
-      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
-      if (command === "discover_cached") return Promise.resolve(null);
-      if (command === "scan_ccswitch") return Promise.resolve(ccScan);
-      if (command === "import_ccswitch_profiles") {
-        return Promise.resolve({
-          importedCount: 2,
-          usageScriptImportedCount: 1,
-          skippedExisting: [],
-          notImported: [],
-        });
-      }
-      return Promise.resolve([]);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await openOverflowPage(user, "发现");
-    await user.click(screen.getByRole("button", { name: "扫描 CC Switch（只读）" }));
-
-    expect(await screen.findByText("中继 A")).toBeInTheDocument();
-    expect(screen.getByText(/将导入用量查询脚本/)).toBeInTheDocument();
-    expect(screen.getByText(/无法导入：客户端 gemini 超出本应用支持范围/)).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("scan_ccswitch");
-
-    // Every importable row is selected, including the credential-free
-    // official route.
-    expect(screen.getByRole("checkbox", { name: "中继 A" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Codex 官方登录" })).toBeChecked();
-
-    await user.click(screen.getByRole("button", { name: "导入所选 2 项" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("import_ccswitch_profiles", {
-        keys: ["claude:id-1", "codex:id-2"],
-      }),
-    );
-    expect(
-      await screen.findByText("已导入 2 项 · 已导入用量脚本 1 项"),
-    ).toBeInTheDocument();
-  });
-
-  it("opens provider editing in a dedicated view and returns via the back affordance", async () => {
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("option", { name: /备用网关/ }));
-    await user.click(screen.getByRole("button", { name: "编辑 备用网关" }));
-
-    // Dedicated view: focused title, back affordance, list hidden.
-    expect(screen.getByRole("heading", { name: "编辑供应商" })).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "客户端" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "返回供应商列表" }));
-    expect(await screen.findByRole("tablist", { name: "客户端" })).toBeInTheDocument();
-  });
-
-  it("confirms an active provider edit in place before applying it", async () => {
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.getByRole("option", { name: /备用网关/ }));
-    await user.click(screen.getByRole("button", { name: "编辑 备用网关" }));
-    fireEvent.change(screen.getByLabelText("服务地址"), {
-      target: { value: "https://updated.internal/v1" },
-    });
-    await user.click(screen.getByRole("button", { name: "保存供应商" }));
-
-    expect(await screen.findByRole("dialog", { name: "确认保存并应用" })).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("prepare_profile_save", expect.objectContaining({
-      profileId: "codex-gateway",
-      expectedFileHash: "provider-file-hash",
-    }));
-    expect(invokeMock).not.toHaveBeenCalledWith("commit_profile_save", expect.anything());
-
-    await user.click(screen.getByRole("button", { name: "确认保存并应用" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("commit_profile_save", expect.objectContaining({
-        preparationId: "prepared-save",
-        confirmWrite: true,
-      })),
-    );
-  });
-
-  it("offers a confirmed reset only for an unsupported profile store", async () => {
-    primeBackend();
-    let unsupported = true;
-    const backend = invokeMock.getMockImplementation();
-    expect(backend).toBeDefined();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
-      if (command === "list_profiles" && unsupported) {
-        return Promise.reject({
-          code: "profile-store-unsupported",
-          message: "供应商存储格式无效或来自已不受支持的旧版本；请重新创建供应商档案",
-        });
-      }
-      if (command === "reset_profile_store") {
-        unsupported = false;
-        return Promise.resolve(undefined);
-      }
-      return backend!(command, args as never);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    const alert = await screen.findByRole("alert", { name: "操作错误" });
-    expect(alert).toHaveTextContent("供应商存储格式无效");
-    const resetTrigger = screen.getByRole("button", { name: "清空旧档案并重新开始" });
-    expect(invokeMock).not.toHaveBeenCalledWith("reset_profile_store", expect.anything());
-
-    await user.click(resetTrigger);
-    expect(screen.getByRole("dialog", { name: "清空旧供应商档案" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(invokeMock).not.toHaveBeenCalledWith("reset_profile_store", expect.anything());
-
-    await user.click(screen.getByRole("button", { name: "清空旧档案并重新开始" }));
-    await user.click(screen.getByRole("button", { name: "清空并重新开始" }));
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("reset_profile_store", { confirmWrite: true }),
-    );
-    await waitFor(() => expect(screen.queryByRole("button", { name: "清空旧档案并重新开始" })).not.toBeInTheDocument());
-  });
-
-  it("does not offer a reset for an unreadable profile store", async () => {
-    primeBackend();
-    invokeMock.mockImplementation((command: string) => {
-      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
-      if (command === "list_profiles") {
-        return Promise.reject({ code: "store-unreadable", message: "供应商存储不可读" });
-      }
-      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
-      return Promise.resolve([]);
-    });
-    render(<App />);
-
-    await screen.findByRole("alert");
-    expect(screen.queryByRole("button", { name: "清空旧档案并重新开始" })).not.toBeInTheDocument();
   });
 
   it("surfaces a config-status failure as a typed error", async () => {
@@ -1333,98 +290,6 @@ describe("App integration with the typed client boundary", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("无法读取当前配置");
   });
 
-  it("keeps the latest provider preview when an older in-flight request lands late", async () => {
-    primeBackend();
-    const twoProfiles: ProviderRecord[] = [
-      {
-        profile: {
-          id: "codex-a",
-          app: "codex",
-          routeMode: "custom",
-          name: "网关甲",
-          model: "model-a",
-          baseUrl: "https://a.internal/v1",
-          apiKey: "KEY_A",
-          upstreamProtocol: "responses",
-          maxOutputTokens: null,
-          modelOptions: null,
-          websiteUrl: null,
-        },
-        fileHash: "a-hash",
-      },
-      {
-        profile: {
-          id: "codex-b",
-          app: "codex",
-          routeMode: "custom",
-          name: "网关乙",
-          model: "model-b",
-          baseUrl: "https://b.internal/v1",
-          apiKey: "KEY_B",
-          upstreamProtocol: "responses",
-          maxOutputTokens: null,
-          modelOptions: null,
-          websiteUrl: null,
-        },
-        fileHash: "b-hash",
-      },
-    ];
-    const previewFor = (id: string, model: string): FilePreview => ({
-      contentHash: `hash-${id}`,
-      renderedHash: `rendered-${id}`,
-      content: `model = "${model}"\n`,
-      preview: {
-        app: "codex",
-        target: "C:/Users/test/.codex/config.toml",
-        changes: [{ key: "model", kind: "set", before: "gpt-5.3-codex", after: model }],
-        warnings: [],
-        backupDir: "C:/backups",
-      },
-    });
-    const pending = new Map<string, ReturnType<typeof deferred<FilePreview>>>();
-    const backend = invokeMock.getMockImplementation();
-    expect(backend).toBeDefined();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
-      if (command === "list_profiles") return Promise.resolve(twoProfiles);
-      if (command === "preview_switch") {
-        const profileId = (args as { profileId: string }).profileId;
-        let entry = pending.get(profileId);
-        if (!entry) {
-          entry = deferred<FilePreview>();
-          pending.set(profileId, entry);
-        }
-        return entry.promise;
-      }
-      return backend!(command, args as never);
-    });
-    invokeMock.mockClear();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("button", { name: "预览 网关甲 变更" }));
-    await user.click(screen.getByRole("button", { name: "预览 网关乙 变更" }));
-    expect(pending.get("codex-a")).toBeDefined();
-    expect(pending.get("codex-b")).toBeDefined();
-    const switchCalls = invokeMock.mock.calls.filter(([command]) => command === "preview_switch");
-    expect(switchCalls).toHaveLength(2);
-
-    await act(async () => {
-      pending.get("codex-b")!.resolve(previewFor("codex-b", "model-b"));
-    });
-    const panel = await screen.findByRole("region", { name: "变更预览" });
-    expect(within(panel).getByText("model-b")).toBeInTheDocument();
-
-    // The older request lands last; it belongs to a superseded selection.
-    await act(async () => {
-      pending.get("codex-a")!.resolve(previewFor("codex-a", "model-a"));
-    });
-    expect(within(panel).getByText("model-b")).toBeInTheDocument();
-    expect(within(panel).queryByText("model-a")).not.toBeInTheDocument();
-  });
-});
-
-describe("client boundary", () => {
   it("re-exports commands as typed functions only", () => {
     for (const exported of Object.keys(client)) {
       expect(typeof client[exported as keyof typeof client]).toBe("function");

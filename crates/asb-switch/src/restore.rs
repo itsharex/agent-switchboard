@@ -37,27 +37,7 @@ pub(crate) fn restore_backup_content<Io: SwitchIo>(
         };
     }
     if !backup.target_existed {
-        if let Err(error) = io.remove(target) {
-            if error.kind() != ErrorKind::NotFound {
-                return RecoveryOutcome::RestoreFailed {
-                    reason: format!("移除配置文件失败: {error}"),
-                    backup_path: backup.backup_path.clone(),
-                };
-            }
-        }
-        return match io.read_file(target) {
-            Err(error) if error.kind() == ErrorKind::NotFound => RecoveryOutcome::Restored {
-                backup: backup.clone(),
-            },
-            Ok(_) => RecoveryOutcome::RestoreFailed {
-                reason: "移除配置文件后仍可读取内容".to_string(),
-                backup_path: backup.backup_path.clone(),
-            },
-            Err(error) => RecoveryOutcome::RestoreFailed {
-                reason: format!("移除后无法确认配置文件状态: {error}"),
-                backup_path: backup.backup_path.clone(),
-            },
-        };
+        return restore_absent_target(io, target, backup);
     }
     let file_name = target
         .file_name()
@@ -118,6 +98,34 @@ pub(crate) fn restore_backup_content<Io: SwitchIo>(
     }
 }
 
+fn restore_absent_target<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    backup: &BackupRecord,
+) -> RecoveryOutcome {
+    if let Err(error) = io.remove(target) {
+        if error.kind() != ErrorKind::NotFound {
+            return RecoveryOutcome::RestoreFailed {
+                reason: format!("移除配置文件失败: {error}"),
+                backup_path: backup.backup_path.clone(),
+            };
+        }
+    }
+    match io.read_file(target) {
+        Err(error) if error.kind() == ErrorKind::NotFound => RecoveryOutcome::Restored {
+            backup: backup.clone(),
+        },
+        Ok(_) => RecoveryOutcome::RestoreFailed {
+            reason: "移除配置文件后仍可读取内容".into(),
+            backup_path: backup.backup_path.clone(),
+        },
+        Err(error) => RecoveryOutcome::RestoreFailed {
+            reason: format!("移除后无法确认配置文件状态: {error}"),
+            backup_path: backup.backup_path.clone(),
+        },
+    }
+}
+
 /// Public restore operation: puts a recorded backup back over its target,
 /// taking the lock and backing up the current content first.
 #[derive(Debug, Serialize)]
@@ -152,7 +160,34 @@ fn read_verified_restore_source<Io: SwitchIo>(
         message: "待恢复备份格式无效".to_string(),
         recovery: RecoveryOutcome::NotNeeded,
     })?;
+    validate_restore_contract(backup, &content)?;
     Ok(content)
+}
+
+fn validate_restore_contract(backup: &BackupRecord, content: &str) -> Result<(), SwitchError> {
+    if backup.app != asb_core::AppKind::Codex {
+        return Ok(());
+    }
+    let document = content
+        .parse::<toml_edit::DocumentMut>()
+        .expect("syntax validated");
+    let retired = document
+        .get("model_provider")
+        .is_some_and(|value| value.as_str() != Some("openai"));
+    let native_override = document
+        .get("model_providers")
+        .and_then(|value| value.get("openai"))
+        .is_some();
+    let credential_target = Path::new(&backup.target_path)
+        .file_name()
+        .is_some_and(|name| name == "auth.json");
+    if retired || native_override || credential_target || backup.linked_backup_id.is_some() {
+        return Err(SwitchError::PlanRejected {
+            message: "备份不符合当前 openai 配置契约；旧认证联动备份只能查看或导出".into(),
+            line: None,
+        });
+    }
+    Ok(())
 }
 
 fn write_pre_restore_backup<Io: SwitchIo>(
@@ -253,12 +288,18 @@ pub(crate) fn restore_locked<Io: SwitchIo, Commit>(
     io: &Io,
     backup: &BackupRecord,
     target: &Path,
+    projected: Option<&str>,
     commit: Commit,
 ) -> Result<RestoreOutcome, SwitchError>
 where
     Commit: FnOnce(&RestoreOutcome) -> Result<(), String>,
 {
-    let content = read_verified_restore_source(io, backup)?;
+    let original = read_verified_restore_source(io, backup)?;
+    let content = projected.unwrap_or(&original).to_string();
+    adapter::validate_syntax(backup.app, &content).map_err(|error| SwitchError::PlanRejected {
+        message: error.message,
+        line: error.line,
+    })?;
     let restored_hash = sha256_hex(&content);
     let (current, target_existed) =
         read_current_or_empty(io, target, backup.app).map_err(|error| {
@@ -266,6 +307,71 @@ where
                 message: error.to_string(),
             }
         })?;
+    let pre_record = snapshot_before_restore(io, backup, target, &current, target_existed)?;
+    let pending = crate::PendingConfigWrite {
+        version: 1,
+        app: backup.app,
+        profile_id: None,
+        backup: pre_record.clone(),
+        after_hash: restored_hash.clone(),
+        after_existed: backup.target_existed,
+    };
+    crate::config_journal::track(io, pending, || {
+        if backup.target_existed {
+            write_restore_candidate(io, target, backup.app, &content, &current, target_existed)?;
+        } else if target_existed {
+            verify_live_snapshot(io, target, backup.app, &current, target_existed)?;
+            io.remove(target)
+                .map_err(|error| SwitchError::CommitFailed {
+                    stage: "restore-replace",
+                    message: error.to_string(),
+                    recovery: RecoveryOutcome::NotNeeded,
+                })?;
+        }
+
+        let restored = match io.read_file(target) {
+            Ok(text) => {
+                backup.target_existed
+                    && text == content
+                    && sha256_hex(&text) == restored_hash
+                    && adapter::validate_syntax(backup.app, &text).is_ok()
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => !backup.target_existed,
+            Err(_) => false,
+        };
+        if !restored {
+            let recovery = restore_backup_content(io, target, &pre_record);
+            return Err(SwitchError::CommitFailed {
+                stage: "restore-verify",
+                message: "恢复后校验失败".to_string(),
+                recovery,
+            });
+        }
+
+        let outcome = RestoreOutcome {
+            pre_restore_backup: pre_record,
+            restored_hash,
+            warnings: vec![],
+        };
+        if let Err(message) = commit(&outcome) {
+            let recovery = restore_backup_content(io, target, &outcome.pre_restore_backup);
+            return Err(SwitchError::CommitFailed {
+                stage: "state-save",
+                message,
+                recovery,
+            });
+        }
+        Ok(outcome)
+    })
+}
+
+pub(crate) fn snapshot_before_restore<Io: SwitchIo>(
+    io: &Io,
+    backup: &BackupRecord,
+    target: &Path,
+    current: &str,
+    target_existed: bool,
+) -> Result<BackupRecord, SwitchError> {
     let backup_path = Path::new(&backup.backup_path);
     let backup_dir = backup_path.parent().expect("backup has a parent dir");
     let timestamp = timestamp_name(io);
@@ -281,58 +387,14 @@ where
         target_path: target.to_string_lossy().to_string(),
         backup_path: pre_path.to_string_lossy().to_string(),
         created_at: io.now_rfc3339(),
-        content_hash: sha256_hex(&current),
+        content_hash: sha256_hex(current),
         target_existed,
         linked_backup_id: None,
         reason: "restore-precheck".to_string(),
     };
-    write_pre_restore_backup(io, &pre_path, &current, &pre_record)?;
+    write_pre_restore_backup(io, &pre_path, current, &pre_record)?;
 
-    if backup.target_existed {
-        write_restore_candidate(io, target, backup.app, &content, &current, target_existed)?;
-    } else if target_existed {
-        verify_live_snapshot(io, target, backup.app, &current, target_existed)?;
-        io.remove(target)
-            .map_err(|error| SwitchError::CommitFailed {
-                stage: "restore-replace",
-                message: error.to_string(),
-                recovery: RecoveryOutcome::NotNeeded,
-            })?;
-    }
-
-    let restored = match io.read_file(target) {
-        Ok(text) => {
-            backup.target_existed
-                && text == content
-                && sha256_hex(&text) == restored_hash
-                && adapter::validate_syntax(backup.app, &text).is_ok()
-        }
-        Err(error) if error.kind() == ErrorKind::NotFound => !backup.target_existed,
-        Err(_) => false,
-    };
-    if !restored {
-        let recovery = restore_backup_content(io, target, &pre_record);
-        return Err(SwitchError::CommitFailed {
-            stage: "restore-verify",
-            message: "恢复后校验失败".to_string(),
-            recovery,
-        });
-    }
-
-    let outcome = RestoreOutcome {
-        pre_restore_backup: pre_record,
-        restored_hash,
-        warnings: vec![],
-    };
-    if let Err(message) = commit(&outcome) {
-        let recovery = restore_backup_content(io, target, &outcome.pre_restore_backup);
-        return Err(SwitchError::CommitFailed {
-            stage: "state-save",
-            message,
-            recovery,
-        });
-    }
-    Ok(outcome)
+    Ok(pre_record)
 }
 
 /// Lists backup records for one target from the sidecar metadata files.

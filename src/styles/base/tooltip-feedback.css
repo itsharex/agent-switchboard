@@ -51,18 +51,3 @@
   gap: var(--asb-space-2);
 }
 
-/* Editor feedback occupies the full-width line under the model-control row. */
-.asb-editor-probe-feedback {
-  flex: 1 1 100%;
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-}
-
-/* Card feedback unfolds within the card itself rather than becoming a nested
-   glass panel. */
-.asb-provider-probe-feedback {
-  padding: var(--asb-space-3);
-  border-top: 1px solid var(--asb-hairline);
-}
-

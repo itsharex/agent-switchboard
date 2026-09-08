@@ -2,9 +2,12 @@
 
 export type AppKind = "codex" | "claude";
 export type RouteMode = "official" | "custom";
-/** The provider endpoint's actual wire protocol. The local gateway converts
- * only when it differs from the selected client's native protocol. */
+/** The provider endpoint's actual wire protocol. */
 export type UpstreamProtocol = "responses" | "chatCompletions" | "anthropicMessages";
+
+export interface ResponsesOptions {
+  requestMode: "standard" | "minimal";
+}
 
 export interface CodexModelSettings {
   contextWindow: number | null;

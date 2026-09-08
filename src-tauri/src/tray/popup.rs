@@ -73,8 +73,13 @@ fn ensure_window(app: &AppHandle) -> Result<WebviewWindow, String> {
         .iter()
         .find(|window| window.label == LABEL)
         .ok_or("托盘窗口配置缺失")?;
-    let window = WebviewWindowBuilder::from_config(app, config)
-        .map_err(|error| error.to_string())?
+    let builder =
+        WebviewWindowBuilder::from_config(app, config).map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    let builder = builder.data_directory(crate::app_paths::local_data_directory(
+        &app.config().identifier,
+    )?);
+    let window = builder
         .build()
         .map_err(|error| format!("托盘窗口创建失败: {error}"))?;
     #[cfg(target_os = "windows")]

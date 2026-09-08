@@ -5,7 +5,8 @@ import {
   checkUpdate,
   closeUpdate,
   deleteProfile,
-  getCommonSettingsEditor,
+  getClientSettingsEditor,
+  getProviderParametersCatalog,
   getCloudBackupSettings,
   getCloudBackupSetupSql,
   getAppSettings,
@@ -31,8 +32,11 @@ import {
   setAppSettings,
   setCloudBackupSettings,
   saveGlobalPromptDocument,
-  saveCommonSettings,
-  previewCommonSettings,
+  saveClientSettings,
+  previewClientSettings,
+  applyCodexSubagentSettings,
+  getCodexSubagentSettings,
+  previewCodexSubagentSettings,
   testCloudBackupConnection,
   startOfficialLogin,
   queryCodexOfficialQuota,
@@ -107,30 +111,66 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenCalledWith("config_status");
   });
 
-  it("reads, previews, and saves application-owned general settings without a client-file write command", async () => {
+  it("reads, previews, and saves client preferences without a client-file write command", async () => {
     invokeMock.mockResolvedValue({});
 
-    await getCommonSettingsEditor("codex");
-    await saveCommonSettings(
+    await getClientSettingsEditor("codex");
+    await saveClientSettings(
       "codex",
-      { settings: { model_reasoning_effort: { mode: "explicit", value: "high" } } },
+      { settings: { approval_policy: { mode: "explicit", value: "on-request" } } },
       "settings-hash",
     );
-    await previewCommonSettings("codex", {
-      settings: { model_reasoning_effort: { mode: "explicit", value: "high" } },
+    await previewClientSettings("codex", {
+      settings: { approval_policy: { mode: "explicit", value: "on-request" } },
     });
 
-    expect(invokeMock).toHaveBeenNthCalledWith(1, "get_common_settings_editor", {
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "get_client_settings_editor", {
       target: "codex",
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "save_common_settings", {
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "save_client_settings", {
       target: "codex",
-      settings: { settings: { model_reasoning_effort: { mode: "explicit", value: "high" } } },
+      settings: { settings: { approval_policy: { mode: "explicit", value: "on-request" } } },
       expectedSettingsHash: "settings-hash",
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(3, "preview_common_settings", {
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "preview_client_settings", {
       target: "codex",
-      settings: { settings: { model_reasoning_effort: { mode: "explicit", value: "high" } } },
+      settings: { settings: { approval_policy: { mode: "explicit", value: "on-request" } } },
+    });
+  });
+
+  it("reads the provider-parameter catalog through its dedicated typed command", async () => {
+    invokeMock.mockResolvedValue({});
+    await getProviderParametersCatalog("claude");
+    expect(invokeMock).toHaveBeenCalledWith("get_provider_parameters_catalog", { target: "claude" });
+  });
+
+  it("keeps Codex subagent runtime controls in their own preview-and-confirm command family", async () => {
+    const settings = {
+      enabled: { mode: "explicit" as const, value: true },
+      maxConcurrentThreadsPerSession: { mode: "explicit" as const, value: 3 },
+      interruptMessage: { mode: "explicit" as const, value: false },
+    };
+    const plan = {
+      settings,
+      expectedHash: "config-hash",
+      expectedTargetExisted: true,
+      renderedHash: "candidate-hash",
+    };
+    invokeMock.mockResolvedValue({});
+
+    await getCodexSubagentSettings();
+    await previewCodexSubagentSettings(settings, "config-hash");
+    await applyCodexSubagentSettings(plan, true);
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "get_codex_subagent_settings");
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      2,
+      "preview_codex_subagent_settings_command",
+      { settings, expectedHash: "config-hash" },
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "apply_codex_subagent_settings", {
+      plan,
+      confirmWrite: true,
     });
   });
 
@@ -330,7 +370,6 @@ describe("api client boundary", () => {
     const downloadAndInstall = vi.fn().mockResolvedValue(undefined);
     const close = vi.fn().mockResolvedValue(undefined);
     const nativeUpdate = {
-      currentVersion: "0.1.2",
       version: "0.2.0",
       body: "### 新功能\n\n- 支持更新说明",
       downloadAndInstall,
@@ -341,7 +380,6 @@ describe("api client boundary", () => {
 
     const update = await checkUpdate();
     expect(update).toEqual(expect.objectContaining({
-      currentVersion: "0.1.2",
       latestVersion: "0.2.0",
       releaseNotes: "### 新功能\n\n- 支持更新说明",
       update: nativeUpdate,

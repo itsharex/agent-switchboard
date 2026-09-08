@@ -1,10 +1,18 @@
+import type { ReactNode } from "react";
 import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
+import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
 import { UpdateSection } from "../components/UpdateSection";
 
 interface SettingsPageProps {
+  section: SettingsSection;
+  onSectionChange: (section: SettingsSection) => void;
+  onReturnToProviders?: () => void;
+  clientSettings: ReactNode;
+  backups: ReactNode;
+  diagnostics: ReactNode;
   settings: AppSettings | null;
   /** Why settings could not load; null while loading or after success. */
   loadError: string | null;
@@ -20,6 +28,8 @@ interface SettingsPageProps {
   /** Latest manual update check; null until the first check runs. */
   updateCheck: UpdateCheck | null;
   updateChannel: UpdateChannel | null;
+  /** Running build's version; null until the process reports it. */
+  appVersion: string | null;
   /** A startup or user-triggered release lookup is currently in flight. */
   updateChecking: boolean;
   updateInstalling: boolean;
@@ -31,78 +41,87 @@ interface SettingsPageProps {
   onRestartInstalledUpdate: () => void;
 }
 
-/** Application-runtime settings. Separate from the client common
- * configuration contract. */
-export function SettingsPage({
-  settings,
-  loadError,
-  onRetryLoad,
-  onRepair,
-  busy,
-  onPatch,
-  onRestart,
-  updateCheck,
-  updateChannel,
-  updateChecking,
-  updateInstalling,
-  updateProgress,
-  updateCheckedAt,
-  updateRestartRequired,
-  onCheckUpdate,
-  onInstallUpdate,
-  onRestartInstalledUpdate,
-}: SettingsPageProps) {
+function ApplicationSettings(props: SettingsPageProps) {
+  const { settings, busy, onPatch } = props;
   return (
-    <section className="asb-panel" aria-label="设置">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">设置</h2>
-      </div>
-      <div className="asb-app-settings">
-        {settings ? (
-          <AppSettingsForm
-            settings={settings}
-            busy={busy}
-            onCloseBehaviorChange={(closeBehavior) => onPatch({ closeBehavior })}
-            onThemeChange={(theme) => onPatch({ theme })}
-            onMotionChange={(motion) => onPatch({ motion })}
-            onInterfaceFontChange={(interfaceFont) => onPatch({ interfaceFont })}
-            onAlwaysOnTopChange={(alwaysOnTop) => onPatch({ alwaysOnTop })}
-            onLaunchAtLoginChange={(launchAtLogin) => onPatch({ launchAtLogin })}
-            onHardwareAccelerationChange={(hardwareAcceleration) =>
-              onPatch({ hardwareAcceleration })
-            }
-            onRestart={onRestart}
-          />
-        ) : loadError ? (
-          <div className="asb-app-setting-row" role="alert">
-            <div className="asb-app-setting-copy">
-              <span className="asb-checkbox-label">设置加载失败：{loadError}</span>
-              <span className="asb-app-setting-detail">
-                读取失败期间，外观与关闭行为使用默认值
-              </span>
-            </div>
-            <Button variant="secondary" disabled={busy} onClick={onRetryLoad}>
-              重试
-            </Button>
-            <Button variant="secondary" disabled={busy} onClick={onRepair}>
-              一键修复
-            </Button>
+    <div className="asb-app-settings">
+      {settings ? (
+        <AppSettingsForm settings={settings} busy={busy}
+          onCloseBehaviorChange={(closeBehavior) => onPatch({ closeBehavior })}
+          onThemeChange={(theme) => onPatch({ theme })}
+          onMotionChange={(motion) => onPatch({ motion })}
+          onInterfaceFontChange={(interfaceFont) => onPatch({ interfaceFont })}
+          onAlwaysOnTopChange={(alwaysOnTop) => onPatch({ alwaysOnTop })}
+          onLaunchAtLoginChange={(launchAtLogin) => onPatch({ launchAtLogin })}
+          onHardwareAccelerationChange={(hardwareAcceleration) => onPatch({ hardwareAcceleration })}
+          onRestart={props.onRestart} />
+      ) : props.loadError ? (
+        <div className="asb-app-setting-row" role="alert">
+          <div className="asb-app-setting-copy">
+            <span className="asb-checkbox-label">设置加载失败：{props.loadError}</span>
+            <span className="asb-app-setting-detail">读取失败期间，外观与关闭行为使用默认值</span>
           </div>
-        ) : (
-          <p className="asb-empty">加载中</p>
-        )}
-        <UpdateSection
-          channel={updateChannel}
-          result={updateCheck}
-          busy={busy || updateChecking}
-          installing={updateInstalling}
-          progress={updateProgress}
-          checkedAt={updateCheckedAt}
-          restartRequired={updateRestartRequired}
-          onCheck={onCheckUpdate}
-          onInstall={onInstallUpdate}
-          onRestart={onRestartInstalledUpdate}
-        />
+          <div className="asb-panel-actions">
+            <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>重试</Button>
+            <Button variant="secondary" disabled={busy} onClick={props.onRepair}>一键修复</Button>
+          </div>
+        </div>
+      ) : <p className="asb-empty">加载中</p>}
+    </div>
+  );
+}
+
+function AboutSettings(props: SettingsPageProps) {
+  return (
+    <div className="asb-app-settings">
+      <div className="asb-about-product">
+        <h3>Agent Switchboard</h3>
+        <p className="asb-field-help">Codex 与 Claude Code 的本地配置控制台。</p>
+      </div>
+      <UpdateSection channel={props.updateChannel} appVersion={props.appVersion}
+        result={props.updateCheck} busy={props.busy || props.updateChecking} installing={props.updateInstalling}
+        progress={props.updateProgress} checkedAt={props.updateCheckedAt} restartRequired={props.updateRestartRequired}
+        onCheck={props.onCheckUpdate} onInstall={props.onInstallUpdate} onRestart={props.onRestartInstalledUpdate} />
+    </div>
+  );
+}
+
+function SettingsPanel({ section, selected, children }: {
+  section: SettingsSection;
+  selected: SettingsSection;
+  children: ReactNode;
+}) {
+  const title = SETTINGS_SECTIONS.find((item) => item.value === section)!.label;
+  return (
+    <section className="asb-panel" hidden={selected !== section} aria-label={title}>
+      <div className="asb-panel-heading"><h2 className="asb-panel-title">{title}</h2></div>
+      {children}
+    </section>
+  );
+}
+
+export function SettingsPage(props: SettingsPageProps) {
+  const { section, onSectionChange } = props;
+  return (
+    <section className="asb-settings-workspace" aria-label="设置">
+      <aside className="asb-settings-sidebar">
+        <div className="asb-settings-sidebar-heading">
+          <h2 className="asb-panel-title">设置</h2>
+          {props.onReturnToProviders && <Button variant="secondary" onClick={props.onReturnToProviders}>返回供应商</Button>}
+        </div>
+        <nav className="asb-settings-navigation" aria-label="设置分类">
+          {SETTINGS_SECTIONS.map(({ value, label }) => (
+            <button key={value} type="button" aria-current={section === value ? "page" : undefined}
+              className="asb-settings-category" onClick={() => onSectionChange(value)}>{label}</button>
+          ))}
+        </nav>
+      </aside>
+      <div className="asb-settings-content">
+        <SettingsPanel section="application" selected={section}><ApplicationSettings {...props} /></SettingsPanel>
+        <SettingsPanel section="client" selected={section}>{props.clientSettings}</SettingsPanel>
+        {section === "backups" && props.backups}
+        <div hidden={section !== "diagnostics"}>{props.diagnostics}</div>
+        <SettingsPanel section="about" selected={section}><AboutSettings {...props} /></SettingsPanel>
       </div>
     </section>
   );

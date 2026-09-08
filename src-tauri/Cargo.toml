@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 default-run = "agent-switchboard"
 
+[features]
+desktop-e2e = []
+
 [lib]
 name = "agent_switchboard_lib"
 # Desktop-only: link statically into the exe. A cdylib would push the GNU
@@ -20,13 +23,20 @@ asb-core = { path = "../crates/asb-core" }
 asb-switch = { path = "../crates/asb-switch" }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-# Resolves the app-data directory before Tauri creates its first WebView.
-# This is the same platform resolver Tauri uses for `app_data_dir`.
+# Platform defaults, used after honoring Windows process directory overrides.
 dirs = "6"
 # GitHub tarball extraction for skill sources (gzip + untar, size-capped).
 flate2 = "1"
 fontdb = "0.23"
 log = "0.4"
+bytes = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync"] }
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["io-util"] }
+toml_edit = "0.22"
 # System credential storage for extension secrets (Windows Credential
 # Manager, macOS Keychain, Linux secret service).
 keyring = { version = "3", features = [

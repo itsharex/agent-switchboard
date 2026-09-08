@@ -1,65 +1,104 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    AppKind, AuthenticationScheme, CodexModelSettings, CommonSettings, ProviderDraft,
-    ProviderProfile, RouteMode, UpstreamProtocol,
+    AppKind, AuthenticationScheme, CodexModelSettings, ProviderDraft, ProviderProfile, RouteMode,
+    SettingsValues, UpstreamProtocol,
 };
 
 /// The full side-effect-free input for one switch.
 ///
-/// A direct plan derives its client credential delivery from the provider's
-/// protocol. A gateway projection owns the sole exception: its loopback
-/// capability token always uses Bearer authentication. This execution route
-/// is neither persisted nor accepted from the renderer.
+/// Upstream profile facts remain immutable during client projection. Codex
+/// keeps official authentication; Claude receives the projected credential.
+/// The execution route is neither persisted nor accepted from the renderer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SwitchPlan {
     pub profile: ProviderProfile,
-    pub common: CommonSettings,
+    pub client_settings: SettingsValues,
     client_route: ClientRoute,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum ClientRoute {
     Direct,
-    Gateway,
+    Gateway {
+        base_url: String,
+        bearer_token: String,
+    },
+}
+impl std::fmt::Debug for ClientRoute {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Direct => f.write_str("Direct"),
+            Self::Gateway { .. } => f.write_str("Gateway([redacted])"),
+        }
+    }
 }
 
 impl SwitchPlan {
     /// Builds a direct client plan. Validation still reports an invalid custom
     /// profile that lacks its required upstream protocol.
-    pub fn direct(profile: ProviderProfile, common: CommonSettings) -> Self {
+    pub fn direct(profile: ProviderProfile, client_settings: SettingsValues) -> Self {
         Self {
             profile,
-            common,
+            client_settings,
             client_route: ClientRoute::Direct,
         }
     }
 
     /// Builds the client-facing projection for the application's loopback
-    /// gateway. The gateway alone owns this bearer capability-token contract.
-    pub fn through_gateway(profile: ProviderProfile, common: CommonSettings) -> Self {
+    /// gateway. Codex uses a path capability; Claude uses a Bearer token.
+    pub fn through_gateway(
+        profile: ProviderProfile,
+        client_settings: SettingsValues,
+        base_url: String,
+        bearer_token: String,
+    ) -> Self {
         Self {
             profile,
-            common,
-            client_route: ClientRoute::Gateway,
+            client_settings,
+            client_route: ClientRoute::Gateway {
+                base_url,
+                bearer_token,
+            },
         }
     }
 
     /// Credential delivery used by the client configuration written for this
     /// execution plan. It is absent for official logins.
     pub fn client_authentication(&self) -> Option<AuthenticationScheme> {
-        if self.profile.route_mode != RouteMode::Custom {
+        if self.profile.app == AppKind::Codex || self.profile.route_mode != RouteMode::Custom {
             return None;
         }
-        match self.client_route {
+        match &self.client_route {
             ClientRoute::Direct => self
                 .profile
                 .upstream_protocol
                 .map(UpstreamProtocol::authentication_scheme),
-            ClientRoute::Gateway => Some(AuthenticationScheme::Bearer),
+            ClientRoute::Gateway { .. } => Some(AuthenticationScheme::Bearer),
         }
     }
 
+    pub fn is_gateway(&self) -> bool {
+        matches!(self.client_route, ClientRoute::Gateway { .. })
+    }
+    pub fn client_base_url(&self) -> Option<&str> {
+        if self.profile.route_mode == RouteMode::Official {
+            return None;
+        }
+        match &self.client_route {
+            ClientRoute::Direct => self.profile.base_url.as_deref(),
+            ClientRoute::Gateway { base_url, .. } => Some(base_url),
+        }
+    }
+    pub fn client_api_key(&self) -> &str {
+        if self.profile.app == AppKind::Codex || self.profile.route_mode == RouteMode::Official {
+            return "";
+        }
+        match &self.client_route {
+            ClientRoute::Direct => &self.profile.api_key,
+            ClientRoute::Gateway { bearer_token, .. } => bearer_token,
+        }
+    }
     /// Client selection has one owner: the selected provider profile.
     pub fn app(&self) -> AppKind {
         self.profile.app
@@ -200,7 +239,7 @@ pub enum MatchStatus {
         profile_name: String,
     },
     /// Content still equals the last switch output, but the associated profile
-    /// or common settings have since changed or been deleted.
+    /// or client settings have since changed or been deleted.
     #[serde(rename_all = "camelCase")]
     ProfileChanged { profile_name: String },
     /// Content still equals a backup restored by the application. A restore is

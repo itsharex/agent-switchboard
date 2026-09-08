@@ -1,9 +1,11 @@
 use crate::adapter::OverlayEntry;
 use crate::contracts::{
-    AppKind, AuthenticationScheme, CommonSettingValue, CommonSettings, ConfigValue, ModelOptions,
+    AppKind, AuthenticationScheme, ConfigValue, ModelOptions, SettingValue, SettingsValues,
     SwitchPlan, UpstreamProtocol,
 };
-use crate::ownership::{provider_absent_action, setting_specs, ProviderAbsentAction, SettingOwner};
+use crate::ownership::{
+    provider_absent_action, setting_specs, ProviderAbsentAction, SettingControl, SettingOwner,
+};
 
 /// Deprecated Claude Code model key superseded by
 /// `ANTHROPIC_DEFAULT_HAIKU_MODEL`. It remains a profile-owned cleanup key
@@ -52,13 +54,13 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
                 ConfigValue::Array(models.iter().cloned().map(ConfigValue::Str).collect())
             })
         }),
-        "env.ANTHROPIC_BASE_URL" => profile.base_url.clone().map(ConfigValue::Str),
+        "env.ANTHROPIC_BASE_URL" => plan.client_base_url().map(|url| ConfigValue::Str(url.into())),
         "env.ANTHROPIC_AUTH_TOKEN" => (plan.client_authentication()
             == Some(AuthenticationScheme::Bearer))
-        .then(|| ConfigValue::Str(profile.api_key.clone())),
+        .then(|| ConfigValue::Str(plan.client_api_key().into())),
         "env.ANTHROPIC_API_KEY" => (plan.client_authentication()
             == Some(AuthenticationScheme::XApiKey))
-        .then(|| ConfigValue::Str(profile.api_key.clone())),
+        .then(|| ConfigValue::Str(plan.client_api_key().into())),
         "env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS" => profile
             .upstream_protocol
             .filter(|protocol| *protocol != UpstreamProtocol::native_for(AppKind::Claude))
@@ -80,24 +82,26 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
     }
 }
 
-/// Common-setting intent is explicit: automatic removes a previously managed
+/// Setting intent is explicit: automatic removes a previously managed
 /// key, while an explicit value is always written.
-fn common_entry(value: &CommonSettingValue) -> OverlayEntry {
+fn setting_entry(value: &SettingValue) -> OverlayEntry {
     match value {
-        CommonSettingValue::Automatic => OverlayEntry::RemoveIfPresent,
-        CommonSettingValue::Explicit { value } => OverlayEntry::Set(value.clone()),
+        SettingValue::Automatic => OverlayEntry::RemoveIfPresent,
+        SettingValue::Explicit { value } => OverlayEntry::Set(value.clone()),
     }
 }
 
-pub(super) fn common_overlay(common: &CommonSettings) -> Vec<(String, OverlayEntry)> {
+pub(super) fn client_settings_overlay(
+    client_settings: &SettingsValues,
+) -> Vec<(String, OverlayEntry)> {
     setting_specs(AppKind::Claude)
         .into_iter()
-        .filter(|spec| spec.owner == SettingOwner::Common)
+        .filter(|spec| spec.owner == SettingOwner::Client)
         .map(|spec| {
-            let value = common
+            let value = client_settings
                 .value(spec.key)
-                .expect("common-settings validation guarantees every catalog key");
-            (spec.key.to_string(), common_entry(value))
+                .expect("client-settings validation guarantees every catalog key");
+            (spec.key.to_string(), setting_entry(value))
         })
         .collect()
 }
@@ -110,15 +114,23 @@ pub(super) fn overlay(plan: &SwitchPlan) -> Vec<(String, OverlayEntry)> {
         .into_iter()
         .map(|spec| {
             let entry = match spec.owner {
+                SettingOwner::Provider if spec.control != SettingControl::None => {
+                    let value = plan
+                        .profile
+                        .parameters
+                        .value(spec.key)
+                        .expect("plan validation guarantees complete provider parameters");
+                    setting_entry(value)
+                }
                 SettingOwner::Provider => provider_value(plan, spec.key)
                     .map(OverlayEntry::Set)
                     .unwrap_or_else(|| absent_provider_entry(spec.key)),
-                SettingOwner::Common => {
+                SettingOwner::Client => {
                     let value = plan
-                        .common
+                        .client_settings
                         .value(spec.key)
-                        .expect("plan validation guarantees complete common settings");
-                    common_entry(value)
+                        .expect("plan validation guarantees complete client settings");
+                    setting_entry(value)
                 }
                 SettingOwner::Host => unreachable!("host keys never appear in the directory"),
             };

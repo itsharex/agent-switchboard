@@ -13,6 +13,11 @@ const SECRET_MARKERS: &[&str] = &["token", "secret", "api_key", "apikey", "crede
 
 /// True when a key path names something secret-like.
 pub fn is_secret_key(key: &str) -> bool {
+    for app in [crate::AppKind::Codex, crate::AppKind::Claude] {
+        if let Some(spec) = crate::ownership::setting_spec(app, key) {
+            return spec.value_type == crate::ownership::SettingValueType::Secret;
+        }
+    }
     let lower = key.to_ascii_lowercase();
     SECRET_MARKERS.iter().any(|m| lower.contains(m))
 }
@@ -57,6 +62,10 @@ mod tests {
 
     #[test]
     fn ordinary_values_render_verbatim() {
+        assert_eq!(
+            redact("hide_agent_reasoning", "true"),
+            "true"
+        );
         assert_eq!(redact("model", "gpt-5"), "gpt-5");
         assert_eq!(
             redact("model", "claude-sonnet-4-20250514"),

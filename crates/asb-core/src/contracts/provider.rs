@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    AppKind, ExplicitMaxOutputTokens, ModelOptions, RouteMode, UpstreamProtocol, UsageQuery,
+    AppKind, ExplicitMaxOutputTokens, ModelOptions, ResponsesOptions, ResponsesRequestMode,
+    RouteMode, SettingsValues, UpstreamProtocol, UsageQuery,
 };
 
 /// A provider profile. It is a small overlay, never a full copy of a user's
@@ -22,6 +23,8 @@ pub struct ProviderProfile {
     /// activation service whether the client connects directly or through the
     /// local protocol gateway.
     pub upstream_protocol: Option<UpstreamProtocol>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responses_options: Option<ResponsesOptions>,
     /// Required only when Codex converts a Responses request to an Anthropic
     /// Messages upstream that requires `max_tokens` even when Codex omits a
     /// per-request output limit. This is an explicit profile setting, never
@@ -29,6 +32,7 @@ pub struct ProviderProfile {
     pub max_output_tokens: ExplicitMaxOutputTokens,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
+    pub parameters: SettingsValues,
     /// Local-only note; never written into any client configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
@@ -58,10 +62,13 @@ pub struct ProviderDraft {
     pub base_url: Option<String>,
     pub api_key: String,
     pub upstream_protocol: Option<UpstreamProtocol>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responses_options: Option<ResponsesOptions>,
     pub max_output_tokens: ExplicitMaxOutputTokens,
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
+    pub parameters: SettingsValues,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     pub website_url: Option<String>,
@@ -83,8 +90,10 @@ impl std::fmt::Debug for ProviderProfile {
             .field("base_url", &self.base_url)
             .field("api_key", &crate::redact::REDACTED)
             .field("upstream_protocol", &self.upstream_protocol)
+            .field("responses_options", &self.responses_options)
             .field("max_output_tokens", &self.max_output_tokens)
             .field("model_options", &self.model_options)
+            .field("parameters", &self.parameters)
             .field("notes", &self.notes)
             .field("website_url", &self.website_url)
             .field("usage_query", &self.usage_query)
@@ -106,9 +115,11 @@ impl std::fmt::Debug for ProviderDraft {
             .field("base_url", &self.base_url)
             .field("api_key", &crate::redact::REDACTED)
             .field("upstream_protocol", &self.upstream_protocol)
+            .field("responses_options", &self.responses_options)
             .field("max_output_tokens", &self.max_output_tokens)
             .field("model", &self.model)
             .field("model_options", &self.model_options)
+            .field("parameters", &self.parameters)
             .field("notes", &self.notes)
             .field("website_url", &self.website_url)
             .field("usage_query", &self.usage_query)
@@ -131,13 +142,30 @@ impl ProviderProfile {
             base_url: draft.base_url,
             api_key: draft.api_key,
             upstream_protocol: draft.upstream_protocol,
+            responses_options: draft.responses_options,
             max_output_tokens: draft.max_output_tokens,
             model_options: draft.model_options,
+            parameters: draft.parameters,
             notes: draft.notes,
             website_url: draft.website_url,
             usage_query: draft.usage_query,
             official_quota_refresh_interval_minutes: draft.official_quota_refresh_interval_minutes,
         }
+    }
+
+    /// Whether the selected protocol or request shape needs the local gateway.
+    pub fn requires_gateway(&self) -> bool {
+        self.route_mode == RouteMode::Custom
+            && (self.app == AppKind::Codex
+                || self.requires_protocol_translation()
+                || self
+                    .responses_options
+                    .is_some_and(|options| options.request_mode == ResponsesRequestMode::Minimal))
+    }
+
+    pub fn requires_protocol_translation(&self) -> bool {
+        self.route_mode == RouteMode::Custom
+            && self.upstream_protocol != Some(UpstreamProtocol::native_for(self.app))
     }
 
     /// Whether persisting `draft` over this profile would change any field the
@@ -151,8 +179,10 @@ impl ProviderProfile {
             || self.base_url != draft.base_url
             || self.api_key != draft.api_key
             || self.upstream_protocol != draft.upstream_protocol
+            || self.responses_options != draft.responses_options
             || self.max_output_tokens != draft.max_output_tokens
             || self.model_options != draft.model_options
+            || self.parameters != draft.parameters
     }
 }
 
@@ -213,11 +243,14 @@ pub struct ProviderFile {
     pub route_mode: RouteMode,
     pub api_key: String,
     pub upstream_protocol: Option<UpstreamProtocol>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responses_options: Option<ResponsesOptions>,
     pub max_output_tokens: ExplicitMaxOutputTokens,
     pub base_url: Option<String>,
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
+    pub parameters: SettingsValues,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     pub website_url: Option<String>,
@@ -239,8 +272,10 @@ impl ProviderFile {
             base_url: self.base_url,
             api_key: self.api_key,
             upstream_protocol: self.upstream_protocol,
+            responses_options: self.responses_options,
             max_output_tokens: self.max_output_tokens,
             model_options: self.model_options,
+            parameters: self.parameters,
             notes: self.notes,
             website_url: self.website_url,
             usage_query: self.usage_query,
@@ -259,8 +294,10 @@ impl ProviderFile {
             base_url: profile.base_url.clone(),
             model: profile.model.clone(),
             upstream_protocol: profile.upstream_protocol,
+            responses_options: profile.responses_options,
             max_output_tokens: profile.max_output_tokens,
             model_options: profile.model_options.clone(),
+            parameters: profile.parameters.clone(),
             notes: profile.notes.clone(),
             website_url: profile.website_url.clone(),
             usage_query: profile.usage_query.clone(),
@@ -272,7 +309,7 @@ impl ProviderFile {
 
 /// One provider profile together with the storage revision of its file. The
 /// revision lets an editor refuse to overwrite an externally changed provider
-/// file, mirroring the optimistic check used for common settings.
+/// file, mirroring the optimistic check used for client settings.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderRecord {

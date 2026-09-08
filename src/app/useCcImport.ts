@@ -5,7 +5,10 @@ import {
   type CcSwitchImportOutcome,
   type CcSwitchScan,
   type CommandError,
+  type AppKind,
+  type ProviderRecord,
 } from "../api/client";
+import { toast } from "../components/use-toast";
 
 interface CcImportDeps {
   busy: boolean;
@@ -13,7 +16,11 @@ interface CcImportDeps {
   clearError: () => void;
   setBusy: (busy: boolean) => void;
   invalidateCandidates: () => void;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<ProviderRecord[] | undefined>;
+  records: ProviderRecord[];
+  preferredApp: AppKind;
+  selectProfile: (id: string) => void;
+  setAppFilter: (app: AppKind) => void;
 }
 
 /**
@@ -27,6 +34,10 @@ export function useCcImport({
   setBusy,
   invalidateCandidates,
   refresh,
+  records,
+  preferredApp,
+  selectProfile,
+  setAppFilter,
 }: CcImportDeps) {
   const [ccScan, setCcScan] = useState<CcSwitchScan | null>(null);
   const [ccSelected, setCcSelected] = useState<Record<string, boolean>>({});
@@ -52,24 +63,39 @@ export function useCcImport({
   }, [busy, clearError, onError, setBusy]);
 
   const runCcImport = useCallback(async () => {
-    if (busy || !ccScan) return;
+    if (busy || !ccScan) return false;
     const keys = ccScan.providers.filter((item) => ccSelected[item.key]).map((item) => item.key);
-    if (keys.length === 0) return;
+    if (keys.length === 0) return false;
     invalidateCandidates();
     setBusy(true);
     clearError();
     try {
       const result = await importCcswitchProfiles(keys);
       setCcResult(result);
+      toast({ kind: result.notImported.length > 0 ? "warning" : "success",
+        title: `已导入 ${result.importedCount} 项 · 已导入用量脚本 ${result.usageScriptImportedCount} 项`,
+        description: result.notImported.length > 0 ? `${result.notImported.length} 项未导入，请查看导入结果` : undefined });
       setCcScan(null);
       setCcSelected({});
-      await refresh();
+      const nextRecords = await refresh();
+      if (nextRecords && result.importedCount > 0) {
+        const previousIds = new Set(records.map((record) => record.profile.id));
+        const added = nextRecords.filter((record) => !previousIds.has(record.profile.id));
+        const selected = added.find((record) => record.profile.app === preferredApp) ?? added[0];
+        if (selected) {
+          setAppFilter(selected.profile.app);
+          selectProfile(selected.profile.id);
+        }
+      }
+      return nextRecords !== undefined && result.notImported.length === 0;
     } catch (caught) {
       onError(caught as CommandError);
+      return false;
     } finally {
       setBusy(false);
     }
-  }, [busy, ccScan, ccSelected, clearError, invalidateCandidates, onError, refresh, setBusy]);
+  }, [busy, ccScan, ccSelected, clearError, invalidateCandidates, onError, refresh, setBusy,
+    records, preferredApp, selectProfile, setAppFilter]);
 
   return { ccScan, ccSelected, setCcSelected, ccResult, runCcScan, runCcImport };
 }

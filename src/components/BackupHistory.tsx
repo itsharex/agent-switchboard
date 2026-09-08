@@ -114,7 +114,7 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
         return (
           <div className="asb-backup-actions">
             {isGatewayPortChange ? (
-              <span className="asb-scope-note">请在网关页修改端口</span>
+              <span className="asb-scope-note">请在设置的本机网关中修改端口</span>
             ) : (
               <Button
                 variant="secondary"

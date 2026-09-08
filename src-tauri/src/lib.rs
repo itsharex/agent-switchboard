@@ -1,3 +1,4 @@
+mod app_paths;
 mod ccswitch_source;
 mod cloud_backup;
 mod codex_official_quota;
@@ -15,6 +16,8 @@ mod model_usage;
 mod model_usage_cache;
 mod official_login;
 mod probe;
+mod provider_diagnostics;
+mod provider_request;
 mod runtime_log;
 mod session_manager;
 #[cfg(test)]
@@ -67,7 +70,7 @@ fn apply_hardware_acceleration(
 #[cfg(windows)]
 fn configure_hardware_acceleration<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
     let identifier = context.config().identifier.clone();
-    let hardware_acceleration = local_state::LocalState::from_startup_identifier(&identifier)
+    let hardware_acceleration = local_state::LocalState::from_identifier(&identifier)
         .and_then(|state| state.get_app_settings())
         // A missing or malformed app setting must not stop the recovery shell;
         // retain WebView2's current GPU-enabled default in that case.
@@ -85,7 +88,11 @@ pub fn run() {
     use tauri::Manager;
 
     let mut context = tauri::generate_context!();
+    let log_directory =
+        app_paths::log_directory(&context.config().identifier).expect("无法定位应用日志目录");
     configure_hardware_acceleration(&mut context);
+    #[cfg(windows)]
+    let startup_windows = app_paths::prepare_windows(&mut context);
 
     tauri::Builder::default()
         // Registered first so a duplicate launch exits during plugin init,
@@ -96,14 +103,17 @@ pub fn run() {
                 log::warn!("重复启动已拦截，恢复主窗口失败: {error}");
             }
         }))
-        .plugin(runtime_log::plugin())
+        .plugin(runtime_log::plugin(log_directory))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .setup(|app| {
+        .setup(move |app| {
+            #[cfg(windows)]
+            app_paths::build_windows(app.handle(), &startup_windows)
+                .map_err(std::io::Error::other)?;
             let local =
                 local_state::LocalState::from_app(app.handle()).map_err(std::io::Error::other)?;
             app.manage(commands::ConfigWriteGate::default());
@@ -112,14 +122,31 @@ pub fn run() {
             // is published. Hold the same gate as every later client-config
             // transaction so that recovery has one write boundary.
             let _write_guard = write_gate.lock().map_err(std::io::Error::other)?;
+            // Invalid or no-longer-convertible application configuration must
+            // leave the shell alive so the existing reset flow can present a
+            // deliberate recovery choice. The store remains unreadable to all
+            // runtime commands until that recovery is confirmed.
+            let configuration_ready = match local.initialize_configuration_schema() {
+                Ok(()) => true,
+                Err(error) => {
+                    log::error!("供应商配置升级失败，已进入恢复状态: {error}");
+                    false
+                }
+            };
+            local
+                .initialize_extension_schema()
+                .map_err(std::io::Error::other)?;
             // The gateway controller always exists; a failed port bind or an
             // unusable state file becomes a visible runtime state instead of
             // refusing the window.
             app.manage(gateway::GatewayController::start(&local));
             app.manage(gateway::PortChangePreparations::default());
             app.manage(commands::switching::ProfileSavePreparations::default());
-            commands::switching::recover_pending_profile_save(app.handle())
-                .map_err(std::io::Error::other)?;
+            app.manage(provider_request::ProviderRequests::default());
+            if configuration_ready {
+                commands::switching::recover_pending_profile_save(app.handle())
+                    .map_err(std::io::Error::other)?;
+            }
             // A malformed settings file is rejected by the typed settings
             // surface, but must never prevent the tray/window recovery shell
             // from starting. Default native window behavior remains usable.
@@ -218,11 +245,15 @@ pub fn run() {
             commands::delete_profile,
             commands::reorder_profiles,
             commands::import_discovered_profile,
-            commands::common_settings::get_common_settings_editor,
-            commands::common_settings::save_common_settings,
-            commands::common_settings::preview_common_settings,
+            commands::client_settings::get_provider_parameters_catalog,
+            commands::client_settings::get_client_settings_editor,
+            commands::client_settings::save_client_settings,
+            commands::client_settings::preview_client_settings,
             commands::prompt_management::get_global_prompt_document,
             commands::prompt_management::save_global_prompt_document,
+            commands::subagent_settings::get_codex_subagent_settings,
+            commands::subagent_settings::preview_codex_subagent_settings_command,
+            commands::subagent_settings::apply_codex_subagent_settings,
             commands::switching::preview_switch,
             commands::switching::execute_switch,
             commands::switching::list_backups,
@@ -239,6 +270,7 @@ pub fn run() {
             commands::cloud_backup::upload_cloud_backup,
             commands::cloud_backup::restore_cloud_backup,
             commands::probe_endpoint,
+            commands::resolve_provider_endpoints,
             commands::test_usage_query,
             commands::query_profile_usage,
             commands::read_profile_usage,
@@ -249,6 +281,10 @@ pub fn run() {
             commands::official_login::official_login_poll,
             commands::official_login::official_login_cancel,
             commands::fetch_provider_models,
+            commands::provider_request::prepare_provider_request,
+            commands::provider_request::execute_provider_request,
+            commands::provider_request::cancel_provider_request,
+            commands::provider_request::fetch_provider_request_models,
             commands::get_cached_codex_reset_status,
             commands::check_codex_reset_status,
             commands::status::lock_status,

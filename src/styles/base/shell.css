@@ -55,6 +55,23 @@
   font: var(--asb-text-title);
 }
 
+/* A quiet release-channel marker stays with the upper-left product brand,
+   rather than competing with navigation or window actions. */
+.asb-topbar-beta {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--asb-space-1);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-row-selected);
+  color: var(--asb-action);
+  font: var(--asb-text-label);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .asb-web-development-badge {
   flex: 0 0 auto;
   padding: 4px var(--asb-space-2);

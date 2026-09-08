@@ -1,7 +1,7 @@
 use crate::gateway::GatewayController;
 use crate::local_state::LocalState;
 use asb_core::contracts::{AppKind, ProviderDraft, RouteMode, SwitchPlan, UpstreamProtocol};
-use asb_core::ownership::default_common_settings;
+use asb_core::ownership::default_client_settings;
 use asb_switch::io::FsIo;
 use std::fs::{self, File};
 use std::path::Path;
@@ -30,12 +30,14 @@ fn nvidia_kimi_k3_completes_through_both_isolated_clients() {
 
 fn nvidia_draft(app: AppKind, api_key: &str) -> ProviderDraft {
     ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(app),
         app,
         route_mode: RouteMode::Custom,
         name: "NVIDIA Kimi K3 live sandbox".to_string(),
         base_url: Some(NVIDIA_BASE_URL.to_string()),
         api_key: api_key.to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
+        responses_options: None,
         max_output_tokens: None.into(),
         model: Some(NVIDIA_MODEL.to_string()),
         model_options: None,
@@ -119,7 +121,7 @@ fn run_codex(api_key: &str) {
     let projection = gateway
         .project(&SwitchPlan::direct(
             record.profile,
-            default_common_settings(AppKind::Codex),
+            default_client_settings(AppKind::Codex),
         ))
         .expect("project temporary Codex NVIDIA route");
 
@@ -129,31 +131,8 @@ fn run_codex(api_key: &str) {
     fs::create_dir_all(&workdir).expect("create temporary Codex workdir");
     let config = codex_home.join("config.toml");
     let auth = codex_home.join("auth.json");
-    let backup_dir = directory.path().join("backups");
-    let io = FsIo;
-    let preview = asb_switch::read_codex_preview(
-        &io,
-        &config,
-        &auth,
-        &projection.plan,
-        &backup_dir.to_string_lossy(),
-    )
-    .expect("preview temporary Codex NVIDIA switch");
-    let committed_projection = projection.clone();
-    let committed_gateway = gateway.clone();
-    asb_switch::execute_codex(
-        &io,
-        &asb_switch::CodexSwitchRequest {
-            target: &config,
-            auth_target: &auth,
-            plan: &projection.plan,
-            backup_dir: &backup_dir,
-            expected_hash: &preview.content_hash,
-            expected_rendered_hash: &preview.rendered_hash,
-        },
-        move |_| committed_gateway.commit(&committed_projection, || Ok(())),
-    )
-    .expect("execute temporary Codex NVIDIA switch");
+    fs::write(&auth, r#"{"auth_mode":"chatgpt","tokens":{"access_token":"sandbox-access","refresh_token":"sandbox-refresh","id_token":"sandbox-id"}}"#).expect("isolated login fixture");
+    apply_fixture(&directory, &config, &projection, &gateway);
     let rendered = fs::read_to_string(&config).expect("read temporary Codex settings");
     assert!(!rendered.contains(api_key));
 
@@ -219,7 +198,7 @@ fn run_claude(api_key: &str) {
     let projection = gateway
         .project(&SwitchPlan::direct(
             record.profile,
-            default_common_settings(AppKind::Claude),
+            default_client_settings(AppKind::Claude),
         ))
         .expect("project temporary Claude NVIDIA route");
 
@@ -230,29 +209,7 @@ fn run_claude(api_key: &str) {
     fs::create_dir_all(&workdir).expect("create temporary Claude workdir");
     fs::create_dir_all(&home).expect("create temporary Claude home");
     let settings = claude_config.join("settings.json");
-    let backup_dir = directory.path().join("backups");
-    let io = FsIo;
-    let preview = asb_switch::read_preview(
-        &io,
-        &settings,
-        &projection.plan,
-        &backup_dir.to_string_lossy(),
-    )
-    .expect("preview temporary Claude NVIDIA switch");
-    let committed_projection = projection.clone();
-    let committed_gateway = gateway.clone();
-    asb_switch::execute(
-        &io,
-        &asb_switch::SwitchRequest {
-            target: &settings,
-            plan: &projection.plan,
-            backup_dir: &backup_dir,
-            expected_hash: &preview.content_hash,
-            expected_rendered_hash: &preview.rendered_hash,
-        },
-        move |_| committed_gateway.commit(&committed_projection, || Ok(())),
-    )
-    .expect("execute temporary Claude NVIDIA switch");
+    apply_fixture(&directory, &settings, &projection, &gateway);
     let rendered = fs::read_to_string(&settings).expect("read temporary Claude settings");
     assert!(!rendered.contains(api_key));
     assert!(rendered.contains("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"));
@@ -306,4 +263,31 @@ fn run_claude(api_key: &str) {
     assert!(!stdout.contains(api_key));
     assert!(!stderr.contains(api_key));
     gateway.shutdown();
+}
+
+fn apply_fixture(
+    directory: &tempfile::TempDir,
+    target: &std::path::Path,
+    projection: &crate::gateway::GatewayProjection,
+    gateway: &GatewayController,
+) {
+    let backup_dir = directory.path().join("backups");
+    let io = FsIo;
+    let preview =
+        asb_switch::read_preview(&io, target, &projection.plan, &backup_dir.to_string_lossy())
+            .expect("preview isolated gateway switch");
+    let committed_projection = projection.clone();
+    let committed_gateway = gateway.clone();
+    asb_switch::execute(
+        &io,
+        &asb_switch::SwitchRequest {
+            target: target,
+            plan: &projection.plan,
+            backup_dir: &backup_dir,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+        move |_| committed_gateway.commit(&committed_projection, || Ok(())),
+    )
+    .expect("execute isolated gateway switch");
 }

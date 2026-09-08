@@ -81,7 +81,7 @@ impl GatewayController {
     /// port-change recovery is blocked: a gateway-dependent client write must
     /// never land against an address nothing serves.
     pub(crate) fn project(&self, plan: &SwitchPlan) -> Result<GatewayProjection, String> {
-        validate_plan(&plan.profile, &plan.common).map_err(|error| error.to_string())?;
+        validate_plan(&plan.profile, &plan.client_settings).map_err(|error| error.to_string())?;
         if plan.profile.route_mode == RouteMode::Official || is_direct(&plan.profile) {
             return Ok(GatewayProjection {
                 plan: plan.clone(),
@@ -100,36 +100,47 @@ impl GatewayController {
                 .to_string()
         })?;
         let route = self.route_for_profile(&plan.profile)?;
-        let mut projected = SwitchPlan::through_gateway(plan.profile.clone(), plan.common.clone());
-        projected.profile.base_url = Some(match route.app {
-            AppKind::Codex => format!("{base_url}/v1"),
-            AppKind::Claude => base_url.clone(),
-        });
-        // Both clients can authenticate to this loopback listener with a
-        // bearer token. The original upstream protocol stays only on `route`.
-        projected.profile.api_key = route.client_token.clone();
-        let protocol = plan
-            .profile
-            .upstream_protocol
-            .expect("validated custom profile has a protocol");
-        let mut warning = format!(
-            "该供应商的上游协议是 {}，与 {} 原生协议（{}）不同：切换后客户端配置中的服务地址会被改写为本机协议网关地址 {}（127.0.0.1 仅监听本机），请求由网关转换为 {} 格式并携带原 API 密钥转发到所填服务地址，原地址与密钥只保存在本应用内。退出应用前请先切换到直连或官方登录，否则客户端将无法请求。",
-            protocol.label(),
-            plan.profile.app.label(),
-            UpstreamProtocol::native_for(plan.profile.app).label(),
-            projected.profile.base_url.clone().expect("routed projection has a gateway base url"),
-            protocol.label(),
+        let projected = SwitchPlan::through_gateway(
+            plan.profile.clone(),
+            plan.client_settings.clone(),
+            route.client_endpoint(&base_url),
+            route.client_token.clone(),
         );
-        if plan.profile.app == AppKind::Codex && protocol != UpstreamProtocol::Responses {
-            warning.push_str(
-                " Codex 的网页搜索会在此路由中关闭，因为它是该上游无法无损承载的 Responses 服务端工具；client_metadata、prompt_cache_key、reasoning.summary=auto 与 reasoning.encrypted_content 也不会转发到上游或出现在转换后的输出。需要这些 Responses 能力时，请使用 Responses 上游。",
-            );
-        }
+        let warning = projection_warning(plan, &projected);
         Ok(GatewayProjection {
             plan: projected,
             activation: GatewayActivation::Routed(route),
             warning: Some(warning),
         })
+    }
+
+    /// Status compares the full current parameter intent even when the
+    /// gateway's routing identity stayed stable or its listener is offline.
+    pub(crate) fn active_route_projection(
+        &self,
+        plan: &SwitchPlan,
+    ) -> Result<Option<SwitchPlan>, String> {
+        let route = self
+            .inner
+            .routes
+            .read()
+            .map_err(|_| "本机协议网关路由锁不可用".to_string())?
+            .get(&plan.app())
+            .cloned();
+        let Some(route) = route else {
+            return Ok(None);
+        };
+        if route.profile_id != plan.profile.id
+            || route.fingerprint != route_fingerprint(&plan.profile)?
+        {
+            return Ok(None);
+        }
+        Ok(Some(SwitchPlan::through_gateway(
+            plan.profile.clone(),
+            plan.client_settings.clone(),
+            route.client_endpoint(&self.configured_base_url()),
+            route.client_token.clone(),
+        )))
     }
 
     /// Persists and publishes one post-switch route. Returning an error makes
@@ -169,18 +180,6 @@ impl GatewayController {
         };
         adapter::validate_syntax(app, &text)
             .map_err(|_| "恢复后客户端配置格式无效，已拒绝更新本机协议网关".to_string())?;
-        let codex_auth = if app == AppKind::Codex {
-            let auth_path = LocalState::codex_auth_path()?;
-            match fs::read_to_string(auth_path) {
-                Ok(auth) => Some(auth),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(_) => {
-                    return Err("恢复后无法读取 Codex 登录缓存，已拒绝更新本机协议网关".to_string())
-                }
-            }
-        } else {
-            None
-        };
         let candidates = local
             .configuration()
             .list_providers()
@@ -197,13 +196,13 @@ impl GatewayController {
             .collect::<Result<Vec<_>, _>>()?;
         let mut routes = Vec::new();
         for route in candidates {
-            if self.route_matches_config(&route, &text, codex_auth.as_deref())? {
+            if self.route_matches_config(&route, &text)? {
                 routes.push(route);
             }
         }
         let activation = match routes.as_slice() {
             [route] => GatewayActivation::Routed(route.clone()),
-            [] if routing::config_points_at_gateway(app, &text, codex_auth.as_deref()) => {
+            [] if routing::config_points_at_gateway(app, &text) => {
                 return Err(
                     "恢复的配置指向本机协议网关，但未找到匹配的供应商；已拒绝恢复。请重新应用该供应商以更新地址与凭据".to_string(),
                 )
@@ -222,7 +221,6 @@ impl GatewayController {
         &self,
         app: AppKind,
         configuration: &str,
-        codex_auth: Option<&str>,
     ) -> Result<Option<String>, String> {
         let route = self
             .inner
@@ -233,7 +231,7 @@ impl GatewayController {
             .cloned();
         Ok(route
             .filter(|route| {
-                self.route_matches_config(route, configuration, codex_auth)
+                self.route_matches_config(route, configuration)
                     .unwrap_or(false)
             })
             .map(|route| route.profile_id))
@@ -301,4 +299,36 @@ impl GatewayController {
     pub(crate) fn exit_maintenance(&self) {
         self.inner.maintenance.store(false, Ordering::Release);
     }
+}
+
+fn projection_warning(plan: &SwitchPlan, _projected: &SwitchPlan) -> String {
+    let protocol = plan
+        .profile
+        .upstream_protocol
+        .expect("validated custom protocol");
+    let reason = if protocol == UpstreamProtocol::native_for(plan.profile.app) {
+        "Codex 第三方请求统一经过本机网关并保留官方登录".to_string()
+    } else {
+        format!(
+            "该供应商的上游协议是 {}，与 {} 原生协议（{}）不同",
+            protocol.label(),
+            plan.profile.app.label(),
+            UpstreamProtocol::native_for(plan.profile.app).label()
+        )
+    };
+    let mut warning = format!(
+        "{reason}：切换后客户端配置中的服务地址会被改写为本机协议网关地址 {}（127.0.0.1 仅监听本机），请求由网关处理后以 {} 格式通过 HTTP(S)/SSE 携带原 API 密钥转发到所填服务地址，原地址与密钥只保存在本应用内。第三方请求需要本应用持续运行；退出后请重新打开本应用或切换到官方登录。",
+        asb_core::redact::REDACTED, protocol.label(),
+    );
+    if plan.profile.responses_options.is_some_and(|options| {
+        options.request_mode == asb_core::contracts::ResponsesRequestMode::Minimal
+    }) {
+        warning.push_str(" 最小模式省略 reasoning、service_tier、store、include、metadata 与客户端缓存扩展字段，保留输入上下文和工具调用；非空 previous_response_id 必须改为完整 input。");
+    }
+    if plan.profile.app == AppKind::Codex && protocol != UpstreamProtocol::Responses {
+        warning.push_str(
+            " Codex 的网页搜索会在此路由中关闭，因为它是该上游无法无损承载的 Responses 服务端工具；client_metadata、prompt_cache_key、reasoning.summary=auto 与 reasoning.encrypted_content 也不会转发到上游或出现在转换后的输出。需要这些 Responses 能力时，请使用 Responses 上游。",
+        );
+    }
+    warning
 }

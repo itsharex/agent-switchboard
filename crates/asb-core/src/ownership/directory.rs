@@ -21,6 +21,24 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         detail: "由供应商档案与切换事务拥有，不能与通用参数重复写入。",
     },
     OfficialSettingEntry {
+        title: "子 agent 全局运行策略",
+        path: "agents",
+        related_paths: &[
+            "agents.enabled",
+            "agents.max_concurrent_threads_per_session",
+            "agents.interrupt_message",
+        ],
+        disposition: OfficialSettingDisposition::SeparateModule,
+        detail: "在偏好设置页的“子 agent 运行”模块中以独立事务直接读写用户级 config.toml；自动表示不写入该键，由 Codex 自行解析。默认模型和推理强度由供应商运行参数拥有。不支持任何旧别名。",
+    },
+    OfficialSettingEntry {
+        title: "子 agent 角色",
+        path: "agents.<role>",
+        related_paths: &["agents.<role>.config_file", "agents.<role>.description"],
+        disposition: OfficialSettingDisposition::PreserveOnly,
+        detail: "角色声明、config_file、description 与角色 TOML 文件由宿主所有；本期不显示、不读取、不写入。",
+    },
+    OfficialSettingEntry {
         title: "MCP 服务器",
         path: "mcp_servers.<id>",
         related_paths: &[],
@@ -70,7 +88,6 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
             "history.max_bytes",
             "tool_output_token_limit",
             "background_terminal_max_timeout",
-            "agents.max_concurrent_agents",
             "memories.*_limit",
         ],
         disposition: OfficialSettingDisposition::PreserveOnly,
@@ -96,7 +113,7 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
         related_paths: &["auth.json", "SQLite / 会话状态"],
         disposition: OfficialSettingDisposition::PreserveOnly,
         detail:
-            "属于组织策略与运行态；通用设置只观测不写入。专用切换事务可更新 auth.json 的 Codex API-key 登录字段，官方登录流程才写 OAuth 凭据；两条路径均不触及 SQLite / 会话状态。",
+            "属于组织策略与运行态；参数编辑只观测不写入。专用切换事务可更新 auth.json 的 Codex API-key 登录字段，官方登录流程才写 OAuth 凭据；两条路径均不触及 SQLite / 会话状态。",
     },
 ];
 

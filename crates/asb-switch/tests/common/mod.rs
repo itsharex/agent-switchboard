@@ -6,9 +6,9 @@
 pub mod extensions;
 
 use asb_core::contracts::{
-    AppKind, CommonSettingValue, ConfigValue, ProviderProfile, SwitchPlan, UpstreamProtocol,
+    AppKind, ConfigValue, ProviderProfile, SettingValue, SwitchPlan, UpstreamProtocol,
 };
-use asb_core::ownership::default_common_settings;
+use asb_core::ownership::{default_client_settings, default_provider_parameters};
 use asb_core::test_support::CODEX_TOML;
 use asb_switch::io::{FsIo, SwitchIo};
 use asb_switch::lockfile;
@@ -19,14 +19,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> SwitchPlan {
-    let mut common = default_common_settings(AppKind::Codex);
-    common.settings.insert(
+    let mut parameters = default_provider_parameters(AppKind::Codex);
+    parameters.settings.insert(
         "model_reasoning_effort".into(),
-        CommonSettingValue::Explicit {
+        SettingValue::Explicit {
             value: ConfigValue::Str("xhigh".into()),
         },
     );
-    SwitchPlan::direct(
+    SwitchPlan::through_gateway(
         ProviderProfile {
             id: format!("id-{name}"),
             app: AppKind::Codex,
@@ -36,22 +36,28 @@ pub fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> Switch
             base_url: Some(base_url.into()),
             api_key: cred.into(),
             upstream_protocol: Some(UpstreamProtocol::Responses),
+            responses_options: Some(asb_core::contracts::ResponsesOptions {
+                request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+            }),
             max_output_tokens: None.into(),
             model_options: None,
+            parameters,
             notes: None,
             website_url: None,
             usage_query: None,
             official_quota_refresh_interval_minutes: None,
         },
-        common,
+        default_client_settings(AppKind::Codex),
+        format!("http://127.0.0.1:18900/codex/{}/v1", "a".repeat(64)),
+        "".into(),
     )
 }
 
 pub fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
-    let mut common = default_common_settings(AppKind::Claude);
-    common.settings.insert(
+    let mut parameters = default_provider_parameters(AppKind::Claude);
+    parameters.settings.insert(
         "ultracode".into(),
-        CommonSettingValue::Explicit {
+        SettingValue::Explicit {
             value: ConfigValue::Bool(true),
         },
     );
@@ -65,14 +71,16 @@ pub fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
             base_url: Some(base_url.into()),
             api_key: "test-api-key".into(),
             upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+            responses_options: None,
             max_output_tokens: None.into(),
             model_options: None,
+            parameters,
             notes: None,
             website_url: None,
             usage_query: None,
             official_quota_refresh_interval_minutes: None,
         },
-        common,
+        default_client_settings(AppKind::Claude),
     )
 }
 
@@ -217,9 +225,6 @@ impl SwitchIo for FailingIo {
         if path.to_string_lossy().ends_with(".asb-tmp") {
             self.check("temp-write")?;
         }
-        if path.to_string_lossy().ends_with(".asb-auth-tmp") {
-            self.check("auth-temp-write")?;
-        }
         use std::io::Write;
         let mut file = fs::OpenOptions::new()
             .write(true)
@@ -240,9 +245,6 @@ impl SwitchIo for FailingIo {
     }
 
     fn rename_replace(&self, from: &Path, to: &Path) -> io::Result<()> {
-        if to.file_name().is_some_and(|name| name == "auth.json") {
-            self.check("auth-atomic-replace")?;
-        }
         self.check("atomic-replace")?;
         fs::rename(from, to)?;
         self.renamed.set(true);

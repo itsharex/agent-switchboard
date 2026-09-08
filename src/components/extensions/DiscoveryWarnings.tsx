@@ -55,9 +55,9 @@ function remediationText(diagnostic: ExtensionDiagnostic): string {
 }
 
 /** The single collapsible surface for discovery diagnostics. Collapsed it is
- * exactly one line — the counted summary plus the repair and toggle actions;
- * expanded it lists every diagnostic with its own identity, reason, and
- * remediation class. */
+ * exactly one line — the counted summary row is itself the only expand and
+ * collapse control, with the repair action beside it; expanded it lists every
+ * diagnostic with its own identity, reason, and remediation class. */
 export function DiscoveryWarnings({
   diagnostics,
   scanId,
@@ -130,15 +130,6 @@ export function DiscoveryWarnings({
           ) : warnings.length > 0 ? (
             <span className="asb-scope-note">没有可自动修复项，展开查看各项处理方式</span>
           ) : null}
-          <Button
-            variant="secondary"
-            disabled={busy}
-            aria-controls={detailsId}
-            aria-expanded={open}
-            onClick={() => onOpenChange(!open)}
-          >
-            {open ? "收起" : "展开"}
-          </Button>
         </div>
       </div>
       {stale && scannedAt && (

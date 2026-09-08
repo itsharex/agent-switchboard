@@ -1,7 +1,8 @@
-//! Codex's Responses transport is a WebSocket. This boundary terminates that
+//! Codex can send Responses over WebSocket. This boundary terminates that
 //! local transport, keeps its per-connection replay state private, and sends
 //! only a normalized Responses request to the selected upstream protocol.
 
+mod connections;
 mod context;
 
 use self::context::{ConversationContext, PendingRequest, PreparedResponse};
@@ -10,6 +11,7 @@ use super::super::transform::{
     convert_request, convert_response, ReasoningTransport, SseTranscoder,
 };
 use super::*;
+use asb_core::contracts::ResponsesRequestMode;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use reqwest::blocking::Response as UpstreamResponse;
@@ -17,21 +19,28 @@ use reqwest::header::CONTENT_TYPE;
 use serde_json::{json, Value};
 use sha1::{Digest, Sha1};
 use std::io::{Read, Write};
+use std::sync::atomic::Ordering;
 use tiny_http::{Header, Response, StatusCode};
 use tungstenite::protocol::{Message, Role, WebSocket, WebSocketConfig};
 
 const WEBSOCKET_ACCEPT_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-pub(super) fn is_upgrade_request(request: &Request) -> bool {
-    request.method() == &Method::Get
-        && request.headers().iter().any(|header| {
-            header.field.equiv("Upgrade") && header_contains(header.value.as_str(), "websocket")
-        })
-}
-
-pub(super) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Client>) {
+pub(crate) fn handle(
+    request: Request,
+    inner: Arc<GatewayInner>,
+    client: Arc<Client>,
+    stop: Arc<std::sync::atomic::AtomicBool>,
+) {
     if client_protocol(request.url()) != Some(UpstreamProtocol::Responses) {
-        respond_error(request, None, 404, "本机协议网关不处理该 WebSocket 路径");
+        let endpoint = format!("{}{}", inner.configured_base_url(), request.url());
+        let mut diagnostic = ProviderDiagnostic::new(
+            ProviderFailureKind::WebsocketUnsupported,
+            &endpoint,
+            "本机协议网关不支持该 WebSocket endpoint",
+        );
+        diagnostic.transport = "websocket";
+        diagnostic.status = Some(404);
+        respond_diagnostic(request, UpstreamProtocol::Responses, 404, &diagnostic);
         return;
     }
     let span = RequestSpan::start(
@@ -47,26 +56,28 @@ pub(super) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Cli
             return;
         }
     };
-    let Some(token) = client_token(&request) else {
-        span.finish(Some(401), 0);
+    let Some(token) = request_capability(&request, UpstreamProtocol::Responses)
+        .filter(|token| active_route(&inner, token).is_some())
+    else {
+        span.finish(Some(403), 0);
         respond_error(
             request,
             Some(UpstreamProtocol::Responses),
-            401,
+            403,
             "本机协议网关凭据无效",
         );
         return;
     };
-    if active_route(&inner, &token).is_none() {
-        span.finish(Some(401), 0);
+    let Some(_connection) = connections::ConnectionGuard::acquire(Arc::clone(&inner)) else {
+        span.finish(Some(503), 0);
         respond_error(
             request,
             Some(UpstreamProtocol::Responses),
-            401,
-            "本机协议网关凭据无效",
+            503,
+            "本机 WebSocket 连接数已满",
         );
         return;
-    }
+    };
     let response = Response::empty(StatusCode(101)).with_header(
         Header::from_bytes(
             &b"Sec-WebSocket-Accept"[..],
@@ -74,7 +85,14 @@ pub(super) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Cli
         )
         .expect("valid WebSocket accept header"),
     );
-    let stream = request.upgrade("websocket", response);
+    let stream = match request.upgrade("websocket", response) {
+        Ok(stream) => stream,
+        Err(_) => {
+            span.finish(None, 0);
+            log::debug!("本机 WebSocket 升级失败");
+            return;
+        }
+    };
     let config = WebSocketConfig {
         write_buffer_size: 0,
         max_write_buffer_size: MAX_REQUEST_BYTES as usize + 1,
@@ -83,7 +101,8 @@ pub(super) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Cli
         ..WebSocketConfig::default()
     };
     let socket = WebSocket::from_raw_socket(stream, Role::Server, Some(config));
-    serve_connection(socket, inner, client, token);
+    span.finish(Some(101), 0);
+    serve_connection(socket, inner, client, token, stop);
 }
 
 fn serve_connection<S>(
@@ -91,17 +110,27 @@ fn serve_connection<S>(
     inner: Arc<GatewayInner>,
     client: Arc<Client>,
     token: String,
+    stop: Arc<std::sync::atomic::AtomicBool>,
 ) where
     S: Read + Write,
 {
     let mut context = ConversationContext::default();
-    while !inner.stopping.load(Ordering::Acquire) {
+    while !inner.stopping.load(Ordering::Acquire) && !stop.load(Ordering::Acquire) {
         let message = match socket.read() {
             Ok(message) => message,
             Err(_) => break,
         };
         match message {
             Message::Text(text) => {
+                let Some(_guard) = crate::gateway::InflightGuard::try_acquire(Arc::clone(&inner))
+                else {
+                    let _ = send_failed(
+                        &mut socket,
+                        "gateway_unavailable",
+                        "网关正在切换或请求已满；请稍后重试",
+                    );
+                    break;
+                };
                 let mut span = RequestSpan::start(
                     Arc::clone(&inner.metrics),
                     AppKind::Codex,
@@ -198,7 +227,19 @@ where
     };
     span.bind_route(&route.profile_id, route.upstream_protocol);
     span.note_request_bytes(text.len() as u64);
-    match context.prepare(text) {
+    let mode = route
+        .responses_options
+        .map_or(ResponsesRequestMode::Standard, |options| {
+            options.request_mode
+        });
+    let prepared = if route.upstream_protocol == UpstreamProtocol::Responses
+        || crate::gateway::compaction::is_v2(text.as_bytes()).unwrap_or(false)
+    {
+        context.prepare_native(text)
+    } else {
+        context.prepare(mode, text)
+    };
+    match prepared {
         Ok(PreparedResponse::Prewarm(response)) => {
             if send_created_and_completed(socket, &response.value) {
                 ExchangeOutcome::Served
@@ -206,26 +247,23 @@ where
                 ExchangeOutcome::Disconnect
             }
         }
-        Ok(PreparedResponse::Upstream(request)) => {
-            if execute_request(
-                socket,
-                client,
-                &inner.configured_base_url(),
-                &route,
-                context,
-                request,
-            ) {
-                ExchangeOutcome::Served
-            } else {
-                ExchangeOutcome::Disconnect
-            }
-        }
+        Ok(PreparedResponse::Upstream(request)) => execute_request(
+            socket,
+            client,
+            &inner.configured_base_url(),
+            &route,
+            context,
+            request,
+        ),
         Err(error) => {
-            if send_failed(socket, error.code, &error.message) {
-                ExchangeOutcome::Rejected
-            } else {
-                ExchangeOutcome::Disconnect
-            }
+            let endpoint = upstream_url(&route, &inner.configured_base_url())
+                .unwrap_or_else(|_| route.upstream_base_url.clone());
+            let diagnostic = ProviderDiagnostic::new(
+                ProviderFailureKind::RequestParameters,
+                &endpoint,
+                &error.message,
+            );
+            reject_context(socket, &diagnostic, error.code)
         }
     }
 }
@@ -243,6 +281,7 @@ mod decode;
 mod exchange;
 mod handshake;
 mod send;
+mod stream;
 
 use decode::*;
 use exchange::*;

@@ -17,7 +17,7 @@ export function ProjectRegisterForm({
 }: Props) {
   return (
     <form
-      className="asb-form asb-ext-project-form"
+      className="asb-form"
       aria-label="注册项目目录"
       onSubmit={(event) => {
         event.preventDefault();

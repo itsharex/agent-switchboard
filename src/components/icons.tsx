@@ -20,6 +20,7 @@ import {
   Play,
   Plus,
   Search,
+  Send,
   Square,
   Trash2,
   Wifi,
@@ -54,6 +55,7 @@ export const PlayIcon = icon(Play, 16);
 export const UpdateIcon = icon(Download, 16);
 export const UsageIcon = icon(ChartColumnIncreasing, 16);
 export const ConnectivityIcon = icon(Wifi, 16);
+export const RequestIcon = icon(Send, 16);
 
 export const ChevronDownIcon = icon(ChevronDown, 16, 2.4);
 export const ChevronUpIcon = icon(ChevronUp, 16, 2.4);

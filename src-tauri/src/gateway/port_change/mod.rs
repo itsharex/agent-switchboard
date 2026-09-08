@@ -1,7 +1,7 @@
 //! Recoverable gateway endpoint changes.
 //!
 //! A port change owns exactly one contract: the loopback address. It never
-//! replays a provider projection, so model and common settings are outside
+//! replays a provider projection, so model and client settings are outside
 //! this transaction. The prepared socket closes the bind race; the durable
 //! journal resolves an interrupted multi-client write to one side.
 
@@ -32,14 +32,43 @@ const JOURNAL_VERSION: u8 = 1;
 const PREPARATION_TTL: Duration = Duration::from_secs(10 * 60);
 const MAX_PREPARATIONS: usize = 8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GatewayPortChangeClient {
     pub(crate) app: AppKind,
     pub(crate) profile_id: String,
     pub(crate) profile_name: String,
+    #[serde(serialize_with = "serialize_endpoint")]
     pub(crate) current_base_url: String,
+    #[serde(serialize_with = "serialize_endpoint")]
     pub(crate) new_base_url: String,
+}
+
+fn display_endpoint(value: &str) -> String {
+    match value.split_once("/codex/") {
+        Some((origin, _)) => format!("{origin}/codex/{}/v1", asb_core::redact::REDACTED),
+        None => value.to_string(),
+    }
+}
+
+fn serialize_endpoint<S: serde::Serializer>(value: &str, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&display_endpoint(value))
+}
+
+impl std::fmt::Debug for GatewayPortChangeClient {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GatewayPortChangeClient")
+            .field("app", &self.app)
+            .field("profile_id", &self.profile_id)
+            .field("profile_name", &self.profile_name)
+            .field(
+                "current_base_url",
+                &display_endpoint(&self.current_base_url),
+            )
+            .field("new_base_url", &display_endpoint(&self.new_base_url))
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,7 +114,6 @@ pub(super) struct OwnedRouteSnapshot {
 pub(super) struct ClientSnapshot {
     pub(super) app: AppKind,
     pub(super) config: FileSnapshot,
-    pub(super) codex_auth: Option<FileSnapshot>,
     pub(super) route: Option<OwnedRouteSnapshot>,
 }
 

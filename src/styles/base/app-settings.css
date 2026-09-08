@@ -88,7 +88,7 @@
   }
 }
 
-/* General-settings catalog: grouped official config lines. */
+/* Settings catalog: grouped client preferences and provider parameters. */
 .asb-toggle-list {
   display: flex;
   flex-direction: column;

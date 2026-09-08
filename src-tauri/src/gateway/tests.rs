@@ -1,19 +1,23 @@
 use super::*;
-use asb_core::contracts::{
-    AuthenticationScheme, ExplicitMaxOutputTokens, ProviderDraft, UsageQuery, WriteOperation,
-};
-use asb_core::ownership::default_common_settings;
+use asb_core::contracts::{ExplicitMaxOutputTokens, ProviderDraft, UsageQuery, WriteOperation};
+use asb_core::ownership::default_client_settings;
 
 fn profile(app: AppKind, protocol: UpstreamProtocol) -> ProviderProfile {
     ProviderProfile::from_draft(
         Uuid::new_v4().to_string(),
         ProviderDraft {
+            parameters: asb_core::ownership::default_provider_parameters(app),
             app,
             route_mode: RouteMode::Custom,
             name: "Sandbox relay".to_string(),
             base_url: Some("http://127.0.0.1:18080".to_string()),
             api_key: "sandbox-upstream-key".to_string(),
             upstream_protocol: Some(protocol),
+            responses_options: (Some(protocol)
+                == Some(asb_core::contracts::UpstreamProtocol::Responses))
+            .then_some(asb_core::contracts::ResponsesOptions {
+                request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+            }),
             max_output_tokens: ((app == AppKind::Codex
                 && protocol == UpstreamProtocol::AnthropicMessages)
                 .then_some(8_192))
@@ -30,7 +34,7 @@ fn profile(app: AppKind, protocol: UpstreamProtocol) -> ProviderProfile {
 
 fn plan(profile: ProviderProfile) -> SwitchPlan {
     let app = profile.app;
-    SwitchPlan::direct(profile, default_common_settings(app))
+    SwitchPlan::direct(profile, default_client_settings(app))
 }
 
 #[test]
@@ -89,12 +93,14 @@ fn rehydrate_keeps_metadata_edited_routes_and_drops_rekeyed_ones() {
     let directory = tempfile::tempdir().unwrap();
     let local = LocalState::from_root(directory.path().join("state"));
     let draft = |api_key: &str| ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "中转".to_string(),
         base_url: Some("http://127.0.0.1:18080".to_string()),
         api_key: api_key.to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
+        responses_options: None,
         max_output_tokens: ExplicitMaxOutputTokens::none(),
         model: Some("model-a".to_string()),
         model_options: None,
@@ -156,22 +162,22 @@ fn rehydrate_keeps_metadata_edited_routes_and_drops_rekeyed_ones() {
 }
 
 #[test]
-fn routed_projection_never_keeps_the_upstream_secret_or_endpoint() {
+fn routed_projection_preserves_upstream_and_hides_client_secrets() {
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&state);
     let original = plan(profile(AppKind::Codex, UpstreamProtocol::AnthropicMessages));
     let projected = gateway.project(&original).unwrap();
 
-    assert_ne!(projected.plan.profile.api_key, original.profile.api_key);
-    assert_ne!(projected.plan.profile.base_url, original.profile.base_url);
-    assert_eq!(
-        projected.plan.client_authentication(),
-        Some(AuthenticationScheme::Bearer)
+    assert_eq!(projected.plan.profile, original.profile);
+    assert!(projected.plan.client_api_key().is_empty());
+    assert_ne!(
+        projected.plan.client_base_url(),
+        original.profile.base_url.as_deref()
     );
+    assert_eq!(projected.plan.client_authentication(), None);
     assert!(projected.warning().is_some_and(|warning| {
         warning.contains("服务地址会被改写为本机协议网关地址")
-            && warning.contains(&gateway.observe(&state).base_url.clone().unwrap())
             && warning.contains("127.0.0.1")
             && warning.contains("网页搜索会在此路由中关闭")
             && warning.contains("reasoning.encrypted_content")
@@ -200,7 +206,14 @@ fn direct_projection_does_not_create_a_gateway_warning() {
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&state);
-    let original = plan(profile(AppKind::Codex, UpstreamProtocol::Responses));
+    let mut official = profile(AppKind::Codex, UpstreamProtocol::Responses);
+    official.route_mode = RouteMode::Official;
+    official.base_url = None;
+    official.api_key.clear();
+    official.upstream_protocol = None;
+    official.responses_options = None;
+    official.model = None;
+    let original = plan(official);
     let projected = gateway.project(&original).unwrap();
 
     assert_eq!(projected.plan, original);
@@ -375,106 +388,22 @@ fn gateway_dependency_outlives_a_failed_listener() {
     gateway.shutdown();
 }
 
-/// The confirmed port change rewrites every owning client configuration in
-/// one transaction, keeps the capability token stable, moves the persisted
-/// port, swaps the live listener, and cleans the journal.
-#[test]
-fn confirmed_port_change_rewrites_clients_and_keeps_tokens_stable() {
-    let _client_paths = crate::test_client_paths::redirect_client_paths();
-    let directory = tempfile::tempdir().unwrap();
-    let state = LocalState::from_root(directory.path().join("state"));
-    let gateway = GatewayController::start(&state);
-    let from_port = gateway.configured_port();
+#[path = "tests/port_projection.rs"]
+mod port_projection;
 
-    let record = state
-        .configuration()
-        .create_provider(claude_gateway_draft("upstream-key"))
-        .unwrap();
-    let projection = gateway.project(&plan(record.profile.clone())).unwrap();
-    let target = state.target(AppKind::Claude).unwrap();
-    fs::create_dir_all(target.parent().unwrap()).unwrap();
-    fs::write(
-        &target,
-        asb_core::adapter::render("{}", &projection.plan).unwrap(),
-    )
-    .unwrap();
-    gateway.commit(&projection, || Ok(())).unwrap();
-    let original_token = projection.plan.profile.api_key.clone();
-
-    let preparations = PortChangePreparations::default();
-    // A probe port can be re-stolen by the OS between release and re-bind on
-    // busy hosts; retry with fresh probe ports until one is bindable.
-    let mut port_plan = None;
-    for _ in 0..10 {
-        let probe = Server::http(("127.0.0.1", 0)).unwrap();
-        let to_port = probe.server_addr().to_ip().unwrap().port();
-        drop(probe);
-        match port_change::prepare(&gateway, &state, &preparations, to_port) {
-            Ok(plan) => {
-                port_plan = Some(plan);
-                break;
-            }
-            Err(error) if error.contains("端口已被占用") => continue,
-            Err(error) => panic!("{error}"),
-        }
-    }
-    let port_plan = port_plan.expect("an eventually bindable probe port");
-    let to_port = port_plan.to_port;
-    assert_eq!(port_plan.from_port, from_port);
-    assert_eq!(port_plan.to_port, to_port);
-    assert_eq!(port_plan.clients.len(), 1);
-    assert_eq!(
-        port_plan.clients[0].current_base_url,
-        format!("http://127.0.0.1:{from_port}")
-    );
-    assert_eq!(
-        port_plan.clients[0].new_base_url,
-        format!("http://127.0.0.1:{to_port}")
-    );
-
-    port_change::commit(&gateway, &state, &preparations, &port_plan.preparation_id).unwrap();
-
-    let text = fs::read_to_string(&target).unwrap();
-    assert!(text.contains(&format!("http://127.0.0.1:{to_port}")));
-    assert!(text.contains(&original_token), "capability token is stable");
-    assert!(
-        !text.contains("upstream-key"),
-        "upstream secret never lands"
-    );
-
-    let saved: GatewayStateFile =
-        serde_json::from_str(&fs::read_to_string(state.gateway_state_path()).unwrap()).unwrap();
-    assert_eq!(saved.port, to_port);
-    assert!(saved.active.contains_key(&AppKind::Claude));
-    assert!(!state
-        .gateway_state_path()
-        .with_file_name("gateway-port-journal.json")
-        .exists());
-    assert!(gateway.is_listening());
-    assert!(gateway.has_active_routes());
-    assert_eq!(
-        state
-            .configuration()
-            .latest_config_write(AppKind::Claude)
-            .unwrap()
-            .unwrap()
-            .operation,
-        WriteOperation::GatewayPortChange
-    );
-    let observation = gateway.observe(&state);
-    assert_eq!(observation.status, GatewayStatusKind::Running);
-    assert_eq!(observation.listening_port, Some(to_port));
-    gateway.shutdown();
-}
+#[path = "tests/restore.rs"]
+mod restore;
 
 fn claude_gateway_draft(api_key: &str) -> asb_core::contracts::ProviderDraft {
     asb_core::contracts::ProviderDraft {
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "中转".to_string(),
         base_url: Some("http://127.0.0.1:18080".to_string()),
         api_key: api_key.to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
+        responses_options: None,
         max_output_tokens: asb_core::contracts::ExplicitMaxOutputTokens::none(),
         model: Some("model-a".to_string()),
         model_options: None,

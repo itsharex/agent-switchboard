@@ -17,23 +17,22 @@ export type ConfigValue = boolean | string | number;
 
 /** One application-owned setting intent. Automatic means that no line/key is
  * written to the client configuration; explicit values are always projected. */
-export type CommonValue =
+export type SettingValue =
   | { mode: "automatic" }
   | { mode: "explicit"; value: ConfigValue };
 
-/** The complete general-parameter values for one client, stored in the
- * application's `configuration/common/{client}.json`. */
-export interface CommonSettings {
-  settings: Record<string, CommonValue>;
+/** Complete values for one backend-owned settings catalog. */
+export interface SettingsValues {
+  settings: Record<string, SettingValue>;
 }
 
-export interface CommonChoiceOption {
+export interface SettingChoiceOption {
   value: string;
   label: string;
 }
 
-/** One ownership-catalog general parameter the settings page may edit. */
-export type CommonSettingSpec =
+/** One backend-owned parameter or client preference. */
+export type SettingSpec =
   | {
       key: string;
       label: string;
@@ -46,7 +45,14 @@ export type CommonSettingSpec =
       label: string;
       group: string;
       control: "slider" | "segment";
-      options: CommonChoiceOption[];
+      options: SettingChoiceOption[];
+    }
+  | {
+      key: string;
+      label: string;
+      group: string;
+      control: "model";
+      options: [];
     };
 
 /** One official configuration family with its real editing boundary. Paths
@@ -59,57 +65,68 @@ export interface OfficialSettingDirectoryEntry {
   detail: string;
 }
 
-/** Full typed general-settings editing model. `settingsHash` is the
+/** Full typed client-preference editing model. `settingsHash` is the
  * optimistic application-store revision; it is unrelated to client-file
  * hashes. */
-export interface CommonSettingsEditor {
+export interface ClientSettingsEditor {
   app: AppKind;
-  settings: CommonSettings;
+  settings: SettingsValues;
   settingsHash: string;
   groups: string[];
-  specs: CommonSettingSpec[];
+  specs: SettingSpec[];
   directory: OfficialSettingDirectoryEntry[];
 }
 
-export interface CommonSettingsSnapshot {
-  settings: CommonSettings;
+export interface ClientSettingsSnapshot {
+  settings: SettingsValues;
   settingsHash: string;
 }
 
+export interface ProviderParametersCatalog {
+  app: AppKind;
+  defaults: SettingsValues;
+  groups: string[];
+  specs: SettingSpec[];
+}
+
+export function getProviderParametersCatalog(app: AppKind): Promise<ProviderParametersCatalog> {
+  return invoke<ProviderParametersCatalog>("get_provider_parameters_catalog", { target: app });
+}
+
 /** Read-only rendering of the current draft's shared settings only. */
-export interface CommonSettingsPreview {
+export interface ClientSettingsPreview {
   app: AppKind;
   target: string;
   content: string;
 }
 
-/** Reads the stored general-parameter values plus the catalog that can edit
+/** Reads the stored client-preference values plus the catalog that can edit
  * them. This does not read a real Codex or Claude Code configuration file. */
-export function getCommonSettingsEditor(app: AppKind): Promise<CommonSettingsEditor> {
-  return invoke<CommonSettingsEditor>("get_common_settings_editor", { target: app });
+export function getClientSettingsEditor(app: AppKind): Promise<ClientSettingsEditor> {
+  return invoke<ClientSettingsEditor>("get_client_settings_editor", { target: app });
 }
 
 /** Saves desired application state only. A supplier must subsequently be
  * re-applied through the normal switch flow to project it into a client file. */
-export function saveCommonSettings(
+export function saveClientSettings(
   app: AppKind,
-  settings: CommonSettings,
+  settings: SettingsValues,
   expectedSettingsHash: string,
-): Promise<CommonSettingsSnapshot> {
-  return invoke<CommonSettingsSnapshot>("save_common_settings", {
+): Promise<ClientSettingsSnapshot> {
+  return invoke<ClientSettingsSnapshot>("save_client_settings", {
     target: app,
     settings,
     expectedSettingsHash,
   });
 }
 
-/** Renders the current common-settings draft without reading or writing a
+/** Renders the current client-preference draft without reading or writing a
  * real client file. */
-export function previewCommonSettings(
+export function previewClientSettings(
   app: AppKind,
-  settings: CommonSettings,
-): Promise<CommonSettingsPreview> {
-  return invoke<CommonSettingsPreview>("preview_common_settings", {
+  settings: SettingsValues,
+): Promise<ClientSettingsPreview> {
+  return invoke<ClientSettingsPreview>("preview_client_settings", {
     target: app,
     settings,
   });

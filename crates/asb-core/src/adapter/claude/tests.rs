@@ -1,7 +1,7 @@
 use super::*;
-use crate::contracts::{ChangeKind, CommonSettingValue, ConfigValue, RouteMode, SwitchPlan};
+use crate::contracts::{ChangeKind, ConfigValue, RouteMode, SettingValue, SwitchPlan};
 use crate::contracts::{ClaudeModelSettings, ModelOptions, ProviderProfile, UpstreamProtocol};
-use crate::ownership::default_common_settings;
+use crate::ownership::{default_client_settings, default_provider_parameters};
 use crate::test_support::CLAUDE_JSON;
 use crate::AppKind;
 use serde_json::Value as Json;
@@ -17,6 +17,7 @@ fn plan_b() -> SwitchPlan {
             base_url: Some("https://relay-c.internal".into()),
             api_key: "test-api-key".into(),
             upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+            responses_options: None,
             max_output_tokens: None.into(),
             model_options: Some(ModelOptions::Claude(ClaudeModelSettings {
                 primary_one_m: false,
@@ -30,12 +31,13 @@ fn plan_b() -> SwitchPlan {
                     "claude-sonnet-4".to_string(),
                 ]),
             })),
+            parameters: default_provider_parameters(AppKind::Claude),
             notes: None,
             website_url: None,
             usage_query: None,
             official_quota_refresh_interval_minutes: None,
         },
-        default_common_settings(AppKind::Claude),
+        default_client_settings(AppKind::Claude),
     )
 }
 
@@ -89,7 +91,7 @@ fn official_route_removes_managed_custom_keys_and_keeps_host_keys() {
 fn cross_protocol_provider_disables_experimental_betas_and_native_provider_removes_it() {
     let mut profile = plan_b().profile;
     profile.upstream_protocol = Some(UpstreamProtocol::ChatCompletions);
-    let routed = SwitchPlan::direct(profile, default_common_settings(AppKind::Claude));
+    let routed = SwitchPlan::direct(profile, default_client_settings(AppKind::Claude));
     let rendered = render("{}", &routed).expect("routed Claude render");
     let parsed: Json = serde_json::from_str(&rendered).expect("routed Claude JSON");
     assert_eq!(
@@ -146,20 +148,20 @@ fn deprecated_fast_model_key_is_cleaned_up() {
 }
 
 #[test]
-fn token_key_is_provider_owned_and_common_settings_cannot_claim_it() {
+fn scalar_parameters_cannot_claim_the_provider_credential_slot() {
     let current = CLAUDE_JSON.replace(
         "\"ANTHROPIC_MODEL\": \"claude-sonnet-4\"",
         "\"ANTHROPIC_AUTH_TOKEN\": \"sk-live-old-secret\"",
     );
     let mut plan = plan_b();
-    plan.common.settings.insert(
+    plan.profile.parameters.settings.insert(
         "env.ANTHROPIC_AUTH_TOKEN".into(),
-        CommonSettingValue::Explicit {
+        SettingValue::Explicit {
             value: ConfigValue::Str("sk-live-forbidden".into()),
         },
     );
     let err = crate::adapter::preview(&current, &plan, "/b").unwrap_err();
-    assert!(err.message.contains("不是"));
+    assert!(err.message.contains("不属于"));
 
     let preview = preview(&current, &plan_b(), "/b").unwrap();
     // Anthropic Messages routes via x-api-key: the Bearer-era token key
@@ -189,9 +191,9 @@ fn token_key_is_provider_owned_and_common_settings_cannot_claim_it() {
 #[test]
 fn explicit_ultracode_writes_its_own_key_and_automatic_removes_it() {
     let mut plan = plan_b();
-    plan.common.settings.insert(
+    plan.profile.parameters.settings.insert(
         "ultracode".into(),
-        CommonSettingValue::Explicit {
+        SettingValue::Explicit {
             value: ConfigValue::Bool(true),
         },
     );
@@ -203,13 +205,57 @@ fn explicit_ultracode_writes_its_own_key_and_automatic_removes_it() {
     // Automatic behavior leaves the file without the line.
     let mut defaulted = plan_b();
     defaulted
-        .common
+        .profile
+        .parameters
         .settings
-        .insert("ultracode".into(), CommonSettingValue::Automatic);
+        .insert("ultracode".into(), SettingValue::Automatic);
     let with_line = "{\"ultracode\": true}";
     let rendered = render(with_line, &defaulted).unwrap();
     let parsed: Json = serde_json::from_str(&rendered).unwrap();
     assert!(parsed.get("ultracode").is_none());
+}
+
+#[test]
+fn claude_provider_parameters_change_independently_of_client_settings() {
+    let mut first = plan_b();
+    first.profile.parameters.settings.insert(
+        "effortLevel".into(),
+        SettingValue::Explicit {
+            value: ConfigValue::Str("high".into()),
+        },
+    );
+    first.client_settings.settings.insert(
+        "spinnerTipsEnabled".into(),
+        SettingValue::Explicit {
+            value: ConfigValue::Bool(false),
+        },
+    );
+    let mut second = first.clone();
+    second.profile.id = "independent-provider".into();
+    second.profile.parameters.settings.insert(
+        "effortLevel".into(),
+        SettingValue::Explicit {
+            value: ConfigValue::Str("low".into()),
+        },
+    );
+
+    let first_text = crate::adapter::render("{}", &first).unwrap();
+    let second_text = crate::adapter::render(&first_text, &second).unwrap();
+    let parsed: Json = serde_json::from_str(&second_text).unwrap();
+    assert_eq!(parsed["effortLevel"], "low");
+    assert_eq!(parsed["spinnerTipsEnabled"], false);
+    assert_eq!(
+        first.profile.parameters.value("effortLevel"),
+        Some(&SettingValue::Explicit {
+            value: ConfigValue::Str("high".into())
+        })
+    );
+
+    second.profile.parameters = default_provider_parameters(AppKind::Claude);
+    let automatic = crate::adapter::render(&second_text, &second).unwrap();
+    let parsed: Json = serde_json::from_str(&automatic).unwrap();
+    assert!(parsed.get("effortLevel").is_none());
+    assert_eq!(parsed["spinnerTipsEnabled"], false);
 }
 
 #[test]

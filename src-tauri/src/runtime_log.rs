@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 const LOG_FILE_STEM: &str = "agent-switchboard";
 const LOG_TARGET: &str = "agent-switchboard.runtime";
@@ -82,6 +82,7 @@ pub enum RuntimeLogAction {
     ProfilesReordered,
     ProfileImported,
     GlobalPromptDocumentSaved,
+    CodexSubagentSettingsApplied,
     ConfigurationSwitched,
     BackupRestored,
     SwitchUndone,
@@ -111,7 +112,7 @@ pub struct RuntimeLogEntry {
 /// Registers the app-owned runtime logger before command setup. The same
 /// bounded files are used by the diagnostic Log tab and never by the renderer
 /// directly.
-pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+pub fn plugin<R: tauri::Runtime>(directory: PathBuf) -> tauri::plugin::TauriPlugin<R> {
     use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
     tauri_plugin_log::Builder::new()
@@ -127,7 +128,8 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .filter(|metadata| metadata.target() == LOG_TARGET)
         .targets([
             Target::new(TargetKind::Stdout),
-            Target::new(TargetKind::LogDir {
+            Target::new(TargetKind::Folder {
+                path: directory,
                 file_name: Some(LOG_FILE_STEM.to_string()),
             }),
         ])
@@ -202,9 +204,7 @@ pub fn list(app: &AppHandle) -> Result<Vec<RuntimeLogEntry>, String> {
 /// Resolves the only directory that contains this application's runtime logs.
 /// The path remains backend-owned and is never returned to the renderer.
 pub fn log_directory(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_log_dir()
-        .map_err(|_| "无法定位应用日志目录".to_string())
+    crate::app_paths::log_directory(&app.config().identifier)
 }
 
 fn list_from_dir(directory: &Path) -> Result<Vec<RuntimeLogEntry>, String> {

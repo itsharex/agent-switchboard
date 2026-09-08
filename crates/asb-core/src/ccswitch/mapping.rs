@@ -1,7 +1,8 @@
 use serde_json::Value;
 
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, ModelOptions, ProviderDraft, RouteMode, UpstreamProtocol,
+    AppKind, ClaudeModelSettings, ModelOptions, ProviderDraft, ResponsesOptions,
+    ResponsesRequestMode, RouteMode, SettingsValues, UpstreamProtocol,
 };
 
 use crate::ccswitch::row::{CcSwitchProposal, CcSwitchRow, CcSwitchSkip};
@@ -10,7 +11,13 @@ use crate::ccswitch::usage::map_usage_query;
 /// Keys of a Codex managed provider table that a profile can represent.
 /// Anything beyond this set would be lost on activation, so such providers
 /// are skipped instead of silently narrowed (same rule as `discovery`).
-const CODEX_TABLE_KEYS: [&str; 4] = ["name", "base_url", "env_key", "wire_api"];
+const CODEX_TABLE_KEYS: [&str; 5] = [
+    "name",
+    "base_url",
+    "env_key",
+    "wire_api",
+    "requires_openai_auth",
+];
 
 /// Claude env keys a profile can represent. Either credential alias supplies
 /// the profile API key; the configured `ANTHROPIC_AUTH_TOKEN` is rendered on
@@ -76,6 +83,9 @@ fn skip_with(key: String, row: &CcSwitchRow, reason: String) -> CcSwitchSkip {
 fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String> {
     let config: Value =
         serde_json::from_str(&row.settings_config).map_err(|e| format!("配置无法解析: {e}"))?;
+    let parameters =
+        crate::adapter::read_provider_parameters(AppKind::Claude, &row.settings_config)
+            .map_err(|error| error.to_string())?;
     let env = config.get("env").cloned().unwrap_or(Value::Null);
     let env = env.as_object().cloned().unwrap_or_default();
 
@@ -85,6 +95,77 @@ fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String
             .filter(|v| !v.is_empty())
     };
     let base_url = text("ANTHROPIC_BASE_URL");
+    let (model, model_options) = claude_models(&env)?;
+
+    // Names only; values of unrecognized keys never enter the output.
+    let mut warnings = Vec::new();
+    for name in env.keys() {
+        if !CLAUDE_ENV_KEYS.contains(&name.as_str()) {
+            warnings.push(format!("未导入: env.{name}"));
+        }
+    }
+    for name in config.as_object().map(|o| o.keys()).into_iter().flatten() {
+        if name != "env" && !parameters.settings.contains_key(name) {
+            warnings.push(format!("未导入: {name}"));
+        }
+    }
+
+    // A settings.json without a custom endpoint is an official route. Its
+    // credentials stay client-owned; only the selectable route is imported.
+    let base_url = match base_url {
+        Some(url) => url,
+        None => {
+            return Ok(CcSwitchProposal {
+                key,
+                app: AppKind::Claude,
+                draft: official_draft(AppKind::Claude, parameters),
+                warnings,
+            });
+        }
+    };
+    let api_key = text("ANTHROPIC_AUTH_TOKEN")
+        .or_else(|| text("ANTHROPIC_API_KEY"))
+        .ok_or_else(|| "缺少 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY".to_string())?;
+    let upstream_protocol =
+        source_protocol(row.meta.as_deref(), UpstreamProtocol::AnthropicMessages)?;
+    let usage_query = map_usage_query(row.meta.as_deref(), &mut warnings);
+    Ok(CcSwitchProposal {
+        key,
+        app: AppKind::Claude,
+        draft: ProviderDraft {
+            app: AppKind::Claude,
+            route_mode: RouteMode::Custom,
+            name: row.name.clone(),
+            model,
+            base_url: Some(base_url.to_string()),
+            api_key: api_key.to_string(),
+            upstream_protocol: Some(upstream_protocol),
+            responses_options: (upstream_protocol == UpstreamProtocol::Responses).then_some(
+                ResponsesOptions {
+
+                    request_mode: ResponsesRequestMode::Standard,
+                },
+            ),
+            max_output_tokens: None.into(),
+            model_options,
+            parameters,
+            notes: row.notes.clone(),
+            website_url: row.website_url.clone(),
+            usage_query,
+            official_quota_refresh_interval_minutes: None,
+        },
+        warnings,
+    })
+}
+
+fn claude_models(
+    env: &serde_json::Map<String, Value>,
+) -> Result<(Option<String>, Option<ModelOptions>), String> {
+    let text = |name: &str| {
+        env.get(name)
+            .and_then(Value::as_str)
+            .filter(|v| !v.is_empty())
+    };
     let (model, primary_one_m) =
         crate::claude_model::parse_ccswitch_model(text("ANTHROPIC_MODEL"), "主模型", true)?;
     let (haiku, _) = crate::claude_model::parse_ccswitch_model(
@@ -103,35 +184,6 @@ fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String
         true,
     )?;
 
-    // Names only; values of unrecognized keys never enter the output.
-    let mut warnings = Vec::new();
-    for name in env.keys() {
-        if !CLAUDE_ENV_KEYS.contains(&name.as_str()) {
-            warnings.push(format!("未导入: env.{name}"));
-        }
-    }
-    for name in config.as_object().map(|o| o.keys()).into_iter().flatten() {
-        if name != "env" {
-            warnings.push(format!("未导入: {name}"));
-        }
-    }
-
-    // A settings.json without a custom endpoint is an official route. Its
-    // credentials stay client-owned; only the selectable route is imported.
-    let base_url = match base_url {
-        Some(url) => url,
-        None => {
-            return Ok(CcSwitchProposal {
-                key,
-                app: AppKind::Claude,
-                draft: official_draft(AppKind::Claude),
-                warnings,
-            });
-        }
-    };
-    let api_key = text("ANTHROPIC_AUTH_TOKEN")
-        .or_else(|| text("ANTHROPIC_API_KEY"))
-        .ok_or_else(|| "缺少 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY".to_string())?;
     let model_options = (primary_one_m
         || haiku.is_some()
         || sonnet.is_some()
@@ -149,29 +201,7 @@ fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String
                 available_models: None,
             })
         });
-    let upstream_protocol =
-        source_protocol(row.meta.as_deref(), UpstreamProtocol::AnthropicMessages)?;
-    let usage_query = map_usage_query(row.meta.as_deref(), &mut warnings);
-    Ok(CcSwitchProposal {
-        key,
-        app: AppKind::Claude,
-        draft: ProviderDraft {
-            app: AppKind::Claude,
-            route_mode: RouteMode::Custom,
-            name: row.name.clone(),
-            model,
-            base_url: Some(base_url.to_string()),
-            api_key: api_key.to_string(),
-            upstream_protocol: Some(upstream_protocol),
-            max_output_tokens: None.into(),
-            model_options,
-            notes: row.notes.clone(),
-            website_url: row.website_url.clone(),
-            usage_query,
-            official_quota_refresh_interval_minutes: None,
-        },
-        warnings,
-    })
+    Ok((model, model_options))
 }
 
 fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String> {
@@ -185,10 +215,18 @@ fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String>
     let official = oauth || api_key.is_none_or(Value::is_null);
 
     if official {
+        let parameters = match config.get("config") {
+            Some(Value::String(text)) => {
+                crate::adapter::read_provider_parameters(AppKind::Codex, text)
+                    .map_err(|error| error.to_string())?
+            }
+            None => crate::ownership::default_provider_parameters(AppKind::Codex),
+            Some(_) => return Err("供应商 config 必须是 TOML 文本".to_string()),
+        };
         return Ok(CcSwitchProposal {
             key,
             app: AppKind::Codex,
-            draft: official_draft(AppKind::Codex),
+            draft: official_draft(AppKind::Codex, parameters),
             warnings: vec![],
         });
     }
@@ -200,6 +238,51 @@ fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String>
     let document: toml_edit::DocumentMut = toml_text
         .parse()
         .map_err(|_| "供应商 TOML 无法解析".to_string())?;
+    let parameters = crate::adapter::read_provider_parameters(AppKind::Codex, toml_text)
+        .map_err(|error| error.to_string())?;
+    let (base_url, wire_protocol, responses_options) = codex_source_route(&document)?;
+    let api_key = auth
+        .get("OPENAI_API_KEY")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "缺少 OPENAI_API_KEY".to_string())?;
+    let mut warnings = Vec::new();
+    let upstream_protocol = source_protocol(row.meta.as_deref(), wire_protocol)?;
+    if upstream_protocol == UpstreamProtocol::AnthropicMessages {
+        return Err(
+            "Codex 到 Anthropic Messages 的供应商必须明确设置最大输出 token；无法从导入来源安全推断"
+                .to_string(),
+        );
+    }
+    let usage_query = map_usage_query(row.meta.as_deref(), &mut warnings);
+    Ok(CcSwitchProposal {
+        key,
+        app: AppKind::Codex,
+        draft: ProviderDraft {
+            app: AppKind::Codex,
+            route_mode: RouteMode::Custom,
+            name: row.name.clone(),
+            model: None,
+            base_url: Some(base_url),
+            api_key: api_key.to_string(),
+            upstream_protocol: Some(upstream_protocol),
+            responses_options: (upstream_protocol == UpstreamProtocol::Responses)
+                .then_some(responses_options),
+            max_output_tokens: None.into(),
+            model_options: None,
+            parameters,
+            notes: row.notes.clone(),
+            website_url: row.website_url.clone(),
+            usage_query,
+            official_quota_refresh_interval_minutes: None,
+        },
+        warnings,
+    })
+}
+
+fn codex_source_route(
+    document: &toml_edit::DocumentMut,
+) -> Result<(String, UpstreamProtocol, ResponsesOptions), String> {
     let providers = document
         .get("model_providers")
         .and_then(|item| item.as_table())
@@ -236,43 +319,11 @@ fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String>
         "anthropic" | "anthropic_messages" => UpstreamProtocol::AnthropicMessages,
         _ => return Err(format!("wire_api = {wire_api} 不受支持")),
     };
-    let api_key = auth
-        .get("OPENAI_API_KEY")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "缺少 OPENAI_API_KEY".to_string())?;
-    let mut warnings = Vec::new();
-    let upstream_protocol = source_protocol(row.meta.as_deref(), wire_protocol)?;
-    if upstream_protocol == UpstreamProtocol::AnthropicMessages {
-        return Err(
-            "Codex 到 Anthropic Messages 的供应商必须明确设置最大输出 token；无法从导入来源安全推断"
-                .to_string(),
-        );
-    }
-    let usage_query = map_usage_query(row.meta.as_deref(), &mut warnings);
-    Ok(CcSwitchProposal {
-        key,
-        app: AppKind::Codex,
-        draft: ProviderDraft {
-            app: AppKind::Codex,
-            route_mode: RouteMode::Custom,
-            name: row.name.clone(),
-            model: None,
-            base_url: Some(base_url),
-            api_key: api_key.to_string(),
-            upstream_protocol: Some(upstream_protocol),
-            max_output_tokens: None.into(),
-            model_options: None,
-            notes: row.notes.clone(),
-            website_url: row.website_url.clone(),
-            usage_query,
-            official_quota_refresh_interval_minutes: None,
-        },
-        warnings,
-    })
+    let responses_options = crate::adapter::codex::import_responses_options(table)?;
+    Ok((base_url, wire_protocol, responses_options))
 }
 
-fn official_draft(app: AppKind) -> ProviderDraft {
+fn official_draft(app: AppKind, parameters: SettingsValues) -> ProviderDraft {
     ProviderDraft {
         app,
         route_mode: RouteMode::Official,
@@ -285,8 +336,10 @@ fn official_draft(app: AppKind) -> ProviderDraft {
         base_url: None,
         api_key: String::new(),
         upstream_protocol: None,
+        responses_options: None,
         max_output_tokens: None.into(),
         model_options: None,
+        parameters,
         notes: None,
         website_url: None,
         usage_query: None,

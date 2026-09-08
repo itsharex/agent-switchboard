@@ -1,5 +1,5 @@
-//! The private loopback gateway used only when a provider's upstream wire
-//! protocol differs from the selected client's native protocol.
+//! The private loopback gateway for every third-party Codex route and
+//! cross-protocol Claude routes, including Responses transport and compaction.
 //!
 //! A provider profile remains the sole owner of its endpoint and API key. The
 //! persisted gateway state stores only a listener identity plus a profile id
@@ -19,7 +19,9 @@ use metrics::{GatewayMetrics, GatewayMetricsSnapshot};
 
 use crate::local_state::LocalState;
 use asb_core::adapter;
-use asb_core::contracts::{AppKind, ProviderProfile, RouteMode, SwitchPlan, UpstreamProtocol};
+use asb_core::contracts::{
+    AppKind, ProviderProfile, ResponsesOptions, RouteMode, SwitchPlan, UpstreamProtocol,
+};
 use asb_core::validate_plan;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -30,15 +32,23 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
+#[cfg(test)]
 use tiny_http::Server;
 use uuid::Uuid;
 
+mod activation_snapshot;
 mod controller;
+pub(crate) use activation_snapshot::GatewayActivationSnapshot;
+mod compaction;
+pub(crate) mod http;
 mod identity;
 mod lifecycle;
+mod restore_validation;
 mod routing;
 mod state;
 
+#[cfg(test)]
+mod responses_tests;
 #[cfg(test)]
 mod tests;
 
@@ -113,8 +123,10 @@ pub(crate) struct ActiveRoute {
     pub(crate) profile_id: String,
     pub(crate) fingerprint: String,
     pub(crate) client_token: String,
+    pub(crate) continuation_key: [u8; 32],
     pub(crate) upstream_base_url: String,
     pub(crate) upstream_protocol: UpstreamProtocol,
+    pub(crate) responses_options: Option<ResponsesOptions>,
     pub(crate) max_output_tokens: Option<u64>,
     pub(crate) api_key: String,
 }
@@ -123,40 +135,35 @@ pub(crate) struct ActiveRoute {
 /// socket alone so a port handoff cannot accidentally stop the replacement.
 #[derive(Clone)]
 pub(crate) struct BoundListener {
-    server: Arc<Server>,
+    socket: Arc<Mutex<Option<std::net::TcpListener>>>,
     stop: Arc<AtomicBool>,
     port: u16,
 }
-
 impl BoundListener {
-    pub(crate) fn from_server(server: Server) -> Self {
-        let port = server
-            .server_addr()
-            .to_ip()
-            .expect("the loopback gateway always owns a TCP listener")
-            .port();
-        Self {
-            server: Arc::new(server),
+    pub(crate) fn bind(port: u16) -> std::io::Result<Self> {
+        let socket = std::net::TcpListener::bind(("127.0.0.1", port))?;
+        socket.set_nonblocking(true)?;
+        Ok(Self {
+            port: socket.local_addr()?.port(),
+            socket: Arc::new(Mutex::new(Some(socket))),
             stop: Arc::new(AtomicBool::new(false)),
-            port,
-        }
+        })
     }
-
-    pub(crate) fn server(&self) -> Arc<Server> {
-        Arc::clone(&self.server)
+    pub(crate) fn take_socket(&self) -> std::io::Result<std::net::TcpListener> {
+        self.socket
+            .lock()
+            .map_err(|_| std::io::ErrorKind::Other)?
+            .take()
+            .ok_or_else(|| std::io::ErrorKind::NotConnected.into())
     }
-
     pub(crate) fn stop_signal(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.stop)
+        self.stop.clone()
     }
-
     pub(crate) fn port(&self) -> u16 {
         self.port
     }
-
     pub(crate) fn stop(&self) {
         self.stop.store(true, Ordering::Release);
-        self.server.unblock();
     }
 }
 
@@ -178,6 +185,7 @@ pub(crate) struct GatewayInner {
     /// Requests accepted but not yet answered; drains to zero before a
     /// listener swap. Panicking workers release their count via unwind.
     pub(crate) inflight: AtomicUsize,
+    pub(crate) websocket_connections: AtomicUsize,
     pub(crate) stopping: AtomicBool,
     /// False when the persisted identity could not be read or safely
     /// recreated. A listener must never serve with a fabricated identity.
@@ -318,7 +326,12 @@ impl GatewayController {
     pub(crate) fn listening(&self) -> Option<BoundListener> {
         let listener = self.inner.listener.read().ok()?;
         match &*listener {
-            ListenerState::Listening { listener } => Some(listener.clone()),
+            ListenerState::Listening { listener }
+                if !listener.stop_signal().load(Ordering::Acquire) =>
+            {
+                Some(listener.clone())
+            }
+            ListenerState::Listening { .. } => None,
             ListenerState::Failed(_) => None,
         }
     }
@@ -422,69 +435,11 @@ pub(crate) fn points_at_gateway_files(local: &LocalState) -> bool {
         let Ok(text) = fs::read_to_string(target) else {
             continue;
         };
-        let codex_auth = if app == AppKind::Codex {
-            crate::local_state::LocalState::codex_auth_path()
-                .ok()
-                .and_then(|path| fs::read_to_string(path).ok())
-        } else {
-            None
-        };
-        if routing::config_points_at_gateway(app, &text, codex_auth.as_deref()) {
+        if routing::config_points_at_gateway(app, &text) {
             return true;
         }
     }
     false
-}
-
-/// Classifies a bind error into the structured failure report, identifying
-/// the holder process only when the platform reports it reliably.
-pub(crate) fn bind_failure_report(
-    port: u16,
-    error: Box<dyn std::error::Error + Send + Sync>,
-) -> GatewayFailureReport {
-    const WSAEADDRINUSE: i32 = 10048;
-    let io_error = error.downcast_ref::<std::io::Error>();
-    let os_code = io_error.and_then(|error| error.raw_os_error());
-    let in_use = matches!(
-        io_error.map(|error| error.kind()),
-        Some(std::io::ErrorKind::AddrInUse)
-    ) || os_code == Some(WSAEADDRINUSE);
-    let holder = if in_use {
-        port_probe::find_listener(port)
-    } else {
-        None
-    };
-    let (kind, message) = if in_use {
-        let holder_text = match &holder {
-            Some(info) => match &info.name {
-                Some(name) => format!("（占用进程 {}，PID {}）", name, info.pid),
-                None => format!("（占用进程 PID {}）", info.pid),
-            },
-            None => "（占用进程未知）".to_string(),
-        };
-        (
-            GatewayFailureKind::PortInUse,
-            format!("无法监听 127.0.0.1:{port}：端口已被占用{holder_text}。"),
-        )
-    } else {
-        let code_text = os_code
-            .map(|code| format!("（系统错误码 {code}）"))
-            .unwrap_or_default();
-        (
-            GatewayFailureKind::SystemRejected,
-            format!("无法监听 127.0.0.1:{port}：绑定请求被系统拒绝{code_text}。"),
-        )
-    };
-    GatewayFailureReport {
-        port,
-        kind,
-        os_code,
-        message,
-        process: holder.map(|info| GatewayPortProcess {
-            pid: info.pid,
-            name: info.name,
-        }),
-    }
 }
 
 /// A minimal failure report for lock-poisoned or test-only paths.
@@ -495,5 +450,24 @@ pub(crate) fn test_failure_report(port: u16, message: &str) -> GatewayFailureRep
         os_code: None,
         message: message.to_string(),
         process: None,
+    }
+}
+
+impl InflightGuard {
+    pub(crate) fn try_acquire(inner: Arc<GatewayInner>) -> Option<Self> {
+        if inner.maintenance.load(Ordering::Acquire) || inner.stopping.load(Ordering::Acquire) {
+            return None;
+        }
+        inner
+            .inflight
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                (count < 8).then_some(count + 1)
+            })
+            .ok()?;
+        let guard = Self(inner);
+        if guard.0.maintenance.load(Ordering::Acquire) || guard.0.stopping.load(Ordering::Acquire) {
+            return None;
+        }
+        Some(guard)
     }
 }

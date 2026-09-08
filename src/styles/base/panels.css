@@ -16,11 +16,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--asb-space-3);
   margin-bottom: var(--asb-space-3);
 }
 
+/* Left cluster inside the heading row: subview back button, page title, and
+   the section tabs — reads left to right in that order on every page. */
+.asb-panel-heading-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-panel-heading-main > div {
+  min-width: 0;
+}
+
 .asb-panel-heading .asb-panel-title {
+  margin-bottom: 0;
+}
+
+/* In gap-owning containers the layout gap owns the space below the heading. */
+.asb-page-stack > .asb-panel-heading,
+.asb-edit-view > .asb-panel-heading,
+.asb-diagnostics > .asb-panel-heading,
+.asb-usage-workspace > .asb-panel-heading,
+.asb-provider-import > .asb-panel-heading,
+.asb-sessions > .asb-panel-heading {
   margin-bottom: 0;
 }
 
@@ -81,6 +106,12 @@
   font: var(--asb-text-label);
 }
 
+/* Inactive tabs answer the pointer; the raised active card does not move. */
+.asb-tab:hover:not(.is-on):not(:disabled) {
+  background: var(--asb-content-muted);
+  color: var(--asb-text);
+}
+
 .asb-tab-logo {
   display: block;
   width: 22px;
@@ -92,37 +123,6 @@
   background: var(--asb-content);
   color: var(--asb-text);
   font-weight: 600;
-}
-
-/* Main settings mode switch. It is deliberately separate from the inner
-   client tabs: one chooses the management domain, the other chooses a
-   supported client or its global prompt document. */
-.asb-settings-main-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: var(--asb-space-2);
-  margin-bottom: var(--asb-space-4);
-  border-bottom: 1px solid var(--asb-hairline);
-}
-
-.asb-settings-main-tab {
-  min-height: var(--asb-touch-target);
-  padding: 0 var(--asb-space-3);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-body);
-  font-weight: 600;
-}
-
-.asb-settings-main-tab:hover:not(:disabled),
-.asb-settings-main-tab[aria-selected="true"] {
-  color: var(--asb-text);
-}
-
-.asb-settings-main-tab[aria-selected="true"] {
-  border-bottom-color: var(--asb-action);
 }
 
 /* Official settings coverage is an audit surface: compact, solid, and
@@ -254,7 +254,10 @@
   color: var(--asb-text);
 }
 
-.asb-prompt-editor {
+/* The prompt editor's sizing variant hangs off its field wrapper: the
+   Textarea component owns the field classes exclusively, so the parent
+   container owns size — higher specificity than .asb-input, order-independent. */
+.asb-prompt-editor-field .asb-textarea {
   inline-size: 100%;
   height: var(--asb-prompt-editor-min-height);
   min-height: var(--asb-prompt-editor-min-height);

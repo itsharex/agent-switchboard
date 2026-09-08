@@ -1,0 +1,252 @@
+/* 路由卡复刻：渐变与阴影为 DESIGN.md 批准的唯一定制表面 */
+.route-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.route-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--site-radius-panel);
+  padding: 20px 20px 16px;
+  color: var(--site-route-card-text);
+  box-shadow: var(--site-route-shadow);
+}
+
+.route-card-codex {
+  background: var(--site-route-gradient-codex);
+}
+
+.route-card-claude {
+  background: var(--site-route-gradient-claude);
+}
+
+.route-card-client {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.94;
+}
+
+.route-card-provider {
+  margin-top: 2px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.route-card-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 10px 14px;
+  background: var(--site-route-field-surface);
+  border-radius: 12px;
+  color: var(--site-route-field-text);
+}
+
+.route-card-fields dt {
+  font-size: 12px;
+  color: var(--site-route-field-label);
+}
+
+.route-card-fields dd {
+  margin: 2px 0 0;
+  font: 500 13px/1.45 var(--site-font-code);
+  overflow-wrap: anywhere;
+}
+
+/* 软件界面复刻：应用顶栏 + 概览模块面板 */
+.app-replica {
+  overflow: hidden;
+  background: var(--site-canvas);
+  border: 1px solid var(--site-hairline);
+  border-radius: var(--site-radius-panel);
+  box-shadow: var(--site-route-shadow);
+}
+
+.app-replica-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 16px;
+  background: var(--site-surface-rail);
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.app-replica-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-replica-brand img {
+  width: 14px;
+  height: 14px;
+}
+
+.app-replica-nav {
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.app-replica-nav span {
+  padding: 3px 7px;
+  border-radius: 7px;
+  color: var(--site-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-replica-nav span:first-child {
+  background: var(--site-content);
+  color: var(--site-text);
+  font-weight: 600;
+}
+
+.app-replica-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.app-replica-panel {
+  background: var(--site-content);
+  border: 1px solid var(--site-hairline);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.app-replica-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.app-replica-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-replica-panel-action {
+  padding: 3px 10px;
+  border: 1px solid var(--site-hairline-strong);
+  border-radius: 8px;
+  color: var(--site-text-muted);
+  font-size: 11px;
+}
+
+.app-replica .route-card {
+  padding: 13px 14px 11px;
+  border-radius: 14px;
+}
+
+.app-replica .route-card-provider {
+  font-size: 15px;
+}
+
+.app-replica .route-card-fields {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 2fr) minmax(0, 0.85fr);
+  gap: 10px;
+  margin-top: 11px;
+  padding: 7px 10px;
+}
+
+.app-replica .route-card-fields dt {
+  font-size: 10.5px;
+}
+
+.app-replica .route-card-fields dd {
+  font-size: 11px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.status-card {
+  background: var(--site-content-muted);
+  border: 1px solid var(--site-hairline);
+  border-radius: 12px;
+  padding: 10px 12px 6px;
+}
+
+.status-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 8px;
+}
+
+.status-card-head strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--site-content);
+  border: 1px solid var(--site-hairline);
+  font-size: 10.5px;
+  color: var(--site-text-muted);
+}
+
+.status-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--site-safe);
+}
+
+.status-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--site-hairline);
+}
+
+.status-row dt {
+  color: var(--site-text-muted);
+  font-size: 11px;
+}
+
+.status-row dd {
+  margin: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .route-stack {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media (max-width: 479px) {
+  .app-replica-nav {
+    display: none;
+  }
+}

@@ -1,6 +1,7 @@
 import type {
   AppKind,
   ExtensionDiagnosticRemediation,
+  ExtensionListItem,
   ExtensionTarget,
   FileState,
   PlanOperation,
@@ -59,10 +60,7 @@ export const DIAGNOSTIC_CODE_LABELS: Record<string, string> = {
   managedTargetUnreadable: "托管目标不可读",
 };
 
-export const REMEDIATION_LABELS: Record<
-  ExtensionDiagnosticRemediation["kind"],
-  string
-> = {
+export const REMEDIATION_LABELS: Record<ExtensionDiagnosticRemediation["kind"], string> = {
   auto: "可自动修复",
   manual: "需人工处理",
   info: "信息提示",
@@ -75,16 +73,31 @@ export const TRANSPORT_LABELS: Record<string, string> = {
   claudeWs: "WebSocket（仅 Claude）",
 };
 
-/** The MCP transports project to Codex as well; Claude-only ones do not. */
-export function mcpSupportsClient(transport: string, client: AppKind): boolean {
-  if (transport === "claudeSse" || transport === "claudeWs") return client === "claude";
-  return true;
+/** Worst-state-first ordering: the summary names the state that needs
+ * attention before the reassuring ones. */
+const FILE_STATE_SEVERITY: Array<ExtensionListItem["bindings"][number]["fileState"]> = [
+  "unreadable",
+  "externalChange",
+  "missing",
+  "pendingApply",
+  "notDeployed",
+  "inSync",
+];
+
+/** One line of text for an item's deployment state on one client; the row
+ * toggles carry it as their accessible name so state never rides on colour
+ * alone. */
+export function clientSummary(item: ExtensionListItem, client: AppKind): string {
+  const rows = item.bindings.filter((binding) => binding.target.client === client);
+  if (rows.length === 0) return "未部署";
+  const worst =
+    FILE_STATE_SEVERITY.find((state) => rows.some((binding) => binding.fileState === state)) ?? "inSync";
+  const enabled = rows.filter((binding) => binding.desired === "enabled").length;
+  if (enabled > 0 && enabled < rows.length) return `${FILE_STATE_LABELS[worst]} · 部分启用`;
+  return enabled === 0 ? `${FILE_STATE_LABELS[worst]} · 已停用` : FILE_STATE_LABELS[worst];
 }
 
-export function targetLabel(
-  target: ExtensionTarget,
-  projectNames?: ReadonlyMap<string, string>,
-): string {
+export function targetLabel(target: ExtensionTarget, projectNames?: ReadonlyMap<string, string>): string {
   const client = clientName(target.client);
   if (target.scope === "app") return `${client} 用户配置`;
   const project = projectNames?.get(target.projectId);

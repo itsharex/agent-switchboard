@@ -62,25 +62,34 @@ impl GatewayController {
         }
         drop(routes);
         if let Err(error) = persist() {
-            let state_restore = write_state(&self.inner.state_path, &previous_state);
-            if state_restore.is_ok() {
-                *state = previous_state;
-                if let Ok(mut routes) = self.inner.routes.write() {
-                    match previous_route {
-                        Some(route) => {
-                            routes.insert(app, route);
-                        }
-                        None => {
-                            routes.remove(&app);
-                        }
-                    }
-                } else {
-                    return Err("保存切换记录失败，且无法恢复本机协议网关路由".to_string());
-                }
-            } else {
-                return Err("保存切换记录失败，且无法恢复本机协议网关状态".to_string());
-            }
+            self.restore_previous_activation(app, &mut state, previous_state, previous_route)?;
             return Err(error);
+        }
+        Ok(())
+    }
+
+    fn restore_previous_activation(
+        &self,
+        app: AppKind,
+        state: &mut GatewayStateFile,
+        previous_state: GatewayStateFile,
+        previous_route: Option<ActiveRoute>,
+    ) -> Result<(), String> {
+        write_state(&self.inner.state_path, &previous_state)
+            .map_err(|error| format!("保存切换记录失败，且无法恢复网关状态：{error}"))?;
+        *state = previous_state;
+        let mut routes = self
+            .inner
+            .routes
+            .write()
+            .map_err(|_| "保存切换记录失败，且无法恢复网关路由".to_string())?;
+        match previous_route {
+            Some(route) => {
+                routes.insert(app, route);
+            }
+            None => {
+                routes.remove(&app);
+            }
         }
         Ok(())
     }
@@ -148,24 +157,7 @@ impl GatewayController {
                 log::warn!("本机协议网关拒绝恢复未指向本机端口的供应商路由");
                 continue;
             };
-            let auth = if app == AppKind::Codex {
-                match LocalState::codex_auth_path()
-                    .ok()
-                    .and_then(|path| fs::read_to_string(path).ok())
-                {
-                    Some(value) => Some(value),
-                    None => {
-                        log::warn!("本机协议网关拒绝恢复缺少 Codex 登录缓存的供应商路由");
-                        continue;
-                    }
-                }
-            } else {
-                None
-            };
-            if !self
-                .route_matches_config(&route, &text, auth.as_deref())
-                .unwrap_or(false)
-            {
+            if !self.route_matches_config(&route, &text).unwrap_or(false) {
                 log::warn!("本机协议网关拒绝恢复未匹配当前客户端配置的供应商路由");
                 continue;
             }
@@ -186,14 +178,7 @@ impl GatewayController {
             let Ok(configuration) = fs::read_to_string(target) else {
                 continue;
             };
-            let codex_auth = if app == AppKind::Codex {
-                LocalState::codex_auth_path()
-                    .ok()
-                    .and_then(|path| fs::read_to_string(path).ok())
-            } else {
-                None
-            };
-            if !config_points_at_gateway(app, &configuration, codex_auth.as_deref()) {
+            if !config_points_at_gateway(app, &configuration) {
                 continue;
             }
             let route = match self.inner.routes.read() {
@@ -201,7 +186,7 @@ impl GatewayController {
                 Err(_) => return true,
             };
             if !route.is_some_and(|route| {
-                self.route_matches_config(&route, &configuration, codex_auth.as_deref())
+                self.route_matches_config(&route, &configuration)
                     .unwrap_or(false)
             }) {
                 return true;
@@ -238,10 +223,12 @@ impl GatewayController {
         Ok(ActiveRoute {
             app: profile.app,
             profile_id: profile.id.clone(),
-            client_token: route_token(&identity, &fingerprint),
+            client_token: route_token(&identity, &profile.id, &fingerprint),
+            continuation_key: continuation_key(&identity, profile),
             fingerprint,
             upstream_base_url,
             upstream_protocol,
+            responses_options: profile.responses_options.clone(),
             max_output_tokens: profile.max_output_tokens.value(),
             api_key: profile.api_key.clone(),
         })
@@ -251,14 +238,9 @@ impl GatewayController {
         &self,
         route: &ActiveRoute,
         configuration: &str,
-        codex_auth: Option<&str>,
     ) -> Result<bool, String> {
-        adapter::matches_provider_identity(
-            configuration,
-            codex_auth,
-            &self.client_identity_plan(route),
-        )
-        .map_err(|_| "无法验证本机协议网关客户端凭据".to_string())
+        adapter::matches_provider_identity(configuration, &self.client_identity_plan(route))
+            .map_err(|_| "无法验证本机协议网关客户端凭据".to_string())
     }
 
     pub(super) fn client_identity_plan(&self, route: &ActiveRoute) -> SwitchPlan {
@@ -266,19 +248,15 @@ impl GatewayController {
         SwitchPlan::through_gateway(
             ProviderProfile {
                 id: route.profile_id.clone(),
+                parameters: asb_core::ownership::default_provider_parameters(route.app),
                 app: route.app,
                 route_mode: RouteMode::Custom,
                 name: "本机协议网关".to_string(),
                 model: None,
-                base_url: Some(match route.app {
-                    AppKind::Codex => format!("{base_url}/v1"),
-                    AppKind::Claude => base_url,
-                }),
-                api_key: route.client_token.clone(),
-                upstream_protocol: Some(match route.app {
-                    AppKind::Codex => UpstreamProtocol::Responses,
-                    AppKind::Claude => UpstreamProtocol::AnthropicMessages,
-                }),
+                base_url: Some(route.upstream_base_url.clone()),
+                api_key: route.api_key.clone(),
+                upstream_protocol: Some(route.upstream_protocol),
+                responses_options: route.responses_options,
                 max_output_tokens: None.into(),
                 model_options: None,
                 notes: None,
@@ -286,7 +264,9 @@ impl GatewayController {
                 usage_query: None,
                 official_quota_refresh_interval_minutes: None,
             },
-            asb_core::ownership::default_common_settings(route.app),
+            asb_core::ownership::default_client_settings(route.app),
+            route.client_endpoint(&base_url),
+            route.client_token.clone(),
         )
     }
 }
@@ -301,11 +281,10 @@ pub(super) const CLIENT_TOKEN_PREFIX: &str = "asb_local_";
 /// capability token. Used for repair detection, exit decisions, and restore
 /// rejection — never to *authorize* a rewrite, which always requires the
 /// exact identity match.
-pub(super) fn config_points_at_gateway(
-    app: AppKind,
-    configuration: &str,
-    codex_auth: Option<&str>,
-) -> bool {
+pub(super) fn config_points_at_gateway(app: AppKind, configuration: &str) -> bool {
+    if adapter::validate_syntax(app, configuration).is_err() {
+        return false;
+    }
     let Some(base_url) = adapter::route_state(app, configuration).base_url else {
         return false;
     };
@@ -313,10 +292,7 @@ pub(super) fn config_points_at_gateway(
         return false;
     }
     match app {
-        AppKind::Codex => {
-            configuration.contains(CLIENT_TOKEN_PREFIX)
-                || codex_auth.is_some_and(|auth| auth.contains(CLIENT_TOKEN_PREFIX))
-        }
+        AppKind::Codex => base_url.contains("/codex/asb_local_") && base_url.ends_with("/v1"),
         AppKind::Claude => configuration.contains(CLIENT_TOKEN_PREFIX),
     }
 }

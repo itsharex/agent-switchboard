@@ -3,9 +3,15 @@
 
 mod backups;
 mod plan;
+mod profile_rollback;
 mod profile_save;
 mod recovery;
+mod transaction;
+#[cfg(test)]
+mod transaction_tests;
 
+#[cfg(test)]
+pub(crate) use profile_rollback::save as save_profile_preimage;
 pub use profile_save::ProfileSavePreparation;
 pub(crate) use profile_save::ProfileSavePreparations;
 pub(crate) use recovery::{ensure_profile_save_recovered, recover_pending_profile_save};
@@ -17,13 +23,13 @@ use crate::commands::ConfigWriteGate;
 use crate::runtime_log::RuntimeLogAction;
 use asb_core::adapter;
 use asb_core::contracts::{
-    AppKind, BackupRecord, ConfigWriteRecord, KeyChange, ProfileSaveKind, ProviderDraft,
-    ProviderRecord, WriteOperation,
+    AppKind, BackupRecord, KeyChange, ProfileSaveKind, ProviderDraft, ProviderRecord,
+    WriteOperation,
 };
 use asb_switch::io::{FsIo, SwitchIo};
-use asb_switch::{execute, execute_codex, sha256_hex, RestoreOutcome, SwitchOutcome};
+use asb_switch::{sha256_hex, RestoreOutcome, SwitchOutcome};
 use backups::{find_backup, local_backups, run_restore};
-use plan::{build_plan, preview_projection};
+use plan::{build_plan, execute_projection, preview_projection};
 use profile_save::{
     commit_prepared_profile_save, invalidate_provider_readings, prepare_profile_save_data,
     PreparedProfileSave,
@@ -174,75 +180,13 @@ pub async fn execute_switch(
                 .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
             ensure_profile_save_recovered(&app)?;
             let projection = build_plan(&state, &gateway, &profile_id)?;
-            let codex_projection = projection.clone();
-            let claude_projection = projection.clone();
-            let plan = &projection.plan;
-            let target = state
-                .target(plan.app())
-                .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-            let backup_dir = state.backup_dir();
-            let record = ConfigWriteRecord {
-                app: plan.app(),
-                profile_id: Some(plan.profile.id.clone()),
-                profile_name: Some(plan.profile.name.clone()),
-                content_hash: String::new(),
-                backup_id: String::new(),
-                at: String::new(),
-                operation: WriteOperation::Projection,
-            };
-            let mut outcome = match plan.app() {
-                AppKind::Codex => {
-                    let auth_target = crate::local_state::LocalState::codex_auth_path()
-                        .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
-                    execute_codex(
-                        &FsIo,
-                        &asb_switch::CodexSwitchRequest {
-                            target: &target,
-                            auth_target: &auth_target,
-                            plan: &plan,
-                            backup_dir: &backup_dir,
-                            expected_hash: &expected_hash,
-                            expected_rendered_hash: &expected_rendered_hash,
-                        },
-                        move |outcome| {
-                            gateway.commit(&codex_projection, || {
-                                state
-                                    .configuration()
-                                    .record_config_write(ConfigWriteRecord {
-                                        content_hash: outcome.final_hash.clone(),
-                                        backup_id: outcome.backup.id.clone(),
-                                        at: outcome.backup.created_at.clone(),
-                                        ..record
-                                    })
-                            })
-                        },
-                    )
-                }
-                AppKind::Claude => execute(
-                    &FsIo,
-                    &asb_switch::SwitchRequest {
-                        target: &target,
-                        plan: &plan,
-                        backup_dir: &backup_dir,
-                        expected_hash: &expected_hash,
-                        expected_rendered_hash: &expected_rendered_hash,
-                    },
-                    move |outcome| {
-                        gateway.commit(&claude_projection, || {
-                            state
-                                .configuration()
-                                .record_config_write(ConfigWriteRecord {
-                                    content_hash: outcome.final_hash.clone(),
-                                    backup_id: outcome.backup.id.clone(),
-                                    at: outcome.backup.created_at.clone(),
-                                    ..record
-                                })
-                        })
-                    },
-                ),
-            }
-            .map_err(CommandError::from)?;
-            outcome.preview.target = target.to_string_lossy().to_string();
+            let outcome = execute_projection(
+                &state,
+                &gateway,
+                &projection,
+                &expected_hash,
+                &expected_rendered_hash,
+            )?;
             crate::tray::refresh(&app);
             Ok(outcome)
         })
@@ -275,6 +219,12 @@ pub async fn restore_backup(
             let _write_gate = write_gate
                 .lock()
                 .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
+            if let Some(outcome) =
+                transaction::restore_pending_backup(&state, &gateway, &backup_id)?
+            {
+                crate::tray::refresh(&app);
+                return Ok(outcome);
+            }
             ensure_profile_save_recovered(&app)?;
             let record = find_backup(&state, &backup_id)?;
             let outcome = run_restore(&state, &gateway, &record)?;

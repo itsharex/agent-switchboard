@@ -5,17 +5,23 @@ import type {
   ModelOptions,
   ProviderDraft,
   ProviderProfile,
+  SettingsValues,
   UpstreamProtocol,
 } from "../../api/client";
 import { NATIVE_PROTOCOL } from "../../lib/protocol";
+import { normalizeUsageQuery } from "../../lib/usage-query";
+
+export type ProviderEditorDraft = Omit<ProviderDraft, "parameters"> & {
+  parameters: SettingsValues | null;
+};
 
 export const CONTEXT_WINDOW_1M = 1_000_000;
 
 /** What each wire format means for the endpoint the user is about to enter. */
 export const PROTOCOL_NOTES: Record<UpstreamProtocol, string> = {
-  responses: "上游使用 OpenAI Responses 接口（/v1/responses）。",
-  chatCompletions: "上游使用 OpenAI 兼容的 Chat Completions 接口（/v1/chat/completions）。",
-  anthropicMessages: "上游使用 Anthropic Messages 接口（/v1/messages）。",
+  responses: "按供应商要求填写完整 API 根地址（可含 /v1、/v2 或 /openai），不会自动补 /v1。例如 https://example.com/v1 → https://example.com/v1/responses。",
+  chatCompletions: "按供应商要求填写完整 API 根地址（可含 /v1、/v2 或 /openai），不会自动补 /v1。例如 https://example.com/v2 → https://example.com/v2/chat/completions。",
+  anthropicMessages: "填写供应商的服务根地址，请求在该地址后追加 /v1/messages。",
 };
 
 export const PROTOCOL_AUTHENTICATION_NOTES: Record<UpstreamProtocol, string> = {
@@ -27,17 +33,16 @@ export const PROTOCOL_AUTHENTICATION_NOTES: Record<UpstreamProtocol, string> = {
     "认证方式会自动使用 x-api-key：以 x-api-key: <API 密钥> 请求头发送密钥；密钥值本身不变。",
 };
 
-export function defaultConnection(app: AppKind): {
-  upstreamProtocol: UpstreamProtocol;
-  maxOutputTokens: number | null;
-} {
+export function defaultConnection(app: AppKind): Pick<ProviderDraft,
+  "upstreamProtocol" | "maxOutputTokens" | "responsesOptions"> {
   return {
     upstreamProtocol: NATIVE_PROTOCOL[app],
     maxOutputTokens: null,
+    responsesOptions: app === "codex" ? { requestMode: "standard" } : null,
   };
 }
 
-export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): ProviderDraft {
+export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind): ProviderEditorDraft {
   if (profile) {
     return {
       app: profile.app,
@@ -47,8 +52,10 @@ export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind):
       baseUrl: profile.baseUrl,
       apiKey: profile.apiKey,
       upstreamProtocol: profile.upstreamProtocol,
+      responsesOptions: profile.responsesOptions,
       maxOutputTokens: profile.maxOutputTokens,
       modelOptions: profile.modelOptions,
+      parameters: { settings: { ...profile.parameters.settings } },
       notes: profile.notes ?? null,
       websiteUrl: profile.websiteUrl,
       usageQuery: profile.usageQuery ?? null,
@@ -65,11 +72,38 @@ export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind):
     apiKey: "",
     ...defaultConnection(initialApp),
     modelOptions: null,
+    parameters: null,
     notes: null,
     websiteUrl: null,
     usageQuery: null,
     officialQuotaRefreshIntervalMinutes: null,
   };
+}
+
+export function prepareDraft(draft: ProviderEditorDraft): ProviderDraft | null {
+  if (!draft.parameters || !responsesOptionsValid(draft)) return null;
+  return {
+    ...draft,
+    parameters: draft.parameters,
+    name: draft.name.trim(),
+    model: optional(draft.model ?? ""),
+    baseUrl: optional(draft.baseUrl ?? ""),
+    apiKey: draft.apiKey.trim(),
+    notes: optional(draft.notes ?? ""),
+    websiteUrl: optional(draft.websiteUrl ?? ""),
+    modelOptions: codexOptionsAreEmpty(draft.modelOptions) ? null : draft.modelOptions,
+    usageQuery: normalizeUsageQuery(draft.usageQuery),
+  };
+}
+
+export function responsesOptionsValid(draft: ProviderEditorDraft): boolean {
+  if (draft.routeMode !== "custom" || draft.upstreamProtocol !== "responses") {
+    return draft.responsesOptions === null;
+  }
+  const options = draft.responsesOptions;
+  return Boolean(options && Object.keys(options).length === 1 && (
+    options.requestMode === "standard" || options.requestMode === "minimal"
+  ));
 }
 
 export function optional(value: string): string | null {

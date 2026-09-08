@@ -1,0 +1,381 @@
+.asb-ext-actions,
+.asb-ext-countbar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-ext-countbar-row {
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-ext-countbar {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+.asb-ext-count-total {
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+  white-space: nowrap;
+}
+
+.asb-ext-count-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+}
+
+.asb-ext-count-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-height: 30px;
+  padding: var(--asb-space-unit) var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-content);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.asb-ext-count-logo {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+.asb-ext-count-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-ext-count-chip[data-client="codex"][data-state="all"],
+.asb-ext-clienttoggle[data-client="codex"][data-state="all"] {
+  border-color: var(--asb-action);
+  background: var(--asb-row-selected);
+  color: var(--asb-text);
+}
+
+.asb-ext-count-chip[data-client="claude"][data-state="all"],
+.asb-ext-clienttoggle[data-client="claude"][data-state="all"] {
+  border-color: var(--asb-claude);
+  background: var(--asb-content);
+  color: var(--asb-text);
+}
+
+.asb-ext-count-chip[data-state="partial"],
+.asb-ext-clienttoggle[data-state="partial"] {
+  border-style: dashed;
+  border-color: var(--asb-text-muted);
+  color: var(--asb-text);
+}
+
+.asb-ext-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-ext-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.asb-ext-search .asb-input {
+  width: 100%;
+  padding-inline: var(--asb-space-5);
+}
+.asb-ext-filter {
+  flex: 0 0 160px;
+}
+
+.asb-ext-search-icon,
+.asb-ext-search-clear {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  color: var(--asb-text-muted);
+}
+
+.asb-ext-search-icon {
+  left: var(--asb-space-2);
+  pointer-events: none;
+}
+.asb-ext-search-clear {
+  right: var(--asb-space-unit);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--asb-radius-action);
+  background: transparent;
+  cursor: pointer;
+}
+.asb-ext-search-clear:hover {
+  background: var(--asb-content-muted);
+  color: var(--asb-text);
+}
+.asb-ext-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.asb-ext-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content);
+  overflow: hidden;
+}
+
+.asb-ext-row {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-3);
+  min-height: 72px;
+  padding: var(--asb-space-1) var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+.asb-ext-row:last-child {
+  border-bottom: 0;
+}
+.asb-ext-row:hover {
+  background: var(--asb-content-muted);
+}
+
+.asb-ext-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+  padding: var(--asb-space-unit) 0;
+  border: 0;
+  background: transparent;
+  color: var(--asb-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.asb-ext-row-title {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-width: 0;
+}
+.asb-ext-row-name {
+  font: var(--asb-text-body);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asb-ext-row-meta,
+.asb-ext-row-desc {
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+.asb-ext-row-meta {
+  flex: none;
+}
+.asb-ext-row-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asb-ext-update-badge,
+.asb-ext-row-error {
+  flex: none;
+  font: var(--asb-text-label);
+  color: var(--asb-warning);
+}
+
+.asb-ext-clienttoggles {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--asb-space-1);
+}
+.asb-ext-clienttoggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content-muted);
+  cursor: pointer;
+}
+.asb-ext-clienttoggle-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+.asb-ext-count-logo,
+.asb-ext-clienttoggle-logo {
+  padding: calc(var(--asb-space-unit) / 2);
+  border-radius: var(--asb-radius-check);
+  background: var(--asb-ice);
+}
+.asb-ext-clienttoggle[data-state="none"] .asb-ext-clienttoggle-logo {
+  opacity: 0.4;
+}
+.asb-ext-clienttoggle:hover:not(:disabled),
+.asb-ext-count-chip:hover:not(:disabled) {
+  border-color: var(--asb-text-muted);
+}
+.asb-ext-clienttoggle:disabled,
+.asb-ext-count-chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.asb-ext-row-actions {
+  display: flex;
+  flex: none;
+  gap: var(--asb-space-unit);
+  opacity: 0;
+  transition: opacity var(--asb-motion-press) var(--asb-easing);
+}
+/* Keyboard-only :focus-within reveal, matching the provider rows in
+   base.css: pointer clicks focus the row too, and an unguarded
+   :focus-within pinned the actions visible until focus moved elsewhere
+   (2026-09-08 user report). These stay opacity-hidden, not display:none,
+   so they remain tab-reachable either way. */
+.asb-ext-row:hover .asb-ext-row-actions,
+:root[data-focus-source="key"] .asb-ext-row:focus-within .asb-ext-row-actions {
+  opacity: 1;
+}
+.asb-ext-rowbtn {
+  width: 32px;
+  height: 32px;
+}
+.asb-ext-rowbtn-danger:hover:not(:disabled) {
+  color: var(--asb-danger);
+  background: var(--asb-diff-remove-bg);
+}
+
+.asb-ext-empty,
+.asb-ext-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-6) var(--asb-space-3);
+  text-align: center;
+}
+.asb-ext-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-content-muted);
+  color: var(--asb-text-muted);
+}
+.asb-ext-empty h3 {
+  margin: 0;
+  font: var(--asb-text-title);
+}
+.asb-ext-empty p,
+.asb-ext-result-count {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+.asb-ext-result-count {
+  margin-top: var(--asb-space-2);
+}
+
+.asb-ext-menu {
+  min-width: 190px;
+  padding: var(--asb-space-1);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-surface-menu);
+  box-shadow: var(--asb-shadow-modal);
+}
+.asb-ext-menu-items {
+  outline: none;
+}
+.asb-ext-menu-item {
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border-radius: var(--asb-radius-action);
+  outline: none;
+  font: var(--asb-text-body);
+  color: var(--asb-text);
+  cursor: pointer;
+}
+.asb-ext-menu-item[data-focused] {
+  background: var(--asb-row-selected);
+}
+.asb-ext-menu-item[data-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (hover: none) {
+  .asb-ext-row-actions {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .asb-panel-heading > .asb-ext-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 32px;
+    gap: var(--asb-space-1);
+    width: 100%;
+  }
+  .asb-panel-heading > .asb-ext-actions > .asb-btn {
+    min-width: 0;
+    padding-inline: var(--asb-space-1);
+  }
+  /* Scoped to the extension page: panel-heading layout is owned by
+     panels.css everywhere else. */
+  .asb-ext .asb-panel-heading .asb-panel-heading-main {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .asb-ext-countbar {
+    flex-basis: 100%;
+  }
+  .asb-ext-toolbar {
+    flex-wrap: wrap;
+  }
+  .asb-ext-search {
+    flex-basis: 100%;
+  }
+  .asb-ext-filter {
+    flex-basis: 100%;
+  }
+  .asb-ext-row {
+    flex-wrap: wrap;
+    gap: var(--asb-space-1);
+    padding-block: var(--asb-space-2);
+  }
+  .asb-ext-row-main {
+    flex-basis: 100%;
+  }
+  .asb-ext-row-actions {
+    margin-left: auto;
+    opacity: 1;
+  }
+}

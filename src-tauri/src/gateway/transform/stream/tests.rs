@@ -1,4 +1,5 @@
 use super::*;
+use serde_json::json;
 use std::collections::VecDeque;
 use std::io::Cursor;
 
@@ -315,7 +316,7 @@ fn nvidia_reasoning_stream_is_opaque_for_both_clients() {
             }
         }),
     );
-    let transport = ReasoningTransport::from_client_token("sandbox-route-token");
+    let transport = ReasoningTransport::from_continuation_key([7; 32]);
     for target in [
         UpstreamProtocol::Responses,
         UpstreamProtocol::AnthropicMessages,

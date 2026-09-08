@@ -1,5 +1,6 @@
 use crate::adapter::{AdapterError, OverlayEntry};
 use crate::contracts::{ChangeKind, KeyChange, SwitchPlan, SwitchPreview};
+use crate::ownership::CODEX_PROVIDER_ID;
 use crate::redact::redact;
 use crate::AppKind;
 
@@ -11,7 +12,23 @@ pub(crate) fn preview(
     plan: &SwitchPlan,
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
-    preview_entries(current, overlay(plan), backup_dir)
+    super::validate_projection(plan)?;
+    let mut preview = preview_entries(current, overlay(plan), backup_dir)?;
+    let doc = parse(current)?;
+    let previous = item_at(&doc, "model_provider")
+        .and_then(item_repr)
+        .unwrap_or_else(|| super::OFFICIAL_PROVIDER.to_string());
+    let selected = if plan.profile.route_mode == crate::contracts::RouteMode::Custom {
+        CODEX_PROVIDER_ID
+    } else {
+        super::OFFICIAL_PROVIDER
+    };
+    if previous != selected {
+        preview.warnings.push(format!(
+            "Codex 的 Provider 标识将从 {previous} 变为 {selected}。Codex 按 Provider 归属区分会话；此操作不会改写已有会话，需要在对应 Provider 下继续原会话。"
+        ));
+    }
+    Ok(preview)
 }
 
 pub(crate) fn preview_entries(

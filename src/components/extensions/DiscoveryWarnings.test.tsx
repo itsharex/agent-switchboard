@@ -64,6 +64,9 @@ describe("DiscoveryWarnings", () => {
     expect(toggle).toHaveAttribute("aria-controls");
     expect(screen.getByText("当前结果有 1 条警告，1 条可修复")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "修复这 1 项可修复警告" })).toBeEnabled();
+    // The summary row is the only toggle; a separate expand button would
+    // duplicate it.
+    expect(screen.queryByRole("button", { name: "展开" })).not.toBeInTheDocument();
     // The details are not rendered while collapsed.
     expect(screen.queryByText(/可自动修复/)).not.toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(true);
@@ -108,6 +111,8 @@ describe("DiscoveryWarnings", () => {
     expect(screen.getByText(/可自动修复：本地内容库保存了已部署版本/)).toBeInTheDocument();
 
     const toggle = screen.getByRole("button", { name: "收起警告详情" });
+    // The expanded state likewise keeps the summary row as the only toggle.
+    expect(screen.queryByRole("button", { name: "收起" })).not.toBeInTheDocument();
     await user.click(toggle);
   });
 

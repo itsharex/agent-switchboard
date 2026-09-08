@@ -117,9 +117,17 @@ describe("ModelPicker", () => {
     expect(screen.getByRole("option", { name: "claude-haiku-4-5" })).toHaveFocus();
   });
 
-  it("disables the trigger while busy", () => {
-    renderPicker({ disabled: true });
+  it("disables the trigger and closes an open menu while busy", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderPicker();
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
 
-    expect(screen.getByRole("button", { name: "选择模型" })).toBeDisabled();
+    rerender(<ModelPicker models={MODELS} current={null} ariaLabel="选择模型" disabled onSelect={vi.fn()} />);
+
+    const trigger = screen.getByRole("button", { name: "选择模型" });
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });

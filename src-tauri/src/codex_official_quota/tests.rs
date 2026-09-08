@@ -12,7 +12,7 @@ use std::collections::HashMap;
 #[test]
 fn accepts_only_the_existing_chatgpt_oauth_shape() {
     let credentials = parse_credentials(
-        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"token","account_id":"account"}}"#,
+        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"token","refresh_token":"refresh","id_token":"id","account_id":"account"}}"#,
     )
     .expect("OAuth credentials");
     assert_eq!(credentials.access_token, "token");
@@ -410,4 +410,56 @@ fn the_account_marker_is_a_short_stable_digest() {
     assert_ne!(first, second);
     assert_eq!(account_marker(Some("account-1")), Some(first));
     assert_eq!(account_marker(None), None);
+}
+
+#[test]
+fn complete_oauth_residue_never_overrides_an_api_key_identity() {
+    let valid = serde_json::json!({"auth_mode": "chatgpt", "tokens": {
+        "access_token": "fixture-access", "refresh_token": "fixture-refresh", "id_token": "fixture-id", "account_id": "fixture-account"
+    }});
+    assert!(parse_credentials(&valid.to_string()).is_some());
+    for key in ["access_token", "refresh_token", "id_token"] {
+        let mut incomplete = valid.clone();
+        incomplete["tokens"].as_object_mut().unwrap().remove(key);
+        assert!(parse_credentials(&incomplete.to_string()).is_none());
+    }
+    let mut api_key = valid.clone();
+    api_key["auth_mode"] = serde_json::json!("apikey");
+    assert!(parse_credentials(&api_key.to_string()).is_none());
+    let mut mixed = valid.clone();
+    mixed["OPENAI_API_KEY"] = serde_json::json!("fixture-api-key");
+    assert!(parse_credentials(&mixed.to_string()).is_none());
+    let mut header = valid;
+    header["tokens"]["access_token"] = serde_json::json!("token\r\nInjected: true");
+    assert!(parse_credentials(&header.to_string()).is_none());
+}
+
+#[test]
+fn unsupported_storage_never_uses_a_residual_file_for_quota() {
+    let directory = tempfile::tempdir().unwrap();
+    let auth = directory.path().join("auth.json");
+    let content = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"fixture-access","refresh_token":"fixture-refresh","id_token":"fixture-id","account_id":"fixture-account"}}"#;
+    std::fs::write(&auth, content).unwrap();
+    for mode in ["keyring", "auto", "ephemeral"] {
+        std::fs::write(
+            directory.path().join("config.toml"),
+            format!("cli_auth_credentials_store = \"{mode}\"\n"),
+        )
+        .unwrap();
+        let (quota, marker) = fetch(&auth);
+        assert_eq!(quota.status, CodexOfficialQuotaStatus::SignInRequired);
+        assert!(marker.is_none());
+        assert_eq!(std::fs::read_to_string(&auth).unwrap(), content);
+    }
+}
+
+#[test]
+fn malformed_account_header_is_rejected_instead_of_querying_another_account() {
+    let mut auth = serde_json::json!({"auth_mode": "chatgpt", "tokens": {
+        "access_token": "fixture-access", "refresh_token": "fixture-refresh", "id_token": "fixture-id", "account_id": "fixture-account"
+    }});
+    for account in ["", " ", "fixture\r\nInjected: true", "fixture\taccount"] {
+        auth["tokens"]["account_id"] = serde_json::json!(account);
+        assert!(parse_credentials(&auth.to_string()).is_none());
+    }
 }
