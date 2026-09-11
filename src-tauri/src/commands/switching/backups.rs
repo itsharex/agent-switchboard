@@ -92,6 +92,7 @@ pub(super) fn run_restore(
                     at: outcome.pre_restore_backup.created_at.clone(),
                     ..write_record
                 })
+                .map_err(|error| error.to_string())
         })
     });
     super::transaction::finish(state, gateway, execution)

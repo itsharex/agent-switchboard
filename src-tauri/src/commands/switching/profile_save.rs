@@ -1,5 +1,5 @@
 use super::plan::{build_plan_for_profile, execute_projection, preview_projection};
-use crate::commands::error::{require_write_confirmation, CommandError};
+use crate::commands::error::{operation_error, require_write_confirmation, CommandError};
 use crate::config_store::PendingProfileSave;
 use asb_core::contracts::{
     classify_profile_save, ProfileSaveKind, ProviderDraft, ProviderProfile, ProviderRecord,
@@ -27,7 +27,7 @@ pub(crate) fn classify_existing_profile_save(
     let record = state
         .configuration()
         .find_provider_record(profile_id)
-        .map_err(|error| CommandError::new("profile-not-found", error))?;
+        .map_err(|error| operation_error("profile-not-found", error))?;
     if record.profile.app != draft.app {
         return Err(CommandError::new(
             "profile-save-invalid",
@@ -213,7 +213,7 @@ fn apply_prepared_profile_save(
     let (original_app, original_file) = state
         .configuration()
         .load_provider_file(&profile_id)
-        .map_err(|error| CommandError::new("profile-save-failed", error))?;
+        .map_err(|error| operation_error("profile-save-failed", error))?;
     super::profile_rollback::save(
         state,
         original_app,
@@ -243,7 +243,7 @@ fn apply_prepared_profile_save(
                     .clear_profile_save()
                     .and_then(|_| super::profile_rollback::clear(state))
                 {
-                    Ok(()) => Err(CommandError::new("profile-save-failed", error)),
+                    Ok(()) => Err(operation_error("profile-save-failed", error)),
                     Err(clear_error) => Err(CommandError::new(
                         "profile-save-recovery-required",
                         format!("{error}；{clear_error}"),
@@ -351,7 +351,7 @@ pub(super) fn commit_prepared_profile_save(
         ProfileSaveKind::Create => state
             .configuration()
             .create_provider(prepared.draft.clone())
-            .map_err(|error| CommandError::new("profile-save-failed", error)),
+            .map_err(|error| operation_error("profile-save-failed", error)),
         ProfileSaveKind::NoChange => Ok(stored.expect("existing preparation has a record")),
         ProfileSaveKind::SaveOnly => {
             let stored = stored.expect("existing preparation has a record");
@@ -362,7 +362,7 @@ pub(super) fn commit_prepared_profile_save(
                     prepared.draft.clone(),
                     &stored.file_hash,
                 )
-                .map_err(|error| CommandError::new("profile-save-failed", error))
+                .map_err(|error| operation_error("profile-save-failed", error))
         }
         ProfileSaveKind::SaveAndApply => {
             require_write_confirmation(confirm_write, "保存并应用供应商")?;

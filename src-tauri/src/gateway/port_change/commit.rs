@@ -124,7 +124,9 @@ fn apply_changes(
                 };
                 journal.clients[index].history = Some(record.clone());
                 write_journal(local, &journal)?;
-                store.record_config_write(record)
+                store
+                    .record_config_write(record)
+                    .map_err(|error| error.to_string())
             },
         );
         let outcome = match execution {

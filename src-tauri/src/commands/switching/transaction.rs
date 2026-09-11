@@ -266,7 +266,10 @@ fn complete(
                 if last != intent.previous_write {
                     return Err("配置写入历史已变化，拒绝叠加恢复".into());
                 }
-                state.configuration().record_config_write(desired)
+                state
+                    .configuration()
+                    .record_config_write(desired)
+                    .map_err(|error| error.to_string())
             } else if last.as_ref().is_some_and(|r| {
                 r.content_hash == intent.after_hash && r.profile_id == intent.profile_id
             }) {
@@ -318,7 +321,10 @@ fn restore_application_snapshot(
     }
     if let (Some(last), Some(pending)) = (last, pending) {
         if last.backup_id == pending.backup.id && last.content_hash == pending.after_hash {
-            state.configuration().remove_config_write_if_last(&last)?;
+            state
+                .configuration()
+                .remove_config_write_if_last(&last)
+                .map_err(|error| error.to_string())?;
             return Ok(());
         }
     }
@@ -338,7 +344,8 @@ fn profile_revision(state: &LocalState, app: AppKind, id: &str) -> Result<String
         AppKind::Claude => state
             .configuration()
             .find_provider_record(id)
-            .map(|record| record.file_hash),
+            .map(|record| record.file_hash)
+            .map_err(|error| error.to_string()),
     }
 }
 
@@ -359,7 +366,8 @@ fn profile_name_and_revision(
         AppKind::Claude => state
             .configuration()
             .find_provider_record(id)
-            .map(|record| (record.profile.name, record.file_hash)),
+            .map(|record| (record.profile.name, record.file_hash))
+            .map_err(|error| error.to_string()),
     }
 }
 

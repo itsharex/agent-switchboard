@@ -2,7 +2,10 @@
 //! `history/{client}.json`. Only real client-file writes append here; saving
 //! providers or client settings never does.
 
-use super::{parse_strict, read_optional, write_json_atomic, ConfigStore, ProfileStoreError};
+use super::{
+    parse_strict, read_optional, write_json_atomic, ConfigStore, ProfileStoreError,
+    StoreOperationError,
+};
 use asb_core::contracts::{AppKind, ConfigWriteRecord, WriteOperation};
 use serde::{Deserialize, Serialize};
 
@@ -76,14 +79,15 @@ impl ConfigStore {
 
     /// Appends one completed real client-file write. Provider and client
     /// settings saves deliberately never call this method.
-    pub fn record_config_write(&self, entry: ConfigWriteRecord) -> Result<(), String> {
+    pub fn record_config_write(&self, entry: ConfigWriteRecord) -> Result<(), StoreOperationError> {
         let app = entry.app;
         validate_write_record(app, &entry)?;
-        let mut records = self.load_history(app).map_err(|error| error.to_string())?;
+        let mut records = self.load_history(app)?;
         records.push(entry);
         let json = serde_json::to_string_pretty(&HistoryFile { records })
-            .map_err(|_| "写入历史序列化失败".to_string())?;
-        write_json_atomic(&self.history_path(app), &json)
+            .map_err(|_| StoreOperationError::Invalid("写入历史序列化失败".to_string()))?;
+        write_json_atomic(&self.history_path(app), &json)?;
+        Ok(())
     }
 
     /// Removes one transaction-owned write fact only when it is still the
@@ -93,20 +97,18 @@ impl ConfigStore {
     pub(crate) fn remove_config_write_if_last(
         &self,
         entry: &ConfigWriteRecord,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, StoreOperationError> {
         validate_write_record(entry.app, entry)?;
-        let mut records = self
-            .load_history(entry.app)
-            .map_err(|error| error.to_string())?;
+        let mut records = self.load_history(entry.app)?;
         let Some(last) = records.last() else {
             return Ok(false);
         };
         if last != entry {
-            return Err("配置写入历史已被后续操作更新，拒绝删除恢复记录".to_string());
+            return Err("配置写入历史已被后续操作更新，拒绝删除恢复记录".into());
         }
         records.pop();
         let json = serde_json::to_string_pretty(&HistoryFile { records })
-            .map_err(|_| "写入历史序列化失败".to_string())?;
+            .map_err(|_| StoreOperationError::Invalid("写入历史序列化失败".to_string()))?;
         write_json_atomic(&self.history_path(entry.app), &json)?;
         Ok(true)
     }

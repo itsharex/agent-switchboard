@@ -1,7 +1,7 @@
 //! Typed catalogs for provider parameters and independently stored client
 //! preferences. Provider parameters are saved only with their provider draft.
 
-use super::error::{blocking, state, store_error, CommandError};
+use super::error::{blocking, operation_error, state, store_error, CommandError};
 use asb_core::contracts::{AppKind, ClientSettingsPreview, ClientSettingsSnapshot, SettingsValues};
 use asb_core::ownership::{
     self, ChoiceControl, OfficialSettingDisposition, SettingControl, SettingOwner,
@@ -196,7 +196,7 @@ pub async fn save_client_settings(
         state
             .configuration()
             .save_client_settings(target, settings, &expected_settings_hash)
-            .map_err(|message| CommandError::new("client-settings-save-failed", message))
+            .map_err(|error| operation_error("client-settings-save-failed", error))
     })
     .await
 }

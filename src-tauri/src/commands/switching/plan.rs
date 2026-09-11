@@ -1,4 +1,4 @@
-use crate::commands::error::{store_error, CommandError};
+use crate::commands::error::{operation_error, store_error, CommandError};
 use asb_core::contracts::{AppKind, ProviderProfile, SwitchPlan};
 use asb_switch::io::FsIo;
 use asb_switch::read_preview;
@@ -19,7 +19,7 @@ pub(super) fn build_plan(
     }
     let profile = configuration
         .find_provider(profile_id)
-        .map_err(|error| CommandError::new("profile-not-found", error))?;
+        .map_err(|error| operation_error("profile-not-found", error))?;
     build_plan_for_profile(state, gateway, profile)
 }
 
@@ -160,6 +160,7 @@ pub(super) fn execute_projection(
                         at: outcome.backup.created_at.clone(),
                         operation: asb_core::WriteOperation::Projection,
                     })
+                    .map_err(|error| error.to_string())
             })
         },
     );

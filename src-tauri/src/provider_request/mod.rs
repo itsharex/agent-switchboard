@@ -12,8 +12,8 @@ pub(crate) use contracts::{
 };
 pub(crate) use registry::ProviderRequests;
 
-use crate::commands::error::{blocking, CommandError};
-use crate::config_store::ConfigStore;
+use crate::commands::error::{blocking, operation_error, CommandError};
+use crate::config_store::{ConfigStore, StoreOperationError};
 use registry::PreparedSource;
 use std::time::Instant;
 
@@ -150,8 +150,8 @@ async fn execute_with_client(
     result.ok_or_else(interrupted)?.map_err(|_| interrupted())?
 }
 
-fn profile_error(message: impl Into<String>) -> CommandError {
-    CommandError::new("provider-request-profile-unavailable", message)
+fn profile_error(error: StoreOperationError) -> CommandError {
+    operation_error("provider-request-profile-unavailable", error)
 }
 
 fn profile_changed() -> CommandError {

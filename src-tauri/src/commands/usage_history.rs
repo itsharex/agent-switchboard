@@ -1,6 +1,6 @@
 //! Renderer-safe historical usage commands.
 
-use super::error::{blocking, state, CommandError};
+use super::error::{blocking, operation_error, state, CommandError};
 use asb_core::contracts::{UsageHistoryRequest, UsageHistorySeries};
 
 /// Returns one current provider's query-matched history or the independent
@@ -17,7 +17,7 @@ pub async fn get_usage_history(
             let profile = state
                 .configuration()
                 .find_provider(&profile_id)
-                .map_err(|error| CommandError::new("profile-not-found", error))?;
+                .map_err(|error| operation_error("profile-not-found", error))?;
             crate::usage_history::provider_series(&state, &profile)
                 .map_err(|error| CommandError::new("usage-history-unavailable", error))
         }

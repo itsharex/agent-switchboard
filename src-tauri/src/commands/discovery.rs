@@ -1,4 +1,4 @@
-use super::error::{blocking, observe, state, CommandError};
+use super::error::{blocking, observe, operation_error, state, CommandError};
 use super::switching;
 use crate::local_state::LocalState;
 use crate::runtime_log::RuntimeLogAction;
@@ -141,7 +141,7 @@ pub async fn import_ccswitch_claude_profiles(
                 ));
             }
             crate::ccswitch_source::import(&state, &keys)
-                .map_err(|error| CommandError::new("ccswitch-import-failed", error))
+                .map_err(|error| operation_error("ccswitch-import-failed", error))
         })
         .await
     })

@@ -145,7 +145,10 @@ fn rollback_clients(local: &LocalState, journal: &PortChangeJournal) -> Result<(
     }
     for client in journal.clients.iter().rev() {
         if let Some(record) = &client.history {
-            local.configuration().remove_config_write_if_last(record)?;
+            local
+                .configuration()
+                .remove_config_write_if_last(record)
+                .map_err(|error| error.to_string())?;
         }
     }
     Ok(())

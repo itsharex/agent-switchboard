@@ -1,4 +1,4 @@
-use super::error::{blocking, state, CommandError};
+use super::error::{blocking, operation_error, state, CommandError};
 use crate::codex_reset::CodexResetRead;
 use crate::local_state::LocalState;
 use asb_core::contracts::{AppKind, RouteMode};
@@ -17,7 +17,7 @@ pub async fn query_codex_official_quota(
         let profile = state
             .configuration()
             .find_provider(&profile_id)
-            .map_err(|error| CommandError::new("profile-not-found", error))?;
+            .map_err(|error| operation_error("profile-not-found", error))?;
         if profile.app != AppKind::Codex || profile.route_mode != RouteMode::Official {
             return Err(CommandError::new(
                 "official-codex-quota-unavailable",

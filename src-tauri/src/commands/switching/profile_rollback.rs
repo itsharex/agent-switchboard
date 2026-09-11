@@ -83,7 +83,10 @@ pub(super) fn restore(
     let before: ProfilePreimage = serde_json::from_str(&text).map_err(|_| "供应商事务前像无效")?;
     match before.file {
         ProfilePreimageFile::Claude { file } => {
-            let record = state.configuration().find_provider_record(profile_id)?;
+            let record = state
+                .configuration()
+                .find_provider_record(profile_id)
+                .map_err(|error| error.to_string())?;
             if before.app != record.profile.app || file.id != profile_id {
                 return Err("供应商事务前像身份不匹配".into());
             }
@@ -97,6 +100,7 @@ pub(super) fn restore(
                 .configuration()
                 .overwrite_provider_file(before.app, file)
                 .map(|_| ())
+                .map_err(|error| error.to_string())
         }
         ProfilePreimageFile::Codex { file } => {
             if before.app != AppKind::Codex || file.profile.id != profile_id {
@@ -120,7 +124,10 @@ pub(super) fn restore(
             if record.file_hash != expected_hash {
                 return Err("待补偿 Codex 供应商已发生额外修改，拒绝覆盖".into());
             }
-            state.configuration().overwrite_codex_provider_file(file)
+            state
+                .configuration()
+                .overwrite_codex_provider_file(file)
+                .map_err(|error| error.to_string())
         }
     }
 }

@@ -3,7 +3,7 @@
 //! Every command maps its failures onto [`CommandError`] so the UI receives
 //! a stable code plus a scrubbed, user-readable message.
 
-use crate::config_store::ProfileStoreError;
+use crate::config_store::{ProfileStoreError, StoreOperationError};
 use crate::local_state::LocalState;
 use crate::runtime_log::{self, RuntimeLogAction};
 use asb_core::adapter;
@@ -33,6 +33,17 @@ pub(crate) fn store_error(error: ProfileStoreError) -> CommandError {
         ProfileStoreError::Unsupported => "profile-store-unsupported",
     };
     CommandError::new(code, error.to_string())
+}
+
+/// Maps one store operation failure: store-level state errors keep the
+/// stable `store_error` code so the UI can offer the reset entry; every
+/// validation or write failure uses the command's own code. No command may
+/// stringify a store error instead of going through here.
+pub(crate) fn operation_error(code: &'static str, error: StoreOperationError) -> CommandError {
+    match error {
+        StoreOperationError::Store(store) => store_error(store),
+        StoreOperationError::Invalid(message) => CommandError::new(code, message),
+    }
 }
 
 impl From<asb_switch::SwitchError> for CommandError {
@@ -111,6 +122,24 @@ mod tests {
             store_error(ProfileStoreError::Unreadable).code,
             "store-unreadable"
         );
+    }
+
+    #[test]
+    fn operation_errors_keep_the_store_code_and_own_the_command_code() {
+        assert_eq!(
+            operation_error(
+                "codex-profile-create-failed",
+                StoreOperationError::Store(ProfileStoreError::Unsupported),
+            )
+            .code,
+            "profile-store-unsupported"
+        );
+        let invalid = operation_error(
+            "codex-profile-create-failed",
+            StoreOperationError::Invalid("该客户端已有官方登录入口".to_string()),
+        );
+        assert_eq!(invalid.code, "codex-profile-create-failed");
+        assert_eq!(invalid.message, "该客户端已有官方登录入口");
     }
 
     #[test]

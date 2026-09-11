@@ -70,7 +70,8 @@ fn saved_profile_revision(
         asb_core::AppKind::Claude => state
             .configuration()
             .find_provider_record(profile_id)
-            .map(|record| record.file_hash),
+            .map(|record| record.file_hash)
+            .map_err(|error| error.to_string()),
     }
 }
 

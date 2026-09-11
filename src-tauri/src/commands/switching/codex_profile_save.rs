@@ -1,7 +1,9 @@
 //! Active-save transaction for the current Codex-only provider contract.
 use super::plan::{build_codex_plan, execute_projection, preview_projection};
-use crate::commands::error::{require_write_confirmation, CommandError};
-use crate::config_store::PendingProfileSave;
+use crate::commands::error::{
+    operation_error, require_write_confirmation, store_error, CommandError,
+};
+use crate::config_store::{PendingProfileSave, StoreOperationError};
 use asb_core::contracts::{
     CodexProviderDraft, CodexProviderFile, CodexProviderRecord, ProfileSaveKind,
 };
@@ -134,7 +136,7 @@ fn classify(
     let stored = state
         .configuration()
         .list_codex_providers()
-        .map_err(|error| CommandError::new("codex-profile-not-found", error.to_string()))?
+        .map_err(store_error)?
         .into_iter()
         .find(|record| record.profile.id == profile_id)
         .ok_or_else(|| CommandError::new("codex-profile-not-found", "Codex 供应商不存在"))?;
@@ -147,7 +149,7 @@ fn classify(
     let current = state
         .configuration()
         .find_codex_provider_file(profile_id)
-        .map_err(|error| CommandError::new("codex-profile-not-found", error.to_string()))?;
+        .map_err(store_error)?;
     let candidate = draft
         .clone()
         .into_file(profile_id.to_string(), current.position);
@@ -189,7 +191,7 @@ fn apply(
     let current = state
         .configuration()
         .find_codex_provider_file(&stored.profile.id)
-        .map_err(|error| CommandError::new("codex-profile-save-failed", error.to_string()))?;
+        .map_err(store_error)?;
     let projection = build_codex_plan(state, gateway, candidate.clone())?;
     super::profile_rollback::save_codex(
         state,
@@ -243,7 +245,7 @@ fn apply(
 
 fn clear_failed_save(
     state: &crate::local_state::LocalState,
-    update_error: String,
+    update_error: StoreOperationError,
 ) -> Result<CodexProviderRecord, CommandError> {
     state
         .configuration()
@@ -292,8 +294,8 @@ fn stale() -> CommandError {
     )
 }
 
-fn save_failed(message: String) -> CommandError {
-    CommandError::new("codex-profile-save-failed", message)
+fn save_failed(error: StoreOperationError) -> CommandError {
+    operation_error("codex-profile-save-failed", error)
 }
 
 fn recovery_required(message: impl Into<String>) -> CommandError {

@@ -1,6 +1,6 @@
 use crate::config_store::{
     content_revision, parse_strict, read_optional, write_json_atomic, ConfigStore,
-    ProfileStoreError, PROVIDER_POSITION_STEP,
+    ProfileStoreError, StoreOperationError, PROVIDER_POSITION_STEP,
 };
 use asb_core::contracts::{
     AppKind, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord, RouteMode,
@@ -145,10 +145,10 @@ pub(super) fn write_provider_file(
     store: &ConfigStore,
     app: AppKind,
     file: &ProviderFile,
-) -> Result<String, String> {
+) -> Result<String, StoreOperationError> {
     let profile = file.clone().into_profile(app);
     if app == AppKind::Codex && profile.route_mode != RouteMode::Official {
-        return Err("Codex 第三方供应商必须使用专用档案格式".to_string());
+        return Err("Codex 第三方供应商必须使用专用档案格式".into());
     }
     profile.validate().map_err(|error| error.to_string())?;
     if let Some(query) = &file.usage_query {

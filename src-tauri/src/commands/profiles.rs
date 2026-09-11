@@ -1,5 +1,5 @@
 use super::discovery::discovery_report;
-use super::error::{self, blocking, observe, state, store_error, CommandError};
+use super::error::{self, blocking, observe, operation_error, state, store_error, CommandError};
 use super::switching;
 use crate::local_state::LocalState;
 use crate::runtime_log::RuntimeLogAction;
@@ -42,7 +42,7 @@ pub async fn create_codex_profile(
             state
                 .configuration()
                 .create_codex_provider(draft)
-                .map_err(|error| CommandError::new("codex-profile-create-failed", error))
+                .map_err(|error| operation_error("codex-profile-create-failed", error))
         })
         .await
     })
@@ -78,7 +78,7 @@ pub async fn delete_codex_profile(
             state
                 .configuration()
                 .delete_codex_provider(&profile_id, &expected_file_hash)
-                .map_err(|error| CommandError::new("codex-profile-delete-failed", error))
+                .map_err(|error| operation_error("codex-profile-delete-failed", error))
         })
         .await
     })
@@ -111,7 +111,7 @@ pub async fn reorder_codex_profiles(
             state
                 .configuration()
                 .reorder_codex_providers(&ordered_ids, &expected_file_hashes)
-                .map_err(|error| CommandError::new("codex-profile-reorder-failed", error))
+                .map_err(|error| operation_error("codex-profile-reorder-failed", error))
         })
         .await
     })
@@ -191,7 +191,7 @@ pub async fn delete_profile(
             state
                 .configuration()
                 .delete_provider(&profile_id, &expected_file_hash)
-                .map_err(|error| CommandError::new("profile-delete-failed", error))
+                .map_err(|error| operation_error("profile-delete-failed", error))
         })
         .await
     })
@@ -227,7 +227,7 @@ pub async fn reorder_profiles(
             state
                 .configuration()
                 .reorder_providers(target, &ordered_ids, &expected_file_hashes)
-                .map_err(|error| CommandError::new("profile-reorder-failed", error))
+                .map_err(|error| operation_error("profile-reorder-failed", error))
         })
         .await
     })
@@ -267,7 +267,7 @@ pub async fn import_discovered_claude_profile(
             state
                 .configuration()
                 .import_provider(proposal.draft)
-                .map_err(|error| CommandError::new("profile-import-failed", error))
+                .map_err(|error| operation_error("profile-import-failed", error))
         })
         .await
     })

@@ -2,7 +2,7 @@ use super::load::{
     check_expected_files, load_all, next_position, provider_path, record_of, same_provider,
     same_provider_routing, write_provider_file, LoadedProvider, POSITION_STEP,
 };
-use crate::config_store::{ConfigStore, ProfileStoreError};
+use crate::config_store::{ConfigStore, ProfileStoreError, StoreOperationError};
 use asb_core::contracts::{
     AppKind, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord, RouteMode,
 };
@@ -23,24 +23,24 @@ impl ConfigStore {
         Ok(records)
     }
 
-    fn locate(&self, id: &str) -> Result<(AppKind, LoadedProvider), String> {
-        let (codex, claude) = load_all(self).map_err(|error| error.to_string())?;
+    fn locate(&self, id: &str) -> Result<(AppKind, LoadedProvider), StoreOperationError> {
+        let (codex, claude) = load_all(self)?;
         if let Some(loaded) = claude.into_iter().find(|loaded| loaded.file.id == id) {
             return Ok((AppKind::Claude, loaded));
         }
         if let Some(loaded) = codex.into_iter().find(|loaded| loaded.file.id == id) {
             return Ok((AppKind::Codex, loaded));
         }
-        Err("供应商不存在".to_string())
+        Err("供应商不存在".into())
     }
 
-    pub fn find_provider(&self, id: &str) -> Result<ProviderProfile, String> {
+    pub fn find_provider(&self, id: &str) -> Result<ProviderProfile, StoreOperationError> {
         let (app, loaded) = self.locate(id)?;
         Ok(loaded.file.into_profile(app))
     }
 
     /// One provider together with its current storage revision.
-    pub fn find_provider_record(&self, id: &str) -> Result<ProviderRecord, String> {
+    pub fn find_provider_record(&self, id: &str) -> Result<ProviderRecord, StoreOperationError> {
         let (app, loaded) = self.locate(id)?;
         Ok(record_of(app, &loaded))
     }
@@ -48,7 +48,10 @@ impl ConfigStore {
     /// The exact persisted file of one provider, including its sort
     /// position. The save transaction keeps it as the in-memory pre-image
     /// used to roll a partially applied save back.
-    pub fn load_provider_file(&self, id: &str) -> Result<(AppKind, ProviderFile), String> {
+    pub fn load_provider_file(
+        &self,
+        id: &str,
+    ) -> Result<(AppKind, ProviderFile), StoreOperationError> {
         let (app, loaded) = self.locate(id)?;
         Ok((app, loaded.file))
     }
@@ -60,16 +63,19 @@ impl ConfigStore {
         &self,
         app: AppKind,
         file: ProviderFile,
-    ) -> Result<String, String> {
+    ) -> Result<String, StoreOperationError> {
         write_provider_file(self, app, &file)
     }
 
-    pub fn create_provider(&self, draft: ProviderDraft) -> Result<ProviderRecord, String> {
+    pub fn create_provider(
+        &self,
+        draft: ProviderDraft,
+    ) -> Result<ProviderRecord, StoreOperationError> {
         if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
-            return Err("Codex 第三方供应商必须使用专用档案格式".to_string());
+            return Err("Codex 第三方供应商必须使用专用档案格式".into());
         }
         draft.validate().map_err(|error| error.to_string())?;
-        let (codex, claude) = load_all(self).map_err(|error| error.to_string())?;
+        let (codex, claude) = load_all(self)?;
         let existing = match draft.app {
             AppKind::Codex => codex,
             AppKind::Claude => claude,
@@ -79,7 +85,7 @@ impl ConfigStore {
                 .iter()
                 .any(|provider| provider.file.route_mode == RouteMode::Official)
         {
-            return Err("该客户端已有官方登录入口".to_string());
+            return Err("该客户端已有官方登录入口".into());
         }
         let profile = ProviderProfile::from_draft(Uuid::new_v4().to_string(), draft);
         let file = ProviderFile::from_profile(&profile, next_position(&existing));
@@ -97,20 +103,20 @@ impl ConfigStore {
         id: &str,
         draft: ProviderDraft,
         expected_file_hash: &str,
-    ) -> Result<ProviderRecord, String> {
+    ) -> Result<ProviderRecord, StoreOperationError> {
         if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
-            return Err("Codex 第三方供应商必须使用专用档案格式".to_string());
+            return Err("Codex 第三方供应商必须使用专用档案格式".into());
         }
         draft.validate().map_err(|error| error.to_string())?;
         let (app, loaded) = self.locate(id)?;
         if app != draft.app {
-            return Err("供应商不能变更所属客户端".to_string());
+            return Err("供应商不能变更所属客户端".into());
         }
         if loaded.hash != expected_file_hash {
-            return Err("供应商文件已被外部修改，请重新读取后再保存".to_string());
+            return Err("供应商文件已被外部修改，请重新读取后再保存".into());
         }
         if draft.route_mode == RouteMode::Official {
-            let (codex, claude) = load_all(self).map_err(|error| error.to_string())?;
+            let (codex, claude) = load_all(self)?;
             let siblings = match app {
                 AppKind::Codex => codex,
                 AppKind::Claude => claude,
@@ -118,7 +124,7 @@ impl ConfigStore {
             if siblings.iter().any(|candidate| {
                 candidate.file.id != id && candidate.file.route_mode == RouteMode::Official
             }) {
-                return Err("该客户端已有官方登录入口".to_string());
+                return Err("该客户端已有官方登录入口".into());
             }
         }
         let profile = ProviderProfile::from_draft(id.to_string(), draft);
@@ -130,13 +136,17 @@ impl ConfigStore {
         })
     }
 
-    pub fn delete_provider(&self, id: &str, expected_file_hash: &str) -> Result<(), String> {
+    pub fn delete_provider(
+        &self,
+        id: &str,
+        expected_file_hash: &str,
+    ) -> Result<(), StoreOperationError> {
         let (app, loaded) = self.locate(id)?;
         if loaded.hash != expected_file_hash {
-            return Err("供应商文件已被外部修改，请重新读取后再删除".to_string());
+            return Err("供应商文件已被外部修改，请重新读取后再删除".into());
         }
         fs::remove_file(provider_path(self, app, &loaded.file.id))
-            .map_err(|_| "无法删除供应商文件".to_string())
+            .map_err(|_| StoreOperationError::Invalid("无法删除供应商文件".to_string()))
     }
 
     /// Persists a drag reorder as new `position` values in the affected
@@ -146,11 +156,11 @@ impl ConfigStore {
         app: AppKind,
         ordered_ids: &[String],
         expected_file_hashes: &BTreeMap<String, String>,
-    ) -> Result<Vec<ProviderRecord>, String> {
+    ) -> Result<Vec<ProviderRecord>, StoreOperationError> {
         if app == AppKind::Codex {
-            return Err("Codex 供应商必须使用专用排序操作".to_string());
+            return Err("Codex 供应商必须使用专用排序操作".into());
         }
-        let (_, claude) = load_all(self).map_err(|error| error.to_string())?;
+        let (_, claude) = load_all(self)?;
         let loaded = match app {
             AppKind::Codex => unreachable!("Codex uses dedicated provider storage"),
             AppKind::Claude => claude,
@@ -158,15 +168,14 @@ impl ConfigStore {
         check_expected_files(&loaded, expected_file_hashes)?;
         let unique: HashSet<&str> = ordered_ids.iter().map(String::as_str).collect();
         if unique.len() != ordered_ids.len() || ordered_ids.len() != loaded.len() {
-            return Err("排序清单必须覆盖该客户端的全部供应商且不得重复".to_string());
+            return Err("排序清单必须覆盖该客户端的全部供应商且不得重复".into());
         }
         // Re-read the complete snapshot and the raw file revisions before
         // constructing the replacement. This rejects a concurrent/manual
         // provider edit (including a formatting-only edit) instead of
         // replacing it blindly.
-        let mut snapshot = crate::config_store::snapshot::read_configuration_snapshot(self)
-            .map_err(|error| error.to_string())?;
-        let (codex_after, claude_after) = load_all(self).map_err(|error| error.to_string())?;
+        let mut snapshot = crate::config_store::snapshot::read_configuration_snapshot(self)?;
+        let (codex_after, claude_after) = load_all(self)?;
         let loaded_after = match app {
             AppKind::Codex => codex_after,
             AppKind::Claude => claude_after,
@@ -175,11 +184,11 @@ impl ConfigStore {
         let current_files: Vec<ProviderFile> =
             loaded_after.into_iter().map(|loaded| loaded.file).collect();
         if snapshot.claude_providers != current_files {
-            return Err("供应商文件已被外部修改，请重新读取后再排序".to_string());
+            return Err("供应商文件已被外部修改，请重新读取后再排序".into());
         }
         for id in ordered_ids {
             if !loaded.iter().any(|loaded| &loaded.file.id == id) {
-                return Err(format!("排序清单包含不属于该客户端的供应商：{id}"));
+                return Err(format!("排序清单包含不属于该客户端的供应商：{id}").into());
             }
         }
         // A reorder is one logical mutation. Rebuild it through the same
@@ -195,18 +204,21 @@ impl ConfigStore {
         }
         files.sort_by_key(|file| file.position);
         crate::config_store::snapshot::enable_snapshot(self, &snapshot)?;
-        self.list_providers().map_err(|error| error.to_string())
+        Ok(self.list_providers()?)
     }
 
     /// Imports one draft as a provider file: an exactly equal provider is a
     /// no-op, a routing-identical one gains the missing usage query, and
     /// anything else creates a new file.
-    pub fn import_provider(&self, draft: ProviderDraft) -> Result<ProviderRecord, String> {
+    pub fn import_provider(
+        &self,
+        draft: ProviderDraft,
+    ) -> Result<ProviderRecord, StoreOperationError> {
         if draft.app == AppKind::Codex {
-            return Err("Codex 供应商必须使用专用档案格式".to_string());
+            return Err("Codex 供应商必须使用专用档案格式".into());
         }
         draft.validate().map_err(|error| error.to_string())?;
-        let (_, claude) = load_all(self).map_err(|error| error.to_string())?;
+        let (_, claude) = load_all(self)?;
         let existing = match draft.app {
             AppKind::Codex => unreachable!("Codex uses dedicated provider storage"),
             AppKind::Claude => claude,

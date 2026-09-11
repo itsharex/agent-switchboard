@@ -317,7 +317,7 @@ fn codex_rows_scan_as_completion_seeds_and_reject_batch_import() {
 
     // The batch import rejects Codex keys up front, before any write.
     let error = import_at(&path, &state, &["codex:id-codex".into()]).unwrap_err();
-    assert!(error.contains("补全导入"));
+    assert!(error.to_string().contains("补全导入"));
     assert!(state
         .configuration()
         .list_codex_providers()
@@ -331,7 +331,7 @@ fn codex_rows_scan_as_completion_seeds_and_reject_batch_import() {
         &["claude:id-1".into(), "codex:id-codex".into()],
     )
     .unwrap_err();
-    assert!(mixed.contains("补全导入"));
+    assert!(mixed.to_string().contains("补全导入"));
     assert!(profiles(&state).is_empty());
 
     // The single-row seed command is the only credential boundary.

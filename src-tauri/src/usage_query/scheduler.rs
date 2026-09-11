@@ -5,6 +5,7 @@
 //! command execute through `execute_once`, so every attempt — successful or
 //! not — advances the persisted timing in the usage cache.
 
+use crate::config_store::StoreOperationError;
 use crate::local_state::LocalState;
 use crate::tray;
 use crate::usage_cache;
@@ -127,11 +128,10 @@ pub(crate) fn execute_once(
 pub(crate) fn usage_profile(
     state: &LocalState,
     profile_id: &str,
-) -> Result<ProviderProfile, String> {
+) -> Result<ProviderProfile, StoreOperationError> {
     if state
         .configuration()
-        .list_codex_providers()
-        .map_err(|error| error.to_string())?
+        .list_codex_providers()?
         .into_iter()
         .any(|record| record.profile.id == profile_id)
     {
@@ -142,7 +142,7 @@ pub(crate) fn usage_profile(
                 file.client_projection()
                     .into_profile(asb_core::contracts::AppKind::Codex)
             })
-            .map_err(|error| error.to_string());
+            .map_err(StoreOperationError::from);
     }
     state.configuration().find_provider(profile_id)
 }

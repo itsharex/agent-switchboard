@@ -52,6 +52,42 @@ impl std::fmt::Display for ProfileStoreError {
     }
 }
 
+/// Failures of one validating store operation. Store-level state errors stay
+/// typed so every command keeps their stable code; all remaining failures
+/// carry only their readable validation or write message.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StoreOperationError {
+    Store(ProfileStoreError),
+    Invalid(String),
+}
+
+impl From<ProfileStoreError> for StoreOperationError {
+    fn from(error: ProfileStoreError) -> Self {
+        Self::Store(error)
+    }
+}
+
+impl From<String> for StoreOperationError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
+impl From<&str> for StoreOperationError {
+    fn from(message: &str) -> Self {
+        Self::Invalid(message.to_string())
+    }
+}
+
+impl std::fmt::Display for StoreOperationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Store(error) => error.fmt(formatter),
+            Self::Invalid(message) => formatter.write_str(message),
+        }
+    }
+}
+
 /// The one configuration store for one app-data directory.
 pub struct ConfigStore {
     /// The `state/` directory itself.
@@ -130,10 +166,11 @@ impl ConfigStore {
     /// The directory marks an initialized current layout even when neither
     /// client has saved preferences yet. Missing provider fields in that
     /// layout are corruption, never evidence of a predecessor schema.
-    fn initialize_current_layout(&self) -> Result<(), String> {
-        self.ensure_layout().map_err(|error| error.to_string())?;
-        fs::create_dir_all(self.client_dir("client-settings"))
-            .map_err(|error| format!("无法初始化客户端设置目录：{error}"))
+    fn initialize_current_layout(&self) -> Result<(), StoreOperationError> {
+        self.ensure_layout()?;
+        fs::create_dir_all(self.client_dir("client-settings")).map_err(|error| {
+            StoreOperationError::Invalid(format!("无法初始化客户端设置目录：{error}"))
+        })
     }
 
     pub fn providers_dir(&self, app: AppKind) -> PathBuf {

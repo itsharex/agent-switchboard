@@ -143,6 +143,7 @@ impl GatewayController {
                 AppKind::Claude => local
                     .configuration()
                     .find_provider(&saved.profile_id)
+                    .map_err(|error| error.to_string())
                     .and_then(|profile| {
                         (profile.app == app && route_fingerprint(&profile)? == saved.revision)
                             .then_some(profile)

@@ -19,7 +19,8 @@ impl ConfigStore {
         {
             return Err("检测到已不受支持的旧配置格式；请重置或重新创建供应商数据".to_string());
         }
-        self.initialize_current_layout()?;
+        self.initialize_current_layout()
+            .map_err(|error| error.to_string())?;
         Ok(false)
     }
 }

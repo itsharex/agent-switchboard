@@ -4,7 +4,7 @@
 
 use super::{
     content_revision, parse_strict, read_optional, write_json_atomic, ConfigStore,
-    ProfileStoreError,
+    ProfileStoreError, StoreOperationError,
 };
 use asb_core::contracts::{AppKind, ClientSettingsSnapshot, SettingsValues};
 use asb_core::ownership::default_client_settings;
@@ -48,21 +48,19 @@ impl ConfigStore {
         app: AppKind,
         settings: SettingsValues,
         expected_hash: &str,
-    ) -> Result<ClientSettingsSnapshot, String> {
+    ) -> Result<ClientSettingsSnapshot, StoreOperationError> {
         settings
             .validate_client_settings(app)
             .map_err(|error| error.to_string())?;
         let _guard = CLIENT_SAVE_LOCK
             .lock()
-            .map_err(|_| "客户端设置保存锁异常".to_string())?;
-        let current = self
-            .get_client_settings(app)
-            .map_err(|error| error.to_string())?;
+            .map_err(|_| StoreOperationError::Invalid("客户端设置保存锁异常".to_string()))?;
+        let current = self.get_client_settings(app)?;
         if current.settings_hash != expected_hash {
-            return Err("客户端设置已更新，请重新加载后再保存".to_string());
+            return Err("客户端设置已更新，请重新加载后再保存".into());
         }
         let json = serde_json::to_string_pretty(&settings)
-            .map_err(|_| "客户端设置序列化失败".to_string())?;
+            .map_err(|_| StoreOperationError::Invalid("客户端设置序列化失败".to_string()))?;
         write_json_atomic(&self.client_settings_path(app), &json)?;
         Ok(ClientSettingsSnapshot {
             settings_hash: content_revision(json.as_bytes()),
@@ -131,7 +129,10 @@ mod tests {
                 &initial.settings_hash,
             )
             .expect_err("stale revision must fail");
-        assert!(error.contains("重新加载"));
+        assert!(matches!(
+            &error,
+            StoreOperationError::Invalid(message) if message.contains("重新加载")
+        ));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::config_store::{ConfigStore, ProfileStoreError};
+use crate::config_store::{ConfigStore, ProfileStoreError, StoreOperationError};
 use asb_core::contracts::{AppKind, ProviderDraft, RouteMode, UpstreamProtocol};
 use std::collections::BTreeMap;
 
@@ -149,7 +149,7 @@ fn codex_official_record_needs_an_official_route_mode() {
     third_party.upstream_protocol = Some(UpstreamProtocol::Responses);
     assert_eq!(
         store.create_provider(third_party).unwrap_err(),
-        "Codex 第三方供应商必须使用专用档案格式"
+        StoreOperationError::Invalid("Codex 第三方供应商必须使用专用档案格式".to_string())
     );
 }
 
@@ -164,4 +164,48 @@ fn malformed_claude_file_is_rejected_without_rewriting_it() {
     std::fs::write(&path, malformed).unwrap();
     assert_eq!(store.list_providers(), Err(ProfileStoreError::Unsupported));
     assert_eq!(std::fs::read_to_string(path).unwrap(), malformed);
+}
+
+/// The store contract behind the UI's reset banner: a legacy or unusable
+/// layout surfaces as the typed store error from every operation family,
+/// never as a flattened validation message.
+#[test]
+fn store_level_failures_stay_typed_through_every_operation_family() {
+    let (directory, store) = store();
+    std::fs::create_dir_all(store.legacy_store_path().parent().unwrap()).unwrap();
+    std::fs::write(store.legacy_store_path(), b"{}").unwrap();
+    let unsupported = StoreOperationError::Store(ProfileStoreError::Unsupported);
+    assert_eq!(
+        store.create_provider(draft("relay")),
+        Err(unsupported.clone())
+    );
+    assert_eq!(
+        store.import_provider(draft("relay")),
+        Err(unsupported.clone())
+    );
+    assert_eq!(
+        store.find_provider("00000000-0000-0000-0000-000000000001"),
+        Err(unsupported.clone())
+    );
+    assert_eq!(
+        store.save_client_settings(
+            AppKind::Claude,
+            asb_core::ownership::default_client_settings(AppKind::Claude),
+            "stale",
+        ),
+        Err(unsupported.clone())
+    );
+    assert_eq!(
+        store.record_config_write(asb_core::contracts::ConfigWriteRecord {
+            app: AppKind::Claude,
+            profile_id: None,
+            profile_name: None,
+            content_hash: "a".repeat(64),
+            backup_id: "backup".to_string(),
+            at: "2026-09-11T12:00:00+08:00".to_string(),
+            operation: asb_core::contracts::WriteOperation::Restore,
+        }),
+        Err(unsupported)
+    );
+    let _ = directory;
 }

@@ -5,7 +5,7 @@
 
 use crate::config_store::{
     content_revision, parse_strict, read_optional, write_json_atomic, ConfigStore,
-    ProfileStoreError,
+    ProfileStoreError, StoreOperationError,
 };
 use asb_core::contracts::{
     CodexEndpoint, CodexProviderDraft, CodexProviderFile, CodexProviderRecord, CodexUpstream,
@@ -35,15 +35,15 @@ impl ConfigStore {
     pub fn create_codex_provider(
         &self,
         draft: CodexProviderDraft,
-    ) -> Result<CodexProviderRecord, String> {
-        let loaded = load(self).map_err(|error| error.to_string())?;
+    ) -> Result<CodexProviderRecord, StoreOperationError> {
+        let loaded = load(self)?;
         let position = loaded
             .iter()
             .map(|provider| provider.file.position)
             .max()
             .unwrap_or(0)
             .checked_add(crate::config_store::PROVIDER_POSITION_STEP)
-            .ok_or_else(|| "Codex 供应商排序位置溢出".to_string())?;
+            .ok_or_else(|| StoreOperationError::Invalid("Codex 供应商排序位置溢出".to_string()))?;
         let file = draft.into_file(Uuid::new_v4().to_string(), position);
         let hash = write(self, &file)?;
         Ok(file.record(hash))
@@ -68,14 +68,13 @@ impl ConfigStore {
         id: &str,
         draft: CodexProviderDraft,
         expected_file_hash: &str,
-    ) -> Result<CodexProviderRecord, String> {
-        let existing = load(self)
-            .map_err(|error| error.to_string())?
+    ) -> Result<CodexProviderRecord, StoreOperationError> {
+        let existing = load(self)?
             .into_iter()
             .find(|loaded| loaded.file.profile.id == id)
-            .ok_or_else(|| "Codex 供应商不存在".to_string())?;
+            .ok_or_else(|| StoreOperationError::Invalid("Codex 供应商不存在".to_string()))?;
         if existing.hash != expected_file_hash {
-            return Err("Codex 供应商文件已被外部修改，请重新读取后再保存".to_string());
+            return Err("Codex 供应商文件已被外部修改，请重新读取后再保存".into());
         }
         let file = draft.into_file(id.to_string(), existing.file.position);
         let hash = write(self, &file)?;
@@ -88,33 +87,37 @@ impl ConfigStore {
     pub(crate) fn overwrite_codex_provider_file(
         &self,
         file: CodexProviderFile,
-    ) -> Result<(), String> {
+    ) -> Result<(), StoreOperationError> {
         write(self, &file).map(|_| ())
     }
 
-    pub fn delete_codex_provider(&self, id: &str, expected_file_hash: &str) -> Result<(), String> {
-        let existing = load(self)
-            .map_err(|error| error.to_string())?
+    pub fn delete_codex_provider(
+        &self,
+        id: &str,
+        expected_file_hash: &str,
+    ) -> Result<(), StoreOperationError> {
+        let existing = load(self)?
             .into_iter()
             .find(|loaded| loaded.file.profile.id == id)
-            .ok_or_else(|| "Codex 供应商不存在".to_string())?;
+            .ok_or_else(|| StoreOperationError::Invalid("Codex 供应商不存在".to_string()))?;
         if existing.hash != expected_file_hash {
-            return Err("Codex 供应商文件已被外部修改，请重新读取后再删除".to_string());
+            return Err("Codex 供应商文件已被外部修改，请重新读取后再删除".into());
         }
         let path = self
             .providers_dir(asb_core::contracts::AppKind::Codex)
             .join(format!("{id}.json"));
-        fs::remove_file(path).map_err(|_| "无法删除 Codex 供应商文件".to_string())
+        fs::remove_file(path)
+            .map_err(|_| StoreOperationError::Invalid("无法删除 Codex 供应商文件".to_string()))
     }
 
     pub fn reorder_codex_providers(
         &self,
         ordered_ids: &[String],
         expected_file_hashes: &BTreeMap<String, String>,
-    ) -> Result<Vec<CodexProviderRecord>, String> {
-        let loaded = load(self).map_err(|error| error.to_string())?;
+    ) -> Result<Vec<CodexProviderRecord>, StoreOperationError> {
+        let loaded = load(self)?;
         if loaded.len() != ordered_ids.len() || loaded.len() != expected_file_hashes.len() {
-            return Err("Codex 排序版本必须覆盖全部供应商".to_string());
+            return Err("Codex 排序版本必须覆盖全部供应商".into());
         }
         let known = loaded
             .iter()
@@ -130,21 +133,21 @@ impl ConfigStore {
                 })
             })
         {
-            return Err("Codex 供应商文件已被外部修改，请重新读取后再排序".to_string());
+            return Err("Codex 供应商文件已被外部修改，请重新读取后再排序".into());
         }
-        let mut snapshot = crate::config_store::snapshot::read_configuration_snapshot(self)
-            .map_err(|error| error.to_string())?;
+        let mut snapshot = crate::config_store::snapshot::read_configuration_snapshot(self)?;
         for (index, id) in ordered_ids.iter().enumerate() {
             let file = snapshot
                 .codex_providers
                 .iter_mut()
                 .find(|file| &file.profile.id == id)
-                .ok_or_else(|| "Codex 排序清单包含未知供应商".to_string())?;
+                .ok_or_else(|| {
+                    StoreOperationError::Invalid("Codex 排序清单包含未知供应商".to_string())
+                })?;
             file.position = (index as u64 + 1) * crate::config_store::PROVIDER_POSITION_STEP;
         }
         crate::config_store::snapshot::enable_snapshot(self, &snapshot)?;
-        self.list_codex_providers()
-            .map_err(|error| error.to_string())
+        Ok(self.list_codex_providers()?)
     }
 }
 
@@ -223,7 +226,7 @@ fn load(store: &ConfigStore) -> Result<Vec<LoadedCodexProvider>, ProfileStoreErr
     Ok(loaded)
 }
 
-fn write(store: &ConfigStore, file: &CodexProviderFile) -> Result<String, String> {
+fn write(store: &ConfigStore, file: &CodexProviderFile) -> Result<String, StoreOperationError> {
     file.validate()?;
     let json =
         serde_json::to_string_pretty(file).map_err(|_| "Codex 供应商文件序列化失败".to_string())?;
@@ -352,6 +355,18 @@ mod tests {
         assert!(store
             .update_codex_provider(&saved.profile.id, draft(), &created.file_hash)
             .is_err());
+    }
+
+    #[test]
+    fn codex_store_level_failures_stay_typed() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(directory.path().join("state"));
+        std::fs::create_dir_all(store.legacy_store_path().parent().unwrap()).unwrap();
+        std::fs::write(store.legacy_store_path(), b"{}").unwrap();
+        assert_eq!(
+            store.create_codex_provider(draft()),
+            Err(StoreOperationError::Store(ProfileStoreError::Unsupported))
+        );
     }
 
     #[test]

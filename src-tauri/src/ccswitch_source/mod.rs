@@ -12,6 +12,7 @@ mod db;
 #[cfg(test)]
 mod tests;
 
+use crate::config_store::StoreOperationError;
 use crate::local_state::LocalState;
 use asb_core::ccswitch;
 use asb_core::contracts::{AppKind, ProviderDraft, RouteMode};
@@ -87,7 +88,10 @@ pub fn scan_at(path: &Path, state: &LocalState) -> Result<CcSwitchScan, String> 
 /// imports the requested Claude keys. Writes only the app's own profile
 /// store. Codex rows are completed in the editor instead: passing one to
 /// this command is a caller bug and fails before any write.
-pub fn import(state: &LocalState, keys: &[String]) -> Result<CcSwitchImportOutcome, String> {
+pub fn import(
+    state: &LocalState,
+    keys: &[String],
+) -> Result<CcSwitchImportOutcome, StoreOperationError> {
     import_at(&db_path()?, state, keys)
 }
 
@@ -97,14 +101,14 @@ pub fn import_at(
     path: &Path,
     state: &LocalState,
     keys: &[String],
-) -> Result<CcSwitchImportOutcome, String> {
+) -> Result<CcSwitchImportOutcome, StoreOperationError> {
     let raw = scan_db(path)?;
     if raw.proposals.iter().any(|proposal| {
         keys.contains(&proposal.key)
             && matches!(proposal.draft, ccswitch::CcSwitchProviderDraft::Codex(_))
     }) {
         return Err(
-            "Codex 供应商必须逐项补全导入；请在扫描列表中选择该供应商的「补全导入」".to_string(),
+            "Codex 供应商必须逐项补全导入；请在扫描列表中选择该供应商的「补全导入」".into(),
         );
     }
     let claude_proposals: Vec<(&str, &ProviderDraft)> = raw
