@@ -4,8 +4,9 @@
 use super::*;
 use asb_core::adapter;
 use asb_core::contracts::{
-    ConfigWriteRecord, ExplicitMaxOutputTokens, ProviderDraft, RouteMode, SwitchPlan,
-    UpstreamProtocol, WriteOperation,
+    CodexCapabilities, CodexCatalogEntry, CodexEndpoint, CodexModelRoute, CodexProviderDraft,
+    CodexUpstream, ConfigWriteRecord, ExplicitMaxOutputTokens, ProviderDraft, RouteMode,
+    SwitchPlan, UpstreamProtocol, WriteOperation,
 };
 use asb_core::ownership::default_client_settings;
 use std::fs;
@@ -32,23 +33,56 @@ fn claude_draft(model: &str) -> ProviderDraft {
     }
 }
 
-fn codex_draft(model: &str) -> ProviderDraft {
-    ProviderDraft {
+fn codex_draft(model: &str) -> CodexProviderDraft {
+    CodexProviderDraft {
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
-        app: AppKind::Codex,
-        route_mode: RouteMode::Custom,
         name: "测试中转".to_string(),
-        base_url: Some("http://127.0.0.1:18080".to_string()),
+        endpoint: CodexEndpoint("http://127.0.0.1:18080/v1".to_string()),
         api_key: "test-upstream-key".to_string(),
-        upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
-        responses_options: None,
-        max_output_tokens: ExplicitMaxOutputTokens::none(),
-        model: Some(model.to_string()),
-        model_options: None,
+        upstream: CodexUpstream::ChatCompletions,
+        request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+        default_model: model.to_string(),
+        catalog: vec![CodexCatalogEntry {
+            id: model.to_string(),
+            context_window: 128_000,
+            max_output_tokens: 16_384,
+            function_tools: true,
+            custom_tools: true,
+            tool_search: true,
+            reasoning: true,
+            default_reasoning_level: asb_core::contracts::CodexReasoningLevel::High,
+            supported_reasoning_levels: vec![
+                asb_core::contracts::CodexReasoningLevel::None,
+                asb_core::contracts::CodexReasoningLevel::High,
+            ],
+            images: false,
+            compact: true,
+        }],
+        model_routes: vec![CodexModelRoute {
+            client_model: model.to_string(),
+            upstream_model: model.to_string(),
+        }],
+        capabilities: CodexCapabilities {
+            responses: true,
+            compact: true,
+            models: true,
+            chat_completions: true,
+            alpha_search: false,
+            image_generation: false,
+            image_edit: false,
+            function_tools: true,
+            custom_tools: true,
+            tool_search: true,
+            reasoning: true,
+            chat_reasoning: asb_core::contracts::CodexChatReasoning::Configured {
+                thinking_parameter: asb_core::contracts::CodexChatThinkingParameter::None,
+                effort_parameter: asb_core::contracts::CodexChatEffortParameter::ReasoningEffort,
+                effort_mode: asb_core::contracts::CodexChatEffortMode::LowHigh,
+            },
+        },
         notes: None,
         website_url: None,
         usage_query: None,
-        official_quota_refresh_interval_minutes: None,
     }
 }
 
@@ -72,13 +106,15 @@ fn activate_claude(controller: &GatewayController, local: &LocalState, model: &s
 fn activate_codex(controller: &GatewayController, local: &LocalState, model: &str) {
     let record = local
         .configuration()
-        .create_provider(codex_draft(model))
+        .create_codex_provider(codex_draft(model))
         .unwrap();
-    let plan = SwitchPlan::direct(
-        record.profile.clone(),
-        default_client_settings(AppKind::Codex),
-    );
-    let projection = controller.project(&plan).unwrap();
+    let file = local
+        .configuration()
+        .find_codex_provider_file(&record.profile.id)
+        .unwrap();
+    let projection = controller
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .unwrap();
     let target = local.target(AppKind::Codex).unwrap();
     let auth_target = LocalState::codex_auth_path().unwrap();
     fs::create_dir_all(target.parent().unwrap()).unwrap();

@@ -7,7 +7,8 @@ pub(in crate::gateway::transform::stream) use anthropic::ChatToAnthropic;
 pub(in crate::gateway::transform::stream) use responses::ChatToResponses;
 
 use super::{json_data, Frame};
-use crate::gateway::transform::{StopReason, TransformError, Usage};
+use crate::gateway::transform::{usage, StopReason, ToolKind, TransformError, Usage};
+use asb_core::contracts::UpstreamProtocol;
 use serde_json::{Map, Value};
 
 #[derive(Default)]
@@ -43,15 +44,30 @@ struct TextOutput {
     text: String,
 }
 
-#[derive(Default)]
 struct ResponseCall {
     id: Option<String>,
     name: Option<String>,
     rendered_name: Option<String>,
     namespace: Option<String>,
+    kind: ToolKind,
     arguments: String,
     sent_arguments: usize,
     output_index: Option<u64>,
+}
+
+impl Default for ResponseCall {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: None,
+            rendered_name: None,
+            namespace: None,
+            kind: ToolKind::Function,
+            arguments: String::new(),
+            sent_arguments: 0,
+            output_index: None,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -199,11 +215,15 @@ fn parse_chat_frame(frame: &Frame) -> Result<ChatUpdate, TransformError> {
         }
         for field in ["content", "refusal"] {
             if let Some(text) = delta.get(field) {
-                update.text.push(
-                    text.as_str()
-                        .ok_or_else(|| TransformError(format!("Chat SSE {field} 必须是字符串")))?
-                        .to_string(),
-                );
+                match text {
+                    Value::Null => {}
+                    Value::String(text) => update.text.push(text.clone()),
+                    _ => {
+                        return Err(TransformError(format!(
+                            "Chat SSE {field} 必须是字符串或 null"
+                        )))
+                    }
+                }
             }
         }
         if let Some(reasoning) = delta.get("reasoning_content") {
@@ -338,21 +358,5 @@ fn optional_string(
 }
 
 fn parse_usage(value: &Value) -> Result<Usage, TransformError> {
-    let map = object(value, "Chat SSE usage")?;
-    allowed(
-        map,
-        &[
-            "prompt_tokens",
-            "completion_tokens",
-            "total_tokens",
-            "prompt_tokens_details",
-            "completion_tokens_details",
-        ],
-        "Chat SSE usage",
-    )?;
-    Ok(Usage {
-        input_tokens: map.get("prompt_tokens").and_then(Value::as_u64),
-        output_tokens: map.get("completion_tokens").and_then(Value::as_u64),
-        total_tokens: map.get("total_tokens").and_then(Value::as_u64),
-    })
+    usage::parse(UpstreamProtocol::ChatCompletions, Some(value))
 }

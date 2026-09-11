@@ -1,4 +1,7 @@
 //! Application half of a configuration transaction; the executor owns file recovery.
+mod catalog;
+mod journal;
+
 use crate::commands::error::CommandError;
 use crate::{
     gateway::{GatewayActivationSnapshot, GatewayController},
@@ -6,8 +9,11 @@ use crate::{
 };
 use asb_core::{AppKind, ConfigWriteRecord, WriteOperation};
 use asb_switch::{FsIo, PendingConfigWrite, SwitchIo};
+pub(super) use catalog::{apply_catalog_artifact, CatalogArtifact};
+use catalog::{restore_catalog, validate_catalog_target, verify_catalog_after};
+use journal::{clear, error, load, path, read_target};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -23,13 +29,7 @@ pub(super) struct SwitchIntent {
     after_existed: bool,
     previous_route: GatewayActivationSnapshot,
     previous_write: Option<ConfigWriteRecord>,
-}
-
-fn path(state: &LocalState) -> std::path::PathBuf {
-    state
-        .root()
-        .join("configuration")
-        .join(crate::config_store::SWITCH_INTENT_FILE)
+    catalog: Option<CatalogArtifact>,
 }
 
 pub(super) fn begin(
@@ -39,19 +39,16 @@ pub(super) fn begin(
     profile_id: Option<&str>,
     after_hash: &str,
     after_existed: bool,
+    catalog: Option<CatalogArtifact>,
 ) -> Result<(), CommandError> {
     if load(state).map_err(error)?.is_some() {
         return Err(error("存在未完成配置事务，请先恢复"));
     }
     let target = state.target(app).map_err(error)?;
     let (before, before_existed) = read_target(&target, app).map_err(error)?;
+    validate_catalog_target(&target, catalog.as_ref()).map_err(error)?;
     let profile_hash = profile_id
-        .map(|id| {
-            state
-                .configuration()
-                .find_provider_record(id)
-                .map(|record| record.file_hash)
-        })
+        .map(|id| profile_revision(state, app, id))
         .transpose()
         .map_err(error)?;
     let intent = SwitchIntent {
@@ -69,6 +66,7 @@ pub(super) fn begin(
             .configuration()
             .latest_config_write(app)
             .map_err(|e| error(e.to_string()))?,
+        catalog,
     };
     let journal = path(state);
     let text = serde_json::to_string(&intent).expect("intent serializes");
@@ -92,6 +90,7 @@ pub(super) fn finish<T>(
                     .map_err(|e| error(e.to_string()))?
                     .is_none()
                 {
+                    restore_catalog(&intent).map_err(error)?;
                     clear(state).map_err(error)?;
                     return Err(CommandError::from(failure));
                 }
@@ -136,6 +135,7 @@ pub(super) fn recover(state: &LocalState, gateway: &GatewayController) -> Result
     {
         return Err("配置事务目标或版本不匹配，保留恢复记录".into());
     }
+    validate_catalog_target(&target, intent.catalog.as_ref())?;
     let pending = asb_switch::pending_config_write(&FsIo, &state.backup_dir(), intent.app)
         .map_err(|e| e.to_string())?;
     if let Some(pending) = &pending {
@@ -191,17 +191,15 @@ fn resume_active_save(
     if Some(&save.profile_id) != intent.profile_id.as_ref() {
         return Err("供应商保存与配置事务不匹配".into());
     }
-    let record = state
-        .configuration()
-        .find_provider_record(&save.profile_id)?;
-    if record.file_hash == save.previous_file_hash {
+    let revision = profile_revision(state, save.app, &save.profile_id)?;
+    if revision == save.previous_file_hash {
         return Ok(false);
     }
-    if Some(&record.file_hash) != intent.profile_hash.as_ref() {
+    if Some(&revision) != intent.profile_hash.as_ref() {
         return Err("待恢复供应商版本已发生额外变化".into());
     }
-    let projected = super::plan::build_plan_for_profile(state, gateway, record.profile)
-        .map_err(|e| e.message)?;
+    let projected =
+        super::plan::build_plan(state, gateway, &save.profile_id).map_err(|e| e.message)?;
     let preview = super::plan::preview_projection(state, &projected).map_err(|e| e.message)?;
     if preview.rendered_hash != intent.after_hash {
         return Err("保存后的目标配置已变化，不能重新解释已确认事务".into());
@@ -223,17 +221,18 @@ fn complete(
     pending: Option<&PendingConfigWrite>,
     text: &str,
 ) -> Result<(), String> {
+    verify_catalog_after(intent)?;
     let profile = intent
         .profile_id
         .as_deref()
         .map(|id| {
-            let record = state.configuration().find_provider_record(id)?;
-            if Some(&record.file_hash) != intent.profile_hash.as_ref() {
+            let (name, hash) = profile_name_and_revision(state, intent.app, id)?;
+            if Some(&hash) != intent.profile_hash.as_ref() {
                 return Err(String::from(
                     "已确认的供应商版本已变化，不能重解释未完成事务",
                 ));
             }
-            Ok(record.profile)
+            Ok((id.to_string(), name))
         })
         .transpose()?;
     gateway.validate_restored(state, intent.app, text)?;
@@ -246,8 +245,8 @@ fn complete(
             if let Some(pending) = pending {
                 let desired = ConfigWriteRecord {
                     app: intent.app,
-                    profile_id: profile.as_ref().map(|p| p.id.clone()),
-                    profile_name: profile.as_ref().map(|p| p.name.clone()),
+                    profile_id: profile.as_ref().map(|p| p.0.clone()),
+                    profile_name: profile.as_ref().map(|p| p.1.clone()),
                     content_hash: intent.after_hash.clone(),
                     backup_id: pending.backup.id.clone(),
                     at: pending.backup.created_at.clone(),
@@ -308,6 +307,7 @@ fn restore_application_snapshot(
     intent: &SwitchIntent,
     pending: Option<&PendingConfigWrite>,
 ) -> Result<(), String> {
+    restore_catalog(intent)?;
     gateway.restore_activation_snapshot(state, &intent.previous_route)?;
     let last = state
         .configuration()
@@ -323,6 +323,44 @@ fn restore_application_snapshot(
         }
     }
     Err("回滚前的应用写入历史已变化，保留事务以人工处理".into())
+}
+
+fn profile_revision(state: &LocalState, app: AppKind, id: &str) -> Result<String, String> {
+    match app {
+        AppKind::Codex => state
+            .configuration()
+            .list_codex_providers()
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .find(|record| record.profile.id == id)
+            .map(|record| record.file_hash)
+            .ok_or_else(|| "Codex 供应商不存在".to_string()),
+        AppKind::Claude => state
+            .configuration()
+            .find_provider_record(id)
+            .map(|record| record.file_hash),
+    }
+}
+
+fn profile_name_and_revision(
+    state: &LocalState,
+    app: AppKind,
+    id: &str,
+) -> Result<(String, String), String> {
+    match app {
+        AppKind::Codex => state
+            .configuration()
+            .list_codex_providers()
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .find(|record| record.profile.id == id)
+            .map(|record| (record.profile.name, record.file_hash))
+            .ok_or_else(|| "Codex 供应商不存在".to_string()),
+        AppKind::Claude => state
+            .configuration()
+            .find_provider_record(id)
+            .map(|record| (record.profile.name, record.file_hash)),
+    }
 }
 
 fn finish_pending(
@@ -417,46 +455,4 @@ fn reject_orphan(state: &LocalState) -> Result<(), String> {
         }
     }
     Ok(())
-}
-fn load(state: &LocalState) -> Result<Option<SwitchIntent>, String> {
-    match std::fs::read_to_string(path(state)) {
-        Ok(text) => serde_json::from_str(&text).map(Some).map_err(|_| {
-            format!(
-                "配置事务意图格式无效，请保留并核对 {}",
-                path(state).display()
-            )
-        }),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(format!(
-            "配置事务意图不可读，请检查 {} 的权限",
-            path(state).display()
-        )),
-    }
-}
-fn clear(state: &LocalState) -> Result<(), String> {
-    let journal = path(state);
-    match std::fs::remove_file(&journal) {
-        Ok(()) => FsIo
-            .sync_dir(journal.parent().expect("journal directory"))
-            .map_err(|_| "配置事务清理无法持久化".into()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(_) => Err("配置事务已处理但意图清理失败，请重试恢复".into()),
-    }
-}
-fn read_target(target: &Path, app: AppKind) -> Result<(String, bool), String> {
-    match std::fs::read_to_string(target) {
-        Ok(text) => Ok((text, true)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok((
-            if app == AppKind::Claude {
-                "{}".into()
-            } else {
-                String::new()
-            },
-            false,
-        )),
-        Err(_) => Err("配置事务目标不可读".into()),
-    }
-}
-fn error(message: impl Into<String>) -> CommandError {
-    CommandError::new("config-recovery-required", message)
 }

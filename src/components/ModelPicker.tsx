@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderModel } from "../api/client";
 import { Input } from "./Input";
+import { Button } from "./Button";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 /** Group label for models the endpoint did not attribute to a vendor. */
@@ -130,8 +131,8 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
         }
       }}
     >
-      <button
-        type="button"
+      <Button
+        variant="unstyled"
         ref={trigger}
         className="asb-model-trigger"
         aria-haspopup="listbox"
@@ -143,7 +144,7 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
         <span className="asb-select-chevron" aria-hidden="true">
           <ChevronDownIcon />
         </span>
-      </button>
+      </Button>
 
       {open && !disabled ? (
         <div className="asb-model-menu" onKeyDown={onMenuKeyDown}>
@@ -169,8 +170,8 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
                 <div key={group.vendor} role="group" aria-label={group.vendor}>
                   <p className="asb-model-group">{group.vendor}</p>
                   {group.models.map((model) => (
-                    <button
-                      type="button"
+                    <Button
+                      variant="unstyled"
                       role="option"
                       aria-selected={model.id === current}
                       className="asb-model-option"
@@ -181,7 +182,7 @@ export function ModelPicker({ models, current, ariaLabel, disabled = false, onSe
                       <span className="asb-model-check" aria-hidden="true">
                         {model.id === current && <CheckIcon />}
                       </span>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ))

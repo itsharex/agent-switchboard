@@ -1,44 +1,83 @@
 use super::{plan, profile_rollback, transaction};
 use crate::{gateway::GatewayController, local_state::LocalState};
-use asb_core::{AppKind, ProviderDraft, ProviderRecord, RouteMode};
+use asb_core::{
+    contracts::{
+        CodexCapabilities, CodexCatalogEntry, CodexEndpoint, CodexModelRoute, CodexProviderDraft,
+        CodexProviderRecord, CodexUpstream,
+    },
+    AppKind,
+};
 use asb_switch::FsIo;
 use std::{fs, panic::AssertUnwindSafe};
 
 const BEFORE: &str = "model_provider = 'openai'\nmodel = 'before-model'\n";
+const AUTH: &str = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"at","refresh_token":"rt","id_token":"id"}}"#;
 
-fn draft(revision: &str) -> ProviderDraft {
-    ProviderDraft {
-        app: AppKind::Codex,
-        route_mode: RouteMode::Official,
-        name: format!("Official fixture {revision}"),
-        base_url: None,
-        api_key: String::new(),
-        upstream_protocol: None,
-        responses_options: None,
-        model: None,
-        model_options: None,
-        max_output_tokens: None.into(),
+fn draft(revision: &str) -> CodexProviderDraft {
+    CodexProviderDraft {
+        name: format!("Codex fixture {revision}"),
+        endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
+        api_key: "fixture-key".to_string(),
+        upstream: CodexUpstream::Responses,
+        request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+        default_model: revision.to_string(),
+        catalog: vec![CodexCatalogEntry {
+            id: revision.to_string(),
+            context_window: 128_000,
+            max_output_tokens: 16_384,
+            function_tools: true,
+            custom_tools: true,
+            tool_search: true,
+            reasoning: true,
+            default_reasoning_level: asb_core::contracts::CodexReasoningLevel::High,
+            supported_reasoning_levels: vec![
+                asb_core::contracts::CodexReasoningLevel::None,
+                asb_core::contracts::CodexReasoningLevel::High,
+            ],
+            images: true,
+            compact: true,
+        }],
+        model_routes: vec![CodexModelRoute {
+            client_model: revision.to_string(),
+            upstream_model: format!("vendor-{revision}"),
+        }],
+        capabilities: CodexCapabilities {
+            responses: true,
+            compact: true,
+            models: true,
+            chat_completions: true,
+            alpha_search: false,
+            image_generation: false,
+            image_edit: false,
+            function_tools: true,
+            custom_tools: true,
+            tool_search: true,
+            reasoning: true,
+            chat_reasoning: asb_core::contracts::CodexChatReasoning::Unsupported,
+        },
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
         notes: None,
         website_url: None,
         usage_query: None,
-        official_quota_refresh_interval_minutes: None,
     }
 }
 
-fn crash_after_config_write(state: &LocalState, gateway: &GatewayController) -> ProviderRecord {
+fn crash_after_config_write(
+    state: &LocalState,
+    gateway: &GatewayController,
+) -> CodexProviderRecord {
     let record = state
         .configuration()
-        .create_provider(draft("after-model"))
+        .create_codex_provider(draft("after-model"))
         .unwrap();
     let target = state.target(AppKind::Codex).unwrap();
     fs::write(&target, BEFORE).unwrap();
-    fs::write(target.with_file_name("auth.json"), "account-owned-by-codex").unwrap();
-    let projection = plan::build_plan_for_profile(state, gateway, record.profile.clone()).unwrap();
+    fs::write(target.with_file_name("auth.json"), AUTH).unwrap();
+    let projection = plan::build_plan(state, gateway, &record.profile.id).unwrap();
     let preview = plan::preview_projection(state, &projection).unwrap();
     assert_ne!(
         preview.content_hash, preview.rendered_hash,
-        "official projection clears the old model override"
+        "third-party Codex projection replaces the selected model"
     );
     transaction::begin(
         state,
@@ -47,6 +86,7 @@ fn crash_after_config_write(state: &LocalState, gateway: &GatewayController) -> 
         Some(&record.profile.id),
         &preview.rendered_hash,
         true,
+        None,
     )
     .unwrap();
     let crashed = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -95,7 +135,7 @@ fn transaction_recovery_finishes_app_commit_once_without_touching_login() {
     let target = state.target(AppKind::Codex).unwrap();
     assert_eq!(
         fs::read_to_string(target.with_file_name("auth.json")).unwrap(),
-        "account-owned-by-codex"
+        AUTH
     );
     assert!(!state
         .root()
@@ -135,7 +175,7 @@ fn transaction_external_change_preserves_bytes_until_explicit_backup_recovery() 
         .is_none());
     assert_eq!(
         fs::read_to_string(target.with_file_name("auth.json")).unwrap(),
-        "account-owned-by-codex"
+        AUTH
     );
     transaction::recover(&state, &gateway).unwrap();
     gateway.shutdown();
@@ -152,7 +192,7 @@ fn transaction_recovery_does_not_adopt_a_newer_profile() {
     let confirmed = fs::read_to_string(&target).unwrap();
     state
         .configuration()
-        .update_provider(
+        .update_codex_provider(
             &record.profile.id,
             draft("external-model"),
             &record.file_hash,
@@ -176,26 +216,19 @@ fn pending_save_binds_the_confirmed_profile_revision_before_config_intent() {
     let state = LocalState::from_root(directory.path().join("state"));
     let record = state
         .configuration()
-        .create_provider(draft("before-model"))
+        .create_codex_provider(draft("before-model"))
         .unwrap();
-    let (app, original) = state
+    let original = state
         .configuration()
-        .load_provider_file(&record.profile.id)
+        .find_codex_provider_file(&record.profile.id)
         .unwrap();
     let candidate =
-        asb_core::ProviderProfile::from_draft(record.profile.id.clone(), draft("confirmed-model"));
-    profile_rollback::save(
-        &state,
-        app,
-        &original,
-        &candidate,
-        "before-hash",
-        "after-hash",
-    )
-    .unwrap();
+        draft("confirmed-model").into_file(record.profile.id.clone(), original.position);
+    profile_rollback::save_codex(&state, &original, &candidate, "before-hash", "after-hash")
+        .unwrap();
     let saved = state
         .configuration()
-        .update_provider(
+        .update_codex_provider(
             &record.profile.id,
             draft("confirmed-model"),
             &record.file_hash,
@@ -205,7 +238,7 @@ fn pending_save_binds_the_confirmed_profile_revision_before_config_intent() {
         .unwrap();
     let external = state
         .configuration()
-        .update_provider(
+        .update_codex_provider(
             &record.profile.id,
             draft("external-model"),
             &saved.file_hash,
@@ -221,7 +254,10 @@ fn pending_save_binds_the_confirmed_profile_revision_before_config_intent() {
     assert_eq!(
         state
             .configuration()
-            .find_provider_record(&record.profile.id)
+            .list_codex_providers()
+            .unwrap()
+            .into_iter()
+            .find(|item| item.profile.id == record.profile.id)
             .unwrap()
             .file_hash,
         external.file_hash
@@ -238,29 +274,29 @@ fn pending_save_does_not_repreview_external_client_changes() {
     fs::write(&target, BEFORE).unwrap();
     let record = state
         .configuration()
-        .create_provider(draft("before-model"))
+        .create_codex_provider(draft("before-model"))
         .unwrap();
-    let (app, original) = state
+    fs::write(target.with_file_name("auth.json"), AUTH).unwrap();
+    let original = state
         .configuration()
-        .load_provider_file(&record.profile.id)
+        .find_codex_provider_file(&record.profile.id)
         .unwrap();
     let candidate =
-        asb_core::ProviderProfile::from_draft(record.profile.id.clone(), draft("confirmed-model"));
-    let projection = plan::build_plan_for_profile(&state, &gateway, candidate.clone()).unwrap();
+        draft("confirmed-model").into_file(record.profile.id.clone(), original.position);
+    let projection = plan::build_codex_plan(&state, &gateway, candidate.clone()).unwrap();
     let confirmed = plan::preview_projection(&state, &projection).unwrap();
-    profile_rollback::save(
+    profile_rollback::save_codex(
         &state,
-        app,
         &original,
         &candidate,
         &confirmed.content_hash,
         &confirmed.rendered_hash,
     )
     .unwrap();
-    profile_rollback::validate_projection(&state, app, &confirmed).unwrap();
+    profile_rollback::validate_projection(&state, AppKind::Codex, &confirmed).unwrap();
     fs::write(&target, "host_setting = 'new'\n").unwrap();
     let reinterpreted = plan::preview_projection(&state, &projection).unwrap();
-    assert!(profile_rollback::validate_projection(&state, app, &reinterpreted).is_err());
+    assert!(profile_rollback::validate_projection(&state, AppKind::Codex, &reinterpreted).is_err());
     assert_eq!(
         fs::read_to_string(target).unwrap(),
         "host_setting = 'new'\n"

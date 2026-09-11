@@ -4,8 +4,8 @@
 //! store, the switch executor, and the frontend projection; it stays free
 //! of filesystem and network access.
 
-pub mod contracts;
 pub mod content_integrity;
+pub mod contracts;
 pub mod diagnostics;
 pub mod edit;
 pub mod mcp;
@@ -205,7 +205,9 @@ pub use contracts::{
     SecretValue, SkillDefinition, SkillDependency, SkillManifest, SourceRef, TargetOutcome,
     EXTENSIONS_SCHEMA_VERSION,
 };
-pub use diagnostics::{DiagnosticCode, DiagnosticRemediation, DiagnosticSubject, ExtensionDiagnostic};
+pub use diagnostics::{
+    DiagnosticCode, DiagnosticRemediation, DiagnosticSubject, ExtensionDiagnostic,
+};
 pub use edit::{apply_mcp_edit, mcp_edit_view, McpEditView, SecretSlot, SecretSlotView};
 pub use mcp::{
     apply_claude_project_disabled_members, apply_claude_project_private_server_patches,

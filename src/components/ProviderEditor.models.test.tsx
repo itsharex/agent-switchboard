@@ -7,50 +7,12 @@ import { ProviderEditor } from "../test/provider-editor";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
+async function selectResponses(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("combobox", { name: "API 格式" }));
+  await user.click(await screen.findByRole("option", { name: /Responses/ }));
+}
+
 describe("ProviderEditor.models", () => {
-  it("maps the 1M context checkbox to the fixed context-window value", async () => {
-    const user = userEvent.setup();
-    const onSave = vi.fn();
-    render(
-      <ProviderEditor
-        profile={null}
-        initialApp="codex"
-        busy={false}
-        officialTakenApps={[]}
-        userConfigModel={null}
-        onSave={onSave}
-        onCancel={() => {}}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: /配置运行参数/ }));
-    const contextWindow = await screen.findByRole("checkbox", { name: "启用 1M 上下文窗口" });
-    expect(contextWindow).not.toBeChecked();
-    expect(screen.queryByRole("spinbutton")).toBeNull();
-
-    await user.click(contextWindow);
-    expect(contextWindow).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
-    await user.type(screen.getByLabelText("名称"), "百万上下文网关");
-    await user.type(screen.getByLabelText("服务地址"), "https://gateway.example/v1");
-    await user.type(screen.getByLabelText("API 密钥"), "sk-test-codex");
-    await user.click(screen.getByRole("button", { name: "保存供应商" }));
-
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        modelOptions: { kind: "codex", contextWindow: 1_000_000 },
-      }),
-    );
-
-    onSave.mockClear();
-    await user.click(screen.getByRole("button", { name: /配置运行参数/ }));
-    await user.click(screen.getByRole("checkbox", { name: "启用 1M 上下文窗口" }));
-    expect(screen.getByRole("checkbox", { name: "启用 1M 上下文窗口" })).not.toBeChecked();
-    await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
-    await user.click(screen.getByRole("button", { name: "保存供应商" }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ modelOptions: null }));
-  });
-
   it("maps Claude Code 1M checkboxes to explicit semantic model state", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -251,7 +213,7 @@ describe("ProviderEditor.models", () => {
     render(
       <ProviderEditor
         profile={null}
-        initialApp="codex"
+        initialApp="claude"
         busy={false}
         officialTakenApps={[]}
         userConfigModel={null}
@@ -259,6 +221,7 @@ describe("ProviderEditor.models", () => {
         onCancel={() => {}}
       />,
     );
+    await selectResponses(user);
 
     await user.type(screen.getByLabelText("名称"), "本机网关");
     await user.type(screen.getByLabelText("服务地址"), "https://gateway.example/v1");
@@ -292,7 +255,7 @@ describe("ProviderEditor.models", () => {
     render(
       <ProviderEditor
         profile={null}
-        initialApp="codex"
+        initialApp="claude"
         busy={false}
         officialTakenApps={[]}
         userConfigModel={null}
@@ -300,6 +263,7 @@ describe("ProviderEditor.models", () => {
         onCancel={() => {}}
       />,
     );
+    await selectResponses(user);
 
     await user.type(screen.getByLabelText("服务地址"), "https://gateway.example/v1");
     await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
@@ -319,7 +283,7 @@ describe("ProviderEditor.models", () => {
     render(
       <ProviderEditor
         profile={null}
-        initialApp="codex"
+        initialApp="claude"
         busy={false}
         officialTakenApps={[]}
         userConfigModel={null}
@@ -327,6 +291,7 @@ describe("ProviderEditor.models", () => {
         onCancel={() => {}}
       />,
     );
+    await selectResponses(user);
 
     await user.type(screen.getByLabelText("名称"), "本机网关");
     await user.type(screen.getByLabelText("服务地址"), "https://gateway.example");

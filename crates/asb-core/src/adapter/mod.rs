@@ -157,13 +157,12 @@ pub fn route_state(app: AppKind, text: &str) -> crate::contracts::RouteState {
 
 /// Matches provider routing and credentials, independently of model and client
 /// settings. Official identity describes the selected route, not OAuth validity.
-pub fn matches_provider_identity(
-    current: &str,
-    plan: &SwitchPlan,
-) -> Result<bool, AdapterError> {
+pub fn matches_provider_identity(current: &str, plan: &SwitchPlan) -> Result<bool, AdapterError> {
     validate_syntax(plan.profile.app, current)?;
     let route = route_state(plan.profile.app, current);
-    if route.route_mode != plan.profile.route_mode || route.base_url.as_deref() != plan.client_base_url() {
+    if route.route_mode != plan.profile.route_mode
+        || route.base_url.as_deref() != plan.client_base_url()
+    {
         return Ok(false);
     }
     match plan.profile.app {
@@ -268,13 +267,13 @@ mod tests {
         let codex = "model = \"user-selected\"
 threads = 8
 model_provider = \"openai\"
-openai_base_url = \"http://127.0.0.1:47821/codex/fixture/v1\"
+openai_base_url = \"http://127.0.0.1:47821/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1\"
 ";
         let codex_rendered =
-            render_gateway_base_url(AppKind::Codex, codex, "http://127.0.0.1:47822/codex/fixture/v1").unwrap();
+            render_gateway_base_url(AppKind::Codex, codex, "http://127.0.0.1:47822/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1").unwrap();
         assert!(codex_rendered.contains("model = \"user-selected\""));
         assert!(codex_rendered.contains("threads = 8"));
-        assert!(codex_rendered.contains("47822/codex/fixture/v1"));
+        assert!(codex_rendered.contains("47822/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1"));
         assert!(!codex_rendered.contains("47821"));
         assert!(codex_rendered.contains("openai_base_url"));
         assert_eq!(

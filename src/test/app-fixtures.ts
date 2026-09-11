@@ -3,7 +3,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import type * as client from "../api/client";
-import type { ConfigWriteRecord, ConfigFileStatus, FilePreview, ProviderRecord, RuntimeLogEntry } from "../api/client";
+import type { CodexProviderRecord, ConfigWriteRecord, ConfigFileStatus, FilePreview, ProviderRecord, RuntimeLogEntry } from "../api/client";
 import { providerParameters, providerParametersCatalog } from "./provider-parameters";
 
 export const invokeMock = vi.mocked(invoke);
@@ -82,32 +82,132 @@ export const statuses: ConfigFileStatus[] = [
 export const profiles: ProviderRecord[] = [
   {
     profile: {
-      id: "codex-gateway",
-      app: "codex",
+      id: "claude-gateway",
+      app: "claude",
       routeMode: "custom",
       name: "备用网关",
-      model: "gpt-5.4",
-      baseUrl: "https://backup.internal/v1",
-      apiKey: "OPENAI_API_KEY",
-      upstreamProtocol: "responses",
-      responsesOptions: { requestMode: "standard" as const },
+      model: "claude-sonnet-4",
+      baseUrl: "https://backup.internal",
+      apiKey: "ANTHROPIC_AUTH_TOKEN",
+      upstreamProtocol: "anthropicMessages",
+      responsesOptions: null,
       maxOutputTokens: null,
-      parameters: providerParameters("codex"),
+      parameters: providerParameters("claude"),
       modelOptions: null,
       websiteUrl: null,
     },
-    fileHash: "provider-file-hash",
+    fileHash: "claude-provider-file-hash",
+  },
+];
+
+/** The Codex official-login record. It lives in the generic provider store
+ * beside Claude's profiles; Codex third-party profiles never do. */
+export const codexOfficialRecord: ProviderRecord = {
+  profile: {
+    id: "codex-official",
+    app: "codex",
+    routeMode: "official",
+    name: "Codex 官方登录",
+    model: null,
+    baseUrl: null,
+    apiKey: "",
+    upstreamProtocol: null,
+    responsesOptions: null,
+    maxOutputTokens: null,
+    parameters: providerParameters("codex"),
+    modelOptions: null,
+    websiteUrl: null,
+    officialQuotaRefreshIntervalMinutes: 30,
+  },
+  fileHash: "codex-official-file-hash",
+};
+
+/** Third-party Codex profiles have a dedicated schema. They are never read
+ * through the generic provider collection that remains owned by Claude. */
+export const codexProfiles: CodexProviderRecord[] = [
+  {
+    profile: {
+      id: "codex-gateway",
+      name: "备用网关",
+      endpoint: "https://backup.internal/v1",
+      apiKey: "OPENAI_API_KEY",
+      upstream: "responses",
+      requestMode: "standard",
+      defaultModel: "gpt-5.4",
+      catalog: [{
+        id: "gpt-5.4",
+        contextWindow: 128000,
+        maxOutputTokens: 16384,
+        functionTools: true,
+        customTools: true,
+        toolSearch: true,
+        reasoning: true,
+        defaultReasoningLevel: "medium",
+        supportedReasoningLevels: ["low", "medium", "high"],
+        images: false,
+        compact: true,
+      }],
+      modelRoutes: [{ clientModel: "gpt-5.4", upstreamModel: "gpt-5.4" }],
+      capabilities: {
+        responses: true,
+        compact: true,
+        models: true,
+        chatCompletions: false,
+        alphaSearch: false,
+        imageGeneration: false,
+        imageEdit: false,
+        functionTools: true,
+        customTools: true,
+        toolSearch: true,
+        reasoning: true,
+        chatReasoning: { kind: "unsupported" },
+      },
+    },
+    parameters: providerParameters("codex"),
+    notes: null,
+    websiteUrl: null,
+    usageQuery: null,
+    fileHash: "codex-provider-file-hash",
   },
 ];
 
 export const filePreview: FilePreview = {
   contentHash: "hash1",
   renderedHash: "rendered-hash1",
-  content: 'model = "gpt-5.4"\nthreads = 8\n',
+  content: 'env = { ANTHROPIC_BASE_URL = "https://backup.internal" }\nmodel = "claude-sonnet-4"\n',
+  preview: {
+    app: "claude",
+    target: "C:/Users/test/.claude/settings.json",
+    changes: [{ key: "model", kind: "set", before: "claude-3-7-sonnet", after: "claude-sonnet-4" }],
+    warnings: [],
+    backupDir: "C:/Users/test/AppData/Roaming/Agent Switchboard/state/backups",
+  },
+};
+
+export const codexFilePreview: FilePreview = {
+  contentHash: "codex-hash1",
+  renderedHash: "codex-rendered-hash1",
+  content: 'model = "gpt-5.4"\nmodel_provider = "openai"\nopenai_base_url = "<redacted>"\n',
   preview: {
     app: "codex",
     target: "C:/Users/test/.codex/config.toml",
-    changes: [{ key: "model", kind: "set", before: "gpt-5.3-codex", after: "gpt-5.4" }],
+    changes: [
+      { key: "model", kind: "set", before: "gpt-5.3-codex", after: "gpt-5.4" },
+      { key: "openai_base_url", kind: "set", before: null, after: "<redacted>" },
+    ],
+    warnings: [],
+    backupDir: "C:/Users/test/AppData/Roaming/Agent Switchboard/state/backups",
+  },
+};
+
+export const codexOfficialFilePreview: FilePreview = {
+  contentHash: "codex-official-hash1",
+  renderedHash: "codex-official-rendered-hash1",
+  content: 'model_provider = "openai"\n',
+  preview: {
+    app: "codex",
+    target: "C:/Users/test/.codex/config.toml",
+    changes: [{ key: "openai_base_url", kind: "remove", before: "<redacted>", after: null }],
     warnings: [],
     backupDir: "C:/Users/test/AppData/Roaming/Agent Switchboard/state/backups",
   },
@@ -160,7 +260,7 @@ export async function openDiagnostics(user: ReturnType<typeof userEvent.setup>, 
 
 export async function openProviderImport(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(screen.getByRole("navigation", { name: "主导航" })).getByRole("button", { name: "供应商" }));
-  await user.click(screen.getByRole("button", { name: "导入" }));
+  await user.click(await screen.findByRole("button", { name: /^(导入|从 CC Switch 导入)$/ }));
 }
 
 export const runtimeOverview = {
@@ -180,7 +280,9 @@ export function primeBackend(logEntries: RuntimeLogEntry[] = []) {
       case "runtime_overview":
         return Promise.resolve(runtimeOverview);
       case "list_profiles":
-        return Promise.resolve(profiles);
+        return Promise.resolve([...profiles, codexOfficialRecord]);
+      case "list_codex_profiles":
+        return Promise.resolve(codexProfiles);
       case "list_backups":
         return Promise.resolve([]);
       case "list_runtime_logs":
@@ -195,6 +297,26 @@ export function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         return Promise.resolve(["Microsoft YaHei", "Noto Sans SC"]);
       case "get_provider_parameters_catalog":
         return Promise.resolve(providerParametersCatalog(targetFrom(args)));
+      case "resolve_provider_endpoints":
+        return Promise.resolve({
+          requestUrl: "https://backup.internal/v1/responses",
+          modelsUrl: "https://backup.internal/v1/models",
+        });
+      case "gateway_status":
+        return Promise.resolve({
+          configuredPort: 51234,
+          listeningPort: 51234,
+          baseUrl: "http://127.0.0.1:51234",
+          status: "running",
+          failure: null,
+          repairReason: null,
+          blockedRecovery: null,
+        });
+      case "fetch_provider_models":
+        return Promise.resolve([
+          { id: "gpt-5.4", ownedBy: null },
+          { id: "gpt-5.4-mini", ownedBy: null },
+        ]);
       case "get_client_settings_editor":
         return Promise.resolve({
           app: targetFrom(args),
@@ -269,7 +391,14 @@ export function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         });
       }
       case "preview_switch":
-        return Promise.resolve(filePreview);
+        if ((args as { profileId?: string } | undefined)?.profileId === codexOfficialRecord.profile.id) {
+          return Promise.resolve(codexOfficialFilePreview);
+        }
+        return Promise.resolve(
+          (args as { profileId?: string } | undefined)?.profileId === codexProfiles[0].profile.id
+            ? codexFilePreview
+            : filePreview,
+        );
       case "execute_switch":
         return Promise.resolve({
           lock: { state: "free" },
@@ -287,16 +416,24 @@ export function primeBackend(logEntries: RuntimeLogEntry[] = []) {
             linkedBackupId: null,
             reason: "switch",
           },
-          preview: filePreview.preview,
+          preview: codexFilePreview.preview,
           recovery: { outcome: "not_needed" },
           finalHash: "hash-after",
         });
+      case "create_codex_profile":
+        return Promise.resolve(codexProfiles[0]);
+      case "prepare_codex_profile_save":
+        return Promise.resolve({ preparationId: "prepared-codex-save", kind: "saveAndApply", preview: codexFilePreview });
+      case "commit_codex_profile_save":
+        return Promise.resolve(codexProfiles[0]);
+      case "delete_codex_profile":
+        return Promise.resolve(undefined);
       case "prepare_profile_save":
         return Promise.resolve({ preparationId: "prepared-save", kind: "saveAndApply", preview: filePreview });
       case "commit_profile_save":
         return Promise.resolve(profiles[0]);
       case "discover_local":
-        return Promise.resolve({ codex: {}, claude: {}, importProposals: [] });
+        return Promise.resolve({ codex: {}, claude: {}, claudeImportProposals: [] });
       case "discover_cached":
         return Promise.resolve(null);
       case "window_is_maximized":
@@ -336,21 +473,41 @@ export const ccScan = {
       existing: false,
     },
     {
-      key: "codex:id-2",
+      key: "codex:id-4",
       app: "codex",
-      routeMode: "official",
-      name: "Codex 官方登录",
-      model: null,
-      baseUrl: null,
+      routeMode: "custom",
+      name: "Codex 中继",
+      model: "gpt-5-codex",
+      baseUrl: "https://relay.codex.example/v1",
       usageScriptImportable: false,
       usageScriptUpdatesExisting: false,
-      warnings: [],
+      warnings: ["未导入: meta.costMultiplier"],
       existing: false,
     },
   ],
   skipped: [
+    { key: "codex:id-2", appType: "codex", name: "Codex 官方登录", reason: "未找到第三方 Codex 地址；官方登录不是可导入的 Codex 供应商" },
     { key: "gemini:id-3", appType: "gemini", name: "双子", reason: "客户端 gemini 超出本应用支持范围" },
   ],
+};
+
+/** A completion seed as returned by `prepare_ccswitch_codex_seed` for the
+ * fixture row above. */
+export const codexSeed = {
+  name: "Codex 中继",
+  endpoint: "https://relay.codex.example/v1",
+  apiKey: "opaque-codex-credential",
+  upstream: "responses",
+  requestMode: "standard",
+  defaultModel: "gpt-5-codex",
+  catalog: [
+    { model: "gpt-5-codex", contextWindow: 272000, images: true, defaultReasoningLevel: "high", reasoningLevels: ["low", "medium", "high"] },
+  ],
+  parameters: providerParameters("codex"),
+  notes: "从 CC Switch 导入",
+  websiteUrl: null,
+  usageQuery: null,
+  warnings: ["未导入: meta.costMultiplier"],
 };
 
 export function primeUsageCollapseBackend(settings: typeof defaultSettings) {

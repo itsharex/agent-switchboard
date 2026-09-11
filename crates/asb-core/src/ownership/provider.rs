@@ -5,6 +5,7 @@ use crate::ownership::spec::{ProviderSettingSpec, SettingValueType};
 /// The built-in identity shared by official and gateway Codex routes.
 pub const CODEX_PROVIDER_ID: &str = "openai";
 pub const CODEX_PROVIDER_BASE_URL_KEY: &str = "openai_base_url";
+pub const CODEX_MODEL_CATALOG_KEY: &str = "model_catalog_json";
 /// Codex's server-side web-search mode. A cross-protocol route cannot carry
 /// this Responses-only server tool, so the Codex adapter derives its effective
 /// value from the selected route at render time.
@@ -25,6 +26,11 @@ pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
         app: AppKind::Codex,
         key: CODEX_PROVIDER_BASE_URL_KEY,
         value_type: SettingValueType::Secret,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_MODEL_CATALOG_KEY,
+        value_type: SettingValueType::String,
     },
     ProviderSettingSpec {
         app: AppKind::Codex,

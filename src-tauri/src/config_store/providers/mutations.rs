@@ -11,26 +11,25 @@ use std::fs;
 use uuid::Uuid;
 
 impl ConfigStore {
-    /// Every provider of both clients, in stored order (Codex first).
+    /// Every provider of the generic store: all Claude providers plus the
+    /// Codex official-login records, each group in stored order.
     pub fn list_providers(&self) -> Result<Vec<ProviderRecord>, ProfileStoreError> {
         let (codex, claude) = load_all(self)?;
-        let mut records = Vec::new();
+        let mut records = claude
+            .iter()
+            .map(|loaded| record_of(AppKind::Claude, loaded))
+            .collect::<Vec<_>>();
         records.extend(codex.iter().map(|loaded| record_of(AppKind::Codex, loaded)));
-        records.extend(
-            claude
-                .iter()
-                .map(|loaded| record_of(AppKind::Claude, loaded)),
-        );
         Ok(records)
     }
 
     fn locate(&self, id: &str) -> Result<(AppKind, LoadedProvider), String> {
         let (codex, claude) = load_all(self).map_err(|error| error.to_string())?;
-        if let Some(loaded) = codex.into_iter().find(|loaded| loaded.file.id == id) {
-            return Ok((AppKind::Codex, loaded));
-        }
         if let Some(loaded) = claude.into_iter().find(|loaded| loaded.file.id == id) {
             return Ok((AppKind::Claude, loaded));
+        }
+        if let Some(loaded) = codex.into_iter().find(|loaded| loaded.file.id == id) {
+            return Ok((AppKind::Codex, loaded));
         }
         Err("供应商不存在".to_string())
     }
@@ -66,6 +65,9 @@ impl ConfigStore {
     }
 
     pub fn create_provider(&self, draft: ProviderDraft) -> Result<ProviderRecord, String> {
+        if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
+            return Err("Codex 第三方供应商必须使用专用档案格式".to_string());
+        }
         draft.validate().map_err(|error| error.to_string())?;
         let (codex, claude) = load_all(self).map_err(|error| error.to_string())?;
         let existing = match draft.app {
@@ -96,6 +98,9 @@ impl ConfigStore {
         draft: ProviderDraft,
         expected_file_hash: &str,
     ) -> Result<ProviderRecord, String> {
+        if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
+            return Err("Codex 第三方供应商必须使用专用档案格式".to_string());
+        }
         draft.validate().map_err(|error| error.to_string())?;
         let (app, loaded) = self.locate(id)?;
         if app != draft.app {
@@ -142,9 +147,12 @@ impl ConfigStore {
         ordered_ids: &[String],
         expected_file_hashes: &BTreeMap<String, String>,
     ) -> Result<Vec<ProviderRecord>, String> {
-        let (codex, claude) = load_all(self).map_err(|error| error.to_string())?;
+        if app == AppKind::Codex {
+            return Err("Codex 供应商必须使用专用排序操作".to_string());
+        }
+        let (_, claude) = load_all(self).map_err(|error| error.to_string())?;
         let loaded = match app {
-            AppKind::Codex => codex,
+            AppKind::Codex => unreachable!("Codex uses dedicated provider storage"),
             AppKind::Claude => claude,
         };
         check_expected_files(&loaded, expected_file_hashes)?;
@@ -166,7 +174,7 @@ impl ConfigStore {
         check_expected_files(&loaded_after, expected_file_hashes)?;
         let current_files: Vec<ProviderFile> =
             loaded_after.into_iter().map(|loaded| loaded.file).collect();
-        if snapshot.providers[&app] != current_files {
+        if snapshot.claude_providers != current_files {
             return Err("供应商文件已被外部修改，请重新读取后再排序".to_string());
         }
         for id in ordered_ids {
@@ -177,10 +185,7 @@ impl ConfigStore {
         // A reorder is one logical mutation. Rebuild it through the same
         // verified directory replacement used by restore, so a later file
         // failure cannot leave a subset of positions persisted.
-        let files = snapshot
-            .providers
-            .get_mut(&app)
-            .expect("complete snapshot always has both clients");
+        let files = &mut snapshot.claude_providers;
         for (order, id) in ordered_ids.iter().enumerate() {
             let file = files
                 .iter_mut()
@@ -197,10 +202,13 @@ impl ConfigStore {
     /// no-op, a routing-identical one gains the missing usage query, and
     /// anything else creates a new file.
     pub fn import_provider(&self, draft: ProviderDraft) -> Result<ProviderRecord, String> {
+        if draft.app == AppKind::Codex {
+            return Err("Codex 供应商必须使用专用档案格式".to_string());
+        }
         draft.validate().map_err(|error| error.to_string())?;
-        let (codex, claude) = load_all(self).map_err(|error| error.to_string())?;
+        let (_, claude) = load_all(self).map_err(|error| error.to_string())?;
         let existing = match draft.app {
-            AppKind::Codex => codex,
+            AppKind::Codex => unreachable!("Codex uses dedicated provider storage"),
             AppKind::Claude => claude,
         };
         if let Some(loaded) = existing
@@ -230,6 +238,9 @@ impl ConfigStore {
     /// Whether an exactly equal provider already exists (scan-side view of
     /// the import dedup rule).
     pub fn provider_exists(&self, draft: &ProviderDraft) -> bool {
+        if draft.app == AppKind::Codex {
+            return false;
+        }
         match load_all(self) {
             Ok((codex, claude)) => {
                 let existing = match draft.app {
@@ -247,6 +258,9 @@ impl ConfigStore {
     /// Whether a selected source import will enrich its otherwise matching
     /// local provider with a currently absent usage query.
     pub fn provider_will_receive_usage_query(&self, draft: &ProviderDraft) -> bool {
+        if draft.app == AppKind::Codex {
+            return false;
+        }
         if draft.usage_query.is_none() {
             return false;
         }

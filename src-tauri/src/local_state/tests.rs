@@ -335,7 +335,6 @@ fn discovery_cache_persists_display_facts_and_never_credentials() {
     let report = asb_core::discovery::discover(
         &asb_core::discovery::DiscoveryPaths {
             codex: "missing-codex.toml".into(),
-            codex_auth: "missing-auth.json".into(),
             claude: "claude.json".into(),
         },
         |path| {
@@ -350,9 +349,9 @@ fn discovery_cache_persists_display_facts_and_never_credentials() {
         },
     );
     assert!(!report.codex.exists);
-    assert_eq!(report.import_proposals.len(), 1);
+    assert_eq!(report.claude_import_proposals.len(), 1);
     assert_eq!(
-        report.import_proposals[0].draft.api_key,
+        report.claude_import_proposals[0].draft.api_key,
         "TEST_CACHE_REDACTED_KEY"
     );
 
@@ -376,7 +375,6 @@ fn clear_discovery_cache_removes_the_stored_snapshot() {
     let report = asb_core::discovery::discover(
         &asb_core::discovery::DiscoveryPaths {
             codex: "c".into(),
-            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |_| Ok(Some(String::new())),

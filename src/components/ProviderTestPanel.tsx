@@ -30,7 +30,7 @@ export function ProviderTestPanel({ id, name, url, target, onClose }: Props) {
   const [mode, setMode] = useState<"connectivity" | "request">("connectivity");
   return <section id={id} className="asb-provider-tests" aria-label={`${name} 供应商测试`}>
     <header className="asb-provider-tests-heading">
-      <h3>供应商测试</h3>
+      <h3 className="asb-section-title">供应商测试</h3>
       <Button variant="icon" aria-label="收起供应商测试" onClick={onClose}><CloseIcon /></Button>
     </header>
     <div className="asb-segments" role="radiogroup" aria-label="测试类型">

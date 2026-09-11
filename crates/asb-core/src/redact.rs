@@ -62,10 +62,7 @@ mod tests {
 
     #[test]
     fn ordinary_values_render_verbatim() {
-        assert_eq!(
-            redact("hide_agent_reasoning", "true"),
-            "true"
-        );
+        assert_eq!(redact("hide_agent_reasoning", "true"), "true");
         assert_eq!(redact("model", "gpt-5"), "gpt-5");
         assert_eq!(
             redact("model", "claude-sonnet-4-20250514"),

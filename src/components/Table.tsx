@@ -26,8 +26,9 @@ interface Props<T> {
 
 /**
  * The single data-table renderer: one markup and style contract for every
- * tabular module. Scroll ownership stays with each module's own region;
- * visual values come from styles/tokens.css via the .asb-table rules.
+ * tabular module. Headers are in normal flow by default; a module that owns
+ * the table's scroll region may opt into sticky headers in its own stylesheet.
+ * Visual values come from styles/tokens.css via the .asb-table rules.
  */
 export function Table<T>({ columns, rows, rowKey, ariaLabel, className, onRowClick }: Props<T>) {
   return (

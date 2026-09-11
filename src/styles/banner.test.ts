@@ -17,6 +17,6 @@ describe("banner pointer-events contract", () => {
     const stackBlock = baseCss.match(/\.asb-banner-stack \{[^}]+\}/)?.[0] ?? "";
     expect(stackBlock).toContain("pointer-events: none");
 
-    expect(baseCss).toMatch(/\.asb-banner > button \{[^}]*pointer-events: auto;/);
+    expect(baseCss).toMatch(/\.asb-banner > \.asb-btn \{[^}]*pointer-events: auto;/);
   });
 });

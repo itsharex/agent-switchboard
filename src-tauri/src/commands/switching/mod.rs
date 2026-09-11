@@ -2,6 +2,7 @@
 //! executor transaction and records an audit entry so it can be undone.
 
 mod backups;
+mod codex_profile_save;
 mod plan;
 mod profile_rollback;
 mod profile_save;
@@ -10,8 +11,7 @@ mod transaction;
 #[cfg(test)]
 mod transaction_tests;
 
-#[cfg(test)]
-pub(crate) use profile_rollback::save as save_profile_preimage;
+pub(crate) use codex_profile_save::CodexProfileSavePreparations;
 pub use profile_save::ProfileSavePreparation;
 pub(crate) use profile_save::ProfileSavePreparations;
 pub(crate) use recovery::{ensure_profile_save_recovered, recover_pending_profile_save};
@@ -29,6 +29,10 @@ use asb_core::contracts::{
 use asb_switch::io::{FsIo, SwitchIo};
 use asb_switch::{sha256_hex, RestoreOutcome, SwitchOutcome};
 use backups::{find_backup, local_backups, run_restore};
+use codex_profile_save::{
+    commit as commit_codex_profile_save_data, prepare_data as prepare_codex_profile_save_data,
+    PreparedCodexProfileSave,
+};
 use plan::{build_plan, execute_projection, preview_projection};
 use profile_save::{
     commit_prepared_profile_save, invalidate_provider_readings, prepare_profile_save_data,
@@ -150,6 +154,95 @@ pub async fn preview_switch(
         preview_projection(&state, &projection)
     })
     .await
+}
+
+#[tauri::command]
+pub async fn prepare_codex_profile_save(
+    app: AppHandle,
+    profile_id: String,
+    draft: asb_core::contracts::CodexProviderDraft,
+    expected_file_hash: String,
+) -> Result<ProfileSavePreparation, CommandError> {
+    let state = state(&app)?;
+    let gateway = app
+        .state::<crate::gateway::GatewayController>()
+        .inner()
+        .clone();
+    let preparations = app
+        .try_state::<CodexProfileSavePreparations>()
+        .ok_or_else(|| {
+            CommandError::new(
+                "codex-profile-save-unavailable",
+                "Codex 供应商保存准备状态尚未初始化",
+            )
+        })?
+        .inner()
+        .clone();
+    blocking(move || {
+        let (kind, preview) = prepare_codex_profile_save_data(
+            &state,
+            &gateway,
+            &profile_id,
+            &draft,
+            &expected_file_hash,
+        )?;
+        let preparation_id = preparations.issue(PreparedCodexProfileSave {
+            created_at: Instant::now(),
+            profile_id,
+            expected_file_hash,
+            draft,
+            kind,
+            preview: preview.clone(),
+        })?;
+        Ok(ProfileSavePreparation {
+            preparation_id,
+            kind,
+            preview,
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn commit_codex_profile_save(
+    app: AppHandle,
+    preparation_id: String,
+    confirm_write: bool,
+) -> Result<asb_core::contracts::CodexProviderRecord, CommandError> {
+    let preparations = app
+        .try_state::<CodexProfileSavePreparations>()
+        .ok_or_else(|| {
+            CommandError::new(
+                "codex-profile-save-unavailable",
+                "Codex 供应商保存准备状态尚未初始化",
+            )
+        })?
+        .inner()
+        .clone();
+    let prepared = preparations.take(&preparation_id)?;
+    let refresh_app = app.clone();
+    let result = observe(RuntimeLogAction::ProfileUpdated, async move {
+        let state = state(&app)?;
+        let gateway = app
+            .state::<crate::gateway::GatewayController>()
+            .inner()
+            .clone();
+        blocking(move || {
+            let _commit_guard = preparations.lock_commit()?;
+            let write_gate = write_gate(&app)?;
+            let _write_gate = write_gate
+                .lock()
+                .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
+            ensure_profile_save_recovered(&app)?;
+            commit_codex_profile_save_data(&state, &gateway, &prepared, confirm_write)
+        })
+        .await
+    })
+    .await;
+    if let Ok(record) = &result {
+        invalidate_provider_readings(&refresh_app, &record.profile.id);
+    }
+    result
 }
 
 fn write_gate(app: &AppHandle) -> Result<ConfigWriteGate, CommandError> {

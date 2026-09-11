@@ -1,6 +1,17 @@
 import { render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Table, type TableColumn } from "./Table";
+
+const tablesCss = readFileSync(
+  resolve(process.cwd(), "src/styles/base/tables-backups.css"),
+  "utf8",
+);
+const logsAndUsageCss = readFileSync(
+  resolve(process.cwd(), "src/styles/base/logs-and-usage.css"),
+  "utf8",
+);
 
 interface Row {
   id: string;
@@ -73,5 +84,20 @@ describe("Table", () => {
       "asb-runtime-log-table",
     );
     expect(screen.getAllByRole("row")).toHaveLength(1);
+  });
+
+  it("only fixes headers in modules that own a table scroll region", () => {
+    const defaultHeaderRule = tablesCss.match(/\.asb-table th\s*\{([^}]*)\}/)?.[1] ?? "";
+
+    expect(defaultHeaderRule).not.toMatch(/position:\s*sticky/);
+    expect(tablesCss).toMatch(
+      /\.asb-backups\s+\.asb-table th\s*\{[^}]*position:\s*sticky/,
+    );
+    expect(logsAndUsageCss).toMatch(
+      /\.asb-runtime-log-table-wrap\s+\.asb-table th\s*\{[^}]*position:\s*sticky/,
+    );
+    expect(logsAndUsageCss).toMatch(
+      /\.asb-model-usage-table-wrap\s+\.asb-table th\s*\{[^}]*position:\s*sticky/,
+    );
   });
 });

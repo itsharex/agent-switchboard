@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   discoverCached,
   discoverLocal,
-  importDiscoveredProfile,
+  importDiscoveredClaudeProfile,
   type AppKind,
   type CommandError,
   type DiscoveryReport,
-  type ProviderRecord,
 } from "../api/client";
 import { toast } from "../components/use-toast";
+import type { ProviderInventory } from "./useConfigSnapshot";
 
 interface DiscoveryDeps {
   busy: boolean;
@@ -16,7 +16,7 @@ interface DiscoveryDeps {
   clearError: () => void;
   setBusy: (busy: boolean) => void;
   invalidateCandidates: () => void;
-  refresh: () => Promise<ProviderRecord[] | undefined>;
+  refresh: () => Promise<ProviderInventory | undefined>;
   selectProfile: (profileId: string) => Promise<void> | void;
   setAppFilter: (app: AppKind) => void;
   setPage: (page: "供应商") => void;
@@ -86,13 +86,13 @@ export function useDiscovery({
   }, [busy, clearError, onError, setBusy]);
 
   const runImport = useCallback(
-    async (app: AppKind) => {
+    async () => {
       if (busy) return false;
       invalidateCandidates();
       setBusy(true);
       clearError();
       try {
-        const record = await importDiscoveredProfile(app);
+        const record = await importDiscoveredClaudeProfile();
         setDiscovery(null);
         toast({ kind: "success", title: `已导入供应商「${record.profile.name}」` });
         const refreshed = await refresh();

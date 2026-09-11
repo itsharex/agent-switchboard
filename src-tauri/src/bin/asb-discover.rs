@@ -47,5 +47,8 @@ fn main() {
             }
         }
     }
-    println!("可导入配置数：{}", report.import_proposals.len());
+    println!(
+        "可导入 Claude 配置数：{}",
+        report.claude_import_proposals.len()
+    );
 }

@@ -132,26 +132,45 @@ fn route_candidates(
     local: &LocalState,
     app: AppKind,
 ) -> Result<Vec<RouteCandidate>, String> {
-    local
-        .configuration()
-        .list_providers()
-        .map_err(|_| "无法读取供应商配置，已取消本次修改".to_string())?
-        .into_iter()
-        .filter_map(|record| {
-            let profile = record.profile;
-            (profile.app == app && profile.route_mode == RouteMode::Custom && !is_direct(&profile))
-                .then_some(profile)
-        })
-        .map(|profile| {
-            let profile_name = profile.name.clone();
-            controller
-                .route_for_profile(&profile)
-                .map(|route| RouteCandidate {
-                    route,
-                    profile_name,
-                })
-        })
-        .collect()
+    match app {
+        AppKind::Codex => local
+            .configuration()
+            .list_codex_providers()
+            .map_err(|_| "无法读取 Codex 供应商配置，已取消本次修改".to_string())?
+            .into_iter()
+            .map(|record| {
+                let name = record.profile.name;
+                local
+                    .configuration()
+                    .find_codex_provider_file(&record.profile.id)
+                    .map_err(|error| error.to_string())
+                    .and_then(|file| controller.route_for_codex_file(&file))
+                    .map(|route| RouteCandidate {
+                        route,
+                        profile_name: name,
+                    })
+            })
+            .collect(),
+        AppKind::Claude => local
+            .configuration()
+            .list_providers()
+            .map_err(|_| "无法读取供应商配置，已取消本次修改".to_string())?
+            .into_iter()
+            .filter_map(|record| {
+                let profile = record.profile;
+                (profile.route_mode == RouteMode::Custom && !is_direct(&profile)).then_some(profile)
+            })
+            .map(|profile| {
+                let profile_name = profile.name.clone();
+                controller
+                    .route_for_profile(&profile)
+                    .map(|route| RouteCandidate {
+                        route,
+                        profile_name,
+                    })
+            })
+            .collect(),
+    }
 }
 
 fn read_optional_text(

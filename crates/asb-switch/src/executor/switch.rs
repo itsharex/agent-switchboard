@@ -167,7 +167,9 @@ fn plan_candidate(
     backup_dir: &str,
     expected_rendered_hash: &str,
 ) -> Result<(SwitchPreview, String), SwitchError> {
-    let (preview, rendered) = super::upgrade::candidate(current, plan, backup_dir)?;
+    let preview =
+        adapter::preview(current, plan, backup_dir).map_err(super::preview::plan_rejected)?;
+    let rendered = adapter::render(current, plan).map_err(super::preview::plan_rejected)?;
     if sha256_hex(&rendered) != expected_rendered_hash {
         return Err(SwitchError::PlanChanged);
     }

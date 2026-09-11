@@ -20,7 +20,6 @@
 
 .asb-provider-tests-heading,
 .asb-request-footer { justify-content: space-between; }
-.asb-provider-tests-heading h3 { margin: 0; font: var(--asb-text-body); font-weight: 600; }
 .asb-request-panel, .asb-connectivity-test { display: grid; gap: var(--asb-space-3); min-width: 0; }
 .asb-test-address { margin: 0; font: var(--asb-text-code); overflow-wrap: anywhere; }
 .asb-provider-tests > .asb-segments { justify-self: start; }
@@ -45,20 +44,24 @@
 
 .asb-request-receipt {
   min-width: 0;
-  min-height: 210px;
+  --asb-receipt-min-height: 210px;
+  min-height: var(--asb-receipt-min-height);
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
   overflow-wrap: anywhere;
 }
 
-.asb-request-receipt h4 { margin: 0 0 var(--asb-space-3); font: var(--asb-text-label); font-weight: 600; }
+/* The receipt heading's step comes from .asb-section-title; this surface owns
+   only its spacing. */
+.asb-request-receipt h4 { margin: 0 0 var(--asb-space-3); }
 .asb-request-receipt svg { flex: none; }
 .asb-request-receipt p { color: var(--asb-text-muted); line-height: 1.6; }
 .asb-request-receipt[data-phase="success"] h4 svg { color: var(--asb-safe); }
 .asb-request-receipt[data-phase="failure"] h4 { color: var(--asb-danger); }
 .asb-request-receipt blockquote {
-  max-height: 240px;
+  --asb-receipt-block-max-height: 240px;
+  max-height: var(--asb-receipt-block-max-height);
   margin: var(--asb-space-4) 0;
   overflow: auto;
   white-space: pre-wrap;
@@ -75,7 +78,8 @@
   cursor: pointer;
 }
 .asb-request-diagnostic pre {
-  max-height: 240px;
+  --asb-diagnostic-block-max-height: 240px;
+  max-height: var(--asb-diagnostic-block-max-height);
   margin: var(--asb-space-1) 0 0;
   padding: var(--asb-space-2);
   overflow: auto;

@@ -124,7 +124,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
     <section className="asb-ext-detail" aria-label={`Skill 编辑 ${item.name}`}>
       <div className="asb-ext-detail-main">
         <header className="asb-ext-detail-head">
-          <h3>编辑 Skill：{item.name}</h3>
+          <h3 className="asb-section-title">编辑 Skill：{item.name}</h3>
           <Button variant="secondary" onClick={handlers.onClose}>
             关闭编辑器
           </Button>
@@ -150,7 +150,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
               每次保存生成新的不可变版本，旧版本可随时恢复。
             </p>
             <div className="asb-ext-section">
-              <h4>文件</h4>
+              <h4 className="asb-section-title">文件</h4>
               <ul className="asb-ext-binding-list">
                 {allPaths.map((path) => {
                   const stored = editor.files.find((file) => file.relativePath === path);
@@ -205,7 +205,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
         )}
 
         <div className="asb-ext-section">
-          <h4>版本历史</h4>
+          <h4 className="asb-section-title">版本历史</h4>
           <Button variant="secondary" disabled={busy} onClick={reloadVersions}>
             加载版本列表
           </Button>
@@ -235,7 +235,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
         </div>
 
         <div className="asb-ext-section">
-          <h4>依赖关联</h4>
+          <h4 className="asb-section-title">依赖关联</h4>
           <p className="asb-scope-note">
             依赖指向库内 MCP 定义；部署该 Skill 时可在同一预览中选择是否一并部署。
           </p>

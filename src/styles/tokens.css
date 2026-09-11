@@ -40,10 +40,9 @@
   --asb-diff-remove-bg: rgba(215, 0, 21, 0.08);
   --asb-diff-add-bg: rgba(30, 142, 62, 0.1);
 
-  /* Live rows keep a quiet tinted lift; their status is conveyed by the
-     accompanying text badge rather than a colored perimeter. */
-  --asb-live-shadow: 0 8px 24px rgba(10, 132, 255, 0.2),
-    0 1px 2px rgba(10, 132, 255, 0.1);
+  /* Provider-list emphasis uses one solid selected surface and a thin
+     perimeter, keeping the row readable at a glance. */
+  --asb-provider-row-highlight: var(--asb-row-selected);
   --asb-gradient-button: linear-gradient(
     88deg,
     #52e1ff -15.8%,
@@ -56,22 +55,6 @@
   --asb-gradient-button-glow-hover: inset 0 0 16px 0 #ffffff,
     inset 0 0 14px 0 #80b4ff;
 
-  /* Premium action gradient — carbon-black body with a restrained violet
-     energy zone on the right (user-directed Frosted Relay replica, 2026-09-03).
-     Fixed across themes like the primary-button gradient above; the white
-     inset highlight is the only glow, replacing any drop shadow. */
-  --asb-gradient-premium-button: linear-gradient(
-    108deg,
-    #1f1f23 0%,
-    #1f1f23 66%,
-    #24212d 74%,
-    #312370 84%,
-    #3d2a8c 100%
-  );
-  --asb-gradient-premium-button-glow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --asb-gradient-premium-button-glow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --asb-premium-button-hover-brightness: 1.06;
-
   /* Typography. The user-selected interface font leads both text stacks; the
      fallback here is the bundled default (see main.tsx @font-face imports).
      useAppSettings overrides --asb-font-user at runtime. */
@@ -80,28 +63,52 @@
     sans-serif;
   --asb-font-ui: var(--asb-font-user), "Segoe UI Variable", "MiSans", system-ui, sans-serif;
   --asb-font-code: "Maple Mono", "Cascadia Mono", ui-monospace, monospace;
-  --asb-text-title: 600 17px/1.3 var(--asb-font-display);
+
+  /* Type ramp — five text steps, closed set (DESIGN.md §5). Hierarchy is
+     expressed by step + weight + muted color only; adding a sixth size is a
+     design change, not a component decision (user directive 2026-09-11).
+     Every step is a `font` shorthand so a consumer cannot inherit a stray
+     size or line-height from its container. */
+  --asb-text-title: 600 18px/1.25 var(--asb-font-display); /* page title h2 — one per page */
+  --asb-text-section: 600 15px/1.4 var(--asb-font-display); /* module heading h3 — .asb-section-title */
+  --asb-text-body: 400 15px/1.55 var(--asb-font-ui); /* body copy, values */
+  --asb-text-label: 400 13px/1.4 var(--asb-font-ui); /* field labels, row metadata */
+  --asb-text-caption: 400 12px/1.4 var(--asb-font-ui); /* counts, timestamps, source notes */
+  --asb-text-code: 400 13px/1.6 var(--asb-font-code); /* TOML/JSON/paths — a family, not a step */
+
+  /* The one sanctioned display metric: a single large number (usage share,
+     reset answer). It is not a text step — never used for copy, never a
+     heading, never a label. */
   --asb-text-signal: 700 72px/0.95 var(--asb-font-display);
-  --asb-text-body: 400 15px/1.55 var(--asb-font-ui);
-  --asb-text-label: 400 13px/1.4 var(--asb-font-ui);
-  --asb-text-code: 400 13px/1.6 var(--asb-font-code);
+
+  /* Every number that can be compared down a column carries tabular figures
+     and proportional-agnostic spacing. Applied by .asb-num, never per value. */
+  --asb-num-font-variant: tabular-nums;
 
   /* Shape */
-  --asb-radius-window: 28px;
-  --asb-radius-panel: 22px;
-  --asb-radius-control: 14px;
-  --asb-radius-action: 12px;
+  --asb-radius-window: 20px;
+  --asb-radius-panel: 16px;
+  --asb-radius-control: 10px;
+  --asb-radius-action: 8px;
   --asb-radius-check: 5px;
   --asb-radius-pill: 999px;
+  /* Concentric inner radii: a child nested inside a 1px-bordered rail keeps
+     its curve parallel to the parent's instead of re-deriving an offset. */
+  --asb-radius-control-inner: 6px;
+  --asb-radius-action-inner: 5px;
 
   /* Scrollbar — ink-line bar (DESIGN.md §6): transparent track, slim ink
      pill thumb that deepens on hover/drag, never a second accent color */
   --asb-scrollbar-gutter: 10px;
+  --asb-scrollbar-thumb-min: 32px;
   --asb-scrollbar-thumb: rgba(20, 22, 27, 0.26);
   --asb-scrollbar-thumb-hover: rgba(20, 22, 27, 0.44);
   --asb-scrollbar-thumb-active: rgba(20, 22, 27, 0.62);
 
-  /* Spacing */
+  /* Spacing — the 8pt rhythm. Structure uses 8/12/16/24/32/48; the atom is
+     4px; the hairline is the single sub-unit step and exists only for the
+     tight internals of a segmented rail or chip (DESIGN.md §5). */
+  --asb-space-hairline: 2px;
   --asb-space-unit: 4px;
   --asb-space-1: 8px;
   --asb-space-2: 12px;
@@ -109,6 +116,9 @@
   --asb-space-4: 24px;
   --asb-space-5: 32px;
   --asb-space-6: 48px;
+  /* The inset that makes a compact child sit concentric inside a
+     1px-bordered rail: the atom minus the border. */
+  --asb-space-concentric: calc(var(--asb-space-unit) - 1px);
 
   /* Ambient field lights. Soft stops are painted directly: background layers
      never sample or blur the pixels behind them. */
@@ -132,43 +142,11 @@
   --asb-gradient-energy: linear-gradient(96deg, #30d158 0%, #0a84ff 50%, #8b7cff 100%);
   --asb-slider-thumb-bg: #ffffff;
 
-  /* Focus */
-  --asb-focus-ring: 0 0 0 2px var(--asb-canvas), 0 0 0 4px var(--asb-action);
-
-  /* Route card — model-service-card treatment replicated from the
-     Frosted Relay reference (user-directed 2026-08-27). Enabled cards carry a
-     client-identity flow with a matching bottom wash — Codex blue→light-blue,
-     Claude purple→lavender — sharing the warm-peach tail (user-directed
-     2026-09-03); idle cards stay calm and near-solid. This is the ONLY
-     sanctioned gradient surface (DESIGN.md §4). */
-  --asb-route-active-gradient-codex:
-    linear-gradient(180deg, rgba(49, 108, 237, 0) 42%, rgba(49, 108, 237, 0.86) 100%),
-    linear-gradient(100deg, #477ff5 0%, #78a0f4 54%, #f8c09c 100%);
-  --asb-route-active-gradient-claude:
-    linear-gradient(180deg, rgba(112, 84, 238, 0) 42%, rgba(112, 84, 238, 0.86) 100%),
-    linear-gradient(100deg, #8b7cff 0%, #ab97ff 54%, #f8c09c 100%);
+  /* Route cards use solid, inspectable surfaces. Client identity is carried
+     by the active perimeter and label color. */
   --asb-route-idle-bg: #f8f9fc;
-  /* Starlight matrix particle tones (RGB triplets), consumed by
-     MatrixStarlightCanvas. Palettes are scoped by client: "cool" white-blue
-     owns the Codex route card and "violet" lavender owns the Claude route
-     card. Each tone owns its corner glow (Frosted Relay recommendation-card
-     replica). */
-  --asb-starlight-cool-base-rgb: 239 248 255;
-  --asb-starlight-cool-flare-rgb: 255 255 255;
-  --asb-starlight-violet-base-rgb: 244 241 255;
-  --asb-starlight-violet-flare-rgb: 198 183 255;
-  --asb-starlight-cool-glow: radial-gradient(
-    ellipse 34% 64% at 92% 86%,
-    rgba(91, 151, 225, 0.18) 0%,
-    transparent 68%
-  );
-  --asb-starlight-violet-glow: radial-gradient(
-    ellipse 34% 64% at 92% 86%,
-    rgba(139, 124, 255, 0.2) 0%,
-    transparent 68%
-  );
   --asb-route-inner-bg: #edf1f8;
-  --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --asb-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
 
   /* Usage charts keep the same calm, inspectable material as data tables.
      Series tones are supplementary: every chart also renders text labels and
@@ -177,8 +155,45 @@
   --asb-chart-ratio-track-width: 56px;
   --asb-chart-ratio-track-height: 4px;
 
-  /* Layout */
-  --asb-touch-target: 40px;
+  /* Layout — control heights, a closed set of three tiers (DESIGN.md §10).
+     Standard 40px is the minimum interactive target; compact 32px is for
+     rails and inline controls that live inside a 40px row; micro 28px is a
+     decorative glyph button that must still project a 40px hit area. No
+     component may pick a fourth height. */
+  --asb-control-height: 40px;
+  --asb-control-height-compact: calc(var(--asb-control-height) - var(--asb-space-1));
+  --asb-control-height-micro: calc(var(--asb-control-height) - var(--asb-space-2));
+  --asb-touch-target: var(--asb-control-height);
+  --asb-button-min-width: 72px;
+  --asb-tooltip-max-width: 16rem;
+  --asb-tooltip-padding-inline: 10px;
+
+  /* Layout — container geometry. Dialog widths are the Apple three-tier
+     skeleton; every modal in the app is one of these three. */
+  --asb-dialog-width-narrow: 440px;
+  --asb-dialog-width-standard: 620px;
+  --asb-dialog-width-wide: 1000px;
+  --asb-dialog-viewport-max: 90dvh;
+  --asb-detail-aside-width: 240px;
+  --asb-fact-label-width: 6em;
+  --asb-menu-min-width: 190px;
+  --asb-select-min-width: 108px;
+  --asb-row-min-height: calc(var(--asb-space-6) + var(--asb-space-4));
+  --asb-row-min-height-compact: 44px;
+  /* The window-control / dense-row square: one number, because a title-bar
+     button and a dense list row must agree on their height. */
+  --asb-square-control-size: 44px;
+
+  /* Layout — the closed set of icon and intrinsic-glyph sizes. An icon is
+     sized by one of these tokens; a new icon size is a new token here, never
+     a literal in a component (DESIGN.md §5). */
+  --asb-icon-size-xs: 14px;
+  --asb-icon-size-sm: 16px;
+  --asb-icon-size-md: 18px;
+  --asb-icon-size-lg: 20px;
+  --asb-icon-size-xl: 24px;
+  --asb-icon-size-2xl: 32px;
+  --asb-icon-size-display: 56px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -205,8 +220,7 @@
     --asb-diff-add-text: #4cd964;
     --asb-diff-remove-bg: rgba(255, 69, 58, 0.16);
     --asb-diff-add-bg: rgba(48, 209, 88, 0.14);
-    --asb-live-shadow: 0 8px 24px rgba(10, 132, 255, 0.32),
-      0 1px 2px rgba(0, 0, 0, 0.24);
+    --asb-provider-row-highlight: var(--asb-row-selected);
     --asb-scrollbar-thumb: rgba(237, 240, 247, 0.3);
     --asb-scrollbar-thumb-hover: rgba(237, 240, 247, 0.48);
     --asb-scrollbar-thumb-active: rgba(237, 240, 247, 0.66);
@@ -214,7 +228,7 @@
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
     --asb-route-idle-bg: #071725;
     --asb-route-inner-bg: #0d2133;
-    --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
+    --asb-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
   }
 }
 
@@ -243,8 +257,7 @@
     --asb-diff-add-text: #4cd964;
     --asb-diff-remove-bg: rgba(255, 69, 58, 0.16);
     --asb-diff-add-bg: rgba(48, 209, 88, 0.14);
-    --asb-live-shadow: 0 8px 24px rgba(10, 132, 255, 0.32),
-      0 1px 2px rgba(0, 0, 0, 0.24);
+    --asb-provider-row-highlight: var(--asb-row-selected);
     --asb-scrollbar-thumb: rgba(237, 240, 247, 0.3);
     --asb-scrollbar-thumb-hover: rgba(237, 240, 247, 0.48);
     --asb-scrollbar-thumb-active: rgba(237, 240, 247, 0.66);
@@ -252,7 +265,7 @@
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
     --asb-route-idle-bg: #071725;
     --asb-route-inner-bg: #0d2133;
-    --asb-route-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
+    --asb-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -80,7 +80,7 @@ describe("LogsPage", () => {
     renderLogsPage();
 
     await screen.findByText("已切换配置");
-    await user.click(screen.getByRole("button", { name: "警告" }));
+    await user.click(screen.getByRole("radio", { name: "警告" }));
     expect(screen.queryByText("应用已启动")).not.toBeInTheDocument();
     expect(screen.queryByText("已切换配置")).not.toBeInTheDocument();
     expect(screen.getByText("已重置供应商数据")).toBeInTheDocument();

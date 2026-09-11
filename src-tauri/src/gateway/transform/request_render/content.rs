@@ -2,6 +2,23 @@
 
 use super::*;
 
+/// Replays one reasoning trace to an Anthropic upstream in the only shape that
+/// backend accepts: its own opaque block, or a thinking block carrying the text
+/// and, when the upstream issued one, its signature.
+fn replay_anthropic_reasoning(reasoning: &Reasoning) -> Result<Value, TransformError> {
+    if let Some(redacted) = &reasoning.redacted {
+        return Ok(json!({ "type": "redacted_thinking", "data": redacted }));
+    }
+    if reasoning.content.is_empty() {
+        return error("该推理没有可发送给 Anthropic 上游的可读内容");
+    }
+    let mut block = json!({ "type": "thinking", "thinking": reasoning.content });
+    if let Some(signature) = &reasoning.signature {
+        block["signature"] = Value::String(signature.clone());
+    }
+    Ok(block)
+}
+
 pub(super) fn render_chat_content(parts: &[Part]) -> Result<Value, TransformError> {
     if parts.iter().all(|part| matches!(part, Part::Text(_))) {
         return Ok(Value::String(
@@ -48,6 +65,7 @@ pub(super) fn render_anthropic_content(parts: &[Part]) -> Result<Value, Transfor
                 id,
                 name,
                 namespace,
+                kind,
                 input,
             } => values.push(json!({
                 "type": "tool_use",
@@ -56,22 +74,22 @@ pub(super) fn render_anthropic_content(parts: &[Part]) -> Result<Value, Transfor
                     UpstreamProtocol::AnthropicMessages,
                     namespace.as_deref(),
                     name,
+                    *kind,
                 )?,
-                "input": input,
+                "input": if *kind == ToolKind::Custom { json!({ "input": input.as_str().ok_or_else(|| TransformError("custom 工具输入必须是字符串".to_string()))? }) } else { input.clone() },
             })),
             Part::ToolResult {
                 id,
                 content,
                 is_error,
+                ..
             } => values.push(json!({
                 "type": "tool_result",
                 "tool_use_id": id,
                 "content": render_anthropic_content(content)?,
                 "is_error": is_error,
             })),
-            Part::Reasoning(reasoning) => {
-                values.push(json!({ "type": "redacted_thinking", "data": reasoning.continuation }))
-            }
+            Part::Reasoning(reasoning) => values.push(replay_anthropic_reasoning(reasoning)?),
         }
     }
     Ok(Value::Array(values))

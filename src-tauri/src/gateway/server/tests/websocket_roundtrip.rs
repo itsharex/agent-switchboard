@@ -1,6 +1,14 @@
 use super::*;
 
-fn websocket_connect(address: &str, token: &str) -> TcpStream {
+pub(super) fn websocket_connect(address: &str, token: &str) -> TcpStream {
+    websocket_connect_with_target(address, token, "")
+}
+
+pub(super) fn websocket_connect_with_query(address: &str, token: &str, query: &str) -> TcpStream {
+    websocket_connect_with_target(address, token, &format!("?{query}"))
+}
+
+fn websocket_connect_with_target(address: &str, token: &str, suffix: &str) -> TcpStream {
     let mut stream = TcpStream::connect(address).expect("connect WebSocket client");
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
@@ -8,7 +16,7 @@ fn websocket_connect(address: &str, token: &str) -> TcpStream {
     stream
             .write_all(
                 format!(
-                    "GET /codex/{token}/v1/responses HTTP/1.1\r\nHost: {address}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nAuthorization: Bearer fake-official-oauth\r\n\r\n"
+                    "GET /codex/{token}/v1/responses{suffix} HTTP/1.1\r\nHost: {address}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nAuthorization: Bearer fake-official-oauth\r\n\r\n"
                 )
                 .as_bytes(),
             )
@@ -28,7 +36,7 @@ fn websocket_connect(address: &str, token: &str) -> TcpStream {
     stream
 }
 
-fn send_websocket_text(stream: &mut TcpStream, text: &str) {
+pub(super) fn send_websocket_text(stream: &mut TcpStream, text: &str) {
     let bytes = text.as_bytes();
     assert!(bytes.len() < u16::MAX as usize, "test frame is bounded");
     let mut frame = vec![0x81];
@@ -51,7 +59,7 @@ fn send_websocket_text(stream: &mut TcpStream, text: &str) {
     stream.flush().expect("flush WebSocket frame");
 }
 
-fn read_websocket_text(stream: &mut TcpStream) -> String {
+pub(super) fn read_websocket_text(stream: &mut TcpStream) -> String {
     let mut first = [0_u8; 2];
     stream
         .read_exact(&mut first)
@@ -83,7 +91,7 @@ fn read_websocket_text(stream: &mut TcpStream) -> String {
     String::from_utf8(bytes).expect("WebSocket text UTF-8")
 }
 
-fn websocket_request(input: Value, previous_response_id: Option<&str>) -> String {
+pub(super) fn websocket_request(input: Value, previous_response_id: Option<&str>) -> String {
     let mut request = json!({
         "type": "response.create",
         "model": "sandbox-model",
@@ -97,7 +105,7 @@ fn websocket_request(input: Value, previous_response_id: Option<&str>) -> String
         }],
         "tool_choice": "auto",
         "parallel_tool_calls": true,
-        "reasoning": { "summary": "auto" },
+        "reasoning": { "summary": "auto", "effort": "high" },
         "store": false,
         "stream": true,
         "include": ["reasoning.encrypted_content"],
@@ -111,7 +119,7 @@ fn websocket_request(input: Value, previous_response_id: Option<&str>) -> String
     request.to_string()
 }
 
-fn receive_responses_completion(stream: &mut TcpStream) -> Value {
+pub(super) fn receive_responses_completion(stream: &mut TcpStream) -> Value {
     for _ in 0..32 {
         let event: Value = serde_json::from_str(&read_websocket_text(stream))
             .expect("WebSocket Responses event JSON");
@@ -136,26 +144,23 @@ fn codex_websocket_replays_visible_context_and_keeps_upstream_credentials_privat
 
     let directory = tempfile::tempdir().expect("temporary state");
     let state = LocalState::from_root(directory.path().join("state"));
-    let mut profile = sandbox_profile(
+    let mut file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
         "WebSocket chat sandbox",
         upstream_url,
         upstream_key.clone(),
-        UpstreamProtocol::ChatCompletions,
+        CodexUpstream::ChatCompletions,
     );
+    file.profile.model_routes[0].upstream_model = "vendor-ws-model".to_string();
     let gateway = GatewayController::start(&state);
-    profile.parameters.settings.insert(
+    file.parameters.settings.insert(
         "web_search".to_string(),
         SettingValue::Explicit {
             value: ConfigValue::Str("live".to_string()),
         },
     );
     let projection = gateway
-        .project(&SwitchPlan::direct(
-            profile,
-            default_client_settings(AppKind::Codex),
-        ))
+        .project_codex(&file, default_client_settings(AppKind::Codex))
         .expect("project route");
     gateway
         .commit(&projection, || Ok(()))
@@ -169,6 +174,12 @@ fn codex_websocket_replays_visible_context_and_keeps_upstream_credentials_privat
     let mut socket = websocket_connect(&address, &local_token);
 
     assert_client_completions(&mut socket, &upstream_key);
+    assert_metric_statuses_for_projection(
+        &gateway,
+        &state,
+        &projection,
+        &[Some(101), Some(200), Some(200)],
+    );
 
     let (first_authorization, first_body) = observed_receiver
         .recv_timeout(Duration::from_secs(5))
@@ -186,10 +197,13 @@ fn codex_websocket_replays_visible_context_and_keeps_upstream_credentials_privat
     }
     assert!(!first_body.contains("reasoning_content"));
     let first_body: Value = serde_json::from_str(&first_body).expect("first upstream JSON");
+    assert_eq!(first_body["model"], "vendor-ws-model");
     assert_eq!(first_body["parallel_tool_calls"], true);
+    assert_eq!(first_body["reasoning_effort"], "high");
     assert_eq!(first_body["messages"][0]["role"], "system");
     assert_eq!(first_body["messages"][1]["content"], "first question");
     let second_body: Value = serde_json::from_str(&second_body).expect("second upstream JSON");
+    assert_eq!(second_body["model"], "vendor-ws-model");
     let messages = second_body["messages"].as_array().expect("Chat messages");
     assert_eq!(messages.len(), 4);
     assert_eq!(messages[1]["content"], "first question");

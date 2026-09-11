@@ -13,7 +13,6 @@ pub fn local_config_paths() -> Result<DiscoveryPaths, String> {
         codex: LocalState::user_config_path(AppKind::Codex)?
             .to_string_lossy()
             .to_string(),
-        codex_auth: LocalState::codex_auth_path()?.to_string_lossy().to_string(),
         claude: LocalState::user_config_path(AppKind::Claude)?
             .to_string_lossy()
             .to_string(),
@@ -118,11 +117,12 @@ pub async fn scan_ccswitch(
     .await
 }
 
-/// Imports selected external providers into the app's own profile store.
-/// The import itself never projects to Codex or Claude Code; it first recovers
-/// an already-confirmed interrupted profile transaction when one exists.
+/// Imports selected external Claude providers into the app's own profile
+/// store. The import itself never projects to Codex or Claude Code; it first
+/// recovers an already-confirmed interrupted profile transaction when one
+/// exists. Codex rows are completed in the editor and rejected here.
 #[tauri::command]
-pub async fn import_ccswitch_profiles(
+pub async fn import_ccswitch_claude_profiles(
     app: tauri::AppHandle,
     keys: Vec<String>,
 ) -> Result<crate::ccswitch_source::CcSwitchImportOutcome, CommandError> {
@@ -144,6 +144,22 @@ pub async fn import_ccswitch_profiles(
                 .map_err(|error| CommandError::new("ccswitch-import-failed", error))
         })
         .await
+    })
+    .await
+}
+
+/// Returns the completion seed for one deliberately chosen Codex row. The
+/// seed carries that row's source credential — the only boundary where a CC
+/// Switch credential reaches the renderer. Nothing is persisted here; the
+/// editor saves through the normal create command after the user confirms
+/// the catalog and capabilities.
+#[tauri::command]
+pub async fn prepare_ccswitch_codex_seed(
+    key: String,
+) -> Result<asb_core::ccswitch::CodexImportSeed, CommandError> {
+    blocking(move || {
+        crate::ccswitch_source::prepare_codex_seed(&key)
+            .map_err(|error| CommandError::new("ccswitch-seed-unavailable", error))
     })
     .await
 }

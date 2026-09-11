@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ExtensionsDeps } from "../app/extensions/extension-ops";
+import { pickDirectory } from "../api/client";
 import { EXTENSION_SECTIONS, type ExtensionSection } from "../app/navigation";
 import { Button } from "../components/Button";
 import { SkillSourceBrowser } from "../components/extensions/SkillSourceBrowser";
@@ -37,6 +38,7 @@ export function ExtensionsPage(props: ExtensionsPageProps) {
       onScanLocal={workspace.ext.scanLocal}
       onResolveGithub={workspace.ext.resolveSource}
       onImport={workspace.ext.importCandidate}
+      onPickDirectory={pickDirectory}
     />
   ) : (
     <ExtensionLibraryPanel workspace={workspace} />

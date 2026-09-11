@@ -29,7 +29,7 @@ function ReleaseNotes({ notes, version }: { notes: string; version: string }) {
     <div className="asb-update-notes" aria-label={`${version} 更新内容`}>
       {sections.map((section) => (
         <section key={section.title} className="asb-update-notes-section">
-          <h4>{section.title}</h4>
+          <h4 className="asb-section-title">{section.title}</h4>
           <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul>
         </section>
       ))}
@@ -85,7 +85,7 @@ export function UpdateSection({
   if (channel === "microsoftStore") {
     return (
       <section className="asb-app-settings-group" aria-labelledby="software-update">
-        <h3 id="software-update" className="asb-toggle-group-title">
+        <h3 id="software-update" className="asb-section-title">
           软件更新
         </h3>
         <div className="asb-app-setting-row">
@@ -132,7 +132,7 @@ export function UpdateSection({
   ) : null;
   return (
     <section className="asb-app-settings-group" aria-labelledby="software-update">
-      <h3 id="software-update" className="asb-toggle-group-title">
+      <h3 id="software-update" className="asb-section-title">
         软件更新
       </h3>
       <div className="asb-app-setting-row">

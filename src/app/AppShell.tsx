@@ -99,13 +99,13 @@ export function AppShell({
             <ul className="asb-nav">
               {PAGES.map((item) => (
                 <li key={item}>
-                  <button
-                    type="button"
+                  <Button
+                    variant="unstyled"
                     aria-current={page === item ? "page" : undefined}
                     onClick={() => onPageChange(item)}
                   >
                     {item}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

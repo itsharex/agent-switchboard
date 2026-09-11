@@ -55,6 +55,7 @@ using System.Reflection;
     "/out:$output" '/win32manifest:installer/app.manifest' '/win32icon:src-tauri/icons/icon.ico' `
     "/resource:$engine,AgentSwitchboard.Installer.Engine.exe" `
     '/resource:installer/Theme.xaml,AgentSwitchboard.Installer.Theme.xaml' `
+    '/resource:installer/assets/installer-background.wdp,AgentSwitchboard.Installer.Assets.InstallerBackground.wdp' `
     "/resource:$metadata,AgentSwitchboard.Installer.Package.txt" @references @sources
   if ($LASTEXITCODE -ne 0) { throw "Custom installer compilation failed (exit code $LASTEXITCODE)." }
   $compiledVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($output)

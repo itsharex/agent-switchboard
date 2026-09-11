@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { CloseIcon } from "./icons";
+import { Button } from "./Button";
 import { ToastStatusIcon } from "./ToastStatusIcon";
 import { useToast, type Toast } from "./use-toast";
 
@@ -62,14 +63,14 @@ function ToastItem({ toast, onDismiss, onPause, onResume }: ToastItemProps) {
         {title ? <div className="asb-toast-title">{title}</div> : null}
         {description ? <div className="asb-toast-description">{description}</div> : null}
       </div>
-      <button
-        type="button"
+      <Button
+        variant="unstyled"
         className="asb-toast-close"
         aria-label="关闭通知"
         onClick={() => onDismiss(id)}
       >
         <CloseIcon />
-      </button>
+      </Button>
     </div>
   );
 }

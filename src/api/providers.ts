@@ -55,6 +55,94 @@ export interface ProviderDraft {
   officialQuotaRefreshIntervalMinutes?: number | null;
 }
 
+export type CodexUpstream = "responses" | "chatCompletions" | "anthropicMessages";
+export type CodexRequestMode = ResponsesOptions["requestMode"];
+
+export type CodexChatReasoning =
+  | { kind: "unsupported" }
+  | {
+    kind: "configured";
+    thinkingParameter: "none" | "thinking" | "enableThinking" | "reasoningSplit";
+    effortParameter: "none" | "reasoningEffort" | "reasoningObject";
+    effortMode: "passthrough" | "lowHigh" | "deepSeek" | "openRouter";
+  };
+
+export interface CodexCapabilities {
+  responses: boolean;
+  compact: boolean;
+  models: boolean;
+  chatCompletions: boolean;
+  alphaSearch: boolean;
+  imageGeneration: boolean;
+  imageEdit: boolean;
+  functionTools: boolean;
+  customTools: boolean;
+  toolSearch: boolean;
+  reasoning: boolean;
+  chatReasoning: CodexChatReasoning;
+}
+
+export interface CodexCatalogEntry {
+  id: string;
+  contextWindow: number;
+  maxOutputTokens: number;
+  functionTools: boolean;
+  customTools: boolean;
+  toolSearch: boolean;
+  reasoning: boolean;
+  defaultReasoningLevel: CodexReasoningLevel;
+  supportedReasoningLevels: CodexReasoningLevel[];
+  images: boolean;
+  compact: boolean;
+}
+
+export type CodexReasoningLevel = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+
+export interface CodexModelRoute {
+  clientModel: string;
+  upstreamModel: string;
+}
+
+/** The current, complete third-party Codex contract. Official login is not
+ * represented by a profile. */
+export interface CodexProviderProfile {
+  id: string;
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  upstream: CodexUpstream;
+  requestMode: CodexRequestMode;
+  defaultModel: string;
+  catalog: CodexCatalogEntry[];
+  modelRoutes: CodexModelRoute[];
+  capabilities: CodexCapabilities;
+}
+
+export interface CodexProviderDraft {
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  upstream: CodexUpstream;
+  requestMode: CodexRequestMode;
+  defaultModel: string;
+  catalog: CodexCatalogEntry[];
+  modelRoutes: CodexModelRoute[];
+  capabilities: CodexCapabilities;
+  parameters: SettingsValues;
+  notes: string | null;
+  websiteUrl: string | null;
+  usageQuery: UsageQuery | null;
+}
+
+export interface CodexProviderRecord {
+  profile: CodexProviderProfile;
+  parameters: SettingsValues;
+  notes: string | null;
+  websiteUrl: string | null;
+  usageQuery: UsageQuery | null;
+  fileHash: string;
+}
+
 /** Reachability grade of one manual probe: any HTTP answer counts as ok/slow,
  * only network-level failures (DNS / refused / TLS / timeout) are unreachable. */
 export type ProbeGrade = "ok" | "slow" | "unreachable";
@@ -80,6 +168,52 @@ export interface ProfileSavePreparation {
 
 export function listProfiles(): Promise<ProviderRecord[]> {
   return invoke<ProviderRecord[]>("list_profiles");
+}
+
+export function listCodexProfiles(): Promise<CodexProviderRecord[]> {
+  return invoke<CodexProviderRecord[]>("list_codex_profiles");
+}
+
+export function createCodexProfile(draft: CodexProviderDraft): Promise<CodexProviderRecord> {
+  return invoke<CodexProviderRecord>("create_codex_profile", { draft });
+}
+
+/** Prepares an existing Codex profile save. A live route change returns the
+ * exact client-file preview that must be confirmed before it can be applied. */
+export function prepareCodexProfileSave(
+  profileId: string,
+  draft: CodexProviderDraft,
+  expectedFileHash: string,
+): Promise<ProfileSavePreparation> {
+  return invoke<ProfileSavePreparation>("prepare_codex_profile_save", {
+    profileId,
+    draft,
+    expectedFileHash,
+  });
+}
+
+export function commitCodexProfileSave(
+  preparationId: string,
+  confirmWrite: boolean,
+): Promise<CodexProviderRecord> {
+  return invoke<CodexProviderRecord>("commit_codex_profile_save", {
+    preparationId,
+    confirmWrite,
+  });
+}
+
+export function deleteCodexProfile(profileId: string, expectedFileHash: string): Promise<void> {
+  return invoke<void>("delete_codex_profile", { profileId, expectedFileHash });
+}
+
+export function reorderCodexProfiles(
+  orderedIds: string[],
+  expectedFileHashes: Record<string, string>,
+): Promise<CodexProviderRecord[]> {
+  return invoke<CodexProviderRecord[]>("reorder_codex_profiles", {
+    orderedIds,
+    expectedFileHashes,
+  });
 }
 
 export function resetProfileStore(confirmWrite: boolean): Promise<void> {
@@ -117,8 +251,8 @@ export function reorderProfiles(
   });
 }
 
-export function importDiscoveredProfile(target: AppKind): Promise<ProviderRecord> {
-  return invoke<ProviderRecord>("import_discovered_profile", { target });
+export function importDiscoveredClaudeProfile(): Promise<ProviderRecord> {
+  return invoke<ProviderRecord>("import_discovered_claude_profile");
 }
 
 export function probeEndpoint(url: string): Promise<ProbeResult> {

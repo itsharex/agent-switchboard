@@ -29,13 +29,13 @@ export function ProviderUsageTrend({ providerName, series, loading, error }: Pro
 
   return (
     <section className="asb-usage-history" aria-label={`${providerName}${heading}`}>
-      <h4>{heading}</h4>
+      <h4 className="asb-section-title">{heading}</h4>
       {loading && !hasSeries ? (
         <p className="asb-provider-usage-state" role="status">正在读取历史记录…</p>
       ) : hasSeries ? (
         selections.map((selection) => (
           <div key={selection.metric} className="asb-usage-history-metric">
-            {selections.length > 1 && <h5>{selection.heading}</h5>}
+            {selections.length > 1 && <h5 className="asb-group-title">{selection.heading}</h5>}
             {selection.groups.map((group) => (
               <div key={group.unit ?? "unitless"} className="asb-usage-history-group">
                 {selection.groups.length > 1 && <p className="asb-usage-history-unit">{group.unit ?? "未标注单位"}</p>}

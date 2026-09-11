@@ -13,23 +13,22 @@ interface Props {
   draft: ProviderEditorDraft;
   busy: boolean;
   baseUrl: string;
-  codex: boolean;
   claudeSettings: ClaudeModelSettings | null;
   models: ProviderModel[] | null;
   modelsBusy: boolean;
   modelsError: string | null;
   userConfigModel: string | null;
   userConfigWarnings: string[];
-  fetchModels: () => void | Promise<void>;
+  fetchModels: () => Promise<unknown> | void;
   setDraft: Dispatch<SetStateAction<ProviderEditorDraft>>;
 }
 
-function PrimaryModelInput({ draft, busy, codex, setDraft }: Pick<Props, "draft" | "busy" | "codex" | "setDraft">) {
+function PrimaryModelInput({ draft, busy, setDraft }: Pick<Props, "draft" | "busy" | "setDraft">) {
   return (
     <Input aria-label="主模型" value={draft.model ?? ""} disabled={busy} placeholder="（可选）"
       onChange={(event) => setDraft((current) => {
         const model = event.target.value;
-        if (!codex && !model.trim() && current.modelOptions?.kind === "claude") {
+        if (!model.trim() && current.modelOptions?.kind === "claude") {
           return { ...current, model, modelOptions: { ...current.modelOptions, primaryOneM: false } };
         }
         return { ...current, model };
@@ -42,7 +41,6 @@ export function MainModelField({
   draft,
   busy,
   baseUrl,
-  codex,
   claudeSettings,
   models,
   modelsBusy,
@@ -56,7 +54,7 @@ export function MainModelField({
     <div className="asb-field">
       <span>主模型</span>
       <div className="asb-model-control">
-        <PrimaryModelInput draft={draft} busy={busy} codex={codex} setDraft={setDraft} />
+        <PrimaryModelInput draft={draft} busy={busy} setDraft={setDraft} />
         {models && (
           <ModelPicker
             models={models}
@@ -66,20 +64,18 @@ export function MainModelField({
             onSelect={(model) => setDraft((current) => ({ ...current, model }))}
           />
         )}
-        {!codex && (
-          <Checkbox
-            label="1M"
-            ariaLabel="主模型启用 1M 上下文"
-            checked={claudeSettings?.primaryOneM ?? false}
-            disabled={busy || !draft.model?.trim()}
-            onChange={(enabled) =>
-              setDraft((current) => ({
-                ...current,
-                modelOptions: claudeOptions(current.modelOptions, { primaryOneM: enabled }),
-              }))
-            }
-          />
-        )}
+        <Checkbox
+          label="1M"
+          ariaLabel="主模型启用 1M 上下文"
+          checked={claudeSettings?.primaryOneM ?? false}
+          disabled={busy || !draft.model?.trim()}
+          onChange={(enabled) =>
+            setDraft((current) => ({
+              ...current,
+              modelOptions: claudeOptions(current.modelOptions, { primaryOneM: enabled }),
+            }))
+          }
+        />
         <div className="asb-model-actions">
           <Button
             variant="secondary"

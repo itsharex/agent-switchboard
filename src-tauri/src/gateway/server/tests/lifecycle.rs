@@ -22,20 +22,16 @@ fn fixture() -> (
 ) {
     let dir = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(dir.path().join("state"));
-    let profile = sandbox_profile(
+    let file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
         "idle sockets",
         "http://127.0.0.1:9".into(),
         "fixture-upstream-key".into(),
-        UpstreamProtocol::Responses,
+        CodexUpstream::Responses,
     );
     let gateway = GatewayController::start(&state);
     let projection = gateway
-        .project(&SwitchPlan::direct(
-            profile,
-            default_client_settings(AppKind::Codex),
-        ))
+        .project_codex(&file, default_client_settings(AppKind::Codex))
         .unwrap();
     gateway.commit(&projection, || Ok(())).unwrap();
     (dir, gateway, projection)

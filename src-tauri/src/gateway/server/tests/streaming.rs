@@ -15,20 +15,16 @@ fn loopback_gateway_streams_a_converted_first_event_before_upstream_finishes() {
 
     let directory = tempfile::tempdir().expect("temporary state");
     let state = LocalState::from_root(directory.path().join("state"));
-    let profile = sandbox_profile(
+    let file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
         "streaming chat sandbox",
         upstream_url,
         upstream_key,
-        UpstreamProtocol::ChatCompletions,
+        CodexUpstream::ChatCompletions,
     );
     let gateway = GatewayController::start(&state);
     let projection = gateway
-        .project(&SwitchPlan::direct(
-            profile,
-            default_client_settings(AppKind::Codex),
-        ))
+        .project_codex(&file, default_client_settings(AppKind::Codex))
         .expect("project route");
     gateway
         .commit(&projection, || Ok(()))

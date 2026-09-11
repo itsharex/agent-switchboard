@@ -59,13 +59,8 @@ pub(super) fn scan_db(path: &Path) -> Result<RawScan, String> {
     for row in read_rows(&connection)? {
         match ccswitch::map_row(&row) {
             Ok(mut proposal) => {
-                if proposal
-                    .draft
-                    .usage_query
-                    .as_ref()
-                    .is_some_and(|query| crate::usage_query::validate_persisted(query).is_err())
-                {
-                    proposal.draft.usage_query = None;
+                if has_invalid_usage_query(&proposal) {
+                    clear_usage_query(&mut proposal);
                     proposal
                         .warnings
                         .push("未导入: meta.usage_script.code（无法转换为本应用脚本）".to_string());
@@ -76,4 +71,19 @@ pub(super) fn scan_db(path: &Path) -> Result<RawScan, String> {
         }
     }
     Ok(RawScan { proposals, skipped })
+}
+
+fn has_invalid_usage_query(proposal: &ccswitch::CcSwitchProposal) -> bool {
+    let usage_query = match &proposal.draft {
+        ccswitch::CcSwitchProviderDraft::Claude(draft) => draft.usage_query.as_ref(),
+        ccswitch::CcSwitchProviderDraft::Codex(draft) => draft.usage_query.as_ref(),
+    };
+    usage_query.is_some_and(|query| crate::usage_query::validate_persisted(query).is_err())
+}
+
+fn clear_usage_query(proposal: &mut ccswitch::CcSwitchProposal) {
+    match &mut proposal.draft {
+        ccswitch::CcSwitchProviderDraft::Claude(draft) => draft.usage_query = None,
+        ccswitch::CcSwitchProviderDraft::Codex(draft) => draft.usage_query = None,
+    }
 }

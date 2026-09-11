@@ -85,12 +85,13 @@ export interface GatewayRouteStatus {
 
 /** One completed gateway request. `status` is the HTTP status, or null when
  * a WebSocket exchange ended without a complete converted answer.
- * `profileId` and `upstreamProtocol` are set only when the request matched an
- * active route; rejected traffic stays unattributed. */
+ * `profileId`, `routeRevision`, and `upstreamProtocol` are set only when the
+ * request matched an active route; rejected traffic stays unattributed. */
 export interface GatewaySample {
   atMs: number;
   app: AppKind;
   profileId: string | null;
+  routeRevision: string | null;
   clientProtocol: UpstreamProtocol;
   upstreamProtocol: UpstreamProtocol | null;
   status: number | null;
@@ -154,6 +155,7 @@ export interface GatewayStatus {
   baseUrl: string | null;
   status: GatewayStatusKind;
   failure: GatewayFailureStatus | null;
+  repairReason: string | null;
   blockedRecovery: GatewayBlockedRecoveryStatus | null;
   routes: GatewayRouteStatus[];
   metrics: GatewayMetricsStatus;

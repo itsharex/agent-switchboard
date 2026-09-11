@@ -6,9 +6,17 @@ import { ProviderEditor } from "../test/provider-editor";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import { invoke } from "@tauri-apps/api/core";
 const invokeMock = vi.mocked(invoke);
-const props = { profile: null, initialApp: "codex" as const, busy: false,
+const props = { profile: null, initialApp: "claude" as const, busy: false,
   officialTakenApps: [], userConfigModel: null, onSave: vi.fn(), onCancel: vi.fn() };
 const commands = (name: string) => invokeMock.mock.calls.filter(([command]) => command === name);
+
+async function fillConnection(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("combobox", { name: "API 格式" }));
+  await user.click(await screen.findByRole("option", { name: /Responses/ }));
+  fireEvent.change(screen.getByLabelText("服务地址"), { target: { value: "https://draft.example/v1" } });
+  fireEvent.change(screen.getByLabelText("API 密钥"), { target: { value: "draft-test-key" } });
+  fireEvent.change(screen.getByLabelText("主模型"), { target: { value: "draft-model" } });
+}
 
 beforeEach(() => {
   invokeMock.mockReset();
@@ -26,16 +34,10 @@ beforeEach(() => {
   });
 });
 
-function fillConnection() {
-  fireEvent.change(screen.getByLabelText("服务地址"), { target: { value: "https://draft.example/v1" } });
-  fireEvent.change(screen.getByLabelText("API 密钥"), { target: { value: "draft-test-key" } });
-  fireEvent.change(screen.getByLabelText("主模型"), { target: { value: "draft-model" } });
-}
-
 it("tests an unnamed unsaved draft using its current connection without saving", async () => {
   const user = userEvent.setup();
   render(<ProviderEditor {...props} />);
-  fillConnection();
+  await fillConnection(user);
   await user.click(screen.getByRole("button", { name: "测试供应商" }));
   expect(commands("prepare_provider_request")).toHaveLength(0);
   await user.click(screen.getByRole("radio", { name: "真实请求" }));
@@ -53,7 +55,7 @@ it("tests an unnamed unsaved draft using its current connection without saving",
 it("lists draft models through the preparation token instead of resending the key", async () => {
   const user = userEvent.setup();
   render(<ProviderEditor {...props} />);
-  fillConnection();
+  await fillConnection(user);
   await user.click(screen.getByRole("button", { name: "测试供应商" }));
   await user.click(screen.getByRole("radio", { name: "真实请求" }));
   const panel = within(screen.getByRole("region", { name: "当前草稿 真实请求" }));
@@ -70,7 +72,7 @@ it("lists draft models through the preparation token instead of resending the ke
 it("replaces a draft preparation after connection edits and releases it when the editor is hidden", async () => {
   const user = userEvent.setup();
   const { rerender } = render(<ProviderEditor {...props} active />);
-  fillConnection();
+  await fillConnection(user);
   await user.click(screen.getByRole("button", { name: "测试供应商" }));
   await user.click(screen.getByRole("radio", { name: "真实请求" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "发送请求" })).toBeEnabled());

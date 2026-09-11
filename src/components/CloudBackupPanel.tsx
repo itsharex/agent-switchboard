@@ -160,37 +160,37 @@ export function CloudBackupPanel({
         <div id="cloud-backup-guide-content" hidden={!guideOpen}>
           <ol className="asb-cloud-backup-guide-list">
             <li>
-              <h4>创建项目</h4>
+              <h4 className="asb-group-title">创建项目</h4>
               <p>
                 在 <a className="asb-cloud-backup-guide-link" href={SUPABASE_DASHBOARD_URL} onClick={openGuideLink}>Supabase Dashboard</a> 新建项目，等待项目状态变为 Healthy。创建项目时设置的数据库密码只用于数据库连接，不填入本应用。
               </p>
             </li>
             <li>
-              <h4>复制项目连接信息</h4>
+              <h4 className="asb-group-title">复制项目连接信息</h4>
               <p>
                 在 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.project} onClick={openGuideLink}>项目 Dashboard</a> 点击 <code className="asb-code">Connect</code>，复制 <code className="asb-code">Project URL</code> 和 <code className="asb-code">Publishable key</code>。不要使用 Account 的 <code className="asb-code">Access Token</code>、项目 <code className="asb-code">Secret key</code>、<code className="asb-code">service_role</code> 或数据库密码。
               </p>
             </li>
             <li>
-              <h4>启用 Data API 并创建备份表</h4>
+              <h4 className="asb-group-title">启用 Data API 并创建备份表</h4>
               <p>
                 在 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.dataApi} onClick={openGuideLink}>Integrations → Data API</a> 保持 <code className="asb-code">Enable Data API</code> 开启；再点击下方「显示初始化 SQL」，将全部 SQL 粘贴到 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.sqlEditor} onClick={openGuideLink}>SQL Editor</a> 新查询中，并执行一次。
               </p>
             </li>
             <li>
-              <h4>创建项目 Auth 用户</h4>
+              <h4 className="asb-group-title">创建项目 Auth 用户</h4>
               <p>
                 打开 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.authUsers} onClick={openGuideLink}>Authentication → Users</a>，点击 <code className="asb-code">Add user → Create new user</code>，填写邮箱和新密码并保持 <code className="asb-code">Auto Confirm User</code> 勾选。可使用自己的 Supabase 登录邮箱；Dashboard 或 GitHub 的原有登录密码不能使用。
               </p>
             </li>
             <li>
-              <h4>填写并测试</h4>
+              <h4 className="asb-group-title">填写并测试</h4>
               <p>
                 在下方填写项目地址、Publishable key、项目 Auth 邮箱和新密码，然后点击「测试连接」。测试只验证登录和备份表读取权限；成功后会在当前窗口保留项目 Auth 密码，上传或恢复成功后才清空。
               </p>
             </li>
             <li>
-              <h4>保存并备份</h4>
+              <h4 className="asb-group-title">保存并备份</h4>
               <p>
                 测试成功后点击「保存连接」。首次备份会加密完整的供应商档案（含运行参数、API 格式和最大输出 token）、客户端设置和切换记录；认证请求头会在使用时按 API 格式自动推导。设置至少 8 位的备份密码，恢复必须使用同一条密码，应用不会保存它。
               </p>

@@ -20,7 +20,8 @@ use metrics::{GatewayMetrics, GatewayMetricsSnapshot};
 use crate::local_state::LocalState;
 use asb_core::adapter;
 use asb_core::contracts::{
-    AppKind, ProviderProfile, ResponsesOptions, RouteMode, SwitchPlan, UpstreamProtocol,
+    AppKind, CodexRouteSnapshot, ProviderProfile, ResponsesOptions, RouteMode, SwitchPlan,
+    UpstreamProtocol,
 };
 use asb_core::validate_plan;
 use serde::{Deserialize, Serialize};
@@ -40,6 +41,7 @@ mod activation_snapshot;
 mod controller;
 pub(crate) use activation_snapshot::GatewayActivationSnapshot;
 mod compaction;
+mod content_encoding;
 pub(crate) mod http;
 mod identity;
 mod lifecycle;
@@ -90,6 +92,16 @@ pub(crate) struct GatewayProjection {
     pub plan: SwitchPlan,
     activation: GatewayActivation,
     warning: Option<String>,
+    pub(crate) codex_catalog: Option<CodexCatalogProjection>,
+}
+
+/// One immutable model-catalog file named from the selected provider and its
+/// route revision. A restored configuration can therefore continue to point
+/// at the exact catalog it was written with.
+#[derive(Clone)]
+pub(crate) struct CodexCatalogProjection {
+    pub(crate) file_name: String,
+    pub(crate) content: String,
 }
 
 impl GatewayProjection {
@@ -129,6 +141,9 @@ pub(crate) struct ActiveRoute {
     pub(crate) responses_options: Option<ResponsesOptions>,
     pub(crate) max_output_tokens: Option<u64>,
     pub(crate) api_key: String,
+    /// Present only for Codex. This is the accepted-request routing source
+    /// for its typed catalog, model mapping, and operation capabilities.
+    pub(crate) codex: Option<CodexRouteSnapshot>,
 }
 
 /// One process-owned loopback listener. Its stop signal belongs to this
@@ -190,6 +205,9 @@ pub(crate) struct GatewayInner {
     /// False when the persisted identity could not be read or safely
     /// recreated. A listener must never serve with a fabricated identity.
     pub(crate) state_available: AtomicBool,
+    /// Explains why an intentionally rejected persisted route needs an
+    /// explicit client repair even while the listener is healthy.
+    pub(crate) repair_reason: Mutex<Option<String>>,
     /// A port-change transaction whose rollback could not preserve an
     /// externally modified file. Kept until explicitly resolved.
     pub(crate) blocked_recovery: Mutex<Option<port_change::BlockedPortChange>>,
@@ -293,6 +311,7 @@ pub(crate) struct GatewayObservation {
     pub(crate) base_url: Option<String>,
     pub(crate) status: GatewayStatusKind,
     pub(crate) failure: Option<GatewayFailureReport>,
+    pub(crate) repair_reason: Option<String>,
     /// Present only while a port-change transaction awaits a decision.
     pub(crate) blocked_recovery: Option<port_change::BlockedPortChange>,
     pub(crate) routes: Vec<RouteObservation>,

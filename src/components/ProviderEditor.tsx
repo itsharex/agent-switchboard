@@ -18,6 +18,8 @@ interface Props {
   busy: boolean;
   officialTakenApps: AppKind[];
   onOpenOfficial: (app: AppKind) => void;
+  /** Replaces the session when the user picks the other client. */
+  onSwitchClient: (app: AppKind) => void;
   userConfigModel: string | null;
   userConfigWarnings: string[];
   onSave: (draft: ProviderDraft) => void;
@@ -30,45 +32,52 @@ function ModelSection({ editor, busy, userConfigModel, userConfigWarnings, profi
   const claudeSettings = draft.modelOptions?.kind === "claude" ? draft.modelOptions : null;
   return (
     <section className="asb-provider-section" aria-label="模型">
-      <h3>模型</h3>
+      <h3 className="asb-section-title">模型</h3>
       <div className="asb-provider-section-fields">
         <MainModelField draft={draft} busy={busy} baseUrl={connection.baseUrl}
-          codex={draft.app === "codex"} claudeSettings={claudeSettings}
+          claudeSettings={claudeSettings}
           models={connection.models} modelsBusy={connection.modelsBusy} modelsError={connection.modelsError}
           userConfigModel={userConfigModel} userConfigWarnings={userConfigWarnings}
           fetchModels={connection.fetchModels} setDraft={setDraft} />
-        {draft.app === "claude" && <ClaudeModelMapping key={profile?.id ?? draft.app} busy={busy}
-          models={connection.models} claudeSettings={claudeSettings} setDraft={setDraft} />}
+        <ClaudeModelMapping key={profile?.id ?? draft.app} busy={busy}
+          models={connection.models} claudeSettings={claudeSettings} setDraft={setDraft} />
       </div>
     </section>
   );
 }
 
 function ProviderForm({ editor, ...props }: Props & { editor: ProviderEditorState }) {
-  const { draft } = editor;
+  const { draft, setDraft } = editor;
   const { busy, profile, onCancel, onSave } = props;
   const official = draft.routeMode === "official";
   return (
     <form className="asb-provider-form" aria-label={profile ? "编辑供应商" : "新建供应商"}
       onSubmit={(event) => { event.preventDefault(); editor.save(onSave); }}>
       <ProviderIdentityFields editor={editor} busy={busy} editing={Boolean(profile)}
-        officialTakenApps={props.officialTakenApps} onOpenOfficial={props.onOpenOfficial} />
+        officialTakenApps={props.officialTakenApps} onOpenOfficial={props.onOpenOfficial}
+        onSwitchClient={props.onSwitchClient} />
       {!official && <>
         <ProviderConnectionFields key={`connection-${draft.app}`} editor={editor} busy={busy} />
         <ModelSection editor={editor} busy={busy} profile={profile}
           userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
         {draft.upstreamProtocol === "responses" &&
-          <ResponsesOptionsFields key={`responses-${draft.app}`} editor={editor} busy={busy} />}
-        <ProviderConnectionTest draft={draft} busy={busy} active={props.active && !editor.parametersOpen} />
+          <ResponsesOptionsFields key={`responses-${draft.app}`} busy={busy}
+            options={draft.responsesOptions}
+            onChange={(next) => setDraft((current) => ({ ...current, responsesOptions: next }))} />}
+        <ProviderConnectionTest busy={busy} active={props.active && !editor.parametersOpen}
+          baseUrl={draft.baseUrl} apiKey={draft.apiKey} upstreamProtocol={draft.upstreamProtocol}
+          responsesOptions={draft.responsesOptions} defaultModel={draft.model} />
       </>}
       {official && (
         <section className="asb-provider-section" aria-label="官方登录">
-          <h3>官方登录</h3>
+          <h3 className="asb-section-title">官方登录</h3>
           <OfficialLoginPanel app={draft.app} onFinished={editor.setLoginDone} />
         </section>
       )}
-      <ProviderNotesField key={`notes-${draft.app}`} editor={editor} busy={busy} />
-      <ParametersLoadStatus editor={editor} busy={busy} />
+      <ProviderNotesField key={`notes-${draft.app}`} busy={busy} value={draft.notes ?? null}
+        onChange={(value) => setDraft((current) => ({ ...current, notes: value }))} />
+      <ParametersLoadStatus busy={busy} ready={editor.parameters.ready}
+        error={editor.parameters.error} retry={editor.parameters.retry} />
       <footer className="asb-provider-form-footer">
         <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
         <Button type="submit" variant="primary" disabled={!editor.canSave}>保存供应商</Button>

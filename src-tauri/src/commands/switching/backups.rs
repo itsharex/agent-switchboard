@@ -80,6 +80,7 @@ pub(super) fn run_restore(
         None,
         &asb_switch::sha256_hex(&candidate),
         record.target_existed,
+        None,
     )?;
     let execution = restore_projected(&FsIo, record, &target, Some(&candidate), |outcome| {
         gateway.reconcile_restored(state, app, || {

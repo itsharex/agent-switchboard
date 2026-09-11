@@ -72,8 +72,8 @@ function ExtensionRow({ item, workspace }: { item: ExtensionListItem; workspace:
   const meta = item.kind === "mcp" ? TRANSPORT_LABELS[item.transport] : item.source ? "来源已关联" : "本地";
   return (
     <li className="asb-ext-row">
-      <button
-        type="button"
+      <Button
+        variant="unstyled"
         className="asb-ext-row-main"
         aria-label={`管理 ${item.name}`}
         onClick={() => workspace.nav.showDefinition(item.id, item.kind)}
@@ -93,7 +93,7 @@ function ExtensionRow({ item, workspace }: { item: ExtensionListItem; workspace:
             {description}
           </span>
         )}
-      </button>
+      </Button>
       <ClientToggleGroup
         item={item}
         busy={workspace.writeBlocked}

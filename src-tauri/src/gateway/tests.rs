@@ -39,7 +39,7 @@ fn plan(profile: ProviderProfile) -> SwitchPlan {
 
 #[test]
 fn route_fingerprint_ignores_metadata_and_client_projection_fields() {
-    let base = profile(AppKind::Codex, UpstreamProtocol::AnthropicMessages);
+    let base = profile(AppKind::Claude, UpstreamProtocol::AnthropicMessages);
     let mut metadata = base.clone();
     metadata.name = "改名".into();
     metadata.notes = Some("备注".into());
@@ -166,22 +166,72 @@ fn routed_projection_preserves_upstream_and_hides_client_secrets() {
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&state);
-    let original = plan(profile(AppKind::Codex, UpstreamProtocol::AnthropicMessages));
-    let projected = gateway.project(&original).unwrap();
+    let file = crate::gateway::server::tests::sandbox_codex_file(
+        &state,
+        "Anthropic relay",
+        "http://127.0.0.1:18080".to_string(),
+        "sandbox-upstream-key".to_string(),
+        asb_core::contracts::CodexUpstream::AnthropicMessages,
+    );
+    let original = file.client_projection().into_profile(AppKind::Codex);
+    let projected = gateway
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .unwrap();
 
-    assert_eq!(projected.plan.profile, original.profile);
+    assert_eq!(projected.plan.profile, original);
     assert!(projected.plan.client_api_key().is_empty());
     assert_ne!(
         projected.plan.client_base_url(),
-        original.profile.base_url.as_deref()
+        original.base_url.as_deref()
     );
     assert_eq!(projected.plan.client_authentication(), None);
-    assert!(projected.warning().is_some_and(|warning| {
-        warning.contains("服务地址会被改写为本机协议网关地址")
-            && warning.contains("127.0.0.1")
-            && warning.contains("网页搜索会在此路由中关闭")
-            && warning.contains("reasoning.encrypted_content")
-    }));
+    assert_eq!(
+        projected.warning(),
+        Some("Codex 第三方模型请求将经过本机协议网关")
+    );
+    gateway.shutdown();
+}
+
+#[test]
+fn codex_provider_switch_keeps_the_client_entry_and_replaces_the_route_revision() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().join("state"));
+    let gateway = GatewayController::start(&state);
+    let first = crate::gateway::server::tests::sandbox_codex_file(
+        &state,
+        "first relay",
+        "http://127.0.0.1:18080".to_string(),
+        "first-upstream-key".to_string(),
+        asb_core::contracts::CodexUpstream::Responses,
+    );
+    let second = crate::gateway::server::tests::sandbox_codex_file(
+        &state,
+        "second relay",
+        "http://127.0.0.1:18081".to_string(),
+        "second-upstream-key".to_string(),
+        asb_core::contracts::CodexUpstream::Responses,
+    );
+    let settings = default_client_settings(AppKind::Codex);
+    let first_projection = gateway.project_codex(&first, settings.clone()).unwrap();
+    let second_projection = gateway.project_codex(&second, settings.clone()).unwrap();
+    assert_eq!(
+        first_projection.plan.client_base_url(),
+        second_projection.plan.client_base_url(),
+        "Codex must not need a config rewrite for A to B"
+    );
+    gateway.commit(&first_projection, || Ok(())).unwrap();
+    gateway.commit(&second_projection, || Ok(())).unwrap();
+    assert_eq!(
+        gateway
+            .active_codex_projection(&second, settings)
+            .unwrap()
+            .and_then(|plan| plan.client_base_url().map(str::to_string)),
+        second_projection.plan.client_base_url().map(str::to_string)
+    );
+    assert!(gateway
+        .active_codex_projection(&first, default_client_settings(AppKind::Codex))
+        .unwrap()
+        .is_none());
     gateway.shutdown();
 }
 
@@ -202,11 +252,11 @@ fn claude_routed_projection_explains_the_loopback_rewrite_without_codex_caveats(
 }
 
 #[test]
-fn direct_projection_does_not_create_a_gateway_warning() {
+fn direct_claude_projection_does_not_create_a_gateway_warning() {
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&state);
-    let mut official = profile(AppKind::Codex, UpstreamProtocol::Responses);
+    let mut official = profile(AppKind::Claude, UpstreamProtocol::AnthropicMessages);
     official.route_mode = RouteMode::Official;
     official.base_url = None;
     official.api_key.clear();
@@ -229,19 +279,67 @@ fn capability_comparison_has_no_early_success_path() {
 }
 
 #[test]
-fn invalid_gateway_state_is_quarantined_before_a_fresh_listener_starts() {
+fn invalid_gateway_state_is_left_untouched_until_explicit_repair() {
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
     let path = state.gateway_state_path();
     fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(&path, "{not-json").unwrap();
+    let original = b"{not-json";
+    fs::write(&path, original).unwrap();
 
     let gateway = GatewayController::start(&state);
     assert!(!gateway.has_active_routes());
-    let restored: GatewayStateFile =
-        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-    assert_eq!(restored.version, STATE_VERSION);
-    assert!(fs::read_dir(path.parent().unwrap())
+    assert_eq!(fs::read(&path).unwrap(), original);
+    assert!(!fs::read_dir(path.parent().unwrap())
+        .unwrap()
+        .filter_map(Result::ok)
+        .any(|entry| entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("gateway.invalid.")));
+    let observation = gateway.observe(&state);
+    assert_eq!(observation.status, GatewayStatusKind::NeedsRepair);
+    assert!(observation.repair_reason.is_some());
+    gateway.shutdown();
+}
+
+#[test]
+fn legacy_active_map_is_left_untouched_and_requires_reapply() {
+    let _client_paths = crate::test_client_paths::redirect_client_paths();
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().join("state"));
+    let path = state.gateway_state_path();
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let original = r#"{
+          "version": 1,
+          "identity": "legacy-installation",
+          "port": 47821,
+          "active": {
+            "codex": {"profileId": "legacy-profile", "fingerprint": "legacy-revision"}
+          }
+        }"#;
+    fs::write(&path, original).unwrap();
+    let target = state.target(AppKind::Codex).unwrap();
+    fs::create_dir_all(target.parent().unwrap()).unwrap();
+    fs::write(
+        target,
+        format!(
+            "model_provider = 'openai'\nopenai_base_url = 'http://127.0.0.1:47821/codex/asb_codex_{}/v1'\n",
+            "a".repeat(64)
+        ),
+    )
+    .unwrap();
+
+    let gateway = GatewayController::start(&state);
+    assert_eq!(fs::read_to_string(&path).unwrap(), original);
+    assert!(!gateway.has_active_route_for(AppKind::Codex));
+    let observation = gateway.observe(&state);
+    assert_eq!(observation.status, GatewayStatusKind::NeedsRepair);
+    assert_eq!(
+        observation.repair_reason.as_deref(),
+        Some("本机协议网关状态不是当前版本；旧状态不会被读取或覆盖，请重新创建并应用 Codex 档案")
+    );
+    assert!(!fs::read_dir(path.parent().unwrap())
         .unwrap()
         .filter_map(Result::ok)
         .any(|entry| entry
@@ -260,18 +358,21 @@ fn gateway_state_rejects_a_persisted_port_outside_the_current_contract() {
     let mut invalid = fresh_state();
     invalid.port = 1;
     write_state(&path, &invalid).unwrap();
+    let original = fs::read(&path).unwrap();
 
     let gateway = GatewayController::start(&state);
-    let replacement: GatewayStateFile =
-        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-    assert_ne!(replacement.port, 1);
-    assert!(fs::read_dir(path.parent().unwrap())
+    assert_eq!(fs::read(&path).unwrap(), original);
+    assert!(!fs::read_dir(path.parent().unwrap())
         .unwrap()
         .filter_map(Result::ok)
         .any(|entry| entry
             .file_name()
             .to_string_lossy()
             .starts_with("gateway.invalid.")));
+    assert_eq!(
+        gateway.observe(&state).status,
+        GatewayStatusKind::NeedsRepair
+    );
     gateway.shutdown();
 }
 
@@ -385,6 +486,51 @@ fn gateway_dependency_outlives_a_failed_listener() {
     assert!(!gateway.is_listening());
     assert!(!gateway.has_active_routes());
     assert!(gateway.has_gateway_dependency(&state));
+    gateway.shutdown();
+}
+
+#[test]
+fn temp_two_codex_profiles_reconcile_restored_probe() {
+    let _client_paths = crate::test_client_paths::redirect_client_paths();
+    let directory = tempfile::tempdir().unwrap();
+    let local = LocalState::from_root(directory.path().join("state"));
+    let gateway = GatewayController::start(&local);
+    let first = crate::gateway::server::tests::sandbox_codex_file(
+        &local,
+        "first relay",
+        "http://127.0.0.1:18080".to_string(),
+        "first-upstream-key".to_string(),
+        asb_core::contracts::CodexUpstream::Responses,
+    );
+    let _second = crate::gateway::server::tests::sandbox_codex_file(
+        &local,
+        "second relay",
+        "http://127.0.0.1:18081".to_string(),
+        "second-upstream-key".to_string(),
+        asb_core::contracts::CodexUpstream::Responses,
+    );
+    let projection = gateway
+        .project_codex(&first, default_client_settings(AppKind::Codex))
+        .unwrap();
+    let target = local.target(AppKind::Codex).unwrap();
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    let rendered = asb_core::adapter::render(
+        "# keep this comment\nmodel = 'old-model'\n",
+        &projection.plan,
+    )
+    .unwrap();
+    std::fs::write(&target, &rendered).unwrap();
+    let reconciled = gateway.reconcile_restored(&local, AppKind::Codex, || Ok(()));
+    println!("PROBE reconcile_restored = {reconciled:?}");
+    let prepared = gateway.prepare_restored(&local, AppKind::Codex, &rendered);
+    println!("PROBE prepare_restored = {:?}", prepared.is_ok());
+    let port_change = crate::gateway::port_change::prepare(
+        &gateway,
+        &local,
+        &crate::gateway::PortChangePreparations::default(),
+        47899,
+    );
+    println!("PROBE port_change = {:?}", port_change.err());
     gateway.shutdown();
 }
 

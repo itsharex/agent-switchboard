@@ -1,14 +1,19 @@
 use super::*;
 
-mod responses;
-
 use crate::contracts::{
-    ConfigValue, ModelOptions, RouteMode, SettingValue, UpstreamProtocol, UsageQuery,
+    ConfigValue, ModelOptions, ProviderDraft, RouteMode, SettingValue, UpstreamProtocol, UsageQuery,
 };
 
 // Mapping keeps credentials in the backend-only proposal so import can
 // persist them; the scan-response boundary is tested at the scan layer.
 const TOKEN: &str = "<placeholder>";
+
+fn claude_draft(outcome: &CcSwitchProposal) -> &ProviderDraft {
+    match &outcome.draft {
+        CcSwitchProviderDraft::Claude(draft) => draft,
+        CcSwitchProviderDraft::Codex(_) => panic!("expected a Claude import proposal"),
+    }
+}
 
 fn row(app_type: &str, id: &str, name: &str, settings_config: &str) -> CcSwitchRow {
     CcSwitchRow {
@@ -54,9 +59,9 @@ fn enabled_script_meta(source: &str) -> String {
 fn claude_custom_imports_its_api_key_and_routing() {
     let outcome = map_row(&row("claude", "id-1", "中继 A", &claude_custom())).unwrap();
     assert_eq!(outcome.key, "claude:id-1");
-    assert_eq!(outcome.draft.api_key, TOKEN);
+    assert_eq!(claude_draft(&outcome).api_key, TOKEN);
     assert_eq!(
-        outcome.draft.base_url.as_deref(),
+        claude_draft(&outcome).base_url.as_deref(),
         Some("https://relay.internal")
     );
     assert!(outcome
@@ -75,7 +80,7 @@ fn claude_api_key_alias_imports_without_an_unimported_warning() {
     );
     let outcome = map_row(&row("claude", "id-api-key", "兼容中继", &config)).unwrap();
 
-    assert_eq!(outcome.draft.api_key, TOKEN);
+    assert_eq!(claude_draft(&outcome).api_key, TOKEN);
     assert!(!outcome
         .warnings
         .iter()
@@ -102,7 +107,8 @@ fn custom_usage_script_becomes_the_native_script_contract() {
     ));
 
     let outcome = map_row(&source).expect("custom provider should map");
-    let Some(UsageQuery::Script { source, .. }) = outcome.draft.usage_query else {
+    let Some(UsageQuery::Script { source, .. }) = claude_draft(&outcome).usage_query.as_ref()
+    else {
         panic!("usage script should be imported");
     };
     assert!(source.contains("const cc = ("));
@@ -128,7 +134,7 @@ fn disabled_or_template_usage_scripts_are_not_activated_on_import() {
         .to_string(),
     );
     let disabled = map_row(&disabled).expect("provider should still map");
-    assert!(disabled.draft.usage_query.is_none());
+    assert!(claude_draft(&disabled).usage_query.is_none());
     assert!(disabled
         .warnings
         .iter()
@@ -147,7 +153,7 @@ fn disabled_or_template_usage_scripts_are_not_activated_on_import() {
         .to_string(),
     );
     let template = map_row(&template).expect("provider should still map");
-    assert!(template.draft.usage_query.is_none());
+    assert!(claude_draft(&template).usage_query.is_none());
     assert!(template
         .warnings
         .iter()
@@ -170,7 +176,7 @@ fn independent_usage_script_inputs_are_not_mixed_into_the_provider() {
     );
 
     let outcome = map_row(&source).expect("provider should still map");
-    assert!(outcome.draft.usage_query.is_none());
+    assert!(claude_draft(&outcome).usage_query.is_none());
     assert!(outcome
         .warnings
         .contains(&"未导入: meta.usage_script.accessToken".to_string()));
@@ -183,8 +189,11 @@ fn claude_import_decodes_lowercase_one_m_model_markers_into_semantic_state() {
     );
     let outcome = map_row(&row("claude", "id-1m", "百万上下文", &config)).unwrap();
 
-    assert_eq!(outcome.draft.model.as_deref(), Some("claude-opus-4-1"));
-    let Some(ModelOptions::Claude(settings)) = outcome.draft.model_options.as_ref() else {
+    assert_eq!(
+        claude_draft(&outcome).model.as_deref(),
+        Some("claude-opus-4-1")
+    );
+    let Some(ModelOptions::Claude(settings)) = claude_draft(&outcome).model_options.as_ref() else {
         panic!("Claude model settings should be imported");
     };
     assert!(settings.primary_one_m);
@@ -192,7 +201,7 @@ fn claude_import_decodes_lowercase_one_m_model_markers_into_semantic_state() {
     assert!(settings.sonnet_one_m);
     assert_eq!(settings.opus_model.as_deref(), Some("claude-opus-4-1"));
     assert!(settings.opus_one_m);
-    assert!(outcome.draft.validate().is_ok());
+    assert!(claude_draft(&outcome).validate().is_ok());
 }
 
 #[test]
@@ -201,8 +210,11 @@ fn claude_import_normalizes_ccswitch_uppercase_one_m_model_markers() {
         r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"{TOKEN}","ANTHROPIC_MODEL":"claude-opus-4-1[1M]"}}}}"#
     );
     let outcome = map_row(&row("claude", "id-1m", "百万上下文", &config)).unwrap();
-    assert_eq!(outcome.draft.model.as_deref(), Some("claude-opus-4-1"));
-    let Some(ModelOptions::Claude(settings)) = outcome.draft.model_options else {
+    assert_eq!(
+        claude_draft(&outcome).model.as_deref(),
+        Some("claude-opus-4-1")
+    );
+    let Some(ModelOptions::Claude(settings)) = claude_draft(&outcome).model_options.as_ref() else {
         panic!("Claude model settings should be imported");
     };
     assert!(settings.primary_one_m);
@@ -212,8 +224,8 @@ fn claude_import_normalizes_ccswitch_uppercase_one_m_model_markers() {
 fn claude_official_rows_become_credential_free_routes() {
     let config = format!(r#"{{"env": {{"ANTHROPIC_AUTH_TOKEN": "{TOKEN}"}}}}"#);
     let outcome = map_row(&row("claude", "id-2", "官方", &config)).unwrap();
-    assert_eq!(outcome.draft.route_mode, RouteMode::Official);
-    assert!(outcome.draft.api_key.is_empty());
+    assert_eq!(claude_draft(&outcome).route_mode, RouteMode::Official);
+    assert!(claude_draft(&outcome).api_key.is_empty());
     assert!(!format!("{outcome:?}").contains(TOKEN));
 }
 
@@ -221,90 +233,6 @@ fn claude_official_rows_become_credential_free_routes() {
 fn claude_malformed_json_skips() {
     let outcome = map_row(&row("claude", "id-3", "坏档", "{oops")).unwrap_err();
     assert!(outcome.reason.contains("无法解析"));
-}
-
-#[test]
-fn codex_oauth_rows_become_credential_free_routes() {
-    let config = format!(
-        r#"{{"auth": {{"OPENAI_API_KEY": null, "tokens": {{"refresh_token": "{TOKEN}"}}}}, "config": ""}}"#
-    );
-    let outcome = map_row(&row("codex", "id-4", "订阅", &config)).unwrap();
-    assert_eq!(outcome.draft.route_mode, RouteMode::Official);
-    assert!(outcome.draft.api_key.is_empty());
-    assert!(!format!("{outcome:?}").contains(TOKEN));
-}
-
-#[test]
-fn codex_custom_imports_api_key_from_auth() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
-            "config": "[model_providers.relay]\nname = \"Relay\"\nbase_url = \"https://api.relay.internal\"\nenv_key = \"RELAY_KEY\"\nwire_api = \"responses\"\n"}"#;
-    let outcome = map_row(&row("codex", "id-5", "中继 B", config)).unwrap();
-    assert_eq!(outcome.draft.api_key, TOKEN);
-    assert_eq!(
-        outcome.draft.base_url.as_deref(),
-        Some("https://api.relay.internal")
-    );
-}
-
-#[test]
-fn codex_custom_without_wire_api_defaults_to_responses() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
-            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\n"}"#;
-    let outcome = map_row(&row("codex", "id-6", "缺省", config)).unwrap();
-    assert_eq!(outcome.draft.api_key, TOKEN);
-    assert_eq!(
-        outcome.draft.base_url.as_deref(),
-        Some("https://x.internal")
-    );
-}
-
-#[test]
-fn codex_chat_completion_wire_api_maps_to_the_explicit_protocol() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
-            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\nwire_api = \"chat\"\n"}"#;
-    let outcome = map_row(&row("codex", "id-7", "聊天式", config)).unwrap();
-    assert_eq!(
-        outcome.draft.upstream_protocol,
-        Some(UpstreamProtocol::ChatCompletions)
-    );
-}
-
-#[test]
-fn codex_anthropic_wire_api_skips_without_inventing_an_output_limit() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
-            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\nwire_api = \"anthropic\"\n"}"#;
-    let outcome = map_row(&row("codex", "id-7a", "Anthropic", config)).unwrap_err();
-    assert!(outcome.reason.contains("最大输出 token"));
-}
-
-#[test]
-fn codex_extra_table_key_skips_because_activation_would_lose_it() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
-            "config": "[model_providers.r]\nbase_url = \"https://x.internal\"\nhttp_headers = {\"X-Up\" = \"1\"}\n"}"#;
-    let outcome = map_row(&row("codex", "id-8", "带头", config)).unwrap_err();
-    assert!(outcome.reason.contains("http_headers"));
-}
-
-#[test]
-fn codex_multiple_provider_tables_skips() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"},
-            "config": "[model_providers.a]\nbase_url = \"https://a.internal\"\n[model_providers.b]\nbase_url = \"https://b.internal\"\n"}"#;
-    let outcome = map_row(&row("codex", "id-9", "多表", config)).unwrap_err();
-    assert!(outcome.reason.contains("2 个表"));
-}
-
-#[test]
-fn codex_broken_toml_skips() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"}, "config": "[oops"}"#;
-    let outcome = map_row(&row("codex", "id-10", "坏档", config)).unwrap_err();
-    assert!(outcome.reason.contains("TOML"));
-}
-
-#[test]
-fn codex_custom_without_base_url_skips() {
-    let config = r#"{"auth": {"OPENAI_API_KEY": "<placeholder>"}, "config": "[model_providers.r]\nname = \"R\"\n"}"#;
-    let outcome = map_row(&row("codex", "id-11", "无地址", config)).unwrap_err();
-    assert!(outcome.reason.contains("base_url"));
 }
 
 #[test]
@@ -329,13 +257,15 @@ fn imported_claude_parameters_are_kept_and_excluded_from_unimported_warnings() {
     ))
     .unwrap();
     assert_eq!(
-        outcome.draft.parameters.value("effortLevel"),
+        claude_draft(&outcome).parameters.value("effortLevel"),
         Some(&SettingValue::Explicit {
             value: ConfigValue::Str("high".into())
         })
     );
     assert_eq!(
-        outcome.draft.parameters.value("autoCompactEnabled"),
+        claude_draft(&outcome)
+            .parameters
+            .value("autoCompactEnabled"),
         Some(&SettingValue::Explicit {
             value: ConfigValue::Bool(false)
         })
@@ -351,32 +281,49 @@ fn imported_claude_parameters_are_kept_and_excluded_from_unimported_warnings() {
 }
 
 #[test]
-fn imported_codex_parameters_belong_to_each_source_provider() {
-    for (id, effort) in [("a", "high"), ("b", "low")] {
-        let config = serde_json::json!({
-            "auth": { "OPENAI_API_KEY": TOKEN },
-            "config": format!("model_reasoning_effort = '{effort}'\n[features]\nfast_mode = false\n[model_providers.relay]\nbase_url = 'https://relay.internal/v1'\nwire_api = 'responses'\n"),
-        });
-        let outcome = map_row(&row("codex", id, id, &config.to_string())).unwrap();
-        assert_eq!(
-            outcome.draft.parameters.value("model_reasoning_effort"),
-            Some(&SettingValue::Explicit {
-                value: ConfigValue::Str(effort.into())
-            })
-        );
-        assert_eq!(
-            outcome.draft.parameters.value("features.fast_mode"),
-            Some(&SettingValue::Explicit {
-                value: ConfigValue::Bool(false)
-            })
-        );
-        outcome.draft.validate().unwrap();
-    }
-}
-
-#[test]
 fn invalid_ccswitch_parameter_values_are_rejected() {
     let config = serde_json::json!({"effortLevel": "unsupported"}).to_string();
     let skipped = map_row(&row("claude", "invalid-parameters", "无效参数", &config)).unwrap_err();
     assert!(skipped.reason.contains("effortLevel"));
+}
+
+#[path = "tests/codex.rs"]
+mod codex;
+
+#[test]
+fn claude_openai_chat_meta_selects_the_upstream_protocol_and_keeps_a_bare_domain_root() {
+    let config = serde_json::json!({
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://integrate.api.nvidia.com",
+            "ANTHROPIC_AUTH_TOKEN": "<placeholder>",
+            "ANTHROPIC_MODEL": "moonshotai/kimi-k2.5"
+        }
+    })
+    .to_string();
+    let mut source = row("claude", "probe", "Nvidia", &config);
+    source.meta = Some(serde_json::json!({"apiFormat": "openai_chat"}).to_string());
+    let outcome = map_row(&source).expect("camelCase apiFormat maps");
+    let draft = claude_draft(&outcome);
+    assert_eq!(
+        draft.upstream_protocol,
+        Some(UpstreamProtocol::ChatCompletions)
+    );
+    assert_eq!(
+        draft.base_url.as_deref(),
+        Some("https://integrate.api.nvidia.com")
+    );
+
+    // The reference database stores this key in either spelling.
+    let mut with_alias = row("claude", "probe-alias", "Alias", &config);
+    with_alias.meta = Some(serde_json::json!({"api_format": "openai_chat"}).to_string());
+    let outcome = map_row(&with_alias).expect("snake_case alias maps");
+    let draft = claude_draft(&outcome);
+    assert_eq!(
+        draft.upstream_protocol,
+        Some(UpstreamProtocol::ChatCompletions)
+    );
+    assert_eq!(
+        draft.base_url.as_deref(),
+        Some("https://integrate.api.nvidia.com")
+    );
 }

@@ -14,7 +14,6 @@ use super::*;
 use asb_core::contracts::ResponsesRequestMode;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use reqwest::blocking::Response as UpstreamResponse;
 use reqwest::header::CONTENT_TYPE;
 use serde_json::{json, Value};
 use sha1::{Digest, Sha1};
@@ -28,10 +27,10 @@ const WEBSOCKET_ACCEPT_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 pub(crate) fn handle(
     request: Request,
     inner: Arc<GatewayInner>,
-    client: Arc<Client>,
+    client: Arc<UpstreamClient>,
     stop: Arc<std::sync::atomic::AtomicBool>,
 ) {
-    if client_protocol(request.url()) != Some(UpstreamProtocol::Responses) {
+    if codex_request(request.url()).is_none_or(|path| !path.operation.is_responses()) {
         let endpoint = format!("{}{}", inner.configured_base_url(), request.url());
         let mut diagnostic = ProviderDiagnostic::new(
             ProviderFailureKind::WebsocketUnsupported,
@@ -43,7 +42,7 @@ pub(crate) fn handle(
         respond_diagnostic(request, UpstreamProtocol::Responses, 404, &diagnostic);
         return;
     }
-    let span = RequestSpan::start(
+    let mut span = RequestSpan::start(
         Arc::clone(&inner.metrics),
         AppKind::Codex,
         UpstreamProtocol::Responses,
@@ -56,8 +55,8 @@ pub(crate) fn handle(
             return;
         }
     };
-    let Some(token) = request_capability(&request, UpstreamProtocol::Responses)
-        .filter(|token| active_route(&inner, token).is_some())
+    let Some((token, route)) = request_capability(&request, UpstreamProtocol::Responses)
+        .and_then(|token| active_route(&inner, &token, None).map(|route| (token, route)))
     else {
         span.finish(Some(403), 0);
         respond_error(
@@ -68,6 +67,11 @@ pub(crate) fn handle(
         );
         return;
     };
+    span.bind_route(
+        &route.profile_id,
+        &route.fingerprint,
+        route.upstream_protocol,
+    );
     let Some(_connection) = connections::ConnectionGuard::acquire(Arc::clone(&inner)) else {
         span.finish(Some(503), 0);
         respond_error(
@@ -85,6 +89,11 @@ pub(crate) fn handle(
         )
         .expect("valid WebSocket accept header"),
     );
+    let request_url = request.url().to_string();
+    // The HTTP request is consumed by the upgrade. Keep the handshake facts
+    // that a native Responses upstream may need for this connection.
+    let request_headers = request.headers().to_vec();
+    let route_revision = route.fingerprint.clone();
     let stream = match request.upgrade("websocket", response) {
         Ok(stream) => stream,
         Err(_) => {
@@ -102,14 +111,26 @@ pub(crate) fn handle(
     };
     let socket = WebSocket::from_raw_socket(stream, Role::Server, Some(config));
     span.finish(Some(101), 0);
-    serve_connection(socket, inner, client, token, stop);
+    serve_connection(
+        socket,
+        inner,
+        client,
+        token,
+        route_revision,
+        request_url,
+        request_headers,
+        stop,
+    );
 }
 
 fn serve_connection<S>(
     mut socket: WebSocket<S>,
     inner: Arc<GatewayInner>,
-    client: Arc<Client>,
+    client: Arc<UpstreamClient>,
     token: String,
+    route_revision: String,
+    request_url: String,
+    request_headers: Vec<Header>,
     stop: Arc<std::sync::atomic::AtomicBool>,
 ) where
     S: Read + Write,
@@ -141,6 +162,9 @@ fn serve_connection<S>(
                     &client,
                     &inner,
                     &token,
+                    &route_revision,
+                    &request_url,
+                    &request_headers,
                     &mut context,
                     &text,
                     &mut span,
@@ -196,9 +220,12 @@ impl ExchangeOutcome {
 
 fn serve_message<S>(
     socket: &mut WebSocket<S>,
-    client: &Client,
+    client: &UpstreamClient,
     inner: &GatewayInner,
     token: &str,
+    route_revision: &str,
+    request_url: &str,
+    request_headers: &[Header],
     context: &mut ConversationContext,
     text: &str,
     span: &mut RequestSpan,
@@ -214,18 +241,19 @@ where
             ExchangeOutcome::Disconnect
         };
     }
-    let Some(route) = active_route(inner, token) else {
-        return if send_failed(
+    let Some(route) = active_route(inner, token, Some(route_revision)) else {
+        let _ = send_failed(
             socket,
             "route_inactive",
             "本机协议网关路由已失效；请重新连接后重试",
-        ) {
-            ExchangeOutcome::Rejected
-        } else {
-            ExchangeOutcome::Disconnect
-        };
+        );
+        return ExchangeOutcome::Disconnect;
     };
-    span.bind_route(&route.profile_id, route.upstream_protocol);
+    span.bind_route(
+        &route.profile_id,
+        &route.fingerprint,
+        route.upstream_protocol,
+    );
     span.note_request_bytes(text.len() as u64);
     let mode = route
         .responses_options
@@ -235,9 +263,9 @@ where
     let prepared = if route.upstream_protocol == UpstreamProtocol::Responses
         || crate::gateway::compaction::is_v2(text.as_bytes()).unwrap_or(false)
     {
-        context.prepare_native(text)
+        context.prepare_native(&route.fingerprint, text)
     } else {
-        context.prepare(mode, text)
+        context.prepare(&route.fingerprint, mode, text)
     };
     match prepared {
         Ok(PreparedResponse::Prewarm(response)) => {
@@ -247,16 +275,37 @@ where
                 ExchangeOutcome::Disconnect
             }
         }
-        Ok(PreparedResponse::Upstream(request)) => execute_request(
-            socket,
-            client,
-            &inner.configured_base_url(),
-            &route,
-            context,
-            request,
-        ),
+        Ok(PreparedResponse::Upstream(mut request)) => {
+            match super::codex::resolve_model_and_validate(
+                &route,
+                CodexOperation::Responses,
+                request.body,
+            ) {
+                Ok(body) => request.body = body,
+                Err(message) => {
+                    let endpoint = upstream_url(&route, &inner.configured_base_url(), request_url)
+                        .unwrap_or_else(|_| route.upstream_base_url.clone());
+                    let diagnostic = ProviderDiagnostic::new(
+                        ProviderFailureKind::RequestParameters,
+                        &endpoint,
+                        &message,
+                    );
+                    return reject_context(socket, &diagnostic, "invalid_request");
+                }
+            }
+            execute_request(
+                socket,
+                client,
+                &inner.configured_base_url(),
+                &route,
+                context,
+                request,
+                request_url,
+                request_headers,
+            )
+        }
         Err(error) => {
-            let endpoint = upstream_url(&route, &inner.configured_base_url())
+            let endpoint = upstream_url(&route, &inner.configured_base_url(), request_url)
                 .unwrap_or_else(|_| route.upstream_base_url.clone());
             let diagnostic = ProviderDiagnostic::new(
                 ProviderFailureKind::RequestParameters,
@@ -267,13 +316,18 @@ where
         }
     }
 }
-fn active_route(inner: &GatewayInner, token: &str) -> Option<ActiveRoute> {
+fn active_route(
+    inner: &GatewayInner,
+    token: &str,
+    route_revision: Option<&str>,
+) -> Option<ActiveRoute> {
     inner
         .routes
         .read()
         .ok()?
         .get(&AppKind::Codex)
         .filter(|route| constant_time_equal(route.client_token.as_bytes(), token.as_bytes()))
+        .filter(|route| route_revision.is_none_or(|revision| route.fingerprint == revision))
         .cloned()
 }
 

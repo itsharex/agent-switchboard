@@ -21,6 +21,7 @@
 @import "./base/tables-backups.css";
 @import "./base/logs-and-usage.css";
 @import "./base/sessions.css";
+@import "./base/gateway.css";
 @import "./base/overlays.css";
 @import "./base/behavior-responsive.css";
 @import "./base/discovery-extensions.css";
@@ -50,7 +51,7 @@
   list-style: none;
 }
 
-.asb-nav button {
+.asb-nav .asb-btn {
   min-height: var(--asb-touch-target);
   padding: 0 var(--asb-space-2);
   border: 0;
@@ -63,11 +64,11 @@
   cursor: pointer;
 }
 
-.asb-nav button:hover {
+.asb-nav .asb-btn:hover {
   color: var(--asb-text);
 }
 
-.asb-nav button[aria-current="page"] {
+.asb-nav .asb-btn[aria-current="page"] {
   color: var(--asb-text);
   font-weight: 700;
 }
@@ -98,7 +99,7 @@
   pointer-events: none;
 }
 
-.asb-banner > button {
+.asb-banner > .asb-btn {
   pointer-events: auto;
 }
 
@@ -106,24 +107,24 @@
 .asb-segments {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
+  gap: var(--asb-space-hairline);
+  padding: var(--asb-space-concentric);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-action);
   background: var(--asb-code-bg);
 }
 
 .asb-seg-opt {
-  /* Own the visually hidden radio's absolute coordinates so focus can only
+  /* Own the visually hidden radio's absolute coordinates so it can only
      scroll the page's actual scroll surface, never #root. */
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
+  min-height: var(--asb-control-height-compact);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
-  border-radius: calc(var(--asb-radius-action) - 3px);
+  border-radius: var(--asb-radius-action-inner);
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
   cursor: pointer;
@@ -140,7 +141,7 @@
   background: var(--asb-content);
   color: var(--asb-text);
   font-weight: 600;
-  box-shadow: var(--asb-route-shadow);
+  box-shadow: var(--asb-shadow-raised);
 }
 
 .asb-seg-opt input {
@@ -153,18 +154,13 @@
   white-space: nowrap;
 }
 
-/* Drawn selection controls (checkbox box, segment pill, slider thumb) show
-   their focus ring only for keyboard navigation: pointer clicks on
-   checkbox/radio/range inputs match :focus-visible natively, which wrapped
-   the drawn control in a ring on every click (2026-08-28 user directive).
-   App.tsx keeps data-focus-source="key" on the root while the last
-   interaction was a navigation key. */
-.asb-seg-opt input:focus-visible {
-  outline: none;
-}
-
-:root[data-focus-source="key"] .asb-seg-opt:has(input:focus-visible) {
-  outline: var(--asb-focus-ring);
+/* Client mark inside a segment or picker; sized to the icon set, unlike the
+   larger mark a tab carried. */
+.asb-seg-logo {
+  display: block;
+  width: var(--asb-icon-size-sm);
+  height: var(--asb-icon-size-sm);
+  object-fit: contain;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -175,7 +171,7 @@
 
 /* Generic tick-box control (Frosted Relay structure, Frosted Relay tokens) */
 .asb-checkbox {
-  /* Keep the native input's focus box attached to the drawn checkbox. */
+  /* Keep the native input attached to the drawn checkbox. */
   position: relative;
   display: flex;
   align-items: center;
@@ -209,8 +205,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--asb-icon-size-lg);
+  height: var(--asb-icon-size-lg);
   border: 1px solid var(--asb-hairline-strong);
   border-radius: var(--asb-radius-check);
   background: var(--asb-canvas);
@@ -239,17 +235,24 @@
   border-color: var(--asb-action);
 }
 
-:root[data-focus-source="key"] .asb-checkbox-input:focus-visible + .asb-checkbox-box {
-  box-shadow: var(--asb-focus-ring);
-}
-
 /* On/off switch for application-settings rows (Frosted Relay structure,
    Frosted Relay tokens). The setting text lives in the row's copy column;
    this control renders on the right. The checked track carries the ported
    Frosted Relay primary-button gradient with its inset glow; hover strengthens
    the glow, exactly like the provider-row activate button. */
 .asb-switch {
-  /* Keep the native input's focus box attached to the drawn switch. */
+  /* Switch geometry: the thumb's travel is the track width minus two insets
+     and two borders, so all three numbers move together. Declared here so
+     every descendant — track, thumb, travel — reads one source. */
+  --asb-switch-track-width: 44px;
+  --asb-switch-track-height: 26px;
+  --asb-switch-thumb-size: var(--asb-icon-size-md);
+  --asb-switch-thumb-travel: calc(
+    var(--asb-switch-track-width) - 2 * var(--asb-space-concentric) - 2 * 1px -
+      var(--asb-switch-thumb-size)
+  );
+
+  /* Keep the native input attached to the drawn switch. */
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -280,9 +283,9 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  width: 44px;
-  height: 26px;
-  padding: 3px;
+  width: var(--asb-switch-track-width);
+  height: var(--asb-switch-track-height);
+  padding: var(--asb-space-concentric);
   border: 1px solid var(--asb-hairline-strong);
   border-radius: var(--asb-radius-pill);
   background: var(--asb-canvas);
@@ -309,8 +312,8 @@
 
 .asb-switch-thumb {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: var(--asb-switch-thumb-size);
+  height: var(--asb-switch-thumb-size);
   border-radius: var(--asb-radius-pill);
   background: var(--asb-slider-thumb-bg);
   box-shadow: 0 1px 3px rgb(20 22 27 / 0.28);
@@ -319,36 +322,7 @@
 }
 
 .asb-switch-track[data-checked="true"] .asb-switch-thumb {
-  translate: 18px 0;
-}
-
-:root[data-focus-source="key"] .asb-switch-input:focus-visible + .asb-switch-track {
-  box-shadow: var(--asb-focus-ring);
-}
-
-/* Reveal rules sit after the shared primary rules so the hidden default
-   wins at equal specificity. Row actions stay hidden until the card is
-   hovered; the cluster also reveals on keyboard-driven :focus-within so
-   its icon buttons remain reachable by keyboard — pointer clicks focus
-   the row too, so they must not pin the reveal (2026-09-08 user report).
-   启用 stays pointer-only by contract (ProviderList.test.tsx). */
-.asb-row-item .asb-row-activate {
-  display: none;
-}
-
-.asb-row-item:hover .asb-row-activate {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.asb-row-item .asb-iconcluster {
-  display: none;
-}
-
-.asb-row-item:hover .asb-iconcluster,
-:root[data-focus-source="key"] .asb-row-item:focus-within .asb-iconcluster {
-  display: inline-flex;
+  translate: var(--asb-switch-thumb-travel) 0;
 }
 
 /* The host is a quiet link, muted until hover: it opens the system browser
@@ -357,6 +331,7 @@
   color: inherit;
   cursor: pointer;
   text-decoration: none;
+  transition: color var(--asb-motion-press) var(--asb-easing);
 }
 
 .asb-row-host:hover {

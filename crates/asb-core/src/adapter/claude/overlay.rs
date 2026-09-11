@@ -54,7 +54,9 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
                 ConfigValue::Array(models.iter().cloned().map(ConfigValue::Str).collect())
             })
         }),
-        "env.ANTHROPIC_BASE_URL" => plan.client_base_url().map(|url| ConfigValue::Str(url.into())),
+        "env.ANTHROPIC_BASE_URL" => plan
+            .client_base_url()
+            .map(|url| ConfigValue::Str(url.into())),
         "env.ANTHROPIC_AUTH_TOKEN" => (plan.client_authentication()
             == Some(AuthenticationScheme::Bearer))
         .then(|| ConfigValue::Str(plan.client_api_key().into())),

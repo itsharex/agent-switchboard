@@ -7,6 +7,7 @@ const VARIANT_CLASS = {
   icon: "asb-btn-icon",
   plus: "asb-btn-plus",
   back: "asb-btn-back",
+  unstyled: "asb-btn-unstyled",
 } as const;
 
 export type ButtonVariant = keyof typeof VARIANT_CLASS;
@@ -17,7 +18,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /**
  * Global action control. Owns the geometry contract: every instance emits
- * .asb-btn plus exactly one variant surface class owned by styles/base.css.
+ * .asb-btn plus exactly one variant surface class owned by styles/base/buttons.css.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button({ variant, className, type = "button", ...props }, ref) {

@@ -83,23 +83,23 @@ export function TrayPanel() {
   };
   const error = actionError ?? readError ?? snapshot?.error;
   return (
-    <div ref={panel} className="tray-panel bui-scope" aria-label="Agent Switchboard 托盘">
-      <header className="tray-header flex items-center justify-between gap-2 px-4 py-2">
+    <div ref={panel} className="tray-panel" aria-label="Agent Switchboard 托盘">
+      <header className="tray-header">
         <img src={appIcon} alt="" className="tray-app-logo" aria-hidden="true" />
         <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("open", () => openTrayMain(false))}>
           <ArrowUpRight size={16} aria-hidden="true" />
           打开主界面
         </Button>
       </header>
-      {error && <div role="alert" className="tray-error px-4 py-2 text-caption-1-regular">{error}</div>}
-      <div ref={list} className="tray-list px-2">
+      {error && <div role="alert" className="tray-error">{error}</div>}
+      <div ref={list} className="tray-list">
         <div>
-          {!snapshot && !readError && <p role="status" className="px-2 py-4 text-body-2-regular">正在读取供应商…</p>}
+          {!snapshot && !readError && <p role="status" className="tray-loading">正在读取供应商…</p>}
           {(["codex", "claude"] as const).map((app) => {
             const providers = snapshot?.providers.filter((provider) => provider.app === app) ?? [];
-            return <section key={app} aria-label={app === "codex" ? "Codex" : "Claude Code"} className="tray-group py-2">
-              <h2 className="m-0 flex items-center gap-2 px-2 pb-2 text-caption-1-semibold text-text-secondary"><ClientLogo app={app} className="tray-client-logo" />{app === "codex" ? "Codex" : "Claude Code"}</h2>
-              {snapshot && providers.length === 0 && <p className="m-0 px-2 py-2 text-caption-1-regular text-text-secondary">暂无供应商</p>}
+            return <section key={app} aria-label={app === "codex" ? "Codex" : "Claude Code"} className="tray-group">
+              <h2 className="tray-group-heading"><ClientLogo app={app} className="tray-client-logo" />{app === "codex" ? "Codex" : "Claude Code"}</h2>
+              {snapshot && providers.length === 0 && <p className="tray-group-empty">暂无供应商</p>}
               {providers.map((provider) => <Button
                 key={provider.id} variant="secondary"
                 className={cx("tray-provider", provider.active && "tray-provider-active")}
@@ -110,22 +110,22 @@ export function TrayPanel() {
               >
                 <span className="tray-check">{provider.active && <Check size={18} aria-hidden="true" />}</span>
                 <span className="tray-provider-text">
-                  <span className="tray-provider-name text-body-2-medium">{provider.name}</span>
+                  <span className="tray-provider-name">{provider.name}</span>
                   <span id={`tray-provider-detail-${provider.id}`} className="tray-provider-text">
-                  <span className="tray-detail text-caption-1-regular">{provider.model ?? "默认模型"}</span>
+                  <span className="tray-detail">{provider.model ?? "默认模型"}</span>
                   {provider.usage && <>
-                    <span className="tray-detail text-caption-1-regular">{formatUsageSummary(provider.usage)}</span>
-                    <span className="tray-time text-caption-2-regular">缓存 · <Time iso={provider.usage.at} /></span>
+                    <span className="tray-detail">{formatUsageSummary(provider.usage)}</span>
+                    <span className="tray-time">缓存 · <Time iso={provider.usage.at} /></span>
                   </>}
                   </span>
                 </span>
-                {!provider.active && <span className="tray-switch text-caption-1-regular">{pending === provider.id ? "切换中" : "切换"}</span>}
+                {!provider.active && <span className="tray-switch">{pending === provider.id ? "切换中" : "切换"}</span>}
               </Button>)}
             </section>;
           })}
         </div>
       </div>
-      <footer className="tray-footer flex items-center justify-between gap-2 px-2 py-2">
+      <footer className="tray-footer">
         <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("manage", () => openTrayMain(true))}>管理供应商</Button>
         <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("quit", quitTray)}><LogOut size={16} aria-hidden="true" />退出</Button>
       </footer>

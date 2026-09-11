@@ -6,6 +6,9 @@ target-*/
 .zcode/
 .playwright-mcp/
 .tmp/
+.tmp-*/
+.apple-build/
+.audit-files.txt
 *.log
 .DS_Store
 .env

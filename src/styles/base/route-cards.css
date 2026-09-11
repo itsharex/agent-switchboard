@@ -10,7 +10,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 224px;
+  --asb-route-card-min-height: 224px;
+  min-height: var(--asb-route-card-min-height);
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--asb-hairline);
@@ -19,60 +20,15 @@
 }
 
 .asb-route-card.is-on {
-  box-shadow: var(--asb-route-shadow);
-}
-
-.asb-route-card[data-app="codex"].is-on {
-  background: var(--asb-route-active-gradient-codex);
+  border-color: var(--asb-action);
 }
 
 .asb-route-card[data-app="claude"].is-on {
-  background: var(--asb-route-active-gradient-claude);
-}
-
-/* Starlight particle matrix — real aria-hidden canvas layer, never content. */
-.asb-card-particle-canvas {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-/* The matrix and corner glow share a clipped decorative layer. Its lifetime
-   follows the readable connection card, so hidden pages do no canvas work. */
-.asb-starlight {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  border-radius: inherit;
-  pointer-events: none;
-}
-
-.asb-starlight .asb-card-particle-canvas,
-.asb-starlight-glow {
-  opacity: 1;
-}
-
-.asb-starlight-glow {
-  position: absolute;
-  inset: 0;
-}
-
-.asb-starlight[data-variant="cool"] .asb-starlight-glow {
-  background: var(--asb-starlight-cool-glow);
-}
-
-.asb-starlight[data-variant="violet"] .asb-starlight-glow {
-  background: var(--asb-starlight-violet-glow);
+  border-color: var(--asb-claude);
 }
 
 .asb-route-card-body {
   position: relative;
-  z-index: 1;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -93,13 +49,17 @@
 }
 
 .asb-route-card.is-on .asb-route-client {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--asb-action);
+}
+
+.asb-route-card[data-app="claude"].is-on .asb-route-client {
+  color: var(--asb-claude);
 }
 
 .asb-route-provider {
-  margin: 2px 0 0;
+  margin: var(--asb-space-hairline) 0 0;
   /* Aligned with the client name text, not the logo tile beside it. */
-  padding-inline-start: calc(24px + var(--asb-space-unit));
+  padding-inline-start: calc(var(--asb-space-4) + var(--asb-space-unit));
   max-width: 100%;
   overflow-wrap: anywhere;
   font: var(--asb-text-title);
@@ -107,7 +67,7 @@
 }
 
 .asb-route-card.is-on .asb-route-provider {
-  color: var(--asb-text-on-action);
+  color: var(--asb-text);
 }
 
 .asb-route-values {
@@ -126,7 +86,7 @@
 .asb-route-values > div {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
   min-width: 0;
 }
 
@@ -140,13 +100,6 @@
   overflow-wrap: anywhere;
   font: var(--asb-text-code);
   color: var(--asb-text);
-}
-
-.asb-route-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--asb-space-1);
-  margin-top: auto;
 }
 
 .asb-route-notes {

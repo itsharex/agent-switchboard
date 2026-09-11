@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Shell;
 using AgentSwitchboard.Installer;
 
@@ -58,7 +59,9 @@ internal static class Contracts
             var surface = window.Content as Grid;
             Equal(true, surface != null);
             Equal(new Thickness(0), surface.Margin);
-            Equal(true, surface.Background != null);
+            var background = surface.Background as ImageBrush;
+            Equal(true, background != null);
+            Equal(Stretch.Fill, background.Stretch);
             var layout = (Grid)surface.Children[0];
             var header = (Grid)layout.Children[0];
             var brand = (StackPanel)header.Children[0];
@@ -76,7 +79,7 @@ internal static class Contracts
             minimize.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Equal(WindowState.Minimized, window.WindowState);
             window.Close();
-            Console.WriteLine("Installer contracts passed: passive/silent, restart arguments, path validation, installed detection, child exit status, single edge-to-edge window surface.");
+            Console.WriteLine("Installer contracts passed: passive/silent, restart arguments, path validation, installed detection, child exit status, single edge-to-edge window surface with the fixed dark background image.");
             return 0;
         }
         finally { Directory.Delete(root, true); }

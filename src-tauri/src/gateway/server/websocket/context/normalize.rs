@@ -29,6 +29,7 @@ pub(super) fn normalize_request(
 ) -> Result<NormalizedRequest, ContextError> {
     let mut value: Value = serde_json::from_str(text)
         .map_err(|_| ContextError::invalid("Codex WebSocket 请求不是有效 JSON"))?;
+    let session_id = session_id(&value)?;
     if mode == ResponsesRequestMode::Minimal {
         prepare_minimal(&mut value)?;
     }
@@ -77,6 +78,7 @@ pub(super) fn normalize_request(
         "instructions",
         "max_output_tokens",
         "parallel_tool_calls",
+        "reasoning",
         "stream",
         "temperature",
         "tool_choice",
@@ -99,6 +101,7 @@ pub(super) fn normalize_request(
         stream,
         generate,
         previous_response_id,
+        session_id,
     })
 }
 
@@ -149,11 +152,16 @@ pub(super) fn validate_transport_metadata(root: &Map<String, Value>) -> Result<(
     }
     if let Some(reasoning) = root.get("reasoning") {
         let reasoning = object(reasoning, "reasoning")?;
-        allowed(reasoning, &["summary"], "reasoning")?;
-        if required_string(reasoning, "summary", "reasoning")? != "auto" {
-            return Err(ContextError::invalid(
-                "跨协议 WebSocket 仅支持 reasoning.summary=auto",
-            ));
+        allowed(reasoning, &["summary", "effort"], "reasoning")?;
+        if let Some(summary) = reasoning.get("summary") {
+            if summary.as_str() != Some("auto") {
+                return Err(ContextError::invalid(
+                    "跨协议 WebSocket 仅支持 reasoning.summary=auto",
+                ));
+            }
+        }
+        if let Some(effort) = reasoning.get("effort") {
+            nonempty_string(effort, "reasoning.effort")?;
         }
     }
     if let Some(key) = root.get("prompt_cache_key") {

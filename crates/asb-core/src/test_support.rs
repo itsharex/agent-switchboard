@@ -11,7 +11,7 @@ history_persistence = "save-all"
 threads = 8
 model = "gpt-5.1"
 model_provider = "openai"
-openai_base_url = "http://127.0.0.1:47821/codex/fixture-a/v1"
+openai_base_url = "http://127.0.0.1:47821/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1"
 
 [projects."F:\\work\\sample"]
 trusted = true

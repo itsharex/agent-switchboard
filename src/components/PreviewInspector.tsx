@@ -1,6 +1,7 @@
 import type { FilePreview } from "../api/client";
 import { CodePreview } from "./CodePreview";
 import { DiffView } from "./DiffView";
+import { PreviewIcon } from "./icons";
 
 interface Props {
   filePreview: FilePreview | null;
@@ -22,7 +23,14 @@ export function PreviewInspector({
   userConfigWarnings,
 }: Props) {
   if (!filePreview) {
-    return <p className="asb-empty">选择供应商后生成预览</p>;
+    return (
+      <div className="asb-empty-state">
+        <span className="asb-empty-state-icon" aria-hidden="true">
+          <PreviewIcon />
+        </span>
+        <h3 className="asb-section-title">选择供应商后生成预览</h3>
+      </div>
+    );
   }
   const { preview } = filePreview;
   return (

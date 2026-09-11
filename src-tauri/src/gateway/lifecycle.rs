@@ -8,13 +8,11 @@ impl GatewayController {
     /// still open with an actionable repair surface.
     pub(crate) fn start(local: &LocalState) -> Self {
         let state_path = local.gateway_state_path();
-        let (mut state, unusable) = match read_or_create_state(&state_path) {
-            StateLoad::Ready(state) | StateLoad::Created(state) | StateLoad::Quarantined(state) => {
-                (state, None)
-            }
+        let (mut state, unusable, repair_reason) = match read_or_create_state(&state_path) {
+            StateLoad::Ready(state) | StateLoad::Created(state) => (state, None, None),
             StateLoad::Unusable(detail) => {
                 log::warn!("本机协议网关状态不可用：{detail}");
-                (fresh_state(), Some(detail))
+                (fresh_state(), Some(detail.clone()), Some(detail))
             }
         };
         let blocked = if unusable.is_none() {
@@ -52,6 +50,7 @@ impl GatewayController {
                 websocket_connections: AtomicUsize::new(0),
                 stopping: AtomicBool::new(false),
                 state_available: AtomicBool::new(state_available),
+                repair_reason: Mutex::new(repair_reason),
                 blocked_recovery: Mutex::new(blocked),
                 metrics: Arc::new(GatewayMetrics::new()),
             }),
@@ -179,10 +178,12 @@ impl GatewayController {
     fn reload_state(&self, local: &LocalState) -> bool {
         let state_path = local.gateway_state_path();
         let mut state = match read_or_create_state(&state_path) {
-            StateLoad::Ready(state) | StateLoad::Created(state) | StateLoad::Quarantined(state) => {
-                state
-            }
+            StateLoad::Ready(state) | StateLoad::Created(state) => state,
             StateLoad::Unusable(detail) => {
+                if let Ok(mut reason) = self.inner.repair_reason.lock() {
+                    *reason = Some(detail.clone());
+                }
+                self.inner.state_available.store(false, Ordering::Release);
                 self.set_listener(ListenerState::Failed(Box::new(GatewayFailureReport {
                     port: self.configured_port(),
                     kind: GatewayFailureKind::StateUnusable,
@@ -193,6 +194,9 @@ impl GatewayController {
                 return false;
             }
         };
+        if let Ok(mut reason) = self.inner.repair_reason.lock() {
+            *reason = None;
+        }
         let blocked =
             port_change::recover_pending(local, &state_path, &mut state).unwrap_or_else(|reason| {
                 Some(port_change::BlockedPortChange {

@@ -86,10 +86,13 @@ fn repeated_compaction_unwraps_prior_summary_once() {
 
 #[test]
 fn foreign_or_corrupt_compaction_never_turns_into_empty_history() {
-    for encrypted in ["official-encrypted-content", "asb-compaction-v1.invalid"] {
-        let mut root = json!({"input":[{"type":"compaction","encrypted_content":encrypted}]});
-        assert!(expand_input(&mut root, Some(&[1; 32])).is_err());
-    }
+    let mut foreign =
+        json!({"input":[{"type":"compaction","encrypted_content":"official-encrypted-content"}]});
+    assert!(!expand_input(&mut foreign, Some(&[1; 32])).unwrap());
+    assert!(reject_unbridgeable_input(&foreign).is_err());
+    let mut corrupt =
+        json!({"input":[{"type":"compaction","encrypted_content":"asb-compaction-v1.invalid"}]});
+    assert!(expand_input(&mut corrupt, Some(&[1; 32])).is_err());
     for response in [
         json!({"status":"incomplete"}),
         json!({"status":"completed","output":[]}),
@@ -115,4 +118,45 @@ fn native_summary_preserves_backend_encryption_but_cross_protocol_rejects_it() {
         UpstreamProtocol::ChatCompletions
     )
     .is_err());
+}
+
+#[test]
+fn native_responses_expands_only_an_asb_owned_compaction_item() {
+    let compact = finish(&summary("visible native history"), &[1; 32]).unwrap();
+    let input = json!({"model":"m","stream":true,"input":compact.response["output"]});
+    let transport = crate::gateway::transform::ReasoningTransport::from_continuation_key([1; 32]);
+    let converted = crate::gateway::transform::convert_request(
+        UpstreamProtocol::Responses,
+        UpstreamProtocol::Responses,
+        input.to_string().as_bytes(),
+        None,
+        Some(&transport),
+        None,
+    )
+    .expect("native Responses should expand ASB compaction");
+    let value: Value = serde_json::from_slice(&converted.body).expect("native request JSON");
+    assert_eq!(value["input"][0]["type"], "message");
+    assert!(value["input"][0]["content"][0]["text"]
+        .as_str()
+        .is_some_and(|text| text.contains("visible native history")));
+}
+
+#[test]
+fn native_responses_leaves_provider_compaction_without_ciphertext_opaque() {
+    let input = json!({
+        "model": "m",
+        "input": [{"type": "context_compaction", "id": "provider-marker"}]
+    });
+    let transport = crate::gateway::transform::ReasoningTransport::from_continuation_key([1; 32]);
+    let converted = crate::gateway::transform::convert_request(
+        UpstreamProtocol::Responses,
+        UpstreamProtocol::Responses,
+        input.to_string().as_bytes(),
+        None,
+        Some(&transport),
+        None,
+    )
+    .expect("provider-owned context marker must remain opaque");
+    let value: Value = serde_json::from_slice(&converted.body).unwrap();
+    assert_eq!(value["input"][0], input["input"][0]);
 }

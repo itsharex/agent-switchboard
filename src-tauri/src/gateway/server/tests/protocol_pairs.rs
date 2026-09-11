@@ -60,6 +60,10 @@ fn upstream_response(protocol: UpstreamProtocol) -> Value {
 fn assert_upstream_request(protocol: UpstreamProtocol, body: &Value) {
     match protocol {
         UpstreamProtocol::Responses => {
+            if let Some(input) = body["input"].as_str() {
+                assert_eq!(input, "hello through the gateway");
+                return;
+            }
             assert_eq!(body["input"][0]["role"], "user");
             assert_eq!(
                 body["input"][0]["content"][0]["text"],
@@ -80,7 +84,11 @@ fn assert_upstream_request(protocol: UpstreamProtocol, body: &Value) {
     }
 }
 
-fn run_cross_protocol_case(app: AppKind, upstream_protocol: UpstreamProtocol) {
+fn run_cross_protocol_case(
+    app: AppKind,
+    upstream_protocol: UpstreamProtocol,
+    content_encoding: Option<&str>,
+) {
     let upstream = Server::http(("127.0.0.1", 0)).expect("upstream listener");
     let upstream_url = endpoint(&upstream);
     let upstream_key = format!("fixture-{}", uuid::Uuid::new_v4());
@@ -89,18 +97,37 @@ fn run_cross_protocol_case(app: AppKind, upstream_protocol: UpstreamProtocol) {
 
     let directory = tempfile::tempdir().expect("temporary state");
     let state = LocalState::from_root(directory.path().join("state"));
-    let profile = sandbox_profile(
-        &state,
-        app,
-        "cross protocol sandbox",
-        upstream_url,
-        upstream_key.clone(),
-        upstream_protocol,
-    );
     let gateway = GatewayController::start(&state);
-    let projection = gateway
-        .project(&SwitchPlan::direct(profile, default_client_settings(app)))
-        .expect("project route");
+    let projection = match app {
+        AppKind::Codex => {
+            let file = sandbox_codex_file(
+                &state,
+                "cross protocol sandbox",
+                upstream_url,
+                upstream_key.clone(),
+                codex_upstream(upstream_protocol),
+            );
+            gateway
+                .project_codex(&file, default_client_settings(AppKind::Codex))
+                .expect("project Codex route")
+        }
+        AppKind::Claude => {
+            let profile = sandbox_profile(
+                &state,
+                AppKind::Claude,
+                "cross protocol sandbox",
+                upstream_url,
+                upstream_key.clone(),
+                upstream_protocol,
+            );
+            gateway
+                .project(&SwitchPlan::direct(
+                    profile,
+                    default_client_settings(AppKind::Claude),
+                ))
+                .expect("project Claude route")
+        }
+    };
     gateway
         .commit(&projection, || Ok(()))
         .expect("commit route");
@@ -109,7 +136,14 @@ fn run_cross_protocol_case(app: AppKind, upstream_protocol: UpstreamProtocol) {
         AppKind::Codex => codex_endpoint(&projection),
         AppKind::Claude => format!("{}/v1/messages", gateway.configured_base_url()),
     };
-    let response = client
+    let request_body = serde_json::to_vec(&client_request(app)).expect("client request json");
+    let request_body = match content_encoding {
+        Some("zstd") => zstd::stream::encode_all(std::io::Cursor::new(request_body), 0)
+            .expect("zstd client request"),
+        Some(other) => panic!("test does not encode {other}"),
+        None => request_body,
+    };
+    let mut request = client
         .post(gateway_url)
         .header(
             "Authorization",
@@ -122,11 +156,13 @@ fn run_cross_protocol_case(app: AppKind, upstream_protocol: UpstreamProtocol) {
                 }
             ),
         )
-        .header(CONTENT_TYPE, "application/json")
-        .body(serde_json::to_vec(&client_request(app)).expect("client request json"))
-        .send()
-        .expect("gateway request");
+        .header(CONTENT_TYPE, "application/json");
+    if let Some(encoding) = content_encoding {
+        request = request.header("Content-Encoding", encoding);
+    }
+    let response = request.body(request_body).send().expect("gateway request");
     assert_client_response(app, response);
+    assert_metric_attribution(&gateway, &state, &projection, Some(200));
 
     let (path, authorization, x_api_key, anthropic_version, body) = observed_receiver
         .recv_timeout(Duration::from_secs(5))
@@ -165,8 +201,13 @@ fn loopback_gateway_converts_every_cross_protocol_pair() {
         (AppKind::Claude, UpstreamProtocol::Responses),
         (AppKind::Claude, UpstreamProtocol::ChatCompletions),
     ] {
-        run_cross_protocol_case(app, upstream_protocol);
+        run_cross_protocol_case(app, upstream_protocol, None);
     }
+}
+
+#[test]
+fn loopback_gateway_decodes_zstd_coded_codex_requests() {
+    run_cross_protocol_case(AppKind::Codex, UpstreamProtocol::Responses, Some("zstd"));
 }
 
 #[test]
@@ -178,17 +219,17 @@ fn loopback_gateway_converts_and_isolates_anthropic_upstream_credentials() {
 
     let directory = tempfile::tempdir().expect("temporary state");
     let state = LocalState::from_root(directory.path().join("state"));
-    let profile = sandbox_profile(
+    let file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
         "Anthropic sandbox",
         upstream_url,
         "upstream-x-api-key".to_string(),
-        UpstreamProtocol::AnthropicMessages,
+        CodexUpstream::AnthropicMessages,
     );
     let gateway = GatewayController::start(&state);
-    let plan = SwitchPlan::direct(profile, default_client_settings(AppKind::Codex));
-    let projection = gateway.project(&plan).expect("project route");
+    let projection = gateway
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .expect("project route");
     gateway
         .commit(&projection, || Ok(()))
         .expect("commit route");
@@ -238,7 +279,7 @@ fn loopback_gateway_converts_and_isolates_anthropic_upstream_credentials() {
     let upstream_body: Value = serde_json::from_str(&body).expect("anthropic request json");
     assert_eq!(upstream_body["messages"][0]["role"], "user");
     assert_eq!(upstream_body["messages"][0]["content"][0]["text"], "hello");
-    assert_eq!(upstream_body["max_tokens"], 8_192);
+    assert_eq!(upstream_body["max_tokens"], 16_384);
 
     upstream_worker.join().expect("upstream worker");
     gateway.shutdown();

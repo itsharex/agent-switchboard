@@ -79,7 +79,7 @@ export function SettingsFields({ specs, groups, values, busy, onChange, onResetG
         return (
           <section className="asb-toggle-group" key={group}>
             <div className="asb-toggle-group-head">
-              <h3 className="asb-toggle-group-title">{group}</h3>
+              <h3 className="asb-section-title">{group}</h3>
               <Button variant="secondary" disabled={busy} onClick={() => onResetGroup(group)}>恢复默认值</Button>
             </div>
             {groupSpecs.map((spec) => (

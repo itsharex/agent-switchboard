@@ -1,14 +1,18 @@
 import { useCallback, useState } from "react";
 import {
-  importCcswitchProfiles,
+  importCcswitchClaudeProfiles,
+  prepareCcswitchCodexSeed,
   scanCcswitch,
   type CcSwitchImportOutcome,
   type CcSwitchScan,
   type CommandError,
   type AppKind,
+  type CodexCcSwitchSeed,
+  type CodexProviderRecord,
   type ProviderRecord,
 } from "../api/client";
 import { toast } from "../components/use-toast";
+import type { ProviderInventory } from "./useConfigSnapshot";
 
 interface CcImportDeps {
   busy: boolean;
@@ -16,8 +20,9 @@ interface CcImportDeps {
   clearError: () => void;
   setBusy: (busy: boolean) => void;
   invalidateCandidates: () => void;
-  refresh: () => Promise<ProviderRecord[] | undefined>;
+  refresh: () => Promise<ProviderInventory | undefined>;
   records: ProviderRecord[];
+  codexRecords: CodexProviderRecord[];
   preferredApp: AppKind;
   selectProfile: (id: string) => void;
   setAppFilter: (app: AppKind) => void;
@@ -35,6 +40,7 @@ export function useCcImport({
   invalidateCandidates,
   refresh,
   records,
+  codexRecords,
   preferredApp,
   selectProfile,
   setAppFilter,
@@ -51,9 +57,12 @@ export function useCcImport({
       const scan = await scanCcswitch();
       setCcScan(scan);
       setCcResult(null);
-      // Fresh scan: select everything importable; exact duplicates stay off.
+      // Fresh scan: batch-select importable Claude rows; exact duplicates
+      // stay off. Codex rows are completed one by one in the editor.
       const selection: Record<string, boolean> = {};
-      for (const item of scan.providers) selection[item.key] = !item.existing;
+      for (const item of scan.providers) {
+        selection[item.key] = item.app === "claude" && !item.existing;
+      }
       setCcSelected(selection);
     } catch (caught) {
       onError(caught as CommandError);
@@ -64,30 +73,35 @@ export function useCcImport({
 
   const runCcImport = useCallback(async () => {
     if (busy || !ccScan) return false;
-    const keys = ccScan.providers.filter((item) => ccSelected[item.key]).map((item) => item.key);
+    const keys = ccScan.providers
+      .filter((item) => item.app === "claude" && ccSelected[item.key])
+      .map((item) => item.key);
     if (keys.length === 0) return false;
     invalidateCandidates();
     setBusy(true);
     clearError();
     try {
-      const result = await importCcswitchProfiles(keys);
+      const result = await importCcswitchClaudeProfiles(keys);
       setCcResult(result);
       toast({ kind: result.notImported.length > 0 ? "warning" : "success",
         title: `已导入 ${result.importedCount} 项 · 已导入用量脚本 ${result.usageScriptImportedCount} 项`,
         description: result.notImported.length > 0 ? `${result.notImported.length} 项未导入，请查看导入结果` : undefined });
       setCcScan(null);
       setCcSelected({});
-      const nextRecords = await refresh();
-      if (nextRecords && result.importedCount > 0) {
-        const previousIds = new Set(records.map((record) => record.profile.id));
-        const added = nextRecords.filter((record) => !previousIds.has(record.profile.id));
-        const selected = added.find((record) => record.profile.app === preferredApp) ?? added[0];
+      const nextInventory = await refresh();
+      if (nextInventory && result.importedCount > 0) {
+        const previousIds = new Set([...records, ...codexRecords].map((record) => record.profile.id));
+        const added = [
+          ...nextInventory.claude.map((record) => ({ app: record.profile.app, id: record.profile.id })),
+          ...nextInventory.codex.map((record) => ({ app: "codex" as const, id: record.profile.id })),
+        ].filter((record) => !previousIds.has(record.id));
+        const selected = added.find((record) => record.app === preferredApp) ?? added[0];
         if (selected) {
-          setAppFilter(selected.profile.app);
-          selectProfile(selected.profile.id);
+          setAppFilter(selected.app);
+          selectProfile(selected.id);
         }
       }
-      return nextRecords !== undefined && result.notImported.length === 0;
+      return nextInventory !== undefined && result.notImported.length === 0;
     } catch (caught) {
       onError(caught as CommandError);
       return false;
@@ -95,7 +109,23 @@ export function useCcImport({
       setBusy(false);
     }
   }, [busy, ccScan, ccSelected, clearError, invalidateCandidates, onError, refresh, setBusy,
-    records, preferredApp, selectProfile, setAppFilter]);
+    records, codexRecords, preferredApp, selectProfile, setAppFilter]);
 
-  return { ccScan, ccSelected, setCcSelected, ccResult, runCcScan, runCcImport };
+  /** Fetches the completion seed for one Codex row. This is the deliberate
+   * single-row credential boundary; the editor owns what happens next. */
+  const prepareCodexSeed = useCallback(async (key: string): Promise<CodexCcSwitchSeed | null> => {
+    if (busy) return null;
+    setBusy(true);
+    clearError();
+    try {
+      return await prepareCcswitchCodexSeed(key);
+    } catch (caught) {
+      onError(caught as CommandError);
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, clearError, onError, setBusy]);
+
+  return { ccScan, ccSelected, setCcSelected, ccResult, runCcScan, runCcImport, prepareCodexSeed };
 }

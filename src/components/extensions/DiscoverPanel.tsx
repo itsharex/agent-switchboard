@@ -185,14 +185,14 @@ export function DiscoverPanel({
         const count = diagnosticsByObservation.get(observed.observationId);
         if (count && count.warnings > 0) {
           return (
-            <button
-              type="button"
+            <Button
+              variant="unstyled"
               className="asb-warn-text asb-discovery-count"
               aria-label={`查看 ${observed.name} 的 ${count.warnings} 条警告`}
               onClick={() => surfaceDiagnostic(observed.observationId)}
             >
               {count.warnings} 条警告
-            </button>
+            </Button>
           );
         }
         if (count && count.information > 0) return <span className="asb-scope-note">{count.information} 条提示</span>;

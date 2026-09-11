@@ -32,7 +32,7 @@ function toKeyChange(change: PlanChangeView): KeyChange {
 function TargetPreview({ target, label }: { target: PlannedTargetView; label: string }) {
   return (
     <div className="asb-ext-plan-target">
-      <h4>{label}</h4>
+      <h4 className="asb-section-title">{label}</h4>
       {target.warnings.map((warning) => (
         <p key={warning} className="asb-warn-text">
           警告：{warning}
@@ -95,7 +95,7 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
       </p>
       {view.operations.map((entry, index) => (
         <section key={index} className="asb-ext-section">
-          <h3 className="asb-panel-title">
+          <h3 className="asb-section-title">
             {resourceNames.get(entry.definitionId) ?? entry.definitionId}
             <span className="asb-ext-row-meta"> · {OPERATION_LABELS[entry.operation]}</span>
           </h3>

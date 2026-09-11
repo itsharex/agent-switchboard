@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
 
 const TOOL_NAME: &str = "asb_fixture_echo";
+const TOOL_NAMESPACE: &str = "asb_fixture";
 const TOOL_OUTPUT: &str = "asb-fixture-tool-result";
 
 #[test]
@@ -18,19 +19,20 @@ fn actual_codex_automatic_compaction_survives_client_restart_and_continues() {
     verify_compaction(true);
 }
 
-fn verify_compaction(automatic: bool) {
+#[test]
+#[ignore = "requires ASB_TEST_CODEX_BIN pointing to the installed Codex CLI"]
+fn actual_codex_tool_search_loads_a_deferred_tool_through_the_chat_gateway() {
     let upstream = Server::http(("127.0.0.1", 0)).unwrap();
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
-    let mut profile = sandbox_profile(
+    let mut file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
-        "compact CLI",
+        "tool search CLI",
         endpoint(&upstream),
         "fixture-vendor-key".into(),
-        UpstreamProtocol::Responses,
+        CodexUpstream::ChatCompletions,
     );
-    profile.parameters.settings.insert(
+    file.parameters.settings.insert(
         "web_search".into(),
         SettingValue::Explicit {
             value: ConfigValue::Str("disabled".into()),
@@ -38,10 +40,72 @@ fn verify_compaction(automatic: bool) {
     );
     let gateway = GatewayController::start(&state);
     let projection = gateway
-        .project(&SwitchPlan::direct(
-            profile,
-            default_client_settings(AppKind::Codex),
-        ))
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .unwrap();
+    let (home, workdir) = super::codex_cli::prepare_client(
+        directory.path(),
+        &projection,
+        &gateway,
+        "fixture-vendor-key",
+    );
+    let (seen_sender, seen_receiver) = mpsc::channel();
+    let worker = thread::spawn(move || tool_search_upstream(upstream, seen_sender));
+    let mut client = AppServer::start(&home);
+    let started = client.call(
+        2,
+        "thread/start",
+        json!({"cwd":workdir,"model":"sandbox-model","approvalPolicy":"never","sandbox":"read-only",
+            "dynamicTools":[{"type":"namespace","name":TOOL_NAMESPACE,
+                "description":"Isolated deferred test tools.","tools":[{
+                    "type":"function","name":TOOL_NAME,
+                    "description":"Return the fixed isolated test value without side effects.",
+                    "inputSchema":{"type":"object","properties":{},"additionalProperties":false},
+                    "deferLoading":true}]}]}),
+    );
+    let id = started["thread"]["id"].as_str().unwrap().to_string();
+    client.turn(
+        3,
+        &id,
+        "Use the deferred sandbox tool and return its result",
+    );
+    assert_eq!(client.tool_calls, 1);
+    assert_eq!(
+        client.tool_namespaces,
+        vec![Some(TOOL_NAMESPACE.to_string())],
+        "the deferred dynamic tool callback must retain its namespace"
+    );
+    drop(client);
+    worker.join().unwrap();
+    let observed: Vec<_> = seen_receiver.try_iter().collect();
+    assert_eq!(
+        observed.len(),
+        3,
+        "search, loaded tool, and result requests"
+    );
+    assert_chat_tool_search_roundtrip(&observed);
+    gateway.shutdown();
+}
+
+fn verify_compaction(automatic: bool) {
+    let upstream = Server::http(("127.0.0.1", 0)).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().join("state"));
+    let mut file = sandbox_codex_file(
+        &state,
+        "compact CLI",
+        endpoint(&upstream),
+        "fixture-vendor-key".into(),
+        CodexUpstream::Responses,
+    );
+    file.parameters.settings.insert(
+        "web_search".into(),
+        SettingValue::Explicit {
+            value: ConfigValue::Str("disabled".into()),
+        },
+    );
+    let gateway = GatewayController::start(&state);
+    let projection = gateway
+        .project_codex(&file, default_client_settings(AppKind::Codex))
         .unwrap();
     let (home, workdir) = super::codex_cli::prepare_client(
         directory.path(),
@@ -138,6 +202,7 @@ struct AppServer {
     output: mpsc::Receiver<Value>,
     pending: VecDeque<Value>,
     tool_calls: usize,
+    tool_namespaces: Vec<Option<String>>,
 }
 
 impl AppServer {
@@ -168,6 +233,7 @@ impl AppServer {
             output: receiver,
             pending: VecDeque::new(),
             tool_calls: 0,
+            tool_namespaces: Vec::new(),
         };
         server.call(1, "initialize", json!({"clientInfo":{"name":"asb_isolated_test","version":"1"},"capabilities":{"experimentalApi":true}}));
         server.send(json!({"method":"initialized"}));
@@ -207,6 +273,8 @@ impl AppServer {
             );
             if value["method"] == "item/tool/call" {
                 assert_eq!(value["params"]["tool"], TOOL_NAME);
+                self.tool_namespaces
+                    .push(value["params"]["namespace"].as_str().map(str::to_string));
                 assert_eq!(value["params"]["arguments"], json!({}));
                 self.send(json!({"id":value["id"],"result":{"success":true,
                     "contentItems":[{"type":"inputText","text":TOOL_OUTPUT}]}}));
@@ -291,6 +359,122 @@ fn upstream_loop(upstream: Server, seen: mpsc::Sender<Value>, automatic: bool) {
             )
             .unwrap();
     }
+}
+
+fn tool_search_upstream(upstream: Server, seen: mpsc::Sender<Value>) {
+    for index in 0..3 {
+        let mut request = upstream
+            .recv_timeout(Duration::from_secs(60))
+            .unwrap()
+            .unwrap();
+        assert_eq!(request.url(), "/v1/chat/completions");
+        let mut raw = String::new();
+        request.as_reader().read_to_string(&mut raw).unwrap();
+        let body: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            request
+                .headers()
+                .iter()
+                .find(|header| header.field.equiv("Authorization"))
+                .map(|header| header.value.as_str()),
+            Some("Bearer fixture-vendor-key")
+        );
+        assert!(!raw.contains("fixture-official-access"));
+        let response = match index {
+            0 => chat_tool_call_stream("chat_search", "call_search", "tool_search"),
+            1 => chat_tool_call_stream(
+                "chat_dynamic",
+                "call_dynamic",
+                &loaded_chat_tool_name(&body),
+            ),
+            2 => chat_text_stream("chat_done", "sandbox answer"),
+            _ => unreachable!(),
+        };
+        seen.send(body).unwrap();
+        request
+            .respond(
+                Response::from_string(response)
+                    .with_header(content_type("text/event-stream; charset=utf-8")),
+            )
+            .unwrap();
+    }
+}
+
+fn loaded_chat_tool_name(body: &Value) -> String {
+    body["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|tool| tool.pointer("/function/name").and_then(Value::as_str))
+        .find(|name| *name != "tool_search")
+        .map(str::to_string)
+        .expect("tool search output must register the deferred dynamic tool")
+}
+
+fn chat_tool_call_stream(response_id: &str, call_id: &str, name: &str) -> String {
+    let arguments = if name == "tool_search" {
+        json!({"query":"sandbox deferred tool"}).to_string()
+    } else {
+        "{}".to_string()
+    };
+    [
+        json!({"id":response_id,"object":"chat.completion.chunk","created":0,"model":"sandbox-model",
+            "choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}),
+        json!({"id":response_id,"object":"chat.completion.chunk","created":0,"model":"sandbox-model",
+            "choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":call_id,"type":"function",
+                "function":{"name":name,"arguments":arguments}}]},"finish_reason":null}]}),
+        json!({"id":response_id,"object":"chat.completion.chunk","created":0,"model":"sandbox-model",
+            "choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}),
+    ]
+    .iter()
+    .map(|event| format!("data: {event}\n\n"))
+    .chain(std::iter::once("data: [DONE]\n\n".to_string()))
+    .collect()
+}
+
+fn chat_text_stream(response_id: &str, text: &str) -> String {
+    [
+        json!({"id":response_id,"object":"chat.completion.chunk","created":0,"model":"sandbox-model",
+            "choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}),
+        json!({"id":response_id,"object":"chat.completion.chunk","created":0,"model":"sandbox-model",
+            "choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]}),
+        json!({"id":response_id,"object":"chat.completion.chunk","created":0,"model":"sandbox-model",
+            "choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}),
+    ]
+    .iter()
+    .map(|event| format!("data: {event}\n\n"))
+    .chain(std::iter::once("data: [DONE]\n\n".to_string()))
+    .collect()
+}
+
+fn assert_chat_tool_search_roundtrip(observed: &[Value]) {
+    let first = &observed[0];
+    assert!(first["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|tool| tool.pointer("/function/name") == Some(&json!("tool_search"))));
+    let second = &observed[1];
+    assert!(second["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|message| { message["role"] == "tool" && message["tool_call_id"] == "call_search" }));
+    assert_ne!(
+        loaded_chat_tool_name(second),
+        "tool_search",
+        "tool search output must expose the deferred dynamic tool to Chat"
+    );
+    let third = &observed[2];
+    assert!(third["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|message| {
+            message["role"] == "tool"
+                && message["tool_call_id"] == "call_dynamic"
+                && message["content"].to_string().contains(TOOL_OUTPUT)
+        }));
 }
 
 fn response_events(response: &Value) -> String {

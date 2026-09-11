@@ -21,6 +21,9 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             "update_channel" => {
                 as_json(Ok::<_, CommandError>(crate::distribution::update_channel()))
             }
+            "pick_directory" => {
+                command!(commands::window::pick_directory(app.clone()))
+            }
             "config_status" => command!(commands::status::config_status(app.clone())),
             "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
             "gateway_status" => command!(commands::gateway::gateway_status(app.clone())),
@@ -53,6 +56,21 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 ))
             }
             "list_profiles" => command!(commands::list_profiles(app.clone())),
+            "list_codex_profiles" => command!(commands::list_codex_profiles(app.clone())),
+            "create_codex_profile" => command!(commands::create_codex_profile(
+                app.clone(),
+                argument(&request.args, "draft")?,
+            )),
+            "delete_codex_profile" => command!(commands::delete_codex_profile(
+                app.clone(),
+                argument(&request.args, "profileId")?,
+                argument(&request.args, "expectedFileHash")?,
+            )),
+            "reorder_codex_profiles" => command!(commands::reorder_codex_profiles(
+                app.clone(),
+                argument(&request.args, "orderedIds")?,
+                argument(&request.args, "expectedFileHashes")?,
+            )),
             "reset_profile_store" => command!(commands::reset_profile_store(
                 app.clone(),
                 argument(&request.args, "confirmWrite")?,
@@ -68,6 +86,21 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument::<String>(&request.args, "preparationId")?,
                 argument::<bool>(&request.args, "confirmWrite")?,
             )),
+            "prepare_codex_profile_save" => {
+                command!(commands::switching::prepare_codex_profile_save(
+                    app.clone(),
+                    argument(&request.args, "profileId")?,
+                    argument(&request.args, "draft")?,
+                    argument(&request.args, "expectedFileHash")?,
+                ))
+            }
+            "commit_codex_profile_save" => {
+                command!(commands::switching::commit_codex_profile_save(
+                    app.clone(),
+                    argument(&request.args, "preparationId")?,
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
             "delete_profile" => command!(commands::delete_profile(
                 app.clone(),
                 argument(&request.args, "profileId")?,
@@ -79,14 +112,18 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument(&request.args, "orderedIds")?,
                 argument(&request.args, "expectedFileHashes")?,
             )),
-            "import_discovered_profile" => command!(commands::import_discovered_profile(
-                app.clone(),
-                argument::<AppKind>(&request.args, "target")?,
-            )),
+            "import_discovered_claude_profile" => {
+                command!(commands::import_discovered_claude_profile(app.clone()))
+            }
             "scan_ccswitch" => command!(commands::scan_ccswitch(app.clone())),
-            "import_ccswitch_profiles" => command!(commands::import_ccswitch_profiles(
-                app.clone(),
-                argument(&request.args, "keys")?,
+            "import_ccswitch_claude_profiles" => {
+                command!(commands::import_ccswitch_claude_profiles(
+                    app.clone(),
+                    argument(&request.args, "keys")?,
+                ))
+            }
+            "prepare_ccswitch_codex_seed" => command!(commands::prepare_ccswitch_codex_seed(
+                argument(&request.args, "key")?,
             )),
             "get_provider_parameters_catalog" => as_json(Ok::<_, CommandError>(
                 commands::client_settings::get_provider_parameters_catalog(argument::<AppKind>(

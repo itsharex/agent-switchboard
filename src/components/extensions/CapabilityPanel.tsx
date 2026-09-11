@@ -1,5 +1,6 @@
 import type { ClientCapabilityReport } from "../../api/client";
 import { clientName } from "../../lib/client-name";
+import { DashIcon } from "../icons";
 
 interface Props {
   reports: ClientCapabilityReport[];
@@ -10,12 +11,17 @@ interface Props {
 export function CapabilityPanel({ reports }: Props) {
   return (
     <aside className="asb-ext-aside" aria-label="客户端能力">
-      <h3>客户端能力</h3>
+      <h3 className="asb-section-title">客户端能力</h3>
       {reports.map((report) => (
         <section key={report.client} aria-label={`${clientName(report.client)} 能力`}>
-          <h4>{clientName(report.client)}</h4>
+          <h4 className="asb-group-title">{clientName(report.client)}</h4>
           {report.entries.length === 0 ? (
-            <p className="asb-empty">无能力记录</p>
+            <div className="asb-empty-state">
+              <span className="asb-empty-state-icon" aria-hidden="true">
+                <DashIcon />
+              </span>
+              <h3 className="asb-section-title">无能力记录</h3>
+            </div>
           ) : (
             <ul className="asb-ext-capability-list">
               {report.entries.map((entry) =>

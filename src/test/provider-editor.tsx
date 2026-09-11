@@ -17,11 +17,13 @@ export function gatewayStatus(port: number) {
     metrics: { startedAtMs: 0, totalRequests: 0, failedRequests: 0, samples: [] } };
 }
 
-export function ProviderEditor({ active = true, userConfigWarnings = [], onOpenOfficial = vi.fn(), ...props }:
-  Omit<ComponentProps<typeof ProviderEditorComponent>, "active" | "userConfigWarnings" | "onOpenOfficial"> & {
+export function ProviderEditor({ active = true, userConfigWarnings = [], onOpenOfficial = vi.fn(), onSwitchClient = vi.fn(), ...props }:
+  Omit<ComponentProps<typeof ProviderEditorComponent>, "active" | "userConfigWarnings" | "onOpenOfficial" | "onSwitchClient"> & {
     active?: boolean;
     userConfigWarnings?: string[];
     onOpenOfficial?: (app: "codex" | "claude") => void;
+    onSwitchClient?: (app: "codex" | "claude") => void;
   }) {
-  return <ProviderEditorComponent {...props} active={active} userConfigWarnings={userConfigWarnings} onOpenOfficial={onOpenOfficial} />;
+  return <ProviderEditorComponent {...props} active={active} userConfigWarnings={userConfigWarnings}
+    onOpenOfficial={onOpenOfficial} onSwitchClient={onSwitchClient} />;
 }

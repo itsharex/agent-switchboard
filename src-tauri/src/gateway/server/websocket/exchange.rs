@@ -1,21 +1,42 @@
 //! Upstream HTTP exchange for the local Responses WebSocket boundary.
 
 use super::super::diagnostics::{embedded_error, response_diagnostic};
+use super::super::respond::redact_native_body;
 use super::*;
-use crate::provider_diagnostics::{read_http_diagnostic, redact_text};
+use crate::provider_diagnostics::redact_text;
 
 pub(super) fn execute_request<S: Read + Write>(
     socket: &mut WebSocket<S>,
-    client: &Client,
+    client: &UpstreamClient,
     gateway_base: &str,
     route: &ActiveRoute,
     context: &mut ConversationContext,
     request: PendingRequest,
+    request_url: &str,
+    request_headers: &[Header],
 ) -> ExchangeOutcome {
-    if crate::gateway::compaction::is_v2(&request.body).unwrap_or(false) {
-        return compact(socket, client, gateway_base, route, context, &request);
+    if route.upstream_protocol != UpstreamProtocol::Responses
+        && crate::gateway::compaction::is_v2(&request.body).unwrap_or(false)
+    {
+        return compact(
+            socket,
+            client,
+            gateway_base,
+            route,
+            context,
+            &request,
+            request_url,
+            request_headers,
+        );
     }
-    let upstream = match request_upstream(client, gateway_base, route, &request) {
+    let upstream = match request_upstream(
+        client,
+        gateway_base,
+        route,
+        &request,
+        request_url,
+        request_headers,
+    ) {
         Ok(response) => response,
         Err(diagnostic) => return reject_diagnostic(socket, &diagnostic),
     };
@@ -27,12 +48,14 @@ pub(super) fn execute_request<S: Read + Write>(
 }
 
 fn request_upstream(
-    client: &Client,
+    client: &UpstreamClient,
     gateway_base: &str,
     route: &ActiveRoute,
     request: &PendingRequest,
-) -> Result<UpstreamResponse, ProviderDiagnostic> {
-    let url = upstream_url(route, gateway_base).map_err(|message| {
+    request_url: &str,
+    request_headers: &[Header],
+) -> Result<super::super::UpstreamResponse, ProviderDiagnostic> {
+    let url = upstream_url(route, gateway_base, request_url).map_err(|message| {
         ProviderDiagnostic::new(
             ProviderFailureKind::Endpoint,
             &route.upstream_base_url,
@@ -52,6 +75,10 @@ fn request_upstream(
         &request.body,
         route.max_output_tokens,
         Some(&reasoning_transport),
+        route
+            .codex
+            .as_ref()
+            .map(|snapshot| &snapshot.capabilities.chat_reasoning),
     )
     .and_then(|request| crate::gateway::transform::minimal::apply(request, route.responses_options))
     .map_err(|error| invalid(&format!("无法转换 Codex WebSocket 请求：{error}")))?;
@@ -61,14 +88,18 @@ fn request_upstream(
     if converted.stream != request.stream {
         return Err(invalid("转换后的请求流状态与 Codex WebSocket 请求不一致"));
     }
-    let upstream = client
-        .post(&url)
-        .headers(upstream_headers(route, None, None))
-        .body(converted.body)
-        .send()
-        .map_err(|error| network_diagnostic(&url, &error))?;
+    let upstream = super::super::send_upstream_request(
+        client,
+        route,
+        &url,
+        reqwest::Method::POST,
+        converted.body,
+        Some(request_headers),
+        None,
+        None,
+    )?;
     if !upstream.status().is_success() {
-        return Err(read_http_diagnostic(
+        return Err(read_upstream_diagnostic(
             upstream,
             &[&route.api_key, &route.client_token],
         ));
@@ -95,7 +126,7 @@ fn request_upstream(
 
 fn relay_response<S: Read + Write>(
     socket: &mut WebSocket<S>,
-    mut upstream: UpstreamResponse,
+    mut upstream: super::super::UpstreamResponse,
     route: &ActiveRoute,
     context: &mut ConversationContext,
     request: &PendingRequest,
@@ -106,7 +137,7 @@ fn relay_response<S: Read + Write>(
         "无法转换上游响应",
         &[&route.api_key, &route.client_token],
     );
-    let body = match read_limited(&mut upstream, MAX_RESPONSE_BYTES) {
+    let encoded = match read_limited(&mut upstream, MAX_RESPONSE_BYTES) {
         Ok(body) => body,
         Err(error) => {
             diagnostic.message = match error {
@@ -120,10 +151,36 @@ fn relay_response<S: Read + Write>(
             return reject_diagnostic(socket, &diagnostic);
         }
     };
-    if let Some(error) = embedded_error(&body, &diagnostic, &[&route.api_key, &route.client_token])
-    {
-        return reject_diagnostic(socket, &error);
+    let body = match crate::gateway::content_encoding::decode_response_body(
+        upstream.headers(),
+        &encoded,
+        MAX_RESPONSE_BYTES as usize,
+    ) {
+        Ok(body) => body,
+        Err(error) => {
+            diagnostic.message = format!("无法解压上游响应：{error}");
+            return reject_diagnostic(socket, &diagnostic);
+        }
+    };
+    let native = route.upstream_protocol == UpstreamProtocol::Responses;
+    if !native {
+        if let Some(error) =
+            embedded_error(&body, &diagnostic, &[&route.api_key, &route.client_token])
+        {
+            return reject_diagnostic(socket, &error);
+        }
     }
+    let body = if native {
+        match redact_native_body(&body, &[&route.api_key, &route.client_token]) {
+            Ok(body) => body,
+            Err(message) => {
+                diagnostic.message = message;
+                return reject_diagnostic(socket, &diagnostic);
+            }
+        }
+    } else {
+        body
+    };
     let reasoning_transport = ReasoningTransport::from_continuation_key(route.continuation_key);
     let body = match convert_response(
         route.upstream_protocol,
@@ -147,6 +204,17 @@ fn relay_response<S: Read + Write>(
             return reject_diagnostic(socket, &diagnostic);
         }
     };
+    if native && response_is_failure(&response) {
+        let event = match response.get("status").and_then(Value::as_str) {
+            Some("incomplete") => "response.incomplete",
+            _ => "response.failed",
+        };
+        return if send_value(socket, &json!({"type": event, "response": response})) {
+            ExchangeOutcome::Rejected
+        } else {
+            ExchangeOutcome::Disconnect
+        };
+    }
     if let Err(error) = context.record_completed(request, &response) {
         diagnostic.message = error.message;
         return reject_diagnostic(socket, &diagnostic);
@@ -158,9 +226,17 @@ fn relay_response<S: Read + Write>(
     }
 }
 
+fn response_is_failure(response: &Value) -> bool {
+    response
+        .get("status")
+        .and_then(Value::as_str)
+        .is_some_and(|status| matches!(status, "failed" | "incomplete"))
+        || response.get("error").is_some_and(|error| !error.is_null())
+}
+
 fn relay_stream<S: Read + Write>(
     socket: &mut WebSocket<S>,
-    upstream: UpstreamResponse,
+    upstream: super::super::UpstreamResponse,
     route: &ActiveRoute,
     context: &mut ConversationContext,
     request: &PendingRequest,
@@ -172,8 +248,20 @@ fn relay_stream<S: Read + Write>(
         &[&route.api_key, &route.client_token],
     );
     let reasoning_transport = ReasoningTransport::from_continuation_key(route.continuation_key);
-    let stream = match SseTranscoder::new(
+    let headers = upstream.headers().clone();
+    let source = match crate::gateway::content_encoding::decode_response_stream(
+        &headers,
         upstream,
+        MAX_RESPONSE_BYTES as usize,
+    ) {
+        Ok(source) => source,
+        Err(error) => {
+            diagnostic.message = format!("无法解压上游 SSE：{error}");
+            return reject_diagnostic(socket, &diagnostic);
+        }
+    };
+    let stream = match SseTranscoder::new(
+        source,
         route.upstream_protocol,
         UpstreamProtocol::Responses,
         MAX_RESPONSE_BYTES,
@@ -192,17 +280,25 @@ fn relay_stream<S: Read + Write>(
 
 fn compact<S: Read + Write>(
     socket: &mut WebSocket<S>,
-    client: &Client,
+    client: &UpstreamClient,
     gateway_base: &str,
     route: &ActiveRoute,
     context: &mut ConversationContext,
     request: &PendingRequest,
+    request_url: &str,
+    request_headers: &[Header],
 ) -> ExchangeOutcome {
-    let result =
-        match crate::gateway::compaction::execute(client, route, gateway_base, &request.body) {
-            Ok(result) => result,
-            Err(diagnostic) => return reject_diagnostic(socket, &diagnostic),
-        };
+    let result = match crate::gateway::compaction::execute(
+        client,
+        route,
+        gateway_base,
+        request_url,
+        &request.body,
+        Some(request_headers),
+    ) {
+        Ok(result) => result,
+        Err(diagnostic) => return reject_diagnostic(socket, &diagnostic),
+    };
     if let Err(error) = context.record_completed(request, &result.response) {
         return if send_failed(socket, error.code, &error.message) {
             ExchangeOutcome::Rejected

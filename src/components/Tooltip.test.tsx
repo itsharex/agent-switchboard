@@ -3,8 +3,22 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Tooltip } from "./Tooltip";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const tooltipCss = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../styles/base/tooltip-feedback.css"),
+  "utf8",
+);
 
 describe("Tooltip", () => {
+  it("uses the compact global tooltip surface", () => {
+    expect(tooltipCss).toContain("max-width: min(var(--asb-tooltip-max-width)");
+    expect(tooltipCss).toContain("padding: var(--asb-space-unit) var(--asb-tooltip-padding-inline)");
+    expect(tooltipCss).toContain("border-radius: var(--asb-radius-action)");
+  });
+
   it("keeps the trigger interactive and hides the label while closed", () => {
     render(
       <Tooltip label="先查看变更并确认候选内容，才能安全切换">

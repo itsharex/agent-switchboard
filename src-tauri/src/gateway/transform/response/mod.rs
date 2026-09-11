@@ -1,7 +1,7 @@
 use super::tool_names::{parse_target_name, render_target_name};
 use super::{
-    error, CanonicalResponse, Reasoning, ReasoningTransport, ResponsePart, StopReason,
-    TransformError, Usage,
+    error, CanonicalResponse, Reasoning, ReasoningTransport, ResponsePart, StopReason, ToolKind,
+    TransformError, CODEX_TOOL_SEARCH_NAME,
 };
 use asb_core::contracts::UpstreamProtocol;
 use serde_json::{json, Map, Value};
@@ -36,9 +36,15 @@ fn decode_target_tool_names(response: &mut CanonicalResponse) -> Result<(), Tran
         else {
             continue;
         };
-        let (decoded_namespace, decoded_name) = parse_target_name(name)?;
+        let (decoded_namespace, decoded_name, kind) = parse_target_name(name)?;
         *namespace = decoded_namespace;
         *name = decoded_name;
+        if let ResponsePart::ToolCall {
+            kind: target_kind, ..
+        } = part
+        {
+            *target_kind = kind;
+        }
     }
     Ok(())
 }
@@ -87,6 +93,7 @@ pub(crate) fn convert_error(to: UpstreamProtocol, status: u16, message: &str) ->
     serde_json::to_vec(&value).unwrap_or_else(|_| b"{}".to_vec())
 }
 
+mod custom;
 mod parse;
 mod render;
 
@@ -95,5 +102,6 @@ mod tests;
 
 pub(super) use render::responses_reasoning_item;
 
+use custom::*;
 use parse::*;
 use render::*;

@@ -19,17 +19,42 @@ pub(crate) fn stage_and_verify(
     snapshot: &ConfigurationSnapshot,
 ) -> Result<(), String> {
     validate_snapshot(snapshot)?;
+    for file in &snapshot.codex_providers {
+        let json = serde_json::to_string_pretty(file)
+            .map_err(|_| "Codex 供应商文件序列化失败".to_string())?;
+        write_json_atomic(
+            &target
+                .join("providers")
+                .join(AppKind::Codex.dir_name())
+                .join(format!("{}.json", file.profile.id)),
+            &json,
+        )?;
+    }
+    for file in &snapshot.codex_official {
+        let json = serde_json::to_string_pretty(file)
+            .map_err(|_| "Codex 官方登录档案序列化失败".to_string())?;
+        write_json_atomic(
+            &target
+                .join("providers")
+                .join(AppKind::Codex.dir_name())
+                .join("official")
+                .join(format!("{}.json", file.id)),
+            &json,
+        )?;
+    }
     for app in [AppKind::Codex, AppKind::Claude] {
-        for file in &snapshot.providers[&app] {
-            let json = serde_json::to_string_pretty(file)
-                .map_err(|_| "供应商文件序列化失败".to_string())?;
-            write_json_atomic(
-                &target
-                    .join("providers")
-                    .join(app.dir_name())
-                    .join(format!("{}.json", file.id)),
-                &json,
-            )?;
+        if app == AppKind::Claude {
+            for file in &snapshot.claude_providers {
+                let json = serde_json::to_string_pretty(file)
+                    .map_err(|_| "Claude 供应商文件序列化失败".to_string())?;
+                write_json_atomic(
+                    &target
+                        .join("providers")
+                        .join(app.dir_name())
+                        .join(format!("{}.json", file.id)),
+                    &json,
+                )?;
+            }
         }
         let settings_json = serde_json::to_string_pretty(&snapshot.client_settings[&app])
             .map_err(|_| "客户端设置序列化失败".to_string())?;

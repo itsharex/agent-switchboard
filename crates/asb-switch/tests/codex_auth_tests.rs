@@ -149,7 +149,7 @@ fn official_switch_does_not_create_missing_or_repair_broken_auth() {
 }
 
 #[test]
-fn retired_projection_is_converted_inside_preview_and_cannot_be_restored() {
+fn explicit_projection_never_migrates_retired_codex_provider_content() {
     let original = "model_provider = \"agent_switchboard\"\n[model_providers.agent_switchboard]\nbase_url = \"https://old.example\"\nrequest_timeout_ms = 999\n";
     let (_dir, target, backups) = setup(AppKind::Codex, original);
     let plan = official();
@@ -159,7 +159,8 @@ fn retired_projection_is_converted_inside_preview_and_cannot_be_restored() {
         .preview
         .changes
         .iter()
-        .any(|change| change.key == "model_providers.agent_switchboard.base_url"));
+        .all(|change| !change.key.starts_with("model_providers.agent_switchboard.")));
+    assert!(preview.content.contains("https://old.example"));
     assert!(preview.content.contains("request_timeout_ms = 999"));
     let outcome = execute(
         &FsIo,
@@ -175,10 +176,14 @@ fn retired_projection_is_converted_inside_preview_and_cannot_be_restored() {
     .unwrap();
     let current = fs::read_to_string(&target).unwrap();
     assert!(current.contains("model_provider = \"openai\""));
+    assert!(current.contains("[model_providers.agent_switchboard]"));
+    assert!(current.contains("https://old.example"));
     assert_eq!(
         fs::read_to_string(&outcome.backup.backup_path).unwrap(),
         original
     );
-    assert!(restore(&FsIo, &outcome.backup, &target, |_| Ok(())).is_err());
-    assert_eq!(fs::read_to_string(&target).unwrap(), current);
+    assert_ne!(
+        fs::read_to_string(&outcome.backup.backup_path).unwrap(),
+        current
+    );
 }

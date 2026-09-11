@@ -1,4 +1,5 @@
 import { PinIcon } from "./icons";
+import { Button } from "./Button";
 import { Tooltip } from "./Tooltip";
 
 /** Topbar quick toggle for the「窗口始终置顶」preference. Stateless by
@@ -17,8 +18,8 @@ export function PinTopButton({
   return (
     <Tooltip label={label} side="bottom">
       <span className="asb-tooltip-anchor">
-        <button
-          type="button"
+        <Button
+          variant="unstyled"
           className={`asb-winbtn asb-pinbtn${active ? " is-active" : ""}`}
           aria-label={label}
           aria-pressed={active}
@@ -26,7 +27,7 @@ export function PinTopButton({
           onClick={onToggle}
         >
           <PinIcon />
-        </button>
+        </Button>
       </span>
     </Tooltip>
   );

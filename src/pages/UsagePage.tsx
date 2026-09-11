@@ -11,9 +11,10 @@ import {
 } from "../components/charts/ModelUsageDistributionChart";
 import { UsageTrendChart } from "../components/charts/UsageTrendChart";
 import { RadioOption } from "../components/RadioOption";
-import { StatCards } from "../components/application/dashboard/stat-cards";
+import { StatCards } from "../components/charts/stat-cards";
 import { Table, type TableColumn } from "../components/Table";
 import { Time } from "../components/Time";
+import { UsageIcon } from "../components/icons";
 import { clientName } from "../lib/client-name";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenCount } from "../lib/token-format";
 import { useModelUsageReport } from "./use-model-usage-report";
@@ -108,7 +109,7 @@ const USAGE_COLUMNS: Array<TableColumn<ModelUsageGroup>> = [
 
 /** Read-only local session token totals. Provider quota remains in provider panels. */
 export function UsagePage({ active }: { active: boolean }) {
-  const [range, setRange] = useState<ModelUsageRange>("today");
+  const [range, setRange] = useState<ModelUsageRange>("last7Days");
   const { read, loading, error, refresh } = useModelUsageReport(active, range);
   const report = read?.report ?? null;
 
@@ -128,9 +129,6 @@ export function UsagePage({ active }: { active: boolean }) {
       <div className="asb-panel-heading">
         <div>
           <h2 className="asb-panel-title">模型消耗</h2>
-          <p className="asb-scope-note">
-            仅汇总本地会话记录，不表示供应商剩余额度。页面可见时按本地快照时间自动刷新。
-          </p>
           {report && (
             <p className="asb-model-usage-snapshot" role="status">
               {read?.freshness === "cached" ? "本地快照" : "本次汇总"}：<Time iso={report.generatedAt} />
@@ -210,21 +208,23 @@ export function UsagePage({ active }: { active: boolean }) {
               />
             </section>
           </div>
-          <section className="asb-model-usage-detail" aria-labelledby="model-usage-detail-heading">
-            <h3 id="model-usage-detail-heading">明细</h3>
-            <div className="asb-model-usage-table-wrap">
-              <Table
-                columns={USAGE_COLUMNS}
-                rows={report.groups}
-                rowKey={(group, index) => `${group.app}-${group.model ?? "unknown"}-${index}`}
-                ariaLabel="模型消耗"
-                className="asb-model-usage-table"
-              />
-            </div>
-          </section>
+          <div className="asb-model-usage-table-wrap">
+            <Table
+              columns={USAGE_COLUMNS}
+              rows={report.groups}
+              rowKey={(group, index) => `${group.app}-${group.model ?? "unknown"}-${index}`}
+              ariaLabel="模型消耗"
+              className="asb-model-usage-table"
+            />
+          </div>
         </div>
       ) : report ? (
-        <p className="asb-empty asb-model-usage-empty">当前范围内没有可用的模型消耗记录。</p>
+        <div className="asb-empty-state asb-model-usage-empty">
+          <span className="asb-empty-state-icon" aria-hidden="true">
+            <UsageIcon />
+          </span>
+          <h3 className="asb-section-title">当前范围内没有可用的模型消耗记录。</h3>
+        </div>
       ) : null}
     </section>
   );

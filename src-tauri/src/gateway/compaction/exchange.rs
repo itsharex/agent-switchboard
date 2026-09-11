@@ -1,19 +1,19 @@
 use super::*;
 use crate::gateway::{server, transform, ActiveRoute};
-use crate::provider_diagnostics::{
-    network_diagnostic, read_http_diagnostic, ProviderDiagnostic, ProviderFailureKind,
-};
+use crate::provider_diagnostics::{ProviderDiagnostic, ProviderFailureKind};
 use asb_core::contracts::UpstreamProtocol;
-use reqwest::blocking::Client;
 use std::io::Read;
+use tiny_http::Header;
 
 pub(crate) fn execute(
-    client: &Client,
+    client: &server::UpstreamClient,
     route: &ActiveRoute,
     gateway_base: &str,
+    request_url: &str,
     body: &[u8],
+    incoming: Option<&[Header]>,
 ) -> Result<CompactionResult, ProviderDiagnostic> {
-    let url = server::upstream_url(route, gateway_base).map_err(|message| {
+    let url = server::upstream_url(route, gateway_base, request_url).map_err(|message| {
         ProviderDiagnostic::new(
             ProviderFailureKind::Endpoint,
             &route.upstream_base_url,
@@ -37,20 +37,28 @@ pub(crate) fn execute(
         &request,
         route.max_output_tokens,
         Some(&transport),
+        route
+            .codex
+            .as_ref()
+            .map(|snapshot| &snapshot.capabilities.chat_reasoning),
     )
     .and_then(|request| transform::minimal::apply(request, route.responses_options))
     .map_err(invalid)?;
     if request.body.len() as u64 > server::MAX_REQUEST_BYTES {
         return Err(invalid(TransformError("压缩历史超过网关请求预算".into())));
     }
-    let upstream = client
-        .post(&url)
-        .headers(server::upstream_headers(route, None, None))
-        .body(request.body)
-        .send()
-        .map_err(|error| network_diagnostic(&url, &error))?;
+    let upstream = server::send_upstream_request(
+        client,
+        route,
+        &url,
+        reqwest::Method::POST,
+        request.body,
+        incoming,
+        None,
+        None,
+    )?;
     if !upstream.status().is_success() {
-        return Err(read_http_diagnostic(
+        return Err(server::read_upstream_diagnostic(
             upstream,
             &[&route.api_key, &route.client_token],
         ));
@@ -59,7 +67,7 @@ pub(crate) fn execute(
 }
 
 fn complete_upstream(
-    upstream: reqwest::blocking::Response,
+    upstream: server::UpstreamResponse,
     route: &ActiveRoute,
     url: &str,
     transport: &transform::ReasoningTransport,
@@ -70,17 +78,32 @@ fn complete_upstream(
     diagnostic.request_id = crate::provider_diagnostics::request_id(upstream.headers()).map(|id| {
         crate::provider_diagnostics::redact_text(&id, &[&route.api_key, &route.client_token])
     });
+    let headers = upstream.headers().clone();
     let mut body = Vec::new();
-    upstream
+    if upstream
         .take(server::MAX_RESPONSE_BYTES + 1)
         .read_to_end(&mut body)
-        .map_err(|_| {
-            ProviderDiagnostic::new(ProviderFailureKind::Network, &url, "读取压缩摘要时连接中断")
-        })?;
+        .is_err()
+    {
+        diagnostic.kind = ProviderFailureKind::Network;
+        diagnostic.message = "读取压缩摘要时连接中断".into();
+        return Err(diagnostic);
+    }
     if body.len() as u64 > server::MAX_RESPONSE_BYTES {
         diagnostic.message = "压缩响应超过网关限制".into();
         return Err(diagnostic);
     }
+    let body = match crate::gateway::content_encoding::decode_response_body(
+        &headers,
+        &body,
+        server::MAX_RESPONSE_BYTES as usize,
+    ) {
+        Ok(body) => body,
+        Err(error) => {
+            diagnostic.message = format!("无法解压上游压缩响应：{error}");
+            return Err(diagnostic);
+        }
+    };
     let result = validate_completion(&body, route.upstream_protocol)
         .and_then(|_| {
             transform::convert_response(

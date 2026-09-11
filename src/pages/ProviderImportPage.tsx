@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { AppKind, CcSwitchImportOutcome, CcSwitchScan, DiscoveryReport } from "../api/client";
 import { Button } from "../components/Button";
-import { ClientPicker } from "../components/ClientPicker";
+import { RadioOption } from "../components/RadioOption";
 import { CcSwitchImport } from "./provider-import/CcSwitchImport";
 import { LocalConfigImport } from "./provider-import/LocalConfigImport";
 import "../styles/base/provider-workspace.css";
@@ -13,20 +13,22 @@ interface ProviderImportPageProps {
   ccSelected: Record<string, boolean>;
   ccResult: CcSwitchImportOutcome | null;
   busy: boolean;
-  onSelectApp: (app: AppKind) => void;
   onBack: () => void;
   onScanLocal: () => void;
-  onImportLocal: (app: AppKind) => Promise<boolean>;
+  onImportLocal: () => Promise<boolean>;
   onScanCc: () => void;
   onSelectCc: (key: string, checked: boolean) => void;
   onImportCc: () => Promise<boolean>;
+  onSeedCc: (key: string) => void;
 }
 
-/** Local discovery uses the selected client; CC Switch retains cross-client batch import. */
+/** Local discovery uses the selected client; batch import stays cross-client. */
 export function ProviderImportPage(props: ProviderImportPageProps) {
-  const [source, setSource] = useState<"local" | "ccswitch">("local");
-  const importLocal = async (app: AppKind) => {
-    if (await props.onImportLocal(app)) props.onBack();
+  const localImportAvailable = props.appFilter === "claude";
+  const [selectedSource, setSelectedSource] = useState<"local" | "ccswitch">("local");
+  const source = localImportAvailable ? selectedSource : "ccswitch";
+  const importLocal = async () => {
+    if (await props.onImportLocal()) props.onBack();
   };
   const importCc = async () => {
     if (await props.onImportCc()) props.onBack();
@@ -38,21 +40,20 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
           <Button variant="back" disabled={props.busy} aria-label="返回供应商" onClick={props.onBack}>←</Button>
           <h2 className="asb-panel-title">导入供应商</h2>
         </div>
-        {source === "local" && <ClientPicker app={props.appFilter} onChange={props.onSelectApp}
-          disabled={props.busy} label="导入客户端" />}
       </div>
-      <section className="asb-panel" aria-label="导入供应商">
-        <div className="asb-provider-import-sources" role="group" aria-label="导入来源">
-          <Button variant="secondary" className="asb-provider-import-source" aria-pressed={source === "local"}
-            disabled={props.busy} onClick={() => setSource("local")}>本机配置</Button>
-          <Button variant="secondary" className="asb-provider-import-source" aria-pressed={source === "ccswitch"}
-            disabled={props.busy} onClick={() => setSource("ccswitch")}>CC Switch</Button>
+      {localImportAvailable && <section className="asb-panel" aria-label="导入供应商">
+        <div className="asb-segments" role="radiogroup" aria-label="导入来源">
+          <RadioOption name="provider-import-source" checked={source === "local"} disabled={props.busy}
+            label="本机配置" onChange={() => setSelectedSource("local")} />
+          <RadioOption name="provider-import-source" checked={source === "ccswitch"} disabled={props.busy}
+            label="CC Switch" onChange={() => setSelectedSource("ccswitch")} />
         </div>
-      </section>
-      {source === "local" ? <LocalConfigImport app={props.appFilter} discovery={props.discovery} busy={props.busy}
-        onScan={props.onScanLocal} onImport={(app) => void importLocal(app)} />
+      </section>}
+      {source === "local" ? <LocalConfigImport app="claude" discovery={props.discovery} busy={props.busy}
+        onScan={props.onScanLocal} onImport={() => void importLocal()} />
         : <CcSwitchImport scan={props.ccScan} selected={props.ccSelected} result={props.ccResult}
-          busy={props.busy} onScan={props.onScanCc} onSelect={props.onSelectCc} onImport={() => void importCc()} />}
+          busy={props.busy} onScan={props.onScanCc} onSelect={props.onSelectCc} onImport={() => void importCc()}
+          onSeed={props.onSeedCc} />}
     </div>
   );
 }

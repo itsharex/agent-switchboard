@@ -31,12 +31,12 @@ const STATUS_LABELS: Record<GatewayStatusKind, string> = {
   recoveryBlocked: "需要恢复",
 };
 
-const FAILURE_TONES: Partial<Record<GatewayStatusKind, string>> = {
-  portConflict: "text-text-error-primary",
-  bindRejected: "text-text-error-primary",
-  needsRepair: "text-text-error-primary",
-  recoveryBlocked: "text-text-error-primary",
-};
+const FAILURE_STATES: ReadonlySet<GatewayStatusKind> = new Set([
+  "portConflict",
+  "bindRejected",
+  "needsRepair",
+  "recoveryBlocked",
+]);
 
 interface Props {
   /** False while another page is shown; polling runs only when visible. */
@@ -99,7 +99,7 @@ export function GatewayPage({ active, profiles }: Props) {
   if (error) {
     return (
       <GatewayPanel>
-        <p className="m-0 text-body-medium text-text-error-primary" role="alert">
+        <p className="asb-gateway-error" role="alert">
           无法读取网关状态：{error}
         </p>
         <Button variant="secondary" onClick={() => void refresh()}>
@@ -111,18 +111,20 @@ export function GatewayPage({ active, profiles }: Props) {
   if (!status) {
     return (
       <GatewayPanel>
-        <p className="m-0 text-body-medium text-text-tertiary" role="status">
+        <p className="asb-gateway-empty" role="status">
           正在读取网关状态…
         </p>
       </GatewayPanel>
     );
   }
 
+  const failed = FAILURE_STATES.has(status.status);
+
   return (
     <GatewayPanel
       aside={
         <span
-          className={`text-body-medium ${FAILURE_TONES[status.status] ?? "text-text-secondary"}`}
+          className={`asb-gateway-status${failed ? " is-failure" : ""}`}
           role="status"
           aria-label="网关运行状态"
         >
@@ -130,24 +132,21 @@ export function GatewayPage({ active, profiles }: Props) {
         </span>
       }
     >
-      <div
-        className="flex flex-col gap-3 rounded-2xl bg-background-secondary-default px-4 py-3"
-        aria-label="监听信息"
-      >
-        <div className="flex flex-wrap items-center gap-2 text-body-medium">
-          <span className="w-20 shrink-0 text-text-secondary">监听地址</span>
+      <div className="asb-gateway-info" aria-label="监听信息">
+        <div className="asb-gateway-row">
+          <span className="asb-gateway-row-label">监听地址</span>
           {status.baseUrl ? (
             <>
-              <span className="tabular-nums text-text-primary">{status.baseUrl}</span>
+              <span className="asb-gateway-row-value asb-code">{status.baseUrl}</span>
               <CopyGatewayAddressButton value={status.baseUrl} />
             </>
           ) : (
-            <span className="text-text-tertiary">未在监听</span>
+            <span className="asb-gateway-empty">未在监听</span>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-body-medium">
-          <span className="w-20 shrink-0 text-text-secondary">监听端口</span>
-          <span className="tabular-nums text-text-primary">{status.configuredPort}</span>
+        <div className="asb-gateway-row">
+          <span className="asb-gateway-row-label">监听端口</span>
+          <span className="asb-gateway-row-value">{status.configuredPort}</span>
           <Button
             variant="secondary"
             disabled={status.status === "recoveryBlocked"}
@@ -156,25 +155,22 @@ export function GatewayPage({ active, profiles }: Props) {
             修改
           </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-body-medium">
-          <span className="w-20 shrink-0 text-text-secondary">使用客户端</span>
-          <span className="text-text-primary">Codex、Claude Code</span>
+        <div className="asb-gateway-row">
+          <span className="asb-gateway-row-label">使用客户端</span>
+          <span>Codex、Claude Code</span>
         </div>
-        <p className="m-0 text-body-2-medium text-text-tertiary">
+        <p className="asb-scope-note">
           修改监听端口会同步更新正在使用本网关的客户端配置；修改完成后，请重新启动相关客户端或会话。
         </p>
       </div>
 
       {status.failure && (
-        <div
-          role="alert"
-          className="flex flex-col gap-3 rounded-2xl bg-background-secondary-default px-4 py-3"
-        >
-          <p className="m-0 text-body-medium text-text-error-primary">{status.failure.message}</p>
-          <p className="m-0 text-body-medium text-text-secondary">
+        <div role="alert" className="asb-gateway-alert">
+          <p className="asb-gateway-alert-title">{status.failure.message}</p>
+          <p className="asb-gateway-alert-copy">
             使用本网关的客户端当前无法连接；本应用仍可管理供应商、查看日志或切换到直连与官方登录。
           </p>
-          <div className="flex gap-2">
+          <div className="asb-panel-actions">
             <Button variant="secondary" disabled={retrying} onClick={() => void retryBind()}>
               重试
             </Button>
@@ -190,14 +186,11 @@ export function GatewayPage({ active, profiles }: Props) {
       )}
 
       {status.status === "needsRepair" && (
-        <div
-          role="alert"
-          className="flex flex-col gap-2 rounded-2xl bg-background-secondary-default px-4 py-3"
-        >
-          <p className="m-0 text-body-medium text-text-error-primary">
-            本机协议网关需要修复。客户端仍指向本网关时，状态损坏会保留诊断副本，身份不匹配会拒绝恢复旧路由。
+        <div role="alert" className="asb-gateway-alert">
+          <p className="asb-gateway-alert-title">
+            {status.repairReason ?? "本机协议网关需要修复。客户端仍指向本网关时，状态损坏会保留诊断副本，身份不匹配会拒绝恢复旧路由。"}
           </p>
-          <p className="m-0 text-body-medium text-text-secondary">
+          <p className="asb-gateway-alert-copy">
             请在供应商页重新应用指向本网关的供应商：重新应用会写入新的服务地址与本机能力令牌，
             预览会先展示这些变化；不再使用网关的客户端可切换到直连或官方登录。
           </p>
@@ -205,22 +198,19 @@ export function GatewayPage({ active, profiles }: Props) {
       )}
 
       {status.blockedRecovery && (
-        <div
-          role="alert"
-          className="flex flex-col gap-3 rounded-2xl bg-background-secondary-default px-4 py-3"
-        >
-          <p className="m-0 text-body-medium text-text-error-primary">
+        <div role="alert" className="asb-gateway-alert">
+          <p className="asb-gateway-alert-title">
             上次端口修改（{status.blockedRecovery.fromPort} →{" "}
             {status.blockedRecovery.toPort}）需要处理：{status.blockedRecovery.reason}
           </p>
-          <p className="m-0 text-body-medium text-text-secondary">
+          <p className="asb-gateway-alert-copy">
             已保留恢复记录与备份，不会覆盖当前配置；经网关的切换与新的端口修改已暂停。
           </p>
           <ConfirmGatewayRecoveryDiscard onConfirm={() => void discardRecovery()} />
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="asb-gateway-tiles">
         <GatewayStatTile label="累计请求" value={status.metrics.totalRequests} />
         <GatewayStatTile label="失败请求" value={status.metrics.failedRequests} />
         <GatewayStatTile label="活动路由" value={status.routes.length} />
@@ -230,24 +220,19 @@ export function GatewayPage({ active, profiles }: Props) {
         />
       </div>
 
-      <section aria-label="活动路由" className="flex flex-col gap-2">
-        <h3 className="m-0 text-title-3-semibold text-text-primary">活动路由</h3>
+      <section aria-label="活动路由" className="asb-gateway-section">
+        <h3 className="asb-section-title">活动路由</h3>
         {status.routes.length === 0 ? (
-          <p className="m-0 text-body-medium text-text-tertiary" role="status">
+          <p className="asb-gateway-empty" role="status">
             当前没有经本机协议网关转换的供应商；客户端均在直连或官方登录。
           </p>
         ) : (
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          <ul className="asb-gateway-route-list">
             {status.routes.map((route) => (
-              <li
-                key={`${route.app}:${route.profileId}`}
-                className="flex flex-wrap items-center gap-2 text-body-medium text-text-secondary"
-              >
-                <span className="text-text-primary">{APP_LABELS[route.app]}</span>
+              <li key={`${route.app}:${route.profileId}`}>
+                <span className="asb-gateway-route-client">{APP_LABELS[route.app]}</span>
                 <span>{profileNames.get(route.profileId) ?? "已删除的供应商"}</span>
-                <span className="text-text-tertiary">
-                  上游 {PROTOCOL_LABELS[route.upstreamProtocol]}
-                </span>
+                <span>上游 {PROTOCOL_LABELS[route.upstreamProtocol]}</span>
               </li>
             ))}
           </ul>

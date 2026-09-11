@@ -1,10 +1,4 @@
-/* Focus and motion behavior */
-:focus-visible {
-  outline: none;
-  box-shadow: var(--asb-focus-ring);
-  border-radius: var(--asb-radius-control);
-}
-
+/* Motion behavior */
 @media (prefers-reduced-motion: reduce) {
   .asb-tooltip {
     animation: none;
@@ -25,10 +19,6 @@
     animation: none;
   }
 
-  .asb-sheet {
-    animation: none;
-  }
-
   .asb-usage-ratio-meter-fill {
     transition: none;
   }
@@ -38,14 +28,6 @@
 @media (max-width: 900px) {
   .asb-topbar {
     flex-wrap: wrap;
-  }
-
-  .asb-session-toolbar {
-    grid-template-columns: 1fr auto;
-  }
-
-  .asb-session-toolbar .asb-segments {
-    grid-column: 1 / -1;
   }
 
   .asb-session-layout {
@@ -93,15 +75,15 @@
     flex-direction: column;
   }
 
-  .asb-runtime-log-controls {
+  .asb-runtime-logs .asb-panel-actions {
     align-items: stretch;
     flex-direction: column;
     width: 100%;
   }
 
   .asb-runtime-log-level-control,
-  .asb-runtime-log-controls .asb-tabs,
-  .asb-runtime-log-controls .asb-btn-secondary {
+  .asb-runtime-logs .asb-panel-actions .asb-segments,
+  .asb-runtime-logs .asb-panel-actions .asb-btn-secondary {
     width: 100%;
   }
 
@@ -140,12 +122,14 @@
     border-left: 0;
   }
 
-  .asb-session-toolbar {
-    grid-template-columns: 1fr;
+  .asb-sessions .asb-panel-heading .asb-panel-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .asb-session-toolbar .asb-segments {
-    grid-column: auto;
+  .asb-sessions .asb-panel-actions .asb-input {
+    flex-basis: auto;
+    width: 100%;
   }
 
   .asb-session-detail-head,

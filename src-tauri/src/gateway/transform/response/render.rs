@@ -20,27 +20,59 @@ pub(super) fn render_responses(response: &CanonicalResponse) -> Result<Value, Tr
                 id,
                 name,
                 namespace,
+                kind,
                 input,
             } => {
                 push_responses_text(&mut output, &response.id, &mut text);
                 let mut call = Map::new();
                 call.insert(
                     "type".to_string(),
-                    Value::String("function_call".to_string()),
+                    Value::String(
+                        match kind {
+                            ToolKind::Function => "function_call",
+                            ToolKind::Custom => "custom_tool_call",
+                            ToolKind::ToolSearch => "tool_search_call",
+                        }
+                        .to_string(),
+                    ),
                 );
-                call.insert("id".to_string(), Value::String(format!("fc_{id}")));
+                match kind {
+                    ToolKind::Function => {
+                        call.insert("id".to_string(), Value::String(format!("fc_{id}")));
+                    }
+                    ToolKind::Custom => {
+                        call.insert("id".to_string(), Value::String(format!("ctc_{id}")));
+                    }
+                    ToolKind::ToolSearch => {}
+                }
                 call.insert("call_id".to_string(), Value::String(id.clone()));
-                call.insert("name".to_string(), Value::String(name.clone()));
+                if *kind != ToolKind::ToolSearch {
+                    call.insert("name".to_string(), Value::String(name.clone()));
+                }
                 if let Some(namespace) = namespace {
                     call.insert("namespace".to_string(), Value::String(namespace.clone()));
                 }
-                call.insert(
-                    "arguments".to_string(),
-                    Value::String(
-                        serde_json::to_string(input)
-                            .map_err(|_| TransformError("无法编码工具参数".to_string()))?,
-                    ),
-                );
+                match kind {
+                    ToolKind::Function => {
+                        call.insert(
+                            "arguments".to_string(),
+                            Value::String(
+                                serde_json::to_string(input)
+                                    .map_err(|_| TransformError("无法编码工具参数".to_string()))?,
+                            ),
+                        );
+                    }
+                    ToolKind::Custom => {
+                        call.insert("input".to_string(), Value::String(custom_input(input)?));
+                    }
+                    ToolKind::ToolSearch => {
+                        if !input.is_object() {
+                            return error("tool_search 参数必须是对象");
+                        }
+                        call.insert("execution".to_string(), Value::String("client".to_string()));
+                        call.insert("arguments".to_string(), input.clone());
+                    }
+                }
                 call.insert("status".to_string(), Value::String("completed".to_string()));
                 output.push(Value::Object(call));
             }
@@ -53,11 +85,7 @@ pub(super) fn render_responses(response: &CanonicalResponse) -> Result<Value, Tr
         "status": "completed",
         "model": response.model,
         "output": output,
-        "usage": {
-            "input_tokens": response.usage.input_tokens.unwrap_or(0),
-            "output_tokens": response.usage.output_tokens.unwrap_or(0),
-            "total_tokens": response.usage.total_tokens.unwrap_or_else(|| response.usage.input_tokens.unwrap_or(0) + response.usage.output_tokens.unwrap_or(0)),
-        },
+        "usage": super::super::usage::responses_json(&response.usage),
         "error": null,
     }))
 }
@@ -114,6 +142,7 @@ pub(super) fn render_chat(response: &CanonicalResponse) -> Result<Value, Transfo
             id,
             name,
             namespace,
+            kind,
             input,
         } = part
         else {
@@ -127,8 +156,9 @@ pub(super) fn render_chat(response: &CanonicalResponse) -> Result<Value, Transfo
                     UpstreamProtocol::ChatCompletions,
                     namespace.as_deref(),
                     name,
+                    *kind,
                 )?,
-                "arguments": serde_json::to_string(input).unwrap_or_else(|_| "{}".to_string()),
+                "arguments": serde_json::to_string(&if *kind == ToolKind::Custom { json!({"input": custom_input(input)?}) } else { input.clone() }).map_err(|_| TransformError("无法编码工具参数".to_string()))?,
             },
         }));
     }
@@ -161,11 +191,7 @@ pub(super) fn render_chat(response: &CanonicalResponse) -> Result<Value, Transfo
                 StopReason::EndTurn | StopReason::StopSequence => "stop",
             },
         }],
-        "usage": {
-            "prompt_tokens": response.usage.input_tokens.unwrap_or(0),
-            "completion_tokens": response.usage.output_tokens.unwrap_or(0),
-            "total_tokens": response.usage.total_tokens.unwrap_or_else(|| response.usage.input_tokens.unwrap_or(0) + response.usage.output_tokens.unwrap_or(0)),
-        },
+        "usage": super::super::usage::chat_json(&response.usage),
     }))
 }
 
@@ -183,6 +209,7 @@ pub(super) fn render_anthropic(response: &CanonicalResponse) -> Result<Value, Tr
                     id,
                     name,
                     namespace,
+                    kind,
                     input,
                 } => json!({
                     "type": "tool_use",
@@ -191,8 +218,9 @@ pub(super) fn render_anthropic(response: &CanonicalResponse) -> Result<Value, Tr
                         UpstreamProtocol::AnthropicMessages,
                         namespace.as_deref(),
                         name,
+                        *kind,
                     )?,
-                    "input": input,
+                    "input": if *kind == ToolKind::Custom { json!({"input": custom_input(input)?}) } else { input.clone() },
                 }),
             })
         })
@@ -210,9 +238,18 @@ pub(super) fn render_anthropic(response: &CanonicalResponse) -> Result<Value, Tr
             StopReason::EndTurn => "end_turn",
         },
         "stop_sequence": null,
-        "usage": {
-            "input_tokens": response.usage.input_tokens.unwrap_or(0),
-            "output_tokens": response.usage.output_tokens.unwrap_or(0),
-        },
+        "usage": super::super::usage::anthropic_json(&response.usage),
     }))
+}
+
+fn custom_input(input: &Value) -> Result<String, TransformError> {
+    match input {
+        Value::String(value) => Ok(value.clone()),
+        Value::Object(map) if map.len() == 1 => map
+            .get("input")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| TransformError("custom 工具输入必须是字符串".to_string())),
+        _ => Err(TransformError("custom 工具输入必须是字符串".to_string())),
+    }
 }

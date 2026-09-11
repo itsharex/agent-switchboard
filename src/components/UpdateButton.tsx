@@ -1,4 +1,5 @@
 import { UpdateIcon } from "./icons";
+import { Button } from "./Button";
 import { Tooltip } from "./Tooltip";
 
 /** Topbar indicator rendered only while a newer release is known. Stateless
@@ -15,8 +16,8 @@ export function UpdateButton({
   return (
     <Tooltip label={label} side="bottom">
       <span className="asb-tooltip-anchor">
-        <button
-          type="button"
+        <Button
+          variant="unstyled"
           className="asb-winbtn asb-updatebtn"
           aria-label={label}
           onClick={onOpen}
@@ -24,7 +25,7 @@ export function UpdateButton({
           <UpdateIcon />
           <span className="asb-updatebtn-label">更新</span>
           <span className="asb-updatebtn-dot" aria-hidden="true" />
-        </button>
+        </Button>
       </span>
     </Tooltip>
   );

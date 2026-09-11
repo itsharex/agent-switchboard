@@ -80,16 +80,13 @@ pub fn route_state(text: &str) -> RouteState {
     let doc = parse(text).expect("caller validates syntax first");
     let get = |path: &str| item_at(&doc, path).and_then(item_repr);
     let provider_id = get("model_provider").unwrap_or_else(|| OFFICIAL_PROVIDER.to_string());
-    let custom_provider = provider_id != OFFICIAL_PROVIDER;
-    let base_url = if custom_provider {
-        get(&format!("model_providers.{provider_id}.base_url"))
-    } else {
-        get("openai_base_url")
-    };
-    let custom = custom_provider || base_url.is_some();
-    let wire_api = custom_provider
-        .then(|| get(&format!("model_providers.{provider_id}.wire_api")))
-        .flatten();
+    let builtin_openai = provider_id == OFFICIAL_PROVIDER;
+    // The current Codex contract has one client provider only. An old custom
+    // provider is classified as unsupported without reading its provider
+    // table, so status and recovery cannot accidentally treat legacy fields as
+    // a live route.
+    let base_url = builtin_openai.then(|| get("openai_base_url")).flatten();
+    let custom = !builtin_openai || base_url.is_some();
     RouteState {
         app: AppKind::Codex,
         route_mode: if custom {
@@ -97,10 +94,10 @@ pub fn route_state(text: &str) -> RouteState {
         } else {
             RouteMode::Official
         },
-        provider_name: if custom_provider { get(&format!("model_providers.{provider_id}.name")) } else { Some(CODEX_PROVIDER_ID.into()) },
+        provider_name: Some(provider_id),
         model: get("model"),
         base_url,
-        wire_api,
+        wire_api: None,
         codex_model_options: Some(CodexModelSettings {
             context_window: item_at(&doc, "model_context_window")
                 .and_then(|item| item.as_value())

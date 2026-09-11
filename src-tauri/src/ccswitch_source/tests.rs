@@ -17,6 +17,7 @@ fn profiles(state: &LocalState) -> Vec<ProviderProfile> {
 // A deliberately nonstandard credential shape proves scan serialization
 // cannot rely on matching a token prefix to keep credentials private.
 const SOURCE_TOKEN: &str = "opaque-source-credential-42";
+const SOURCE_CODEX_TOKEN: &str = "opaque-codex-credential-84";
 const SOURCE_USAGE_SCRIPT: &str = r#"({
         request: {
             url: "{{baseUrl}}/usage",
@@ -96,6 +97,101 @@ fn fixture_db(dir: &Path) -> PathBuf {
     path
 }
 
+/// A Codex row in the shape the source itself writes: credential in `auth`,
+/// an optional real-shaped model catalog, and metadata keys this app does
+/// not consume.
+fn insert_real_codex(connection: &Connection, id: &str) {
+    let config = r#"model_provider = "custom"
+model = "gpt-5-codex"
+
+[model_providers.custom]
+name = "Codex 中继"
+base_url = "https://relay.codex.example"
+wire_api = "responses"
+requires_openai_auth = true
+"#;
+    let settings = serde_json::json!({
+        "auth": { "OPENAI_API_KEY": SOURCE_CODEX_TOKEN },
+        "config": config,
+        "modelCatalog": {
+            "models": [
+                {
+                    "model": "gpt-5-codex",
+                    "displayName": "GPT-5 Codex",
+                    "contextWindow": 272000,
+                    "inputModalities": ["text"]
+                },
+                { "model": "gpt-5-codex-mini", "contextWindow": "200000" }
+            ]
+        }
+    });
+    let meta = serde_json::json!({
+        "apiFormat": "openai_responses",
+        "costMultiplier": 0.9
+    });
+    connection
+        .execute(
+            "INSERT INTO providers (id, app_type, name, settings_config, meta) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, "codex", "Codex 中继", settings.to_string(), meta.to_string()],
+        )
+        .unwrap();
+}
+
+/// One editor-confirmed draft derived from a seed, for route-duplicate
+/// marking only.
+fn completed_codex_draft(
+    seed: &asb_core::ccswitch::CodexImportSeed,
+) -> asb_core::contracts::CodexProviderDraft {
+    use asb_core::contracts::{
+        CodexCapabilities, CodexCatalogEntry, CodexChatReasoning, CodexProviderDraft,
+        CodexReasoningLevel,
+    };
+    CodexProviderDraft {
+        name: seed.name.clone(),
+        endpoint: seed.endpoint.clone(),
+        api_key: seed.api_key.clone(),
+        upstream: seed.upstream,
+        request_mode: seed.request_mode,
+        default_model: seed.default_model.clone(),
+        catalog: vec![CodexCatalogEntry {
+            id: "gpt-5-codex".to_string(),
+            context_window: 272_000,
+            max_output_tokens: 16_384,
+            function_tools: true,
+            custom_tools: false,
+            tool_search: false,
+            reasoning: true,
+            default_reasoning_level: CodexReasoningLevel::Medium,
+            supported_reasoning_levels: vec![
+                CodexReasoningLevel::None,
+                CodexReasoningLevel::Medium,
+                CodexReasoningLevel::High,
+            ],
+            images: false,
+            compact: true,
+        }],
+        model_routes: vec![],
+        capabilities: CodexCapabilities {
+            responses: true,
+            compact: true,
+            models: true,
+            chat_completions: false,
+            alpha_search: false,
+            image_generation: false,
+            image_edit: false,
+            function_tools: true,
+            custom_tools: false,
+            tool_search: false,
+            reasoning: true,
+            chat_reasoning: CodexChatReasoning::Unsupported,
+        },
+        parameters: seed.parameters.clone(),
+        notes: None,
+        website_url: None,
+        usage_query: None,
+    }
+}
+
 #[test]
 fn scan_marks_duplicates_and_filters_out_of_scope_clients() {
     let dir = tempfile::tempdir().unwrap();
@@ -104,9 +200,13 @@ fn scan_marks_duplicates_and_filters_out_of_scope_clients() {
 
     let first = scan_at(&path, &state).unwrap();
     assert_eq!(first.db_path, path.to_string_lossy());
-    assert_eq!(first.providers.len(), 2);
-    assert_eq!(first.skipped.len(), 1);
+    assert_eq!(first.providers.len(), 1);
+    assert_eq!(first.skipped.len(), 2);
     assert!(first.skipped.iter().any(|s| s.reason.contains("gemini")));
+    assert!(first
+        .skipped
+        .iter()
+        .any(|s| s.key == "codex:id-2" && s.reason.contains("官方登录")));
     assert!(first.providers.iter().all(|item| !item.existing));
     let serialized = serde_json::to_string(&first).unwrap();
     assert!(!serialized.contains(SOURCE_TOKEN));
@@ -120,12 +220,6 @@ fn scan_marks_duplicates_and_filters_out_of_scope_clients() {
         .find(|item| item.app == AppKind::Claude)
         .expect("claude proposal");
     assert_eq!(claude.name, "中继 A");
-    let official = first
-        .providers
-        .iter()
-        .find(|item| item.app == AppKind::Codex)
-        .expect("official Codex route");
-    assert_eq!(official.name, "Codex 官方登录");
     assert_eq!(claude.model.as_deref(), Some("claude-x"));
     assert_eq!(claude.base_url.as_deref(), Some("https://relay.internal"));
     assert!(claude.usage_script_importable);
@@ -185,6 +279,92 @@ fn import_reuses_dedup_and_reports_skips() {
     let again = import_at(&path, &state, &["claude:id-1".into()]).unwrap();
     assert_eq!(again.imported_count, 0);
     assert_eq!(again.skipped_existing, vec!["中继 A".to_string()]);
+}
+
+#[test]
+fn codex_rows_scan_as_completion_seeds_and_reject_batch_import() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture_db(dir.path());
+    let connection = Connection::open(&path).unwrap();
+    insert_real_codex(&connection, "id-codex");
+    let state = LocalState::from_root(dir.path().join("state"));
+
+    let first = scan_at(&path, &state).unwrap();
+    let codex = first
+        .providers
+        .iter()
+        .find(|item| item.key == "codex:id-codex")
+        .expect("Codex seed row");
+    assert_eq!(codex.app, AppKind::Codex);
+    assert_eq!(codex.model.as_deref(), Some("gpt-5-codex"));
+    assert_eq!(
+        codex.base_url.as_deref(),
+        Some("https://relay.codex.example/v1")
+    );
+    assert!(!codex.existing);
+    assert!(codex
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("costMultiplier")));
+    assert!(codex
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("displayName")));
+    let serialized = serde_json::to_string(&first).unwrap();
+    assert!(!serialized.contains(SOURCE_CODEX_TOKEN));
+    assert!(!serialized.contains("\"apiKey\""));
+    assert!(!serialized.contains("\"draft\""));
+
+    // The batch import rejects Codex keys up front, before any write.
+    let error = import_at(&path, &state, &["codex:id-codex".into()]).unwrap_err();
+    assert!(error.contains("补全导入"));
+    assert!(state
+        .configuration()
+        .list_codex_providers()
+        .unwrap()
+        .is_empty());
+
+    // A mixed batch also fails without importing the Claude half.
+    let mixed = import_at(
+        &path,
+        &state,
+        &["claude:id-1".into(), "codex:id-codex".into()],
+    )
+    .unwrap_err();
+    assert!(mixed.contains("补全导入"));
+    assert!(profiles(&state).is_empty());
+
+    // The single-row seed command is the only credential boundary.
+    let seed = prepare_codex_seed_at(&path, "codex:id-codex").unwrap();
+    assert_eq!(seed.api_key, SOURCE_CODEX_TOKEN);
+    assert_eq!(seed.catalog.len(), 2);
+    assert_eq!(seed.catalog[0].model, "gpt-5-codex");
+    assert_eq!(seed.catalog[0].context_window, Some(272_000));
+    assert!(prepare_codex_seed_at(&path, "claude:id-1")
+        .unwrap_err()
+        .contains("不是 Codex"));
+    assert!(prepare_codex_seed_at(&path, "codex:missing")
+        .unwrap_err()
+        .contains("重新扫描"));
+
+    // Claude keys still batch-import on their own.
+    let claude_only = import_at(&path, &state, &["claude:id-1".into()]).unwrap();
+    assert_eq!(claude_only.imported_count, 1);
+
+    // A stored provider with the same route marks the seed row as existing.
+    state
+        .configuration()
+        .create_codex_provider(completed_codex_draft(&seed))
+        .unwrap();
+    let second = scan_at(&path, &state).unwrap();
+    assert!(
+        second
+            .providers
+            .iter()
+            .find(|item| item.key == "codex:id-codex")
+            .expect("same Codex seed row")
+            .existing
+    );
 }
 
 #[test]

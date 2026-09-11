@@ -1,101 +1,101 @@
 use super::*;
-use asb_core::contracts::{ProviderDraft, ResponsesRequestMode};
-use asb_core::ownership::{default_client_settings, default_provider_parameters};
+use asb_core::contracts::{CodexProviderDraft, ResponsesRequestMode};
+use asb_core::ownership::default_client_settings;
 
-fn draft(mode: ResponsesRequestMode) -> ProviderDraft {
-    ProviderDraft {
-        parameters: default_provider_parameters(AppKind::Codex),
-        app: AppKind::Codex,
-        route_mode: RouteMode::Custom,
-        name: "Responses sandbox".to_string(),
-        base_url: Some("http://127.0.0.1:18080/custom/api".to_string()),
-        api_key: "sandbox-secret".to_string(),
-        upstream_protocol: Some(UpstreamProtocol::Responses),
-        responses_options: Some(ResponsesOptions { request_mode: mode }),
-        max_output_tokens: None.into(),
-        model: Some("sandbox-model".to_string()),
-        model_options: None,
-        notes: None,
-        website_url: None,
-        usage_query: None,
-        official_quota_refresh_interval_minutes: None,
+fn draft(
+    file: &asb_core::contracts::CodexProviderFile,
+    mode: ResponsesRequestMode,
+) -> CodexProviderDraft {
+    CodexProviderDraft {
+        name: file.profile.name.clone(),
+        endpoint: file.profile.endpoint.clone(),
+        api_key: file.profile.api_key.clone(),
+        upstream: file.profile.upstream,
+        request_mode: mode,
+        default_model: file.profile.default_model.clone(),
+        catalog: file.profile.catalog.clone(),
+        model_routes: file.profile.model_routes.clone(),
+        capabilities: file.profile.capabilities.clone(),
+        parameters: file.parameters.clone(),
+        notes: file.notes.clone(),
+        website_url: file.website_url.clone(),
+        usage_query: file.usage_query.clone(),
     }
 }
 
 #[test]
-fn responses_mode_owns_routing_fingerprint_and_gateway_projection() {
+fn responses_mode_owns_codex_routing_revision_and_gateway_projection() {
     let directory = tempfile::tempdir().unwrap();
     let local = LocalState::from_root(directory.path().join("state"));
     let gateway = GatewayController::start(&local);
-    let standard = ProviderProfile::from_draft(
-        Uuid::new_v4().to_string(),
-        draft(ResponsesRequestMode::Standard),
+    let standard = crate::gateway::server::tests::sandbox_codex_file(
+        &local,
+        "Responses sandbox",
+        "http://127.0.0.1:18080".to_string(),
+        "sandbox-secret".to_string(),
+        asb_core::contracts::CodexUpstream::Responses,
     );
     let mut minimal = standard.clone();
-    minimal.responses_options.as_mut().unwrap().request_mode = ResponsesRequestMode::Minimal;
-    assert!(!is_direct(&standard));
-    assert!(!is_direct(&minimal));
+    minimal.profile.request_mode = ResponsesRequestMode::Minimal;
     assert_ne!(
-        route_fingerprint(&standard).unwrap(),
-        route_fingerprint(&minimal).unwrap()
+        codex_route_fingerprint(&standard).unwrap(),
+        codex_route_fingerprint(&minimal).unwrap()
     );
-    let plan = SwitchPlan::direct(minimal.clone(), default_client_settings(AppKind::Codex));
-    let projection = gateway.project(&plan).unwrap();
+    let projection = gateway
+        .project_codex(&minimal, default_client_settings(AppKind::Codex))
+        .unwrap();
     assert!(projection.warning().unwrap().contains("最小模式"));
-    assert!(!projection
-        .warning()
-        .unwrap()
-        .contains("原生协议（Responses）不同"));
     assert!(adapter::render("", &projection.plan)
         .unwrap()
         .contains("model_provider = \"openai\""));
     gateway.commit(&projection, || Ok(())).unwrap();
-    let active = gateway.active_route_projection(&plan).unwrap().unwrap();
-    assert_eq!(active, projection.plan);
+    assert_eq!(
+        gateway
+            .active_codex_projection(&minimal, default_client_settings(AppKind::Codex))
+            .unwrap(),
+        Some(projection.plan),
+    );
     gateway.shutdown();
 }
 
 #[test]
-fn minimal_responses_route_is_restored_then_refused_when_mode_changes() {
+fn changed_codex_request_mode_is_refused_on_restart() {
     let _client_paths = crate::test_client_paths::redirect_client_paths();
     let directory = tempfile::tempdir().unwrap();
     let local = LocalState::from_root(directory.path().join("state"));
+    let file = crate::gateway::server::tests::sandbox_codex_file(
+        &local,
+        "Responses sandbox",
+        "http://127.0.0.1:18080".to_string(),
+        "sandbox-secret".to_string(),
+        asb_core::contracts::CodexUpstream::Responses,
+    );
     let record = local
         .configuration()
-        .create_provider(draft(ResponsesRequestMode::Minimal))
-        .unwrap();
+        .list_codex_providers()
+        .unwrap()
+        .remove(0);
     let gateway = GatewayController::start(&local);
-    let plan = SwitchPlan::direct(
-        record.profile.clone(),
-        default_client_settings(AppKind::Codex),
-    );
-    let projection = gateway.project(&plan).unwrap();
+    let projection = gateway
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .unwrap();
     let target = local.target(AppKind::Codex).unwrap();
-    let auth = LocalState::codex_auth_path().unwrap();
     fs::create_dir_all(target.parent().unwrap()).unwrap();
-    fs::create_dir_all(auth.parent().unwrap()).unwrap();
     fs::write(&target, adapter::render("", &projection.plan).unwrap()).unwrap();
-    fs::write(
-        &auth,
-        r#"{"auth_mode":"chatgpt","tokens":{"access_token":"sandbox-access","refresh_token":"sandbox-refresh","id_token":"sandbox-id"}}"#,
-    )
-    .unwrap();
     gateway.commit(&projection, || Ok(())).unwrap();
     gateway.shutdown();
     drop(gateway);
-    let restored = restart(&local);
-    assert!(restored.has_active_route_for(AppKind::Codex));
-    assert_eq!(
-        restored.active_route_projection(&plan).unwrap(),
-        Some(projection.plan)
-    );
-    restored.shutdown();
-    drop(restored);
+
+    let restarted = restart(&local);
+    assert!(restarted.has_active_route_for(AppKind::Codex));
+    restarted.shutdown();
+    drop(restarted);
+
     local
         .configuration()
-        .update_provider(
+        .update_codex_provider(
             &record.profile.id,
-            draft(ResponsesRequestMode::Standard),
+            draft(&file, ResponsesRequestMode::Minimal),
             &record.file_hash,
         )
         .unwrap();

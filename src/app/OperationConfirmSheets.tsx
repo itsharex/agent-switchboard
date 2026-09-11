@@ -83,7 +83,9 @@ export function OperationConfirmSheets({
         <ConfirmSheet
           title="删除供应商"
           details={[
-            `删除本地记录 ${providers.deletePending.name}`,
+            `删除本地记录 ${providers.deletePending.kind === "generic"
+              ? providers.deletePending.profile.name
+              : providers.deletePending.record.profile.name}`,
             "不会修改当前客户端配置。",
           ]}
           confirmLabel="确认删除"

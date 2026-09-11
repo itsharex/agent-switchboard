@@ -1,11 +1,7 @@
-import type { AppKind, SessionMeta } from "../../api/client";
+import type { SessionMeta } from "../../api/client";
 
 const CODEX_IDE_CONTEXT_PREFIX = "# Context from my IDE setup:";
 const CODEX_REQUEST_MARKER = "my request for codex";
-
-export function clientName(app: AppKind): string {
-  return app === "codex" ? "Codex" : "Claude Code";
-}
 
 export function sessionMatchesSearch(session: SessionMeta, query: string): boolean {
   const needle = query.trim().toLocaleLowerCase();

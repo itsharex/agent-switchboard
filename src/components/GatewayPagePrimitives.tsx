@@ -13,8 +13,8 @@ export function ConfirmGatewayRecoveryDiscard({ onConfirm }: { onConfirm: () => 
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-body-medium text-text-secondary">
+    <div className="asb-gateway-row">
+      <span className="asb-gateway-alert-copy">
         不会覆盖当前客户端配置（包括外部修改）；会清除本次恢复记录与可清理的备份。
       </span>
       <Button variant="danger" onClick={onConfirm}>确认保留并清除</Button>
@@ -52,20 +52,16 @@ export function GatewayPanel({ children, aside }: { children: ReactNode; aside?:
         <h2 className="asb-panel-title">本机协议网关</h2>
         {aside}
       </div>
-      <div className="flex flex-col gap-6">{children}</div>
+      <div className="asb-gateway-stack">{children}</div>
     </section>
   );
 }
 
 export function GatewayStatTile({ label, value }: { label: string; value: number | string }) {
   return (
-    <div
-      role="group"
-      aria-label={label}
-      className="flex flex-col gap-1 rounded-2xl bg-background-secondary-default px-4 py-3"
-    >
-      <p className="m-0 text-body-2-medium text-text-secondary">{label}</p>
-      <p className="m-0 text-title-2-medium text-text-primary tabular-nums">{value}</p>
+    <div role="group" aria-label={label} className="asb-gateway-tile">
+      <p className="asb-gateway-tile-label">{label}</p>
+      <p className="asb-gateway-tile-value">{value}</p>
     </div>
   );
 }

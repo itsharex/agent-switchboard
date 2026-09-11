@@ -30,7 +30,7 @@ describe("App", () => {
     const view = render(<App />);
     await waitFor(() => expect(navigate).toBeDefined());
     act(() => navigate?.());
-    expect(await screen.findByRole("region", { name: "供应商工作区" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Codex 供应商" })).toBeInTheDocument();
     view.unmount();
     expect(stop).toHaveBeenCalledOnce();
     subscribe.mockRestore();
@@ -58,7 +58,7 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByText("本机网关");
+    await screen.findByRole("region", { name: "Codex 供应商" });
     await openDiagnostics(user, "运行日志");
 
     expect(await screen.findByText("已切换配置")).toBeInTheDocument();
@@ -224,11 +224,11 @@ describe("App", () => {
     const root = document.documentElement;
     expect(root.dataset.focusSource).toBeUndefined();
 
-    // Pointer interaction: no keyboard focus ring on drawn controls.
+    // Pointer interaction clears the keyboard modality marker used by actions.
     fireEvent.pointerDown(window);
     expect(root.dataset.focusSource).toBeUndefined();
 
-    // Keyboard navigation marks the modality the rings key off.
+    // Keyboard navigation marks the modality used by keyboard-only actions.
     fireEvent.keyDown(window, { key: "Tab" });
     expect(root.dataset.focusSource).toBe("key");
     fireEvent.keyDown(window, { key: "ArrowRight" });
@@ -260,10 +260,10 @@ describe("App", () => {
           claude: {
             app: "claude",
             path: "C:/Users/test/.claude/settings.json",
-            exists: false,
-            state: { kind: "missing" },
+            exists: true,
+            state: { kind: "readError", message: "无法读取配置文件" },
           },
-          importProposals: [],
+          claudeImportProposals: [],
         });
       }
       return Promise.resolve([]);
@@ -271,6 +271,7 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await openProviderImport(user);
     await user.click(screen.getByRole("button", { name: "扫描配置" }));
     expect(await screen.findByText("无法读取配置文件")).toBeInTheDocument();

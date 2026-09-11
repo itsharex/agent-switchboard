@@ -1,261 +1,411 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
-import { primeUsageCollapseBackend } from "./test/app-fixtures";
-import type { FilePreview, ProviderRecord } from "./api/client";
-import { providerParameters } from "./test/provider-parameters";
-import { invokeMock, defaultSettings, deferred, runtimeOverview, primeBackend } from "./test/app-fixtures";
+import { CodexProvidersPage } from "./pages/CodexProvidersPage";
+import type { CodexProviderRecord, FilePreview } from "./api/client";
+import {
+  codexFilePreview,
+  codexOfficialFilePreview,
+  codexProfiles,
+  deferred,
+  invokeMock,
+  primeBackend,
+  statuses,
+} from "./test/app-fixtures";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onResized: () => Promise.resolve(() => {}) }) }));
-vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn(() => Promise.resolve(null)) }));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ onResized: () => Promise.resolve(() => {}) }),
+}));
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(() => Promise.resolve(null)),
+}));
+
+function card(name: string) {
+  const entry = screen.getByText(name).closest("li");
+  expect(entry).not.toBeNull();
+  return entry!;
+}
+
+function primeActiveCodexBackend() {
+  primeBackend();
+  const backend = invokeMock.getMockImplementation();
+  expect(backend).toBeDefined();
+  invokeMock.mockImplementation((command: string, args?: unknown) => {
+    if (command === "config_status") {
+      return Promise.resolve([
+        { ...statuses[0], activeProfileId: codexProfiles[0].profile.id },
+        statuses[1],
+      ]);
+    }
+    return backend!(command, args as never);
+  });
+}
+
+function codexRecord(
+  id: string,
+  name: string,
+  model: string,
+): CodexProviderRecord {
+  const source = codexProfiles[0];
+  return {
+    ...source,
+    profile: {
+      ...source.profile,
+      id,
+      name,
+      defaultModel: model,
+      catalog: source.profile.catalog.map((entry) => ({ ...entry, id: model })),
+      modelRoutes: [{ clientModel: model, upstreamModel: model }],
+    },
+    fileHash: `${id}-file-hash`,
+  };
+}
+
+function previewFor(id: string, model: string): FilePreview {
+  return {
+    ...codexFilePreview,
+    contentHash: `hash-${id}`,
+    renderedHash: `rendered-${id}`,
+    content: `model = "${model}"\nmodel_provider = "openai"\nopenai_base_url = "<redacted>"\n`,
+    preview: {
+      ...codexFilePreview.preview,
+      changes: [
+        { key: "model", kind: "set", before: "gpt-5.3-codex", after: model },
+      ],
+    },
+  };
+}
 
 describe("App.providers", () => {
-  it("loads actual status, renders lanes, and completes a confirmed switch", async () => {
+  it("renders a dedicated Codex profile and switches only from its exact preview", async () => {
     primeBackend();
     const user = userEvent.setup();
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText("本机网关")).toBeInTheDocument());
-    expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
+    const profileCard = await screen
+      .findByText("备用网关")
+      .then(() => card("备用网关"));
+    expect(profileCard).toHaveTextContent("gpt-5.4");
+    await user.click(within(profileCard).getByRole("button", { name: "启用 备用网关" }));
 
-    await user.click(screen.getByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("option", { name: /备用网关/ }));
-    // Selection alone shows no diff; the diff appears on explicit request.
-    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
-    const previewPanel = await screen.findByRole("region", { name: "变更预览" });
-    // The user-level configuration model shows twice here: the summary and
-    // the diff's before-value.
-    expect(within(previewPanel).getByText("当前用户级配置模型")).toBeInTheDocument();
-    expect(within(previewPanel).getAllByText("gpt-5.3-codex").length).toBeGreaterThan(0);
-    expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
+    const preview = await screen.findByLabelText(
+      "C:/Users/test/.codex/config.toml 配置预览",
+    );
+    expect(preview).toHaveTextContent("openai_base_url");
+    expect(screen.getByRole("button", { name: "确认切换" })).toBeEnabled();
+    expect(invokeMock).toHaveBeenCalledWith("preview_switch", {
+      profileId: "codex-gateway",
+    });
 
-    // The preview unfolds under the provider list, inside the same panel,
-    // and the eye button retracts it (user decision 2026-08-28).
-    expect(screen.getByRole("region", { name: "供应商工作区" })).toContainElement(previewPanel);
-    await user.click(screen.getByRole("button", { name: "收起 备用网关 预览" }));
-    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
-
-    // The preview header's cancel button retracts it without switching.
-    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
-    await screen.findByRole("region", { name: "变更预览" });
     await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(screen.queryByRole("region", { name: "变更预览" })).not.toBeInTheDocument();
-    expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain("execute_switch");
+    expect(
+      screen.queryByLabelText("C:/Users/test/.codex/config.toml 配置预览"),
+    ).not.toBeInTheDocument();
+    expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain(
+      "execute_switch",
+    );
 
-    await user.click(screen.getByRole("button", { name: "预览 备用网关 变更" }));
-    await screen.findByRole("region", { name: "变更预览" });
-
-    // The switch confirms from the provider page's inline preview.
+    await user.click(
+      within(card("备用网关")).getByRole("button", { name: "启用 备用网关" }),
+    );
+    await screen.findByLabelText("C:/Users/test/.codex/config.toml 配置预览");
     await user.click(screen.getByRole("button", { name: "确认切换" }));
-    const sheet = await screen.findByRole("dialog", { name: "确认切换" });
-    await user.click(within(sheet).getByRole("button", { name: "确认切换" }));
 
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("execute_switch", {
         profileId: "codex-gateway",
-        expectedHash: "hash1",
-        expectedRenderedHash: "rendered-hash1",
+        expectedHash: "codex-hash1",
+        expectedRenderedHash: "codex-rendered-hash1",
         confirmWrite: true,
       }),
     );
-    expect(await screen.findByText(/已切换到「备用网关」/)).toBeInTheDocument();
   });
 
-  it("供应商用量面板的收起选择经应用设置持久化", async () => {
-    primeUsageCollapseBackend(defaultSettings);
+  it("creates a complete specialized Codex profile from the structured form", async () => {
+    primeBackend();
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    expect(await screen.findByRole("region", { name: "备用网关 用量" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "收起 备用网关 用量" }));
+    await user.click(await screen.findByRole("button", { name: "新建供应商" }));
+    fireEvent.change(screen.getByLabelText("名称"), {
+      target: { value: "新网关" },
+    });
+    fireEvent.change(screen.getByLabelText("服务地址"), {
+      target: { value: "https://new.internal/v1" },
+    });
+    fireEvent.change(screen.getByLabelText("API 密钥"), {
+      target: { value: "NEW_KEY" },
+    });
+    await user.click(screen.getByRole("button", { name: "获取模型" }));
+    expect(screen.getByLabelText("模型标识 1")).toHaveValue("gpt-5.4");
+    expect(screen.getByLabelText("模型标识 2")).toHaveValue("gpt-5.4-mini");
+    await user.click(screen.getByRole("combobox", { name: "默认模型" }));
+    await user.click(await screen.findByRole("option", { name: "gpt-5.4" }));
+    await user.click(screen.getByText("模型映射"));
+    await user.click(screen.getByRole("button", { name: "添加映射" }));
+    fireEvent.change(screen.getByLabelText("映射上游模型 1"), {
+      target: { value: "vendor-gpt-5.4" },
+    });
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
 
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("set_app_settings", {
-        settings: { ...defaultSettings, collapsedUsageIds: ["codex-gateway"] },
+      expect(invokeMock).toHaveBeenCalledWith("create_codex_profile", {
+        draft: expect.objectContaining({
+          name: "新网关",
+          endpoint: "https://new.internal/v1",
+          apiKey: "NEW_KEY",
+          upstream: "responses",
+          requestMode: "standard",
+          defaultModel: "gpt-5.4",
+          catalog: [
+            expect.objectContaining({ id: "gpt-5.4", contextWindow: 128_000 }),
+            expect.objectContaining({ id: "gpt-5.4-mini" }),
+          ],
+          modelRoutes: [{ clientModel: "gpt-5.4", upstreamModel: "vendor-gpt-5.4" }],
+        }),
       }),
     );
-    expect(await screen.findByRole("button", { name: "查看 备用网关 用量" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "备用网关 用量" })).not.toBeInTheDocument();
   });
 
-  it("重启后保持用量收起状态并查询显示摘要", async () => {
-    primeUsageCollapseBackend({ ...defaultSettings, collapsedUsageIds: ["codex-gateway"] });
+  it("blocks creating a Codex profile whose catalog is still empty", async () => {
+    primeBackend();
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    const toggle = await screen.findByRole("button", { name: "查看 备用网关 用量" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("region", { name: "备用网关 用量" })).not.toBeInTheDocument();
-    const usageQueries = invokeMock.mock.calls.filter(
-      ([command]) => command === "query_profile_usage",
+    await user.click(await screen.findByRole("button", { name: "新建供应商" }));
+    fireEvent.change(screen.getByLabelText("名称"), {
+      target: { value: "新网关" },
+    });
+    fireEvent.change(screen.getByLabelText("服务地址"), {
+      target: { value: "https://new.internal/v1" },
+    });
+    fireEvent.change(screen.getByLabelText("API 密钥"), {
+      target: { value: "NEW_KEY" },
+    });
+    invokeMock.mockClear();
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+
+    expect(
+      await screen.findByText("模型目录不能为空；请获取模型或手动添加"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存供应商" })).toBeDisabled();
+    expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain(
+      "create_codex_profile",
     );
-    expect(usageQueries).toHaveLength(1);
-    expect(await screen.findByLabelText("备用网关 用量摘要")).toHaveTextContent("余额 18.5 USD");
   });
 
-  it("opens provider editing in a dedicated view and returns via the back affordance", async () => {
+  it("reorders specialized Codex profiles with every current file revision", async () => {
     primeBackend();
+    const records = [
+      codexRecord("codex-a", "网关甲", "model-a"),
+      codexRecord("codex-b", "网关乙", "model-b"),
+    ];
+    render(
+      <CodexProvidersPage
+        active
+        records={records}
+        officialRecord={null}
+        activeProfileId={null}
+        busy={false}
+        onBusy={() => {}}
+        onError={() => {}}
+        onRefresh={async () => {}}
+        onSelectApp={() => {}}
+        requestedPreviewId={null}
+        onPreviewRequestHandled={() => {}}
+        onImport={() => {}}
+        onOpenClientSettings={() => {}}
+        onOpenHistory={() => {}}
+        onDelete={() => {}}
+        onDeleteOfficial={() => {}}
+        editorSession={null}
+        onNew={() => {}}
+        onEdit={() => {}}
+        onEditOfficial={() => {}}
+        onCloseEditor={() => {}}
+        onSave={() => {}}
+        onSaveOfficial={() => {}}
+        onSwitchAccessMode={() => {}}
+        onSwitchClient={() => {}}
+        onSaveOfficialQuotaInterval={async () => true}
+        statuses={[]}
+        profiles={[]}
+        locks={{}}
+        userConfigModel={null}
+        userConfigWarnings={[]}
+      />,
+    );
+
+    // jsdom has no layout; give the rows real vertical geometry so the
+    // sortable keyboard coordinate getter can resolve the next row.
+    document.querySelectorAll("li.asb-row-item").forEach((row, index) => {
+      const top = index * 76;
+      row.getBoundingClientRect = () =>
+        ({ top, bottom: top + 68, left: 0, right: 320, width: 320, height: 68, x: 0, y: top }) as DOMRect;
+    });
+    const grip = screen.getByRole("button", { name: "拖动调整 网关甲 的顺序" });
+    grip.focus();
+    const press = async (code: string, key: string) => {
+      await act(async () => {
+        fireEvent.keyDown(grip, { key, code, bubbles: true, cancelable: true });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    await press("Space", " ");
+    await press("ArrowDown", "ArrowDown");
+    await press("Space", " ");
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("reorder_codex_profiles", {
+        orderedIds: ["codex-b", "codex-a"],
+        expectedFileHashes: {
+          "codex-a": "codex-a-file-hash",
+          "codex-b": "codex-b-file-hash",
+        },
+      }),
+    );
+  });
+
+  it("requires the active Codex profile edit to be confirmed before it is applied", async () => {
+    primeActiveCodexBackend();
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("option", { name: /备用网关/ }));
-    await user.click(screen.getByRole("button", { name: "编辑 备用网关" }));
-
-    // Dedicated view: focused title, back affordance, list hidden.
-    expect(screen.getByRole("heading", { name: "编辑供应商" })).toBeInTheDocument();
-    expect(screen.queryByRole("radiogroup", { name: "供应商客户端" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "返回供应商列表" }));
-    expect(await screen.findByRole("radiogroup", { name: "供应商客户端" })).toBeInTheDocument();
-  });
-
-  it("confirms an active provider edit in place before applying it", async () => {
-    primeBackend();
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.getByRole("option", { name: /备用网关/ }));
-    await user.click(screen.getByRole("button", { name: "编辑 备用网关" }));
+    await user.click(
+      within(
+        await screen.findByText("备用网关").then(() => card("备用网关")),
+      ).getByRole("button", { name: "编辑 备用网关" }),
+    );
     fireEvent.change(screen.getByLabelText("服务地址"), {
       target: { value: "https://updated.internal/v1" },
     });
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
 
-    expect(await screen.findByRole("dialog", { name: "确认保存并应用" })).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("prepare_profile_save", expect.objectContaining({
-      profileId: "codex-gateway",
-      expectedFileHash: "provider-file-hash",
-    }));
-    expect(invokeMock).not.toHaveBeenCalledWith("commit_profile_save", expect.anything());
-
-    await user.click(screen.getByRole("button", { name: "确认保存并应用" }));
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("commit_profile_save", expect.objectContaining({
-        preparationId: "prepared-save",
+      expect(invokeMock).toHaveBeenCalledWith(
+        "prepare_codex_profile_save",
+        expect.objectContaining({
+          profileId: "codex-gateway",
+          expectedFileHash: "codex-provider-file-hash",
+          draft: expect.objectContaining({
+            endpoint: "https://updated.internal/v1",
+          }),
+        }),
+      ),
+    );
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "commit_codex_profile_save",
+      expect.anything(),
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "确认保存并应用" }),
+    );
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("commit_codex_profile_save", {
+        preparationId: "prepared-codex-save",
         confirmWrite: true,
-      })),
+      }),
     );
   });
 
-  it("offers a confirmed reset only for an unsupported profile store", async () => {
+  it("deletes a Codex profile through the shared confirmation sheet", async () => {
     primeBackend();
-    let unsupported = true;
-    const backend = invokeMock.getMockImplementation();
-    expect(backend).toBeDefined();
-    invokeMock.mockImplementation((command: string, args?: unknown) => {
-      if (command === "list_profiles" && unsupported) {
-        return Promise.reject({
-          code: "profile-store-unsupported",
-          message: "供应商存储格式无效或来自已不受支持的旧版本；请重新创建供应商档案",
-        });
-      }
-      if (command === "reset_profile_store") {
-        unsupported = false;
-        return Promise.resolve(undefined);
-      }
-      return backend!(command, args as never);
-    });
     const user = userEvent.setup();
     render(<App />);
 
-    const alert = await screen.findByRole("alert", { name: "操作错误" });
-    expect(alert).toHaveTextContent("供应商存储格式无效");
-    const resetTrigger = screen.getByRole("button", { name: "清空旧档案并重新开始" });
-    expect(invokeMock).not.toHaveBeenCalledWith("reset_profile_store", expect.anything());
+    const row = await screen.findByText("备用网关").then(() => card("备用网关"));
+    await user.click(within(row).getByRole("button", { name: "更多 备用网关 操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "删除 备用网关" }));
 
-    await user.click(resetTrigger);
-    expect(screen.getByRole("dialog", { name: "清空旧供应商档案" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(invokeMock).not.toHaveBeenCalledWith("reset_profile_store", expect.anything());
+    const dialog = screen.getByRole("dialog", { name: "删除供应商" });
+    expect(dialog).toHaveTextContent("删除本地记录 备用网关");
+    await user.click(within(dialog).getByRole("button", { name: "确认删除" }));
 
-    await user.click(screen.getByRole("button", { name: "清空旧档案并重新开始" }));
-    await user.click(screen.getByRole("button", { name: "清空并重新开始" }));
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("reset_profile_store", { confirmWrite: true }),
+      expect(invokeMock).toHaveBeenCalledWith("delete_codex_profile", {
+        profileId: "codex-gateway",
+        expectedFileHash: "codex-provider-file-hash",
+      }),
     );
-    await waitFor(() => expect(screen.queryByRole("button", { name: "清空旧档案并重新开始" })).not.toBeInTheDocument());
   });
 
-  it("does not offer a reset for an unreadable profile store", async () => {
-    primeBackend();
-    invokeMock.mockImplementation((command: string) => {
-      if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
-      if (command === "list_profiles") {
-        return Promise.reject({ code: "store-unreadable", message: "供应商存储不可读" });
-      }
-      if (command === "get_app_settings") return Promise.resolve(defaultSettings);
-      return Promise.resolve([]);
-    });
+  it("switches back to Codex official routing from the official row's own preview", async () => {
+    primeActiveCodexBackend();
+    const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole("alert");
-    expect(screen.queryByRole("button", { name: "清空旧档案并重新开始" })).not.toBeInTheDocument();
+    const row = await screen.findByText("Codex 官方登录").then(() => card("Codex 官方登录"));
+    expect(row).toHaveTextContent("官方登录");
+    await user.click(within(row).getByRole("button", { name: "启用 Codex 官方登录" }));
+
+    const preview = await screen.findByLabelText(
+      "C:/Users/test/.codex/config.toml 配置预览",
+    );
+    expect(preview).toHaveTextContent("model_provider");
+    expect(invokeMock).toHaveBeenCalledWith("preview_switch", {
+      profileId: "codex-official",
+    });
+
+    await user.click(screen.getByRole("button", { name: "确认切换" }));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("execute_switch", {
+        profileId: "codex-official",
+        expectedHash: codexOfficialFilePreview.contentHash,
+        expectedRenderedHash: codexOfficialFilePreview.renderedHash,
+        confirmWrite: true,
+      }),
+    );
   });
 
-  it("keeps the latest provider preview when an older in-flight request lands late", async () => {
+  it("creates the Codex official-login record from the editor's access-mode choice", async () => {
     primeBackend();
-    const twoProfiles: ProviderRecord[] = [
-      {
-        profile: {
-          id: "codex-a",
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "新建供应商" }));
+    expect(screen.getByRole("heading", { name: "新建 Codex 供应商" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "官方登录" }));
+    expect(screen.getByRole("heading", { name: "新建 Codex 官方登录" })).toBeInTheDocument();
+    expect(screen.getByLabelText("名称")).toHaveValue("Codex 官方登录");
+    expect(screen.getByRole("button", { name: "开始官方登录" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "保存供应商" }));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("prepare_profile_save", {
+        profileId: null,
+        expectedFileHash: null,
+        draft: expect.objectContaining({
           app: "codex",
-          routeMode: "custom",
-          name: "网关甲",
-          model: "model-a",
-          baseUrl: "https://a.internal/v1",
-          apiKey: "KEY_A",
-          upstreamProtocol: "responses",
-          responsesOptions: { requestMode: "standard" as const },
-          maxOutputTokens: null,
-          parameters: providerParameters("codex"),
-          modelOptions: null,
-          websiteUrl: null,
-        },
-        fileHash: "a-hash",
-      },
-      {
-        profile: {
-          id: "codex-b",
-          app: "codex",
-          routeMode: "custom",
-          name: "网关乙",
-          model: "model-b",
-          baseUrl: "https://b.internal/v1",
-          apiKey: "KEY_B",
-          upstreamProtocol: "responses",
-          responsesOptions: { requestMode: "standard" as const },
-          maxOutputTokens: null,
-          parameters: providerParameters("codex"),
-          modelOptions: null,
-          websiteUrl: null,
-        },
-        fileHash: "b-hash",
-      },
+          routeMode: "official",
+          name: "Codex 官方登录",
+          baseUrl: null,
+          apiKey: "",
+        }),
+      }),
+    );
+  });
+
+  it("keeps the latest Codex preview when an older request resolves late", async () => {
+    primeBackend();
+    const records = [
+      codexRecord("codex-a", "网关甲", "model-a"),
+      codexRecord("codex-b", "网关乙", "model-b"),
     ];
-    const previewFor = (id: string, model: string): FilePreview => ({
-      contentHash: `hash-${id}`,
-      renderedHash: `rendered-${id}`,
-      content: `model = "${model}"\n`,
-      preview: {
-        app: "codex",
-        target: "C:/Users/test/.codex/config.toml",
-        changes: [{ key: "model", kind: "set", before: "gpt-5.3-codex", after: model }],
-        warnings: [],
-        backupDir: "C:/backups",
-      },
-    });
     const pending = new Map<string, ReturnType<typeof deferred<FilePreview>>>();
     const backend = invokeMock.getMockImplementation();
     expect(backend).toBeDefined();
     invokeMock.mockImplementation((command: string, args?: unknown) => {
-      if (command === "list_profiles") return Promise.resolve(twoProfiles);
       if (command === "preview_switch") {
         const profileId = (args as { profileId: string }).profileId;
         let entry = pending.get(profileId);
@@ -267,29 +417,65 @@ describe("App.providers", () => {
       }
       return backend!(command, args as never);
     });
-    invokeMock.mockClear();
-    const user = userEvent.setup();
-    render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("button", { name: "预览 网关甲 变更" }));
-    await user.click(screen.getByRole("button", { name: "预览 网关乙 变更" }));
+    const user = userEvent.setup();
+    render(
+      <CodexProvidersPage
+        active
+        records={records}
+        officialRecord={null}
+        activeProfileId={null}
+        busy={false}
+        onBusy={() => {}}
+        onError={() => {}}
+        onRefresh={async () => {}}
+        onSelectApp={() => {}}
+        requestedPreviewId={null}
+        onPreviewRequestHandled={() => {}}
+        onImport={() => {}}
+        onOpenClientSettings={() => {}}
+        onOpenHistory={() => {}}
+        onDelete={() => {}}
+        onDeleteOfficial={() => {}}
+        editorSession={null}
+        onNew={() => {}}
+        onEdit={() => {}}
+        onEditOfficial={() => {}}
+        onCloseEditor={() => {}}
+        onSave={() => {}}
+        onSaveOfficial={() => {}}
+        onSwitchAccessMode={() => {}}
+        onSwitchClient={() => {}}
+        onSaveOfficialQuotaInterval={async () => true}
+        statuses={[]}
+        profiles={[]}
+        locks={{}}
+        userConfigModel={null}
+        userConfigWarnings={[]}
+      />,
+    );
+
+    await user.click(
+      within(card("网关甲")).getByRole("button", { name: "启用 网关甲" }),
+    );
+    await user.click(
+      within(card("网关乙")).getByRole("button", { name: "启用 网关乙" }),
+    );
     expect(pending.get("codex-a")).toBeDefined();
     expect(pending.get("codex-b")).toBeDefined();
-    const switchCalls = invokeMock.mock.calls.filter(([command]) => command === "preview_switch");
-    expect(switchCalls).toHaveLength(2);
 
     await act(async () => {
       pending.get("codex-b")!.resolve(previewFor("codex-b", "model-b"));
     });
-    const panel = await screen.findByRole("region", { name: "变更预览" });
-    expect(within(panel).getByText("model-b")).toBeInTheDocument();
+    const preview = await screen.findByLabelText(
+      "C:/Users/test/.codex/config.toml 配置预览",
+    );
+    expect(preview).toHaveTextContent("model-b");
 
-    // The older request lands last; it belongs to a superseded selection.
     await act(async () => {
       pending.get("codex-a")!.resolve(previewFor("codex-a", "model-a"));
     });
-    expect(within(panel).getByText("model-b")).toBeInTheDocument();
-    expect(within(panel).queryByText("model-a")).not.toBeInTheDocument();
+    expect(preview).toHaveTextContent("model-b");
+    expect(preview).not.toHaveTextContent("model-a");
   });
 });

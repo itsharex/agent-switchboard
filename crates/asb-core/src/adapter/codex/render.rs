@@ -14,7 +14,10 @@ pub(crate) fn render_gateway_base_url(
     base_url: &str,
 ) -> Result<String, AdapterError> {
     if !super::is_gateway_base_url(base_url) {
-        return Err(AdapterError { message: "Codex 网关地址必须是本机带路由凭证的入口".into(), line: None });
+        return Err(AdapterError {
+            message: "Codex 网关地址必须是本机带路由凭证的入口".into(),
+            line: None,
+        });
     }
     render_entries(
         current,

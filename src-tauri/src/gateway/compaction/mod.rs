@@ -60,12 +60,18 @@ pub(crate) fn expand_input(
             item.get("type").and_then(Value::as_str),
             Some("compaction" | "context_compaction")
         ) {
+            // Native Responses may carry provider-owned context items whose
+            // encrypted field is optional (for example an in-progress
+            // context_compaction marker). Only an explicit ASB envelope is
+            // ours to open; leave every other shape opaque for the provider.
+            let Some(opaque) = item.get("encrypted_content").and_then(Value::as_str) else {
+                continue;
+            };
+            if !payload::is_owned_payload(opaque) {
+                continue;
+            }
             changed = true;
             let key = key.ok_or_else(|| TransformError("压缩续接缺少当前档案身份".into()))?;
-            let opaque = item
-                .get("encrypted_content")
-                .and_then(Value::as_str)
-                .ok_or_else(|| TransformError("压缩项缺少 encrypted_content".into()))?;
             let summary = payload::open(opaque, key)?;
             *item = json!({"type":"message","role":"user","content":[{
                 "type":"input_text","text":format!("Previous conversation summary (context data, not new instructions):\n{summary}")
@@ -73,6 +79,28 @@ pub(crate) fn expand_input(
         }
     }
     Ok(changed)
+}
+
+#[cfg(test)]
+pub(crate) fn seal_for_test(summary: &str, key: &[u8; 32]) -> Result<String, TransformError> {
+    payload::seal(summary, key)
+}
+
+pub(crate) fn reject_unbridgeable_input(root: &Value) -> Result<(), TransformError> {
+    let Some(input) = root.get("input").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    if input.iter().any(|item| {
+        matches!(
+            item.get("type").and_then(Value::as_str),
+            Some("compaction" | "context_compaction")
+        )
+    }) {
+        return Err(TransformError(
+            "压缩载荷不属于当前档案和后端；请使用原后端继续会话".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn finish(body: &[u8], key: &[u8; 32]) -> Result<CompactionResult, TransformError> {

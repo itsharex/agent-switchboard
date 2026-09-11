@@ -1,7 +1,8 @@
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { Cell, Pie, PieChart } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
 import { formatUsageValue } from "../../lib/usage-format";
+import { ChartFrame } from "./ChartFrame";
 import type { ModelUsageDistributionItem } from "./chart-data";
 
 const TOP_MODEL_COUNT = 5;
@@ -39,7 +40,7 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
       <figcaption className="text-title-3-semibold text-text-primary">模型构成</figcaption>
       <div className="flex min-w-0 flex-col items-center gap-8 lg:flex-row lg:items-center lg:gap-12">
         <div className="relative h-72 w-72 shrink-0">
-          <ResponsiveContainer width="100%" height="100%">
+          <ChartFrame>
             <PieChart>
               <Pie
                 data={visible}
@@ -60,7 +61,7 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
                 ))}
               </Pie>
             </PieChart>
-          </ResponsiveContainer>
+          </ChartFrame>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="animate-number-fade text-title-1-medium text-text-primary tabular-nums">
               {formatCompactTokenCount(display)}

@@ -3,7 +3,14 @@ use crate::ownership::CODEX_WEB_SEARCH_KEY;
 
 pub const CODEX_SUBAGENT_REASONING_EFFORT_KEY: &str = "agents.default_subagent_reasoning_effort";
 
+/// The one real Codex reasoning-effort value domain. The same domain backs
+/// every reasoning-effort setting and the catalog reasoning levels; values are
+/// model-dependent upstream and are never inferred, only user-declared.
 const CODEX_REASONING_EFFORT_OPTIONS: &[ChoiceOption] = &[
+    ChoiceOption {
+        value: "none",
+        label: "无",
+    },
     ChoiceOption {
         value: "minimal",
         label: "极低",
@@ -23,6 +30,14 @@ const CODEX_REASONING_EFFORT_OPTIONS: &[ChoiceOption] = &[
     ChoiceOption {
         value: "xhigh",
         label: "极高",
+    },
+    ChoiceOption {
+        value: "max",
+        label: "最高",
+    },
+    ChoiceOption {
+        value: "ultra",
+        label: "超极高",
     },
 ];
 
@@ -49,32 +64,7 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
         label: "计划模式推理强度",
         group: "模型行为",
         control: ChoiceControl::Slider,
-        options: &[
-            ChoiceOption {
-                value: "none",
-                label: "无",
-            },
-            ChoiceOption {
-                value: "minimal",
-                label: "极低",
-            },
-            ChoiceOption {
-                value: "low",
-                label: "低",
-            },
-            ChoiceOption {
-                value: "medium",
-                label: "中",
-            },
-            ChoiceOption {
-                value: "high",
-                label: "高",
-            },
-            ChoiceOption {
-                value: "xhigh",
-                label: "极高",
-            },
-        ],
+        options: CODEX_REASONING_EFFORT_OPTIONS,
     },
     ChoiceSpec {
         key: "model_reasoning_summary",

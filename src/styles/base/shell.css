@@ -60,7 +60,7 @@
 .asb-topbar-beta {
   display: inline-flex;
   align-items: center;
-  padding: 2px var(--asb-space-1);
+  padding: var(--asb-space-hairline) var(--asb-space-1);
   border: 1px solid var(--asb-hairline-strong);
   border-radius: var(--asb-radius-pill);
   background: var(--asb-row-selected);
@@ -74,7 +74,7 @@
 
 .asb-web-development-badge {
   flex: 0 0 auto;
-  padding: 4px var(--asb-space-2);
+  padding: var(--asb-space-unit) var(--asb-space-2);
   border: 1px solid var(--asb-hairline-strong);
   border-radius: var(--asb-radius-action);
   background: var(--asb-code-bg);
@@ -87,14 +87,14 @@
 .asb-wincontrols {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
 }
 
 .asb-winbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
+  width: var(--asb-square-control-size);
   height: var(--asb-touch-target);
   padding: 0;
   border: 0;
@@ -125,7 +125,7 @@
 .asb-winbtn.asb-updatebtn {
   position: relative;
   width: auto;
-  min-width: 72px;
+  min-width: var(--asb-button-min-width);
   gap: var(--asb-space-1);
   padding: 0 var(--asb-space-2);
   color: var(--asb-action);
@@ -138,8 +138,8 @@
 }
 
 .asb-updatebtn-dot {
-  width: 6px;
-  height: 6px;
+  width: calc(var(--asb-space-unit) + var(--asb-space-hairline));
+  height: calc(var(--asb-space-unit) + var(--asb-space-hairline));
   border-radius: var(--asb-radius-pill);
   background: var(--asb-safe);
   box-shadow: 0 0 0 2px var(--asb-surface-rail);

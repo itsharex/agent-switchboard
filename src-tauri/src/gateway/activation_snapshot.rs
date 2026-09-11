@@ -20,7 +20,7 @@ impl GatewayController {
             .map_err(|_| "网关状态锁不可用".to_string())?;
         Ok(GatewayActivationSnapshot {
             app,
-            route: state.active.get(&app).cloned(),
+            route: state.route(app).cloned(),
         })
     }
 
@@ -32,15 +32,34 @@ impl GatewayController {
         let activation = match &snapshot.route {
             None => GatewayActivation::Direct { app: snapshot.app },
             Some(saved) => {
-                let profile = local
-                    .configuration()
-                    .find_provider(&saved.profile_id)
-                    .map_err(|_| "恢复所需的供应商档案已不存在".to_string())?;
-                if profile.app != snapshot.app || route_fingerprint(&profile)? != saved.fingerprint
-                {
-                    return Err("恢复所需的供应商连接已改变，保留恢复记录等待处理".to_string());
-                }
-                GatewayActivation::Routed(self.route_for_profile(&profile)?)
+                let route = match snapshot.app {
+                    AppKind::Codex => {
+                        let file = local
+                            .configuration()
+                            .find_codex_provider_file(&saved.profile_id)
+                            .map_err(|_| "恢复所需的 Codex 供应商档案已不存在".to_string())?;
+                        if codex_route_fingerprint(&file)? != saved.revision {
+                            return Err("恢复所需的 Codex 供应商连接已改变，保留恢复记录等待处理"
+                                .to_string());
+                        }
+                        self.route_for_codex_file(&file)?
+                    }
+                    AppKind::Claude => {
+                        let profile = local
+                            .configuration()
+                            .find_provider(&saved.profile_id)
+                            .map_err(|_| "恢复所需的供应商档案已不存在".to_string())?;
+                        if profile.app != AppKind::Claude
+                            || route_fingerprint(&profile)? != saved.revision
+                        {
+                            return Err(
+                                "恢复所需的供应商连接已改变，保留恢复记录等待处理".to_string()
+                            );
+                        }
+                        self.route_for_profile(&profile)?
+                    }
+                };
+                GatewayActivation::Routed(route)
             }
         };
         self.commit_activation(&activation, || Ok(()))

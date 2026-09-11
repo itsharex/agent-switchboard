@@ -209,6 +209,13 @@ export function restartApplication(): Promise<void> {
   return invoke("restart_application");
 }
 
+/** Opens the native directory picker and returns the picked absolute path;
+ * `null` means the user closed it without choosing. The dialog itself lives
+ * in the backend, so browser development gets the same native picker. */
+export function pickDirectory(): Promise<string | null> {
+  return invoke<string | null>("pick_directory");
+}
+
 export function getWindowMaximized(): Promise<boolean> {
   if (isBrowserDevelopment) return Promise.resolve(false);
   return invoke<boolean>("window_is_maximized");

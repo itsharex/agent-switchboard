@@ -25,7 +25,7 @@
   /* ----- Accent ramp ---------------------------------------------------------
    * The CTA hue. Interactive/selection surfaces (primary button gradient,
    * ghost + link buttons, checkbox, radio, switch, slider, tabs, sidebar
-   * selected, focus ring, date-range selection) reference accent-* instead of
+   * selected and date-range selection) reference accent-* instead of
    * a raw hue, so the whole system re-tints by overriding these eleven
    * variables at runtime (see components/application/theme/accent.ts) or in
    * a customer project after importing this file. Defaults to the blue
@@ -226,7 +226,6 @@
   --color-border-sidebar-profile-hover: var(--color-neutral-300);
   --color-separator-border:        var(--color-neutral-200);
   --color-separator-border-strong: var(--color-neutral-200);
-  --color-border-focus-ring:       var(--color-accent-500);
 
   /* State */
   --color-state-success-text: var(--color-lime-800);
@@ -635,7 +634,6 @@
   --color-border-sidebar-profile-hover: var(--color-border-sidebar-profile-hover);
   --color-separator-border:        var(--color-separator-border);
   --color-separator-border-strong: var(--color-separator-border-strong);
-  --color-border-focus-ring:       var(--color-border-focus-ring);
 
   --color-state-success-text: var(--color-state-success-text);
   --color-state-success-base: var(--color-state-success-base);

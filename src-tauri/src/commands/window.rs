@@ -1,5 +1,5 @@
-//! Window commands for the integrated (undecorated) title bar and the
-//! dev-only inspector toggle.
+//! Window commands for the integrated (undecorated) title bar, the dev-only
+//! inspector toggle, and the native directory picker.
 //!
 //! The custom webview buttons only emit intents; the native side performs
 //! them through Tauri's portable window APIs, so the same buttons work on
@@ -99,4 +99,24 @@ pub fn toggle_devtools(app: tauri::AppHandle) {
             window.open_devtools();
         }
     }
+}
+
+/// Opens the native directory picker and returns the picked absolute path;
+/// `None` means the user canceled. The dialog lives in a Rust command so the
+/// browser-dev backend offers the same native picker as the desktop webview,
+/// and no local path reaches the renderer unasked.
+#[tauri::command]
+pub async fn pick_directory(app: AppHandle) -> Result<Option<String>, CommandError> {
+    use tauri_plugin_dialog::DialogExt;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |picked| {
+        let _ = sender.send(
+            picked
+                .and_then(|picked| picked.into_path().ok())
+                .map(|picked| picked.display().to_string()),
+        );
+    });
+    receiver
+        .await
+        .map_err(|_| CommandError::new("directory-picker-failed", "目录选择对话框未返回结果"))
 }

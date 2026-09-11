@@ -31,7 +31,7 @@ export function OfficialSettingsDirectory({ app, entries }: Props) {
         {entries.map((entry) => (
           <article className="asb-official-directory-entry" key={`${entry.title}:${entry.paths.join("|")}`}>
             <div className="asb-official-directory-entry-head">
-              <h4>{entry.title}</h4>
+              <h4 className="asb-group-title">{entry.title}</h4>
               <span className={`asb-official-directory-status is-${entry.disposition}`}>
                 {dispositionLabel[entry.disposition]}
               </span>

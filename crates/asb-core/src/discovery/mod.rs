@@ -5,21 +5,19 @@
 //! warnings only — no raw file content — and anything secret-shaped is
 //! redacted.
 
-mod codex;
 mod import;
 mod inspect;
 mod report;
 #[cfg(test)]
-mod responses_tests;
-#[cfg(test)]
 mod tests;
 
-pub use import::import_proposal;
+pub use import::claude_import_proposal;
 pub use inspect::inspect;
-pub use report::{DiscoveredFile, DiscoveredState, DiscoveryPaths, DiscoveryReport};
+pub use report::{
+    ClaudeImportProposal, DiscoveredFile, DiscoveredState, DiscoveryPaths, DiscoveryReport,
+};
 
-use crate::contracts::{AppKind, RouteMode};
-use crate::discovery::import::codex_auth_api_key;
+use crate::contracts::AppKind;
 use crate::discovery::inspect::inspect_read;
 
 /// Runs discovery over injected reads. `read` returns content, a missing-file
@@ -29,40 +27,19 @@ pub fn discover(
     read: impl Fn(&str) -> Result<Option<String>, String>,
 ) -> DiscoveryReport {
     let codex_text = read(&paths.codex);
-    let codex_auth = read(&paths.codex_auth);
     let claude_text = read(&paths.claude);
-    let mut codex = inspect_read(AppKind::Codex, &paths.codex, codex_text.clone());
-    if let DiscoveredState::Ok {
-        route,
-        warnings,
-        importable,
-        managed,
-    } = &mut codex.state
-    {
-        if !*managed
-            && route.route_mode == RouteMode::Custom
-            && codex_auth_api_key(codex_auth.as_ref().ok().and_then(|text| text.as_deref()))
-                .is_none()
-        {
-            *importable = false;
-            warnings.push("当前 Codex API-key 登录缓存不可导入".to_string());
-        }
-    }
+    let codex = inspect_read(AppKind::Codex, &paths.codex, codex_text.clone());
     let claude = inspect_read(AppKind::Claude, &paths.claude, claude_text.clone());
-    let import_proposals = [
-        (import_proposal(
-            &codex,
-            codex_text.ok().flatten().as_deref(),
-            codex_auth.ok().flatten().as_deref(),
-        )),
-        (import_proposal(&claude, claude_text.ok().flatten().as_deref(), None)),
-    ]
+    let claude_import_proposals = [claude_import_proposal(
+        &claude,
+        claude_text.ok().flatten().as_deref(),
+    )]
     .into_iter()
     .flatten()
     .collect();
     DiscoveryReport {
         codex,
         claude,
-        import_proposals,
+        claude_import_proposals,
     }
 }

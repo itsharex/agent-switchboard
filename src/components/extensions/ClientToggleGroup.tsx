@@ -6,6 +6,7 @@ import {
 } from "../../app/extensions/deployment-state";
 import { clientName } from "../../lib/client-name";
 import { ClientLogo } from "../ClientLogo";
+import { Button } from "../Button";
 import { Tooltip } from "../Tooltip";
 import { clientSummary } from "./labels";
 
@@ -30,8 +31,8 @@ export function ClientToggleGroup({ item, busy, onToggle }: Props) {
           : `${clientName(client)}：不支持当前类型`;
         return (
           <Tooltip key={client} label={label} side="bottom">
-            <button
-              type="button"
+            <Button
+              variant="unstyled"
               data-client={client}
               className="asb-ext-clienttoggle"
               data-state={state.all ? "all" : state.partial ? "partial" : "none"}
@@ -44,7 +45,7 @@ export function ClientToggleGroup({ item, busy, onToggle }: Props) {
               }}
             >
               <ClientLogo app={client} className="asb-ext-clienttoggle-logo" />
-            </button>
+            </Button>
           </Tooltip>
         );
       })}

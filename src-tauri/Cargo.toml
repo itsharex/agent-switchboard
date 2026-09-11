@@ -30,10 +30,11 @@ flate2 = "1"
 fontdb = "0.23"
 log = "0.4"
 bytes = "1"
+brotli = "8"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros"] }
 tokio-stream = "0.1"
 tokio-util = { version = "0.7", features = ["io-util"] }
 toml_edit = "0.22"
@@ -55,7 +56,7 @@ reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls-native-roots",
     "system-proxy",
 ] }
-# Read-only access to the CC Switch SQLite database. `bundled` compiles
+# Read-only access to the import source's SQLite database. `bundled` compiles
 # libsqlite3-sys with the system cc (scoop gcc on this windows-gnu host).
 rusqlite = { version = "0.32", features = ["bundled"], default-features = false }
 rquickjs = "0.12.2"
@@ -77,6 +78,9 @@ tauri = { version = "2", default-features = false, features = [
 # Opens provider service URLs in the system browser. wry silently blocks
 # `target=_blank` new-window requests, so external links must go through it.
 tauri-plugin-opener = "2"
+# Native directory picker for source-folder selection, driven from Rust
+# commands so both the desktop webview and the browser-dev backend can use it.
+tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2.11"
 # Rejects additional desktop launches: the duplicate process exits during
@@ -85,6 +89,7 @@ tauri-plugin-single-instance = "2"
 tiny_http = "0.12"
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 uuid = { version = "1", features = ["v4"] }
+zstd = "0.13"
 tauri-plugin-autostart = "2"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]

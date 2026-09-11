@@ -49,49 +49,133 @@
   cursor: pointer;
 }
 
-/* Confirmation sheet */
-.asb-sheet-backdrop {
-  position: absolute;
+/* ---------------------------------------------------------------------------
+ * The one modal skeleton (DESIGN.md §8, user directive 2026-09-11).
+ *
+ * Every modal in the app — confirmation sheet, editor, plan preview, source
+ * browser, history — is this structure and nothing else: an h2-only heading
+ * with a hairline under it, one scrolling body, an optional footer with a
+ * hairline above it. Width is one of three tiers. There is no second modal
+ * anatomy, so a dialog can never drift into its own padding rhythm or invent
+ * a fourth width.
+ * ------------------------------------------------------------------------- */
+.asb-dialog-backdrop {
+  position: fixed;
   inset: 0;
-  z-index: 10;
+  z-index: 100;
   display: grid;
   place-items: center;
+  padding: var(--asb-space-4);
   background: var(--asb-surface-sheet);
 }
 
-.asb-sheet {
-  width: min(440px, calc(100% - var(--asb-space-6)));
-  max-height: calc(100% - var(--asb-space-6));
+/* An inline sheet is scoped to the workspace instead of the viewport, so the
+   top rail and its navigation stay reachable while the sheet is open. */
+.asb-dialog-backdrop.is-inline {
+  position: absolute;
+  z-index: 10;
+}
+
+/* Standard is the default tier; narrow is a yes/no confirmation, wide is a
+   side-by-side browser or a plan with before/after columns. */
+.asb-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, var(--asb-dialog-width-standard));
+  max-height: var(--asb-dialog-viewport-max);
   min-height: 0;
-  padding: var(--asb-space-4);
+  overflow: hidden;
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-panel);
   background: var(--asb-content);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-3);
 }
 
-.asb-sheet-details {
+/* The dialog element inside the surface: the flex column that actually bounds
+   the heading, the scrolling body and the footer. It must be able to shrink
+   below its content, or the body's own scrollbar never appears. */
+.asb-dialog-surface {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  outline: none;
+}
+
+.asb-dialog.is-narrow {
+  width: min(100%, var(--asb-dialog-width-narrow));
+}
+
+.asb-dialog.is-wide {
+  width: min(100%, var(--asb-dialog-width-wide));
+}
+
+.asb-dialog-heading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-3) var(--asb-space-4);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+/* The dialog's single title step. Inside a dialog the page-title class is not
+   reused: it carries a page's own bottom margin, which a flex heading owns. */
+.asb-dialog-title {
+  margin: 0;
+  font: var(--asb-text-title);
+  overflow-wrap: anywhere;
+}
+
+.asb-dialog-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--asb-space-3);
   min-height: 0;
   overflow: auto;
-  margin: 0;
-  padding: 0;
+  padding: var(--asb-space-4);
   scrollbar-gutter: stable;
-  list-style: none;
+}
+
+.asb-dialog-body > p {
+  margin: 0;
+}
+
+.asb-dialog-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3) var(--asb-space-4);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+/* A confirmation's subject list: one line per fact. The body owns scrolling,
+   so this never introduces a second scroll surface. */
+.asb-dialog-details {
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-1);
-  font: var(--asb-text-body);
+  margin: 0;
+  padding: 0;
+  list-style: none;
   color: var(--asb-text);
+  font: var(--asb-text-body);
 }
 
-.asb-sheet-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--asb-space-2);
+@media (max-width: 640px) {
+  .asb-dialog-backdrop {
+    padding: var(--asb-space-2);
+  }
+
+  .asb-dialog-heading,
+  .asb-dialog-body,
+  .asb-dialog-footer {
+    padding: var(--asb-space-3);
+  }
 }
 
 /* Busy indicator */
@@ -101,7 +185,7 @@
   right: var(--asb-space-3);
   z-index: 20;
   padding: var(--asb-space-1) var(--asb-space-3);
-  border-radius: 999px;
+  border-radius: var(--asb-radius-pill);
   background: var(--asb-surface-menu);
   border: 1px solid var(--asb-hairline);
   font: var(--asb-text-label);
@@ -112,6 +196,8 @@
    floats above every layer including sheets and tooltips; each surface opts
    back into pointer events while the stack itself stays click-through. */
 .asb-toast-stack {
+  --asb-toast-width: 400px;
+
   position: fixed;
   top: var(--asb-space-2);
   left: var(--asb-space-2);
@@ -119,16 +205,18 @@
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-1);
-  width: min(400px, calc(100vw - 2 * var(--asb-space-3)));
+  width: min(var(--asb-toast-width), calc(100vw - 2 * var(--asb-space-3)));
   max-height: calc(100vh - 3 * var(--asb-space-2));
   pointer-events: none;
 }
 
 .asb-toast {
+  --asb-toast-min-height: 56px;
+
   display: flex;
   align-items: center;
   gap: var(--asb-space-2);
-  min-height: 56px;
+  min-height: var(--asb-toast-min-height);
   padding: var(--asb-space-2) var(--asb-space-2) var(--asb-space-2) var(--asb-space-3);
   pointer-events: auto;
   border: 1px solid var(--asb-hairline);
@@ -162,7 +250,7 @@
   display: grid;
   flex: 1;
   min-width: 0;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
 }
 
 .asb-toast-title {

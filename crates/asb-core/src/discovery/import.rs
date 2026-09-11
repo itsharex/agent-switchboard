@@ -1,21 +1,9 @@
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, ImportProposal, ModelOptions, ProviderDraft, RouteMode,
-    RouteState, SettingsValues, UpstreamProtocol,
+    AppKind, ClaudeModelSettings, ModelOptions, ProviderDraft, RouteMode, RouteState,
+    SettingsValues, UpstreamProtocol,
 };
 
-use crate::discovery::report::{DiscoveredFile, DiscoveredState};
-
-pub(super) fn codex_auth_api_key(text: Option<&str>) -> Option<String> {
-    let root: serde_json::Value = serde_json::from_str(text?).ok()?;
-    (root.get("auth_mode").and_then(serde_json::Value::as_str) == Some("apikey"))
-        .then(|| {
-            root.get("OPENAI_API_KEY")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        })
-        .flatten()
-        .filter(|value| !value.trim().is_empty())
-}
+use crate::discovery::report::{ClaudeImportProposal, DiscoveredFile, DiscoveredState};
 
 /// Converts only the externally valid Claude wire spelling into the profile
 /// contract. The resulting profile never carries a `[1m]` suffix in a model
@@ -64,14 +52,13 @@ pub(super) fn claude_import_model_fields(
     Ok((model, model_options))
 }
 
-/// Builds an import proposal from a discovered file and its locally-read raw
-/// configuration. The API key enters only the returned draft; route state,
-/// warnings and diagnostics never carry its value.
-pub fn import_proposal(
+/// Builds a Claude import proposal from its discovered locally-read raw
+/// configuration. Codex has its own complete profile contract and is never
+/// representable as a generic import proposal.
+pub fn claude_import_proposal(
     file: &DiscoveredFile,
     text: Option<&str>,
-    codex_auth: Option<&str>,
-) -> Option<ImportProposal> {
+) -> Option<ClaudeImportProposal> {
     let text = text?;
     let DiscoveredState::Ok {
         route,
@@ -81,25 +68,25 @@ pub fn import_proposal(
     else {
         return None;
     };
-    let parameters = crate::adapter::read_provider_parameters(file.app, text).ok()?;
-    if route.route_mode == RouteMode::Official {
-        return Some(official_proposal(file.app, parameters));
-    }
     match file.app {
-        AppKind::Codex => codex_proposal(route, parameters, text, codex_auth),
-        AppKind::Claude => claude_proposal(route, parameters, text),
+        AppKind::Codex => None,
+        AppKind::Claude => {
+            let parameters =
+                crate::adapter::read_provider_parameters(AppKind::Claude, text).ok()?;
+            if route.route_mode == RouteMode::Official {
+                Some(official_proposal(parameters))
+            } else {
+                claude_proposal(route, parameters, text)
+            }
+        }
     }
 }
 
-fn official_proposal(app: AppKind, parameters: SettingsValues) -> ImportProposal {
-    let name = match app {
-        AppKind::Codex => "Codex 官方登录",
-        AppKind::Claude => "Claude 官方登录",
-    };
-    ImportProposal {
-        app,
+fn official_proposal(parameters: SettingsValues) -> ClaudeImportProposal {
+    let name = "Claude 官方登录";
+    ClaudeImportProposal {
         draft: ProviderDraft {
-            app,
+            app: AppKind::Claude,
             route_mode: RouteMode::Official,
             name: name.to_string(),
             model: None,
@@ -119,50 +106,11 @@ fn official_proposal(app: AppKind, parameters: SettingsValues) -> ImportProposal
     }
 }
 
-fn codex_proposal(
-    route: &RouteState,
-    parameters: SettingsValues,
-    text: &str,
-    codex_auth: Option<&str>,
-) -> Option<ImportProposal> {
-    let key = codex_auth_api_key(codex_auth)?;
-    let (upstream_protocol, responses_options) = super::codex::import_route(text, route).ok()?;
-    let model_options = route
-        .codex_model_options
-        .clone()
-        .filter(|options| options.context_window.is_some())
-        .map(ModelOptions::Codex);
-    Some(ImportProposal {
-        app: AppKind::Codex,
-        draft: ProviderDraft {
-            app: AppKind::Codex,
-            route_mode: RouteMode::Custom,
-            name: route
-                .provider_name
-                .clone()
-                .unwrap_or_else(|| "当前 Codex 配置".to_string()),
-            model: route.model.clone(),
-            base_url: route.base_url.clone(),
-            api_key: key,
-            upstream_protocol: Some(upstream_protocol),
-            responses_options,
-            max_output_tokens: None.into(),
-            model_options,
-            parameters,
-            notes: None,
-            website_url: None,
-            usage_query: None,
-            official_quota_refresh_interval_minutes: None,
-        },
-        basis: "由当前 Codex 可转换配置生成".to_string(),
-    })
-}
-
 fn claude_proposal(
     route: &RouteState,
     parameters: SettingsValues,
     text: &str,
-) -> Option<ImportProposal> {
+) -> Option<ClaudeImportProposal> {
     let root: serde_json::Value = serde_json::from_str(text).ok()?;
     let key = root
         .pointer("/env/ANTHROPIC_AUTH_TOKEN")
@@ -170,8 +118,7 @@ fn claude_proposal(
         .and_then(serde_json::Value::as_str)
         .filter(|value| !value.trim().is_empty())?;
     let (model, model_options) = claude_import_model_fields(route).ok()?;
-    Some(ImportProposal {
-        app: AppKind::Claude,
+    Some(ClaudeImportProposal {
         draft: ProviderDraft {
             app: AppKind::Claude,
             route_mode: RouteMode::Custom,

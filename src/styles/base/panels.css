@@ -12,6 +12,25 @@
   font: var(--asb-text-title);
 }
 
+/* Module section heading — the single step between the page title (h2,
+   .asb-panel-title) and body text. Every module/group h3 consumes this class;
+   per-module element selectors are not allowed (user directive 2026-09-11). */
+.asb-section-title {
+  margin: 0;
+  font: var(--asb-text-section);
+}
+
+/* Group heading inside a card: a field cluster's own title. It is a heading,
+   not body copy, so it takes the label step at 600 rather than borrowing the
+   section step and flattening the hierarchy — the mistake that made a
+   detail dialog's h2 and its inner h3 render at the same size. Consumed by
+   class only; `.asb-card h4` element selectors are not allowed either. */
+.asb-group-title {
+  margin: 0;
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
 .asb-panel-heading {
   display: flex;
   align-items: center;
@@ -61,10 +80,97 @@
   margin-bottom: 0;
 }
 
+/* ---------------------------------------------------------------------------
+ * Inline note — one muted line inside a surface that already has content:
+ * "still reading…", "no changes", "nothing recorded for this field". It is a
+ * status line, never a section's only content, so it never grows a glyph or a
+ * heading (use .asb-empty-state for that). Type step is the label tier: a
+ * note is metadata about the surface, not body copy in its own right.
+ * ------------------------------------------------------------------------- */
 .asb-empty {
   margin: 0;
   color: var(--asb-text-muted);
-  font: var(--asb-text-body);
+  font: var(--asb-text-label);
+}
+
+/* ---------------------------------------------------------------------------
+ * Empty state — the one shape (DESIGN.md §8, user directive 2026-09-11).
+ *
+ * A glyph, a section-step heading, one line of explanation, at most one
+ * action. Every page or section that can be empty renders this and nothing
+ * else, so "there is nothing here" is never confused with "still loading"
+ * (a loading line stays an .asb-empty note) and never with "your filter
+ * matched nothing" (the heading and action say which).
+ *
+ * Markup contract:
+ *   <div class="asb-empty-state">
+ *     <span class="asb-empty-state-icon" aria-hidden="true">…</span>
+ *     <h3 class="asb-section-title">…</h3>
+ *     <p class="asb-empty-state-detail">…</p>
+ *     <Button …>…</Button>
+ *   </div>
+ * ------------------------------------------------------------------------- */
+.asb-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-6) var(--asb-space-3);
+  text-align: center;
+}
+
+.asb-empty-state-icon {
+  display: grid;
+  place-items: center;
+  width: var(--asb-icon-size-display);
+  height: var(--asb-icon-size-display);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-content-muted);
+  color: var(--asb-text-muted);
+}
+
+.asb-empty-state-detail {
+  margin: 0;
+  max-width: 34em;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+/* ---------------------------------------------------------------------------
+ * Fact row — one key/value pair per line, the label column fixed so values
+ * line up down the page (DESIGN.md §8). Owns the pattern that provider
+ * details, gateway listener rows, reset facts and diagnostics all used to
+ * re-invent. Rendered as <dl class="asb-fact-row"><div><dt/><dd/></div>…</dl>.
+ * ------------------------------------------------------------------------- */
+.asb-fact-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  margin: 0;
+}
+
+.asb-fact-row > div {
+  display: flex;
+  gap: var(--asb-space-2);
+}
+
+.asb-fact-row dt {
+  flex: 0 0 var(--asb-fact-label-width);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-fact-row dd {
+  min-width: 0;
+  margin: 0;
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
+/* Any number a reader may compare down a column. Applied by class, never by
+   re-declaring the property at each value. */
+.asb-num {
+  font-variant-numeric: var(--asb-num-font-variant);
 }
 
 /* Client switch row: segmented tabs left, the primary new-provider action
@@ -82,25 +188,25 @@
   margin-bottom: 0;
 }
 
-/* Client tabs — segmented pill: active page is a raised white card with a
-   blue ring, inactive segments sit flat in the shared container. */
+/* Client tabs — segmented control with a solid active segment and a quiet
+   inactive rail. */
 .asb-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
   align-self: flex-start;
   margin-bottom: var(--asb-space-3);
-  padding: 3px;
+  padding: var(--asb-space-concentric);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
   background: var(--asb-surface-rail);
 }
 
 .asb-tab {
-  min-height: calc(var(--asb-touch-target) - 8px);
+  min-height: var(--asb-control-height-compact);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
-  border-radius: calc(var(--asb-radius-control) - 4px);
+  border-radius: var(--asb-radius-control-inner);
   background: transparent;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -110,13 +216,6 @@
 .asb-tab:hover:not(.is-on):not(:disabled) {
   background: var(--asb-content-muted);
   color: var(--asb-text);
-}
-
-.asb-tab-logo {
-  display: block;
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
 }
 
 .asb-tab.is-on {
@@ -146,7 +245,6 @@
 }
 
 .asb-official-directory-title,
-.asb-official-directory-entry h4,
 .asb-official-directory-note,
 .asb-official-directory-paths,
 .asb-official-directory-detail {
@@ -187,14 +285,10 @@
   gap: var(--asb-space-2);
 }
 
-.asb-official-directory-entry h4 {
-  font: var(--asb-text-label);
-  font-weight: 700;
-}
 
 .asb-official-directory-status {
   flex: none;
-  padding: 2px var(--asb-space-2);
+  padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-pill);
   color: var(--asb-text-muted);

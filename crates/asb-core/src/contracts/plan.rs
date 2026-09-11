@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    AppKind, AuthenticationScheme, CodexModelSettings, ProviderDraft, ProviderProfile, RouteMode,
-    SettingsValues, UpstreamProtocol,
+    AppKind, AuthenticationScheme, CodexModelSettings, ProviderProfile, RouteMode, SettingsValues,
+    UpstreamProtocol,
 };
 
 /// The full side-effect-free input for one switch.
@@ -15,8 +15,8 @@ pub struct SwitchPlan {
     pub profile: ProviderProfile,
     pub client_settings: SettingsValues,
     client_route: ClientRoute,
+    codex_model_catalog: Option<String>,
 }
-
 #[derive(Clone, PartialEq, Eq)]
 enum ClientRoute {
     Direct,
@@ -42,6 +42,7 @@ impl SwitchPlan {
             profile,
             client_settings,
             client_route: ClientRoute::Direct,
+            codex_model_catalog: None,
         }
     }
 
@@ -60,7 +61,18 @@ impl SwitchPlan {
                 base_url,
                 bearer_token,
             },
+            codex_model_catalog: None,
         }
+    }
+    /// Adds the relative `model_catalog_json` pointer owned by a Codex
+    /// third-party route. Official and Claude plans never carry this field.
+    pub fn with_codex_model_catalog(mut self, pointer: String) -> Self {
+        self.codex_model_catalog = Some(pointer);
+        self
+    }
+
+    pub fn codex_model_catalog(&self) -> Option<&str> {
+        self.codex_model_catalog.as_deref()
     }
 
     /// Credential delivery used by the client configuration written for this
@@ -254,14 +266,4 @@ pub enum MatchStatus {
     Unmanaged,
     /// The file is missing or unparseable; matching is not decidable.
     Unknown,
-}
-
-/// A suggested Provider profile derived read-only from discovered content.
-/// Importing it is an explicit later user decision.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ImportProposal {
-    pub app: AppKind,
-    pub draft: ProviderDraft,
-    pub basis: String,
 }

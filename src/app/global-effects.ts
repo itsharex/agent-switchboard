@@ -18,9 +18,7 @@ export function useDevtoolsShortcut(): void {
   }, []);
 }
 
-/** Keyboard-only focus rings for drawn selection controls: checkbox,
- * radio, and range inputs match :focus-visible even on pointer clicks, so
- * the ring must follow the actual input modality instead. */
+/** Tracks input modality for keyboard-only action affordances. */
 export function useKeyboardFocusMarker(): void {
   useEffect(() => {
     const root = document.documentElement;

@@ -19,17 +19,18 @@
   min-height: 0;
 }
 
-.asb-session-toolbar {
-  display: grid;
-  grid-template-columns: minmax(200px, 1fr) auto auto;
+/* The heading's action cluster spans the remaining header width so the
+   session search gets real input room; sizing is page-scoped on the shared
+   .asb-panel-actions contract (user directive 2026-09-11 unification). */
+.asb-sessions .asb-panel-heading .asb-panel-actions {
   flex: 1;
   min-width: 0;
-  gap: var(--asb-space-2);
-  align-items: center;
+  flex-wrap: wrap;
 }
 
-.asb-session-toolbar .asb-segments {
-  margin: 0;
+.asb-sessions .asb-panel-actions .asb-input {
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 .asb-session-issues {
@@ -49,7 +50,8 @@
   grid-template-columns: 320px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
-  min-height: 520px;
+  --asb-session-layout-min-height: 520px;
+  min-height: var(--asb-session-layout-min-height);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
   overflow: hidden;
@@ -107,7 +109,7 @@
 .asb-session-item {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--asb-space-unit);
   width: 100%;
   padding: var(--asb-space-2);
   border: 1px solid transparent;
@@ -170,12 +172,11 @@
   flex: 1;
 }
 
+/* The step comes from .asb-section-title; this rule owns only truncation. */
 .asb-session-detail-head h3 {
-  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: var(--asb-text-title);
 }
 
 .asb-session-client {
@@ -204,14 +205,15 @@
 }
 
 .asb-session-meta-id {
-  max-width: 280px;
+  --asb-session-meta-id-max-width: 280px;
+  max-width: var(--asb-session-meta-id-max-width);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .asb-session-meta-dir {
-  min-height: 28px;
+  min-height: var(--asb-control-height-micro);
   padding: 0;
   border: 0;
   background: transparent;
@@ -223,10 +225,6 @@
 .asb-session-meta-dir:hover {
   color: var(--asb-text);
   text-decoration: underline;
-}
-
-.asb-session-meta-dir:focus-visible {
-  outline: var(--asb-focus-ring);
 }
 
 .asb-session-command {
@@ -272,7 +270,8 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    width: 248px;
+    --asb-session-toc-width: 248px;
+    width: var(--asb-session-toc-width);
     min-height: 0;
     border-left: 1px solid var(--asb-hairline);
     padding-left: var(--asb-space-3);
@@ -289,7 +288,7 @@
 .asb-session-toc-items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
   flex: 1;
   min-height: 0;
   padding-top: var(--asb-space-2);
@@ -297,12 +296,12 @@
   scrollbar-gutter: stable;
 }
 
-.asb-session-toc-items button {
+.asb-session-toc-items .asb-btn {
   display: flex;
   align-items: flex-start;
   gap: var(--asb-space-2);
   width: 100%;
-  min-height: 28px;
+  min-height: var(--asb-control-height-micro);
   padding: var(--asb-space-1) var(--asb-space-2);
   border: 0;
   border-radius: var(--asb-radius-control);
@@ -313,13 +312,9 @@
   cursor: pointer;
 }
 
-.asb-session-toc-items button:hover {
+.asb-session-toc-items .asb-btn:hover {
   background: var(--asb-row-selected);
   color: var(--asb-text);
-}
-
-.asb-session-toc-items button:focus-visible {
-  outline: var(--asb-focus-ring);
 }
 
 .asb-session-toc-index {
@@ -327,8 +322,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  min-width: 18px;
-  height: 18px;
+  min-width: var(--asb-icon-size-md);
+  height: var(--asb-icon-size-md);
   border-radius: var(--asb-radius-pill);
   background: color-mix(in srgb, var(--asb-action) 12%, transparent);
   color: var(--asb-action);
@@ -391,7 +386,7 @@
 
 /* Per-message copy stays out of sight until hover or keyboard focus. */
 .asb-session-message-copy {
-  min-height: 28px;
+  min-height: var(--asb-control-height-micro);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
   border-radius: var(--asb-radius-action);
@@ -414,19 +409,15 @@
   color: var(--asb-text);
 }
 
-.asb-session-message-copy:focus-visible {
-  outline: var(--asb-focus-ring);
-}
-
 /* Outline-jump target: the action border plus route shadow reads as the
    same "you are here" signal the active row uses elsewhere. */
 .asb-session-message.is-target {
   border-color: var(--asb-action);
-  box-shadow: var(--asb-route-shadow);
+  box-shadow: var(--asb-shadow-raised);
 }
 
 .asb-session-message-toggle {
-  min-height: 28px;
+  min-height: var(--asb-control-height-micro);
   margin-top: var(--asb-space-2);
   padding: 0;
   border: 0;
@@ -438,10 +429,6 @@
 
 .asb-session-message-toggle:hover {
   color: var(--asb-text);
-}
-
-.asb-session-message-toggle:focus-visible {
-  outline: var(--asb-focus-ring);
 }
 
 .asb-session-message pre {

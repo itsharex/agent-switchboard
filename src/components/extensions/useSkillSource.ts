@@ -9,6 +9,7 @@ export interface SkillSourceActions {
     ref: string | null,
   ) => Promise<SkillCandidateDto[] | null>;
   onImport: (digest: string, name: string, host: AppKind | null) => Promise<ExtensionMutation | null>;
+  onPickDirectory: () => Promise<string | null>;
 }
 
 export function useSkillSource(actions: SkillSourceActions) {
@@ -30,9 +31,10 @@ export function useSkillSource(actions: SkillSourceActions) {
     setCandidates(null);
     setError(null);
   };
-  const search = async () => {
+  const search = async (rootOverride?: string) => {
     setError(null);
-    if (source === "local" ? !fields.root.trim() : !fields.repository.trim() || !fields.subpath.trim()) {
+    const root = rootOverride ?? fields.root;
+    if (source === "local" ? !root.trim() : !fields.repository.trim() || !fields.subpath.trim()) {
       setError(source === "local" ? "请输入本地来源目录" : "请填写 GitHub 仓库和 Skill 子目录");
       return;
     }
@@ -40,7 +42,7 @@ export function useSkillSource(actions: SkillSourceActions) {
     try {
       const result =
         source === "local"
-          ? await actions.onScanLocal(fields.root.trim())
+          ? await actions.onScanLocal(root.trim())
           : await actions.onResolveGithub(
               fields.repository.trim(),
               fields.subpath.trim(),
@@ -51,6 +53,21 @@ export function useSkillSource(actions: SkillSourceActions) {
     } finally {
       setLoading(false);
     }
+  };
+  const pickDirectory = async () => {
+    setError(null);
+    let picked: string | null;
+    try {
+      picked = (await actions.onPickDirectory())?.trim() ?? null;
+    } catch {
+      setError("无法打开目录选择对话框");
+      return;
+    }
+    if (!picked) return;
+    setFields((previous) => ({ ...previous, root: picked }));
+    setCandidates(null);
+    setQuery("");
+    await search(picked);
   };
   const visible =
     candidates?.filter((candidate) =>
@@ -70,6 +87,7 @@ export function useSkillSource(actions: SkillSourceActions) {
     changeSource,
     changeField,
     search,
+    pickDirectory,
   };
 }
 

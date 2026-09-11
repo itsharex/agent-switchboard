@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SkillSourceBrowser } from "./SkillSourceBrowser";
 import type { ExtensionListItem, SkillCandidateDto } from "../../api/client";
@@ -19,6 +19,7 @@ function props() {
     onScanLocal: vi.fn().mockResolvedValue([candidate]),
     onResolveGithub: vi.fn().mockResolvedValue([candidate]),
     onImport: vi.fn().mockResolvedValue({ id: "added", name: candidate.name, revision: 1 }),
+    onPickDirectory: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -46,7 +47,7 @@ it("keeps successful source results visible when a refresh fails", async () => {
   callbacks.onScanLocal.mockResolvedValueOnce([candidate]).mockResolvedValueOnce(null);
   const user = userEvent.setup();
   render(<SkillSourceBrowser {...callbacks} />);
-  await user.click(screen.getByRole("button", { name: "本地目录" }));
+  await user.click(screen.getByRole("radio", { name: "本地目录" }));
   await user.type(screen.getByRole("textbox", { name: "本地来源目录" }), "D:\\isolated-skills");
   await user.click(screen.getByRole("button", { name: "扫描来源" }));
   await screen.findByText("release-notes");
@@ -59,7 +60,7 @@ it("clears candidates when source fields change and filters candidates locally",
   const callbacks = props();
   const user = userEvent.setup();
   render(<SkillSourceBrowser {...callbacks} />);
-  await user.click(screen.getByRole("button", { name: "本地目录" }));
+  await user.click(screen.getByRole("radio", { name: "本地目录" }));
   const root = screen.getByRole("textbox", { name: "本地来源目录" });
   await user.type(root, "D:\\isolated-skills");
   await user.click(screen.getByRole("button", { name: "扫描来源" }));
@@ -68,4 +69,29 @@ it("clears candidates when source fields change and filters candidates locally",
   expect(callbacks.onScanLocal).toHaveBeenCalledTimes(1);
   await user.type(root, "-changed");
   expect(screen.queryByRole("region", { name: "Skill 来源候选" })).not.toBeInTheDocument();
+});
+
+it("scans the directory picked through the native folder dialog", async () => {
+  const callbacks = props();
+  callbacks.onPickDirectory.mockResolvedValue("D:\\picked-skills");
+  const user = userEvent.setup();
+  render(<SkillSourceBrowser {...callbacks} />);
+  await user.click(screen.getByRole("radio", { name: "本地目录" }));
+  await user.click(screen.getByRole("button", { name: "浏览…" }));
+  expect(callbacks.onPickDirectory).toHaveBeenCalledTimes(1);
+  expect(callbacks.onScanLocal).toHaveBeenCalledWith("D:\\picked-skills");
+  expect(await screen.findByText("release-notes")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "本地来源目录" })).toHaveValue("D:\\picked-skills");
+});
+
+it("keeps the manual input untouched when the folder dialog is canceled", async () => {
+  const callbacks = props();
+  const user = userEvent.setup();
+  render(<SkillSourceBrowser {...callbacks} />);
+  await user.click(screen.getByRole("radio", { name: "本地目录" }));
+  await user.type(screen.getByRole("textbox", { name: "本地来源目录" }), "D:\\typed-skills");
+  await user.click(screen.getByRole("button", { name: "浏览…" }));
+  await waitFor(() => expect(callbacks.onPickDirectory).toHaveBeenCalled());
+  expect(callbacks.onScanLocal).not.toHaveBeenCalled();
+  expect(screen.getByRole("textbox", { name: "本地来源目录" })).toHaveValue("D:\\typed-skills");
 });

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { AppKind, ProviderDraft, ProviderProfile } from "../../api/client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { AppKind, ProviderDraft, ProviderProfile, SettingsValues } from "../../api/client";
 import { draftFrom, prepareDraft, responsesOptionsValid } from "./draft";
 import { useProviderConnection } from "./useProviderConnection";
 import { useProviderParameters } from "./useProviderParameters";
@@ -12,7 +12,13 @@ export function useProviderEditor(profile: ProviderProfile | null, initialApp: A
   const headingRef = useRef<HTMLHeadingElement>(null);
   const lastSection = useRef(false);
   const connection = useProviderConnection(draft);
-  const parameters = useProviderParameters(draft, setDraft);
+  const app = draft.app;
+  const seedParameters = useCallback((defaults: SettingsValues) => {
+    setDraft((current) => current.app === app && current.parameters === null
+      ? { ...current, parameters: { settings: { ...defaults.settings } } }
+      : current);
+  }, [app]);
+  const parameters = useProviderParameters(app, draft.parameters, seedParameters);
   useEffect(() => {
     if (parametersOpen) headingRef.current?.focus();
     else if (lastSection.current) triggerRef.current?.focus();

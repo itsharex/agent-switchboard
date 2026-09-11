@@ -1,5 +1,6 @@
 import type { SessionMessage } from "../../api/client";
 import { Time } from "../Time";
+import { Button } from "../Button";
 import { toast } from "../use-toast";
 import { copyText, messageRole } from "./session-content";
 
@@ -45,20 +46,20 @@ export function SessionMessageView({
         <span className="asb-session-message-time">
           {message.at ? <Time iso={message.at} /> : null}
         </span>
-        <button type="button" className="asb-session-message-copy" onClick={() => void copy()}>
+        <Button variant="unstyled" className="asb-session-message-copy" onClick={() => void copy()}>
           复制
-        </button>
+        </Button>
       </header>
       <pre>{display}</pre>
       {isLong && (
-        <button
-          type="button"
+        <Button
+          variant="unstyled"
           className="asb-session-message-toggle"
           aria-expanded={expanded}
           onClick={() => onToggleExpanded(index)}
         >
           {expanded ? "收起" : `展开完整内容（约 ${Math.round(message.content.length / 1000)}k 字符）`}
-        </button>
+        </Button>
       )}
     </article>
   );

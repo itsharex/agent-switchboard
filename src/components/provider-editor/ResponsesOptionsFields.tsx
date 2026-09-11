@@ -2,14 +2,16 @@ import { useState } from "react";
 import type { ResponsesOptions } from "../../api/client";
 import { ChevronDownIcon } from "../icons";
 import { Select } from "../Select";
-import type { ProviderEditorState } from "./useProviderEditor";
 
-export function ResponsesOptionsFields({ editor, busy }: { editor: ProviderEditorState; busy: boolean }) {
-  const { draft, setDraft } = editor;
-  const options = draft.responsesOptions;
+interface Props {
+  options: ResponsesOptions | null;
+  busy: boolean;
+  onChange: (next: ResponsesOptions) => void;
+}
+
+export function ResponsesOptionsFields({ options, busy, onChange }: Props) {
   const [expanded, setExpanded] = useState(() => !options || options.requestMode === "minimal");
   const minimal = options?.requestMode === "minimal";
-  const update = (next: ResponsesOptions) => setDraft((current) => ({ ...current, responsesOptions: next }));
   return (
     <details className="asb-provider-disclosure" open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}>
@@ -24,7 +26,7 @@ export function ResponsesOptionsFields({ editor, busy }: { editor: ProviderEdito
           options={[{ value: "standard", label: "标准请求" }, { value: "minimal", label: "最小请求" }]}
           onChange={(value) => {
             const requestMode = value as ResponsesOptions["requestMode"];
-            update({ requestMode });
+            onChange({ requestMode });
           }} />
         <p className="asb-scope-note">
           {minimal

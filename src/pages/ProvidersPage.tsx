@@ -9,16 +9,12 @@ import type {
 } from "../api/client";
 import type { ProviderView } from "../app/navigation";
 import { Button } from "../components/Button";
-import { ClientPicker } from "../components/ClientPicker";
-import { DualRelay } from "../components/DualRelay";
-import { PlusIcon } from "../components/icons";
 import { PreviewInspector } from "../components/PreviewInspector";
 import { ProviderEditor } from "../components/ProviderEditor";
 import { ProviderList } from "../components/ProviderList";
+import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
 import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
 import type { ProviderEditorSession } from "../app/useProviders";
-import type { DiagnosticSection } from "../app/navigation";
-import "../styles/base/provider-workspace.css";
 
 interface ProvidersPageProps {
   view: ProviderView;
@@ -34,7 +30,8 @@ interface ProvidersPageProps {
   /** Known conditions that can override the user-level configuration. */
   userConfigWarnings: string[];
   selectedId: string | null;
-  editorSession: ProviderEditorSession | null;
+  /** The generic editor serves Claude only; Codex owns its specialized editor. */
+  editorSession: Extract<ProviderEditorSession, { app: "claude" }> | null;
   preview: { profileId: string; file: FilePreview } | null;
   busy: boolean;
   /** Persisted profile ids whose usage panel is collapsed. */
@@ -44,10 +41,10 @@ interface ProvidersPageProps {
   onImport: () => void;
   onOpenClientSettings: () => void;
   onOpenHistory: () => void;
-  onOpenDiagnostics: (section: DiagnosticSection) => void;
-  onOpenQuota: () => void;
   onCloseEditor: () => void;
   onSave: (draft: ProviderDraft) => Promise<void>;
+  /** Replaces the editor session when the user picks Codex from the editor. */
+  onSwitchClient: (app: AppKind) => void;
   onSaveUsageQuery: (
     profile: ProviderProfile,
     usageQuery: UsageQuery | null,
@@ -96,6 +93,7 @@ function ProviderEditView(props: ProvidersPageProps) {
       userConfigModel={props.userConfigModel}
       userConfigWarnings={props.userConfigWarnings}
       onSave={props.onSave}
+      onSwitchClient={props.onSwitchClient}
       onCancel={props.onCloseEditor}
     />
   );
@@ -106,7 +104,7 @@ function ProviderPreview(props: ProvidersPageProps) {
   return (
     <section className="asb-preview-inline" aria-label="变更预览">
       <div className="asb-panel-heading">
-        <h3 className="asb-panel-title">变更预览</h3>
+        <h3 className="asb-section-title">变更预览</h3>
         <div className="asb-panel-actions">
           <Button
             variant="secondary"
@@ -141,45 +139,19 @@ function ProviderListView({
 }) {
   const { appFilter, busy } = props;
   return (
-    <section
-      className="asb-panel asb-provider-workspace"
-      aria-label="供应商工作区"
+    <ProviderWorkspaceShell
+      ariaLabel="供应商工作区"
+      app={appFilter}
+      onSelectApp={props.onSelectApp}
+      busy={busy}
+      statuses={props.statuses}
+      profiles={props.profiles}
+      locks={props.locks}
+      onOpenClientSettings={props.onOpenClientSettings}
+      onOpenHistory={props.onOpenHistory}
+      onImport={props.onImport}
+      onNew={props.onNew}
     >
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">供应商</h2>
-        <div className="asb-provider-toolbar">
-          <Button variant="secondary" onClick={props.onOpenClientSettings}>
-            偏好设置
-          </Button>
-          <Button variant="secondary" onClick={props.onOpenHistory}>
-            切换历史
-          </Button>
-        </div>
-      </div>
-      <DualRelay
-        statuses={props.statuses}
-        profiles={props.profiles}
-        locks={props.locks}
-        onOpenDiagnostics={props.onOpenDiagnostics}
-        onOpenQuota={props.onOpenQuota}
-      />
-      <div className="asb-tabs-bar">
-        <ClientPicker
-          app={appFilter}
-          onChange={props.onSelectApp}
-          disabled={busy}
-          label="供应商客户端"
-        />
-        <div className="asb-provider-toolbar">
-          <Button variant="secondary" disabled={busy} onClick={props.onImport}>
-            导入
-          </Button>
-          <Button variant="plus" disabled={busy} onClick={props.onNew}>
-            <PlusIcon />
-            新建供应商
-          </Button>
-        </div>
-      </div>
       <ProviderList
         profiles={props.profiles.filter((profile) => profile.app === appFilter)}
         activeProfileId={props.activeProfileId}
@@ -198,7 +170,7 @@ function ProviderListView({
         onDelete={props.onDelete}
         renderPreview={() => <ProviderPreview {...props} />}
       />
-    </section>
+    </ProviderWorkspaceShell>
   );
 }
 

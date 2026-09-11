@@ -139,6 +139,7 @@ pub(super) fn parse_anthropic_content(
                     id: string(item.get("id"), "tool_use.id")?,
                     name: string(item.get("name"), "tool_use.name")?,
                     namespace: None,
+                    kind: ToolKind::Function,
                     input: item
                         .get("input")
                         .cloned()
@@ -153,6 +154,7 @@ pub(super) fn parse_anthropic_content(
                 )?;
                 parts.push(Part::ToolResult {
                     id: string(item.get("tool_use_id"), "tool_result.tool_use_id")?,
+                    kind: ToolKind::Function,
                     content: match item.get("content") {
                         None => vec![],
                         Some(value) => {
@@ -228,6 +230,7 @@ pub(super) fn parse_chat_tool_calls(value: &Value) -> Result<Vec<Part>, Transfor
             id: string(item.get("id"), "tool_call.id")?,
             name: string(function.get("name"), "tool_call.function.name")?,
             namespace: None,
+            kind: ToolKind::Function,
             input,
         });
     }

@@ -22,7 +22,7 @@ export function OfficialQuotaTrend({ series, loading, error, ariaLabel }: Props)
 
   return (
     <section className="asb-usage-history" aria-label={ariaLabel}>
-      <h4>额度趋势</h4>
+      <h4 className="asb-section-title">额度趋势</h4>
       {loading && quotaSeries.length === 0 ? (
         <p className="asb-provider-usage-state" role="status">正在读取历史记录…</p>
       ) : (

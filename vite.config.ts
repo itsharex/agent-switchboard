@@ -34,6 +34,11 @@ export default defineConfig({
     port: browserDevelopment.port,
     strictPort: true,
     open: false,
+    // Cargo output lives under target/ plus one-off target-* / .tmp*
+    // verification dirs; watching them starves the dev server on Windows.
+    watch: {
+      ignored: ["**/target/**", "**/target-*/**", "**/.tmp*/**", "**/node_modules/**"],
+    },
     proxy: {
       "/api": {
         target: "http://127.0.0.1:1422",

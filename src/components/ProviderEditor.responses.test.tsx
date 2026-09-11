@@ -25,14 +25,20 @@ async function openRequests(user: ReturnType<typeof userEvent.setup>) {
   if (!summary.parentElement?.hasAttribute("open")) await user.click(summary);
 }
 
+async function selectResponses(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("combobox", { name: "API 格式" }));
+  await user.click(await screen.findByRole("option", { name: /Responses/ }));
+}
+
 it("creates request options with an always-on gateway and no login or WebSocket toggle", async () => {
   const onSave = vi.fn();
   const user = userEvent.setup();
-  render(<ProviderEditor {...props} profile={null} onSave={onSave} />);
+  render(<ProviderEditor {...props} profile={null} initialApp="claude" onSave={onSave} />);
+  await selectResponses(user);
   await openRequests(user);
   expect(screen.queryByRole("checkbox", { name: /WebSocket|保留登录/ })).not.toBeInTheDocument();
   expect(screen.getByRole("combobox", { name: "请求模式" })).toHaveTextContent("标准请求");
-  expect(await screen.findByText(/先完成官方登录/)).toHaveTextContent("provider 统一为 openai");
+  expect(await screen.findByText(/本机协议网关 http:\/\/127\.0\.0\.1:31819/)).toBeInTheDocument();
   expect(screen.getByText(/不会自动补 \/v1/)).toHaveTextContent("https://example.com/v1/responses");
   fireEvent.change(screen.getByLabelText("名称"), { target: { value: profile.name } });
   fireEvent.change(screen.getByLabelText("服务地址"), { target: { value: profile.baseUrl } });
@@ -80,13 +86,15 @@ it("clears request options on protocol changes and creates fresh standard option
 
 it("clears request choices on an official-login transition", async () => {
   const user = userEvent.setup();
-  render(<ProviderEditor {...props} profile={null} onSave={vi.fn()} />);
+  render(<ProviderEditor {...props} profile={null} initialApp="claude" onSave={vi.fn()} />);
+  await selectResponses(user);
   await openRequests(user);
   await user.click(screen.getByRole("combobox", { name: "请求模式" }));
   await user.click(screen.getByRole("option", { name: "最小请求" }));
   await user.click(screen.getByRole("radio", { name: "官方登录" }));
   expect(screen.queryByRole("combobox", { name: "请求模式" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("radio", { name: "自定义 API 中继" }));
+  await selectResponses(user);
   await openRequests(user);
   expect(screen.getByRole("combobox", { name: "请求模式" })).toHaveTextContent("标准请求");
 });

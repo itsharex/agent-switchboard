@@ -52,26 +52,40 @@ impl GatewayController {
             "http://127.0.0.1:{}",
             saved_url.port_or_known_default().unwrap_or(80)
         );
-        for record in local
-            .configuration()
-            .list_providers()
-            .map_err(|e| e.to_string())?
-        {
-            if record.profile.app != app || !record.profile.requires_gateway() {
-                continue;
-            }
-            let route = self.route_for_profile(&record.profile)?;
-            if route.client_endpoint(&saved_origin) != saved_base {
-                continue;
-            }
-            let candidate = adapter::render_gateway_base_url(
-                app,
-                configuration,
-                &route.client_endpoint(&self.configured_base_url()),
-            )
-            .map_err(|error| error.to_string())?;
-            if self.route_matches_config(&route, &candidate)? {
-                return Ok(candidate);
+        let routes = match app {
+            AppKind::Codex => local
+                .configuration()
+                .list_codex_providers()
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|record| {
+                    local
+                        .configuration()
+                        .find_codex_provider_file(&record.profile.id)
+                        .map_err(|error| error.to_string())
+                        .and_then(|file| self.route_for_codex_file(&file))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            AppKind::Claude => local
+                .configuration()
+                .list_providers()
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .filter(|record| record.profile.requires_gateway())
+                .map(|record| self.route_for_profile(&record.profile))
+                .collect::<Result<Vec<_>, _>>()?,
+        };
+        for route in routes {
+            if route.client_endpoint(&saved_origin) == saved_base {
+                let candidate = adapter::render_gateway_base_url(
+                    app,
+                    configuration,
+                    &route.client_endpoint(&self.configured_base_url()),
+                )
+                .map_err(|error| error.to_string())?;
+                if self.route_matches_config(&route, &candidate)? {
+                    return Ok(candidate);
+                }
             }
         }
         Err("恢复目标的供应商或连接凭据已变化，请重新应用供应商".to_string())
@@ -86,12 +100,15 @@ fn validate_codex_provider(configuration: &str) -> Result<(), String> {
         .get("model_provider")
         .map(|item| item.as_str())
         .unwrap_or(Some("openai"));
-    if provider != Some("openai")
-        || document
-            .get("model_providers")
-            .and_then(|providers| providers.get("openai"))
-            .is_some()
-    {
+    let retired_provider_table = document
+        .get("model_providers")
+        .and_then(|providers| {
+            ["openai", "agent_switchboard", "OpenAi"]
+                .into_iter()
+                .find(|id| providers.get(*id).is_some())
+        })
+        .is_some();
+    if provider != Some("openai") || retired_provider_table {
         return Err("该备份使用已停用的 Codex provider 契约，请重新应用供应商".to_string());
     }
     Ok(())

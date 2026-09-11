@@ -17,7 +17,12 @@ use crate::redact::REDACTED;
 use serde::Serialize;
 
 const DEMO_API_KEY: &str = "website-generated-demo-key";
-const DEMO_GATEWAY: &str = "http://127.0.0.1:47821/codex/website-demo/v1";
+// This has the only Codex capability shape accepted by the desktop adapter.
+// It is deliberately a fixed demonstration value and is redacted before the
+// generated website artifact is written.
+const DEMO_CODEX_CAPABILITY: &str =
+    "asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const DEMO_GATEWAY: &str = "http://127.0.0.1:47821/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1";
 const BEDROCK_ENDPOINT: &str = "https://bedrock-runtime.us-east-1.amazonaws.com/v1";
 
 #[derive(Serialize)]
@@ -78,7 +83,7 @@ fn client(app: AppKind) -> WebsiteAssemblyClient {
     let candidate = adapter::render(current, &plan).expect("website demonstration plan is valid");
     let public_candidate = candidate
         .replace(DEMO_API_KEY, REDACTED)
-        .replace("website-demo", REDACTED);
+        .replace(DEMO_CODEX_CAPABILITY, REDACTED);
     adapter::validate_syntax(app, &public_candidate)
         .expect("redacted website demonstration remains valid client configuration");
     let fields = adapter::owned_diff(app, &public_candidate, current)

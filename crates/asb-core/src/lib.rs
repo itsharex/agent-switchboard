@@ -21,17 +21,20 @@ pub mod website_assembly;
 
 pub use discovery::{discover, inspect, DiscoveredFile, DiscoveredState, DiscoveryReport};
 
-pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchRow, CcSwitchSkip};
+pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchProviderDraft, CcSwitchRow, CcSwitchSkip};
 
 pub use adapter::{preview, render, route_state, validate_syntax, AdapterError};
 pub use contracts::{
     AppKind, AuthenticationScheme, BackupRecord, ChangeKind, ClaudeModelSettings,
-    ClientSettingsPreview, ClientSettingsSnapshot, CodexModelSettings, CodexSubagentKey,
-    CodexSubagentSettings, CodexSubagentSettingsPreview, CodexSubagentSettingsSnapshot,
-    ConfigValue, ConfigWriteRecord, ExplicitMaxOutputTokens, GlobalPromptDocument, KeyChange,
-    MatchStatus, ModelOptions, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord,
-    RouteMode, RouteState, SettingValue, SettingsValues, SubagentSettingsPlan, SwitchPlan,
-    SwitchPreview, UpstreamProtocol, WriteOperation,
+    ClientSettingsPreview, ClientSettingsSnapshot, CodexCapabilities, CodexCatalogEntry,
+    CodexEndpoint, CodexModelRoute, CodexModelSettings, CodexOperation, CodexProviderDraft,
+    CodexProviderFile, CodexProviderProfile, CodexProviderRecord, CodexRouteSnapshot,
+    CodexSubagentKey, CodexSubagentSettings, CodexSubagentSettingsPreview,
+    CodexSubagentSettingsSnapshot, CodexUpstream, ConfigValue, ConfigWriteRecord,
+    ExplicitMaxOutputTokens, GlobalPromptDocument, KeyChange, MatchStatus, ModelOptions,
+    ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord, RouteMode, RouteState,
+    SettingValue, SettingsValues, SubagentSettingsPlan, SwitchPlan, SwitchPreview,
+    UpstreamProtocol, WriteOperation, CODEX_PROVIDER_SCHEMA_VERSION,
 };
 pub use lock::{classify_lock, LockFileData, LockHolder, LockStatus, PidLiveness};
 pub use redact::{redact, REDACTED};

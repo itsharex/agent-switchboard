@@ -6,15 +6,15 @@
 /* Chromium does not dispatch pointer events from disabled controls, so the
    anchor span carrying the tooltip never sees the click that must dismiss
    the label. Let the span take every pointer event instead. */
-.asb-tooltip-anchor > button:disabled {
+.asb-tooltip-anchor > .asb-btn:disabled {
   pointer-events: none;
 }
 
 .asb-tooltip {
   z-index: 60;
-  max-width: min(20rem, calc(100vw - 2rem));
-  padding: var(--asb-space-1) var(--asb-space-3);
-  border-radius: var(--asb-radius-control);
+  max-width: min(var(--asb-tooltip-max-width), calc(100vw - 2rem));
+  padding: var(--asb-space-unit) var(--asb-tooltip-padding-inline);
+  border-radius: var(--asb-radius-action);
   background: var(--asb-ink);
   color: var(--asb-canvas);
   font: var(--asb-text-label);
@@ -39,7 +39,7 @@
 }
 
 .asb-textarea {
-  min-height: 72px;
+  min-height: var(--asb-row-min-height);
   resize: vertical;
   font-family: inherit;
 }

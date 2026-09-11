@@ -22,7 +22,9 @@ pub use lookup::{
     setting_models, setting_spec, setting_specs, setting_toggles, toggle_spec,
 };
 pub use models::CODEX_SUBAGENT_MODEL_KEY;
-pub use provider::{CODEX_PROVIDER_BASE_URL_KEY, CODEX_PROVIDER_ID, CODEX_WEB_SEARCH_KEY};
+pub use provider::{
+    CODEX_MODEL_CATALOG_KEY, CODEX_PROVIDER_BASE_URL_KEY, CODEX_PROVIDER_ID, CODEX_WEB_SEARCH_KEY,
+};
 pub use spec::{
     ChoiceControl, ChoiceOption, ChoiceSpec, ModelSpec, OfficialSettingDisposition,
     OfficialSettingEntry, ProviderAbsentAction, SettingControl, SettingOwner, SettingSpec,

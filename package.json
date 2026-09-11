@@ -50,7 +50,7 @@
     "@types/node": "^22.20.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "@wdio/cli": "9.31.6",
     "@wdio/globals": "9.31.3",
     "@wdio/local-runner": "9.31.6",
@@ -61,7 +61,7 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.8.3",
-    "vite": "^8.2.2",
+    "vite": "^7.3.6",
     "vitest": "^4.1.11",
     "webdriverio": "9.31.6"
   }

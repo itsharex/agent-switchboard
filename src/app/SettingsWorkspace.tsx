@@ -7,8 +7,10 @@ import type { SwitchboardModel } from "./useSwitchboardModel";
 
 function ClientPreferences({ model }: { model: SwitchboardModel }) {
   const { clientSettings: settings, codexSubagentSettings, snapshot, busy, appFilter: app } = model;
-  const hasActiveProvider = snapshot.profiles.some((profile) =>
-    profile.app === app && profile.id === snapshot.activeProfileId(app));
+  const activeProfileId = snapshot.activeProfileId(app);
+  const hasActiveProvider = app === "codex"
+    ? snapshot.codexRecords.some((record) => record.profile.id === activeProfileId)
+    : snapshot.profiles.some((profile) => profile.app === app && profile.id === activeProfileId);
   return (
     <ClientSettingsPanel key={app} app={app} onSelectApp={model.providers.selectApp} editorState={settings.editorState}
       busy={busy} configStatus={snapshot.statuses?.find((status) => status.app === app)}

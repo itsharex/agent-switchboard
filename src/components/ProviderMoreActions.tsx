@@ -26,11 +26,11 @@ export function ProviderMoreActions({ name, onDelete }: { name: string; onDelete
       <Tooltip label={`更多 ${name} 操作`}>
         <Button variant="icon" ref={triggerRef} className={open ? "is-active" : undefined}
           aria-label={`更多 ${name} 操作`} aria-haspopup="menu" aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}><MoreIcon size={20} /></Button>
+          onClick={() => setOpen((value) => !value)}><MoreIcon /></Button>
       </Tooltip>
       {open && <span className="asb-row-menu" role="menu" aria-label={`${name} 更多操作`}>
-        <button type="button" role="menuitem" className="asb-row-menu-item" aria-label={`删除 ${name}`}
-          onClick={() => { setOpen(false); onDelete(); }}><TrashIcon size={15} />删除</button>
+        <Button variant="unstyled" role="menuitem" className="asb-row-menu-item" aria-label={`删除 ${name}`}
+          onClick={() => { setOpen(false); onDelete(); }}><TrashIcon size={15} />删除</Button>
       </span>}
     </span>
   );

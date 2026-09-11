@@ -1,7 +1,7 @@
 use super::super::tool_names::render_target_name;
 use super::super::{
-    error, CanonicalRequest, ImageSource, Part, ReasoningEffort, Role, Tool, ToolChoice,
-    TransformError,
+    error, CanonicalRequest, ImageSource, Part, Reasoning, ReasoningEffort, Role, Tool, ToolChoice,
+    ToolKind, TransformError,
 };
 use asb_core::contracts::UpstreamProtocol;
 use serde_json::{json, Map, Value};

@@ -9,9 +9,11 @@ import {
   type RuntimeLogSeverity,
 } from "../api/client";
 import { Button } from "../components/Button";
+import { RadioOption } from "../components/RadioOption";
 import { Select } from "../components/Select";
 import { Table, type TableColumn } from "../components/Table";
 import { Time } from "../components/Time";
+import { SearchIcon } from "../components/icons";
 
 type LevelFilter = "all" | RuntimeLogSeverity;
 
@@ -144,11 +146,8 @@ export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
   return (
     <section className="asb-panel asb-runtime-logs" aria-label="日志">
       <div className="asb-panel-heading">
-        <div>
-          <h2 className="asb-panel-title">日志</h2>
-          <p className="asb-scope-note">仅显示本应用已脱敏的运行事件。</p>
-        </div>
-        <div className="asb-runtime-log-controls">
+        <h2 className="asb-panel-title">日志</h2>
+        <div className="asb-panel-actions">
           <div className="asb-runtime-log-level-control">
             <span className="asb-runtime-log-level-label">记录级别</span>
             <Select
@@ -160,17 +159,16 @@ export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
               onChange={(level) => onLogLevelChange(level as RuntimeLogLevel)}
             />
           </div>
-          <div className="asb-tabs" role="group" aria-label="日志级别筛选">
-            {LEVEL_FILTERS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={`asb-tab${filter === item.value ? " is-on" : ""}`}
-                aria-pressed={filter === item.value}
-                onClick={() => setFilter(item.value)}
-              >
-                {item.label}
-              </button>
+          <div className="asb-segments" role="radiogroup" aria-label="日志级别筛选">
+            {LEVEL_FILTERS.map((option) => (
+              <RadioOption
+                key={option.value}
+                name="runtime-log-level-filter"
+                checked={filter === option.value}
+                disabled={false}
+                label={option.label}
+                onChange={() => setFilter(option.value)}
+              />
             ))}
           </div>
           <Button
@@ -204,9 +202,14 @@ export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
           正在读取应用日志…
         </p>
       ) : visibleEntries.length === 0 ? (
-        <p className="asb-empty asb-runtime-log-empty">
-          {filter === "all" ? "暂无应用运行日志" : `暂无${levelLabel(filter)}级别的应用日志`}
-        </p>
+        <div className="asb-empty-state asb-runtime-log-empty">
+          <span className="asb-empty-state-icon" aria-hidden="true">
+            <SearchIcon />
+          </span>
+          <h3 className="asb-section-title">
+            {filter === "all" ? "暂无应用运行日志" : `暂无${levelLabel(filter)}级别的应用日志`}
+          </h3>
+        </div>
       ) : (
         <div className="asb-runtime-log-table-wrap">
           <Table

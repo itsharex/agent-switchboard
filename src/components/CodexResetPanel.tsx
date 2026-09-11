@@ -8,6 +8,7 @@ import {
 } from "../api/client";
 import { Button } from "./Button";
 import { Time } from "./Time";
+import { UpdateIcon } from "./icons";
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
@@ -129,7 +130,12 @@ export function CodexResetPanel() {
       </div>
       {cacheLoading && status === null && <p className="asb-empty" role="status">正在读取本地缓存</p>}
       {status === null && !cacheLoading && readError === null && (
-        <p className="asb-empty">尚无本地缓存。手动刷新以读取公开重置信号。</p>
+        <div className="asb-empty-state">
+          <span className="asb-empty-state-icon" aria-hidden="true">
+            <UpdateIcon />
+          </span>
+          <h3 className="asb-section-title">尚无本地缓存。手动刷新以读取公开重置信号。</h3>
+        </div>
       )}
       {cacheError && <p className="asb-warn-text" role="alert">本地缓存不可用：{cacheError}</p>}
       {readError && (

@@ -3,26 +3,25 @@ import {
   getSessionMessages,
   listSessions,
   resumeSession,
-  type AppKind,
   type SessionIssue,
   type SessionMessage,
   type SessionMeta,
 } from "../api/client";
 import { ClientLogo } from "./ClientLogo";
+import { ClientFilter, type ClientFilterValue } from "./ClientFilter";
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { SessionMessageView } from "./session/SessionMessageView";
 import {
-  clientName,
   codexOutlinePreview,
   copyText,
   directoryName,
   previewLine,
   sessionMatchesSearch,
 } from "./session/session-content";
+import { clientFullName } from "../lib/client-name";
 import { Time } from "./Time";
-
-type Filter = "all" | AppKind;
+import { PreviewIcon, RequestIcon, SearchIcon } from "./icons";
 
 const TARGET_HIGHLIGHT_MS = 2000;
 /* Within the TTL a re-activation or re-selection serves cache with zero
@@ -43,7 +42,7 @@ export function SessionManager({ active }: { active: boolean }) {
   const [sessions, setSessions] = useState<SessionMeta[] | null>(null);
   const [issues, setIssues] = useState<SessionIssue[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<ClientFilterValue>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SessionMeta | null>(null);
   const [messages, setMessages] = useState<SessionMessage[] | null>(null);
@@ -239,30 +238,18 @@ export function SessionManager({ active }: { active: boolean }) {
     <div className="asb-sessions">
       <div className="asb-panel-heading">
         <h2 className="asb-panel-title">会话</h2>
-        <div className="asb-session-toolbar">
+        <div className="asb-panel-actions">
           <Input
             aria-label="搜索会话"
             value={query}
             placeholder="搜索标题、摘要、目录或会话 ID"
             onChange={(event) => setQuery(event.target.value)}
           />
-          <div className="asb-segments" role="radiogroup" aria-label="会话客户端筛选">
-            {(["all", "codex", "claude"] as const).map((item) => {
-              const active = filter === item;
-              const label = item === "all" ? "全部" : clientName(item);
-              return (
-                <label className={`asb-seg-opt${active ? " is-active" : ""}`} key={item}>
-                  <input
-                    type="radio"
-                    name="session-provider"
-                    checked={active}
-                    onChange={() => setFilter(item)}
-                  />
-                  {label}
-                </label>
-              );
-            })}
-          </div>
+          <ClientFilter
+            value={filter}
+            onChange={setFilter}
+            label="会话客户端筛选"
+          />
           <Button variant="secondary" disabled={scanning} onClick={() => void refresh()}>
             刷新会话
           </Button>
@@ -272,7 +259,7 @@ export function SessionManager({ active }: { active: boolean }) {
         <ul className="asb-session-issues" aria-label="会话扫描提示">
           {issues.map((issue) => (
             <li key={`${issue.app}-${issue.message}`} className="asb-warn-text">
-              {clientName(issue.app)}：{issue.message}
+              {clientFullName(issue.app)}：{issue.message}
             </li>
           ))}
         </ul>
@@ -287,14 +274,19 @@ export function SessionManager({ active }: { active: boolean }) {
           {sessions === null ? (
             <p className="asb-empty">正在扫描本地会话</p>
           ) : filtered.length === 0 ? (
-            <p className="asb-empty">未找到匹配的 Codex 或 Claude Code 会话</p>
+            <div className="asb-empty-state">
+              <span className="asb-empty-state-icon" aria-hidden="true">
+                <SearchIcon />
+              </span>
+              <h3 className="asb-section-title">未找到匹配的 Codex 或 Claude Code 会话</h3>
+            </div>
           ) : (
             <div className="asb-session-items">
               {filtered.map((session) => {
                 const active = selected?.app === session.app && selected.sessionId === session.sessionId;
                 return (
-                  <button
-                    type="button"
+                  <Button
+                    variant="unstyled"
                     className={`asb-session-item${active ? " is-active" : ""}`}
                     key={`${session.app}-${session.sessionId}`}
                     aria-pressed={active}
@@ -308,7 +300,7 @@ export function SessionManager({ active }: { active: boolean }) {
                     <span className="asb-session-item-time">
                       {session.lastActiveAt ? <Time iso={session.lastActiveAt} /> : "时间未知"}
                     </span>
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -316,16 +308,21 @@ export function SessionManager({ active }: { active: boolean }) {
         </section>
         <section className="asb-session-detail" aria-label="会话详情">
           {!selected ? (
-            <p className="asb-empty">选择一条会话即可查看内容并复制恢复命令。</p>
+            <div className="asb-empty-state">
+              <span className="asb-empty-state-icon" aria-hidden="true">
+                <PreviewIcon />
+              </span>
+              <h3 className="asb-section-title">选择一条会话即可查看内容并复制恢复命令。</h3>
+            </div>
           ) : (
             <>
               <header className="asb-session-detail-head">
                 <div className="asb-session-detail-title">
                   <span className="asb-session-client">
                     <ClientLogo app={selected.app} className="asb-session-logo" />
-                    {clientName(selected.app)}
+                    {clientFullName(selected.app)}
                   </span>
-                  <h3>{selected.title}</h3>
+                  <h3 className="asb-section-title">{selected.title}</h3>
                 </div>
                 <div className="asb-session-actions">
                   <Button variant="primary" disabled={resuming} onClick={() => void resume()}>
@@ -350,14 +347,14 @@ export function SessionManager({ active }: { active: boolean }) {
                 <span className="asb-code asb-session-meta-id">{selected.sessionId}</span>
                 <span>{selected.lastActiveAt ? <Time iso={selected.lastActiveAt} /> : "时间未知"}</span>
                 {selected.projectDir && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="unstyled"
                     className="asb-session-meta-dir"
                     title={`${selected.projectDir}（点击复制）`}
                     onClick={() => selected.projectDir && void copy(selected.projectDir, "工作目录")}
                   >
                     {directoryName(selected.projectDir)}
-                  </button>
+                  </Button>
                 )}
               </p>
               <div className="asb-session-command">
@@ -374,7 +371,14 @@ export function SessionManager({ active }: { active: boolean }) {
                   <div className="asb-session-transcript" ref={transcriptRef} aria-label="对话历史">
                     {messageLoading && <p className="asb-empty">正在读取会话内容</p>}
                     {detailError && <p className="asb-warn-text">{detailError}</p>}
-                    {messages !== null && messages.length === 0 && <p className="asb-empty">会话中没有可展示的消息。</p>}
+                    {messages !== null && messages.length === 0 && (
+                      <div className="asb-empty-state">
+                        <span className="asb-empty-state-icon" aria-hidden="true">
+                          <RequestIcon />
+                        </span>
+                        <h3 className="asb-section-title">会话中没有可展示的消息。</h3>
+                      </div>
+                    )}
                     {messages?.map((message, index) => (
                       <SessionMessageView
                         key={`${message.at ?? ""}-${index}`}
@@ -392,14 +396,14 @@ export function SessionManager({ active }: { active: boolean }) {
                     <div className="asb-session-toc-heading">消息目录</div>
                     <div className="asb-session-toc-items">
                       {outlineItems.map((item, outlineIndex) => (
-                        <button
-                          type="button"
+                        <Button
+                          variant="unstyled"
                           key={item.index}
                           onClick={() => jumpToMessage(item.index)}
                         >
                           <span className="asb-session-toc-index">{outlineIndex + 1}</span>
                           <span className="asb-session-toc-preview">{item.preview}</span>
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </nav>

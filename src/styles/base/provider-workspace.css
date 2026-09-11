@@ -14,17 +14,6 @@
   gap: var(--asb-space-3);
 }
 
-.asb-provider-import-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--asb-space-1);
-}
-
-.asb-provider-import-source[aria-pressed="true"] {
-  border-color: var(--asb-action);
-  color: var(--asb-action);
-}
-
 .asb-provider-import .asb-status-card {
   width: 100%;
 }

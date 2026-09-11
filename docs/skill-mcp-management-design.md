@@ -30,15 +30,15 @@ GitHub API 当天读取的 Star 数仅作为选型背景，不代表实现正确
 
 | 项目 | Star 快照 | 固定提交 | 检查范围 |
 | --- | ---: | --- | --- |
-| [CC Switch](https://github.com/farion1231/cc-switch) | 131,253 | `db34612807244643d85ccedf9704c965facc4cba` | Skills 服务、MCP 服务与双客户端适配、Skill 同步测试及手册 |
+| 参考实现：资源库与多目标分发 | 131,253 | `db34612807244643d85ccedf9704c965facc4cba` | Skills 服务、MCP 服务与双客户端适配、Skill 同步测试及手册 |
 | [Codex++](https://github.com/BigPizzaV3/CodexPlusPlus) | 30,274 | `48d43158688f5096c7059c690f8cd1daab340681` | Skills 文件管理、MCP 表单转换、README |
 | [Vercel Skills](https://github.com/vercel-labs/skills) | 30,484 | `435076e78988e1e6ec40d00b0b1d76bdbbc5419a` | 安装器、客户端目录映射、来源解析、版本锁文件 |
 
-### CC Switch：借鉴资源库与多目标分发
+### 参考实现：借鉴资源库与多目标分发
 
-Skills 服务维护中心目录、客户端安装状态、内容摘要、更新检测和卸载备份；MCP 服务将统一定义按客户端投影。值得采用的是资源定义与目标启用状态分离，以及从本机导入的明确选择。[Skills 源码](https://github.com/farion1231/cc-switch/blob/db34612807244643d85ccedf9704c965facc4cba/src-tauri/src/services/skill.rs)、[导入选择测试](https://github.com/farion1231/cc-switch/blob/db34612807244643d85ccedf9704c965facc4cba/src-tauri/tests/skill_sync.rs)。
+Skills 服务维护中心目录、客户端安装状态、内容摘要、更新检测和卸载备份；MCP 服务将统一定义按客户端投影。值得采用的是资源定义与目标启用状态分离，以及从本机导入的明确选择。对照源码为 `src-tauri/src/services/skill.rs` 与 `src-tauri/tests/skill_sync.rs`（基线 `db34612807244643d85ccedf9704c965facc4cba`）。
 
-其 `McpService::upsert_server` 先保存数据库，再逐客户端同步；`toggle_app` 也先更新库中的应用状态，再写目标文件。本产品应将这些步骤纳入可恢复事务，否则第二个目标失败时，库记录可能先于真实配置变化。这里是对所检查调用顺序的判断，不推断参考项目所有路径都缺少恢复机制。[MCP 服务源码](https://github.com/farion1231/cc-switch/blob/db34612807244643d85ccedf9704c965facc4cba/src-tauri/src/services/mcp.rs#L19)。
+其 `McpService::upsert_server` 先保存数据库，再逐客户端同步；`toggle_app` 也先更新库中的应用状态，再写目标文件。本产品应将这些步骤纳入可恢复事务，否则第二个目标失败时，库记录可能先于真实配置变化。这里是对所检查调用顺序的判断，不推断参考项目所有路径都缺少恢复机制。对照源码为 `src-tauri/src/services/mcp.rs`（第 19 行起，基线 `db34612807244643d85ccedf9704c965facc4cba`）。
 
 ### Codex++：借鉴原生字段映射和可恢复卸载
 
@@ -104,7 +104,7 @@ Skills 服务维护中心目录、客户端安装状态、内容摘要、更新�
 
 ### 5.1 扩展工作区
 
-2026-09-07 按用户要求重构：参考 CC Switch 的管理流程，视觉由本项目 Frosted Relay 决定。对照的 UI 源码为 [Skills 管理](https://github.com/farion1231/cc-switch/blob/389dd96cb8567f41d05ba4aaebce8a73dc524040/src/components/skills/UnifiedSkillsPanel.tsx)、[MCP 管理](https://github.com/farion1231/cc-switch/blob/389dd96cb8567f41d05ba4aaebce8a73dc524040/src/components/mcp/UnifiedMcpPanel.tsx) 与 [来源发现](https://github.com/farion1231/cc-switch/blob/389dd96cb8567f41d05ba4aaebce8a73dc524040/src/components/skills/SkillsPage.tsx)。具体视觉与交互事实由 [DESIGN 扩展工作区](../DESIGN.md) 拥有。
+2026-09-07 按用户要求重构：参考同类工具的管理流程，视觉由本项目 Frosted Relay 决定。对照的 UI 源码为 `UnifiedSkillsPanel`、`UnifiedMcpPanel` 与 `SkillsPage`（基线 `389dd96cb8567f41d05ba4aaebce8a73dc524040`）。具体视觉与交互事实由 [DESIGN 扩展工作区](../DESIGN.md) 拥有。
 
 ```text
 扩展 [Skills] [MCP]                 [从本机发现] [发现 Skills / 添加 MCP] [更多]

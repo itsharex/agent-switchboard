@@ -49,6 +49,7 @@ describe("App.settings", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await user.click(await screen.findByRole("button", { name: "供应商" }));
     await user.click(await screen.findByRole("option", { name: /备用网关/ }));
     await user.click(
@@ -58,9 +59,11 @@ describe("App.settings", () => {
       name: "变更预览",
     });
     expect(
-      within(previewPanel).getAllByText("gpt-5.3-codex").length,
+      within(previewPanel).getAllByText("claude-3-7-sonnet").length,
     ).toBeGreaterThan(0);
-    expect(within(previewPanel).getByText("gpt-5.4")).toBeInTheDocument();
+    expect(
+      within(previewPanel).getAllByText("claude-sonnet-4").length,
+    ).toBeGreaterThan(0);
 
     expect(
       screen.queryByRole("button", { name: "通用设置" }),
@@ -77,11 +80,11 @@ describe("App.settings", () => {
     await user.click(screen.getByRole("button", { name: "保存客户端设置" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("save_client_settings", {
-        target: "codex",
+        target: "claude",
         settings: {
           settings: { "tui.notifications": { mode: "explicit", value: true } },
         },
-        expectedSettingsHash: "codex-settings-hash",
+        expectedSettingsHash: "claude-settings-hash",
       }),
     );
     expect(invokeMock.mock.calls.map(([command]) => command)).not.toContain(

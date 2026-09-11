@@ -7,6 +7,7 @@ import {
   toggleMaximizeWindow,
 } from "../api/client";
 import { CloseIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from "./icons";
+import { Button } from "./Button";
 
 /** Custom window controls for the undecorated, integrated title bar
  * (PC Manager-style). All Tauri access goes through the api client. The
@@ -34,30 +35,30 @@ export function WindowControls() {
 
   return (
     <div className="asb-wincontrols">
-      <button
-        type="button"
+      <Button
+        variant="unstyled"
         className="asb-winbtn"
         aria-label="最小化"
         onClick={() => void minimizeWindow().catch(() => {})}
       >
         <MinimizeIcon />
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="unstyled"
         className="asb-winbtn"
         aria-label={maximized ? "还原" : "最大化"}
         onClick={() => void toggleMaximizeWindow().catch(() => {})}
       >
         {maximized ? <RestoreIcon /> : <MaximizeIcon />}
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="unstyled"
         className="asb-winbtn asb-winbtn-close"
         aria-label="关闭"
         onClick={() => void closeWindow().catch(() => {})}
       >
         <CloseIcon />
-      </button>
+      </Button>
     </div>
   );
 }

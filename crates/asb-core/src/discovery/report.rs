@@ -1,9 +1,8 @@
-use crate::contracts::{AppKind, ImportProposal, RouteState};
+use crate::contracts::{AppKind, ProviderDraft, RouteState};
 
 /// Paths the caller wants inspected, as display strings.
 pub struct DiscoveryPaths {
     pub codex: String,
-    pub codex_auth: String,
     pub claude: String,
 }
 
@@ -45,7 +44,16 @@ pub enum DiscoveredState {
 pub struct DiscoveryReport {
     pub codex: DiscoveredFile,
     pub claude: DiscoveredFile,
-    pub import_proposals: Vec<ImportProposal>,
+    pub claude_import_proposals: Vec<ClaudeImportProposal>,
+}
+
+/// A suggested Claude provider profile derived read-only from discovered
+/// content. Codex has a separate complete profile contract.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeImportProposal {
+    pub draft: ProviderDraft,
+    pub basis: String,
 }
 
 impl DiscoveryReport {
@@ -54,7 +62,7 @@ impl DiscoveryReport {
     /// the live files, so a cached proposal never needs the secret.
     pub fn cached_display(&self) -> DiscoveryReport {
         let mut copy = self.clone();
-        for proposal in &mut copy.import_proposals {
+        for proposal in &mut copy.claude_import_proposals {
             proposal.draft.api_key = String::new();
         }
         if let DiscoveredState::Ok {

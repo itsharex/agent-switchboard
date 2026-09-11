@@ -22,7 +22,11 @@ pub struct ObservedMcpServer {
 
 /// The typed transport problem of one observed entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum McpEntryProblem {
     /// The entry is readable and its transport is decided.
     None,
@@ -303,7 +307,9 @@ fn read_claude_server_entry(key: &str, entry: &JsonValue) -> ObservedMcpServer {
     };
     let mut notes = Vec::new();
     if object.contains_key("enabled") {
-        notes.push("Claude 的服务定义没有原生 enabled 字段；停用属于项目级 disabledMcpServers".to_string());
+        notes.push(
+            "Claude 的服务定义没有原生 enabled 字段；停用属于项目级 disabledMcpServers".to_string(),
+        );
     }
     let unknown_fields: Vec<String> = object
         .keys()

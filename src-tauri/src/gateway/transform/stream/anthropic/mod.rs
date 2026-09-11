@@ -1,12 +1,13 @@
 use super::{append_event, json_data, responses_complete, Frame};
+use crate::gateway::transform::response::responses_reasoning_item;
 use crate::gateway::transform::tool_names::parse_target_name;
 use crate::gateway::transform::{
-    CanonicalResponse, ResponsePart, StopReason, TransformError, Usage,
+    CanonicalResponse, Reasoning, ReasoningTransport, ResponsePart, StopReason, ToolKind,
+    TransformError, Usage,
 };
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
-#[derive(Default)]
 pub(super) struct AnthropicToResponses {
     id: Option<String>,
     model: Option<String>,
@@ -15,6 +16,22 @@ pub(super) struct AnthropicToResponses {
     started: bool,
     blocks: BTreeMap<u64, Block>,
     completed: bool,
+    reasoning_transport: Option<ReasoningTransport>,
+}
+
+impl AnthropicToResponses {
+    pub(super) fn new(reasoning_transport: Option<ReasoningTransport>) -> Self {
+        Self {
+            id: None,
+            model: None,
+            usage: Usage::default(),
+            stop: StopReasonState::default(),
+            started: false,
+            blocks: BTreeMap::new(),
+            completed: false,
+            reasoning_transport,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -34,10 +51,25 @@ enum Block {
         text: String,
         stopped: bool,
     },
+    Thinking {
+        text: String,
+        /// Anthropic signs the finished trace through `signature_delta`.
+        signature: Option<String>,
+        stopped: bool,
+        /// The opaque item is released as soon as the upstream block closes so
+        /// it precedes the assistant message exactly as it did upstream.
+        reasoning: Option<Reasoning>,
+    },
+    Redacted {
+        data: String,
+        stopped: bool,
+        reasoning: Option<Reasoning>,
+    },
     Tool {
         id: String,
         name: String,
         namespace: Option<String>,
+        kind: ToolKind,
         arguments: String,
         stopped: bool,
     },
@@ -56,7 +88,7 @@ impl AnthropicToResponses {
             Some("message_start") => self.message_start(&frame, &mut output)?,
             Some("content_block_start") => self.block_start(&frame, &mut output)?,
             Some("content_block_delta") => self.block_delta(&frame, &mut output)?,
-            Some("content_block_stop") => self.block_stop(&frame)?,
+            Some("content_block_stop") => self.block_stop(&frame, &mut output)?,
             Some("message_delta") => self.message_delta(&frame)?,
             Some("message_stop") => self.complete(&frame, &mut output)?,
             Some("error") => return Err(TransformError("上游 Anthropic SSE 返回错误".to_string())),
@@ -81,6 +113,7 @@ impl AnthropicToResponses {
     }
 }
 
+mod blocks;
 mod complete;
 mod events;
 mod json;

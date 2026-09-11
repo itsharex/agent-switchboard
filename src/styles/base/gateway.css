@@ -1,0 +1,178 @@
+/* 本机协议网关（设置 → 诊断）。2026-09-11 用户指令去 Tailwind 化：本页曾按
+ * 图表组件层的工具类语言实现，现全部回归 Frosted Relay 令牌；唯一保留的
+ * boardui 表面是趋势图表卡（components/charts/GatewayTrendChart.tsx 内的
+ * .bui-scope）。 */
+
+.asb-gateway-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+}
+
+.asb-gateway-info,
+.asb-gateway-alert,
+.asb-gateway-tile {
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-content-muted);
+}
+
+/* 监听信息面：三行监听事实与端口修改说明共用同一内嵌信息面。 */
+.asb-gateway-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3) var(--asb-space-4);
+}
+
+.asb-gateway-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-2);
+  font: var(--asb-text-body);
+}
+
+.asb-gateway-row-label {
+  width: 5em;
+  flex: none;
+  color: var(--asb-text-muted);
+}
+
+.asb-gateway-row-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-gateway-info > .asb-scope-note {
+  margin: 0;
+}
+
+/* 失败 / 修复 / 恢复横幅：中性信息面承载，错误语义由文字颜色表达。 */
+.asb-gateway-alert {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-3) var(--asb-space-4);
+}
+
+.asb-gateway-alert > p { margin: 0; font: var(--asb-text-body); }
+.asb-gateway-alert > .asb-gateway-alert-title { color: var(--asb-danger); }
+.asb-gateway-alert > .asb-gateway-alert-copy { color: var(--asb-text-muted); }
+.asb-gateway-alert > .asb-panel-actions { justify-content: flex-start; }
+
+.asb-gateway-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-3);
+}
+
+.asb-gateway-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  padding: var(--asb-space-3) var(--asb-space-4);
+}
+
+.asb-gateway-tile-label {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-gateway-tile-value {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 活动路由 / 上游协议分布 / 最近请求的公共小节。 */
+.asb-gateway-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-gateway-empty {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-gateway-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-gateway-route-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-2);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-gateway-route-client { color: var(--asb-text); }
+
+/* 上游协议分布：文本行内的比例条，序列色沿用图表层桥接的 chart 令牌。 */
+.asb-gateway-protocol-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-gateway-protocol-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-3);
+  font: var(--asb-text-body);
+}
+
+.asb-gateway-protocol-name {
+  width: 9em;
+  flex: none;
+  color: var(--asb-text-muted);
+}
+
+.asb-gateway-protocol-bar {
+  height: var(--asb-space-1);
+  min-width: 0;
+  border-radius: var(--asb-radius-pill);
+}
+
+.asb-gateway-protocol-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-gateway-revision { overflow-wrap: anywhere; }
+
+.asb-gateway-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-gateway-error {
+  margin: 0;
+  color: var(--asb-danger);
+  font: var(--asb-text-body);
+}
+
+.asb-gateway-status {
+  font: var(--asb-text-body);
+  color: var(--asb-text-muted);
+}
+
+.asb-gateway-status.is-failure { color: var(--asb-danger); }
+
+@media (min-width: 960px) {
+  .asb-gateway-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

@@ -27,11 +27,11 @@
 ## 界面
 
 <p align="center">
-  <img src="docs/screenshots/providers.png" width="100%" alt="供应商工作区：Codex 与 Claude 渐变星光双卡、当前连接和档案列表">
+  <img src="docs/screenshots/providers.png" width="100%" alt="供应商工作区：Codex 与 Claude 当前连接双卡、当前连接和档案列表">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/providers-dark.png" width="100%" alt="最小桌面宽度下的深色供应商工作区：保留渐变星光双卡与实体信息面">
+  <img src="docs/screenshots/providers-dark.png" width="100%" alt="最小桌面宽度下的深色供应商工作区：实体当前连接双卡与信息面">
 </p>
 
 <p align="center">
@@ -40,28 +40,28 @@
 
 截图来自实际生产前端与隔离测试夹具，档案和状态均为虚构，不包含真实用户数据。这些截图展示界面，不代表原生配置读写验收。
 
-主导航为供应商、扩展、会话、用量、设置，默认进入供应商。发现与 CC Switch 导入位于供应商子界面，官方额度和公开重置信号位于「用量 → 额度与重置」；备份、配置诊断、网关、日志和更新归入设置。编辑草稿跨工作区保留。
+主导航为供应商、扩展、会话、用量、设置，默认进入供应商。发现与导入位于供应商子界面，官方额度和公开重置信号位于「用量 → 额度与重置」；备份、配置诊断、网关、日志和更新归入设置。编辑草稿跨工作区保留。
 
 ## 核心能力
 
 ### 把配置变成可管理的档案
 
-- 为 Codex 与 Claude Code 分别保存供应商名称、模型、服务地址、密钥、`Responses` / `Chat Completions` / `Anthropic Messages` API 格式；请求认证由 API 格式唯一推导：`Responses` 与 `Chat Completions` 使用 `Authorization: Bearer <API 密钥>`，`Anthropic Messages` 使用 `x-api-key: <API 密钥>`。支持新建、编辑、排序、删除，以及从本机现有配置发现并导入。Codex 转到 Anthropic Messages 时还必须给出正整数的最大输出 token 数。
-- 自定义供应商与官方登录是两种清晰的连接方式。应用引导完成官方登录，但不会把登录令牌放进供应商档案或界面中。
+- Codex 第三方档案使用独立的完整契约：服务 API 根、API 密钥、上游协议、请求模式、默认模型、客户端模型目录、模型映射和逐项能力必须同时保存；Claude Code 保持通用供应商档案。请求认证由 API 格式唯一推导：`Responses` 与 `Chat Completions` 使用 `Authorization: Bearer <API 密钥>`，`Anthropic Messages` 使用 `x-api-key: <API 密钥>`。两类档案都支持新建、编辑、排序、删除和从本机现有配置导入；Codex 转到 Anthropic Messages 时还必须给出正整数的最大输出 token 数。
+- Claude Code 的自定义供应商与官方登录是两种清晰的连接方式。Codex 官方登录同样是一条可管理的连接方式：它可以像自定义供应商一样创建、重命名、删除和切回，只是不携带端点、密钥或模型目录。应用引导完成登录，但不会把登录令牌放进档案或界面中。
 - 自定义供应商列表与编辑器共用「供应商测试」模块，内含连通性测试与真实请求：查看完整请求地址，临时填写测试模型或按需获取该连接的模型列表后从下拉选择，显式发送固定短提示并查看实际回复、状态码和耗时。失败时区分网络、TLS、路径、认证、参数、模型和上游错误，并展示脱敏后的响应正文、request id 与 endpoint；正文超过 16 KiB 时明确标注截断。列表测试已保存档案，编辑器测试当前未保存的连接；草稿密钥只在准备时进入后端，模型获取、发送与取消只携带内存中的 `requestId`；请求凭证仅驻留内存，支持取消；每次请求可能产生少量费用，不修改客户端配置。原有连通性测试仅检测地址可达，真实请求只在收到有效模型回复后判定成功。
 - Codex 的 provider 标识和本应用对应显示统一为 `openai`：官方订阅直连，所有第三方模型请求经本机网关。先完成文件存储模式的官方登录才能激活第三方（目前不支持 keyring、auto、ephemeral），切换和恢复只写配置，不改 `auth.json`。Claude Code 的 Anthropic Messages 保持原生直连，其他协议通过网关。
-- Codex 跨协议及最小请求路由会在候选配置中把 `web_search` 固定为 `disabled`，但不会改写该供应商保存的网页搜索偏好；回到标准 `Responses` 后原值恢复。`client_metadata`、`prompt_cache_key`、`reasoning.summary=auto` 与 `reasoning.encrypted_content` 不会转发到非 Responses 上游，变更预览会明确提示这一限制。
-- 新建与编辑页参考 [CC Switch 的表单组织](https://github.com/farion1231/cc-switch/tree/main/src/components/providers/forms)，分组展示资料、连接与模型，按需展开高级选项；服务地址下直接显示后端解析的请求 URL，保存和取消位于统一底栏。
+- Codex 跨协议及最小请求路由会在候选配置中把 `web_search` 固定为 `disabled`，但不会改写该供应商保存的网页搜索偏好；回到标准 `Responses` 后原值恢复。`client_metadata`、`prompt_cache_key`、`reasoning.summary=auto` 与 `reasoning.encrypted_content` 不会转发到非 Responses 上游，变更预览会明确提示这一限制。`reasoning.effort` 例外：它按目标协议方言转换——Chat Completions 用档案声明的思考方言，Anthropic Messages 用 `output_config.effort`，显式 `none` 用 `thinking.type = "disabled"`，没有对应档位时明确失败而不是猜测。
+- 新建与编辑页分组展示资料、连接与模型，按需展开高级选项；服务地址下直接显示后端解析的请求 URL，保存和取消位于统一底栏。
 - 每个供应商独立保存运行参数。在供应商编辑页点击「配置运行参数」进入二级子界面，返回保留草稿，和连接信息一起保存；切换供应商同时应用它自己的参数。「自动」清除对应的手动值，由客户端与模型决定默认行为。
 - 通知、历史、审批与沙箱等偏好集中在「设置 → 偏好设置」，官方设置目录按需展开；全局指令位于「扩展 → 全局指令」。Codex 的默认子 agent 模型与默认推理强度位于各供应商的「配置运行参数」：模型从该供应商的模型列表选择，推理强度用滑块设置，切换时一同投影，适用于通过本机 harness 接入的非 OpenAI 上游。偏好设置中的「子 agent 运行」只直管启用、最大并发和中断消息三个全局键；各处的「自动」都会移除自己拥有的键，角色表与其余用户配置保留。客户端偏好支持「保存并预览应用」，确认后才写入客户端配置。
 
 ### 在落盘之前看见改变
 
-自定义 OpenAI-Compatible 的服务地址是**包含 API 前缀的完整 API 根地址**。例如 `https://example.com/v1` 对应 `/v1/responses`，`https://example.com/openai/v2` 对应 `/openai/v2/responses`；只填域名则请求 `/responses`。应用不猜测或自动补 `/v1`，模型列表也使用同一根路径。Anthropic 地址遵循 Claude Code 的服务根约定，在其后追加 `/v1/messages`。完整请求 endpoint、URL 凭据、查询参数和片段不能作为服务地址保存。
+Codex 第三方服务地址必须是**包含 API 前缀的完整 API 根地址**。例如 `https://example.com/v1` 对应 `/v1/responses`，`https://example.com/openai/v2` 对应 `/openai/v2/responses`；Codex 不接受只填域名的档案。导入的裸 OpenAI 地址在扫描与补全种子中规范为 `/v1`，经编辑器核对保存后才写入新档案；Claude 行仍走勾选批量导入。Claude Code 保持自己的服务根规则，Anthropic 地址在根后追加 `/v1/messages`。完整请求 endpoint、URL 凭据、查询参数和片段不能作为服务地址保存。
 
-Responses 档案显式保存 `responsesOptions.requestMode`（`standard` / `minimal`）。Codex 到网关支持 HTTP/SSE 和 WebSocket；网关到第三方统一使用 HTTP/SSE，不提供 WebSocket 或保留登录开关。第三方配置仅写 `model_provider = "openai"` 与带本机路由凭证的 `openai_base_url`，第三方密钥留在应用档案中，官方 OAuth 不转发给第三方。
+Codex 档案显式保存 `requestMode`（`standard` / `minimal`）以及每个模型与操作的能力声明。Codex 到网关支持 HTTP/SSE 和 WebSocket；网关到第三方统一使用 HTTP/SSE，不提供 WebSocket 或保留登录开关。第三方配置仅写 `model_provider = "openai"` 与带稳定本机 capability 的 `openai_base_url`，第三方密钥留在应用档案中，官方 OAuth 不转发给第三方。
 
-最小模式经网关省略 reasoning、service_tier、store、include 和 metadata 等可选字段，保留输入与工具语义；WebSocket 续聊先重建上下文再裁剪字段，未知 response ID 明确失败。网关支持 Codex 历史压缩，压缩后摘要以本机加密载荷在同一档案、同一后端续接；旧版网关推理载荷及跨后端的未知加密内容不保证续接。已有会话文件不迁移、不改写。第三方请求需要本应用持续运行，退出后重新打开即可恢复有效路由；不会自动切回官方或更换供应商。
+最小模式经网关省略 reasoning、service_tier、store、include 和 metadata 等可选字段，保留输入与工具语义；WebSocket 续聊先重建上下文再裁剪字段，未知 response ID 明确失败。原生 Responses 的 `/responses/compact` 与 V2 `compaction_trigger` 按档案能力直接处理；桥接路由只在明确需要时生成 ASB 摘要。仅 ASB 自有 `asb-compaction-v1.` 载荷可在同一路由重启后续接，跨后端不透明内容明确拒绝；已有会话文件不迁移、不改写。推理续接同理：`asb-reasoning-v3.` 载荷封存可读文本、上游签名与上游自己的不透明块，只回放给产生它的同一后端，本机密文从不进入上游请求，跨后端无法阅读的不透明内容明确拒绝。第三方请求需要本应用持续运行，退出后重新打开即可恢复有效路由；不会自动切回官方或更换供应商。
 
 缺少显式 Responses 能力字段的旧档案会被拒绝，原文件保持不变；需要补齐字段或重新导入，不进行能力猜测或旧格式回退。
 
@@ -76,7 +76,7 @@ Responses 档案显式保存 `responsesOptions.requestMode`（`standard` / `mini
 
 ### 扩展（Skills 与 MCP）有自己的工作区
 
-- 「扩展」页以 Skills / MCP 页签、客户端启用数量、搜索和紧凑列表管理资源；流程参考 CC Switch，视觉沿用本项目设计。Skill 来源发现独立成页，本机发现、新建、编辑和历史通过弹窗进入；支持全库检查更新、逐项或全部更新、按绑定固定内容版本，部署仍按客户端与作用域确认。供应商切换不会触碰已部署的扩展。
+- 「扩展」页以 Skills / MCP 页签、客户端启用数量、搜索和紧凑列表管理资源；视觉沿用本项目设计。Skill 来源发现独立成页，本机发现、新建、编辑和历史通过弹窗进入；支持全库检查更新、逐项或全部更新、按绑定固定内容版本，部署仍按客户端与作用域确认。供应商切换不会触碰已部署的扩展。
 - 每次安装、停用、移除都先展示脱敏计划与目标文件清单，确认后经事务写入；多目标批次失败会整体回滚，中断的操作可从历史恢复。
 - 敏感值只存入系统凭据存储，配置里只写环境变量引用或按预览明示写入的值；连接检测是显式发起的有界探测，结果只代表本次检测，不代表原生客户端已连通。扩展数据保存在本机，不参与云端备份。
 

@@ -11,6 +11,7 @@ import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
 import { useUsageHistory } from "./use-usage-history";
+import { UsageIcon } from "./icons";
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
@@ -127,7 +128,12 @@ export function CodexOfficialResetPanel() {
         <p className="asb-empty" role="status">正在读取本地缓存</p>
       )}
       {quota === null && !cacheLoading && !cacheError && !statusNotice && !readError && (
-        <p className="asb-empty">尚无官方额度读取记录。手动刷新以读取本机 Codex 官方登录。</p>
+        <div className="asb-empty-state">
+          <span className="asb-empty-state-icon" aria-hidden="true">
+            <UsageIcon />
+          </span>
+          <h3 className="asb-section-title">尚无官方额度读取记录。手动刷新以读取本机 Codex 官方登录。</h3>
+        </div>
       )}
       {cacheError && <p className="asb-warn-text" role="alert">本地缓存不可用：{cacheError}</p>}
       {statusNotice && <p className="asb-warn-text" role="alert">{statusNotice}</p>}

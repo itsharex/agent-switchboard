@@ -117,12 +117,12 @@ fn start_api(root: &Path) -> (tauri::App, crate::local_state::LocalState, Api) {
 
 fn draft(base_url: &str) -> ProviderDraft {
     serde_json::from_value(json!({
-        "app": "codex", "routeMode": "custom", "name": "Loopback request fixture",
+        "app": "claude", "routeMode": "custom", "name": "Loopback request fixture",
         "apiKey": "isolated-provider-request-key", "baseUrl": base_url,
         "model": "stored-model", "upstreamProtocol": "responses",
         "responsesOptions": { "requestMode": "standard" },
         "maxOutputTokens": null, "modelOptions": null, "websiteUrl": null,
-        "parameters": asb_core::ownership::default_provider_parameters(AppKind::Codex),
+        "parameters": asb_core::ownership::default_provider_parameters(AppKind::Claude),
     }))
     .unwrap()
 }
@@ -285,7 +285,7 @@ fn fetches_models(api: &Api, upstream: &Server, profile_id: &str, base_url: &str
         json!({"target": {"kind": "draft", "connection": {"apiKey": "not-accepted"}}}),
     );
     assert_eq!(obsolete["kind"], "failure");
-    assert_eq!(obsolete["error"]["code"], "web-argument-invalid");
+    assert_eq!(obsolete["error"]["code"], "web-argument-missing");
     assert!(upstream
         .recv_timeout(Duration::from_millis(50))
         .unwrap()

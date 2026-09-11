@@ -1,10 +1,11 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
+import { TabButton } from "./TabButton";
 
 interface TabsProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   scope: string;
-  tabs: ReadonlyArray<{ value: T; label: string; controls?: string; disabled?: boolean }>;
+  tabs: ReadonlyArray<{ value: T; label: ReactNode; controls?: string; disabled?: boolean }>;
   label: string;
 }
 
@@ -20,19 +21,17 @@ export function Tabs<T extends string>({ value, onChange, scope, tabs, label }: 
   return (
     <div className="asb-tabs" role="tablist" aria-label={label}>
       {tabs.map((tab, index) => (
-        <button
+        <TabButton
+          role="tab"
+          selected={value === tab.value}
+          tabId={`${scope}-${tab.value}-tab`}
+          controls={tab.controls}
           key={tab.value}
           ref={(element) => {
             buttons.current[index] = element;
           }}
-          id={`${scope}-${tab.value}-tab`}
-          type="button"
-          role="tab"
-          aria-selected={value === tab.value}
-          aria-controls={tab.controls}
           disabled={tab.disabled}
           tabIndex={value === tab.value ? 0 : -1}
-          className={`asb-tab${value === tab.value ? " is-on" : ""}`}
           onClick={() => onChange(tab.value)}
           onKeyDown={(event) => {
             if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -56,7 +55,7 @@ export function Tabs<T extends string>({ value, onChange, scope, tabs, label }: 
           }}
         >
           {tab.label}
-        </button>
+        </TabButton>
       ))}
     </div>
   );

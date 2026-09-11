@@ -42,7 +42,7 @@ fn plan(app: AppKind, mode: RouteMode) -> SwitchPlan {
         SwitchPlan::through_gateway(
             profile,
             default_client_settings(app),
-            "http://127.0.0.1:47821/codex/fixture/v1".into(),
+            "http://127.0.0.1:47821/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1".into(),
             String::new(),
         )
     } else {
@@ -53,9 +53,13 @@ fn plan(app: AppKind, mode: RouteMode) -> SwitchPlan {
 #[test]
 fn codex_identity_is_provider_and_gateway_endpoint_only() {
     let plan = plan(AppKind::Codex, RouteMode::Custom);
-    let text = "model_provider = 'openai'\nopenai_base_url = 'http://127.0.0.1:47821/codex/fixture/v1'\nmodel = 'externally-changed'";
+    let text = "model_provider = 'openai'\nopenai_base_url = 'http://127.0.0.1:47821/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1'\nmodel = 'externally-changed'";
     assert!(matches_provider_identity(text, &plan).unwrap());
-    assert!(!matches_provider_identity(&text.replace("fixture", "revoked"), &plan).unwrap());
+    assert!(!matches_provider_identity(
+        &text.replace("0123456789abcdef", "fedcba9876543210"),
+        &plan
+    )
+    .unwrap());
     assert!(
         !matches_provider_identity(&text.replace("'openai'", "'agent_switchboard'"), &plan)
             .unwrap()

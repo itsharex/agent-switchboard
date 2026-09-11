@@ -108,9 +108,7 @@ pub async fn query_profile_usage(
 ) -> Result<UsageSummary, CommandError> {
     let state = state(&app)?;
     let summary = blocking(move || {
-        let profile = state
-            .configuration()
-            .find_provider(&profile_id)
+        let profile = crate::usage_query::scheduler::usage_profile(&state, &profile_id)
             .map_err(|error| CommandError::new("profile-not-found", error))?;
         crate::usage_query::scheduler::execute_once(&state, &profile)
             .map_err(|error| CommandError::new("usage-query-failed", error))
@@ -130,9 +128,7 @@ pub async fn read_profile_usage(
 ) -> Result<Option<UsageSummary>, CommandError> {
     let state = state(&app)?;
     blocking(move || {
-        let profile = state
-            .configuration()
-            .find_provider(&profile_id)
+        let profile = crate::usage_query::scheduler::usage_profile(&state, &profile_id)
             .map_err(|error| CommandError::new("profile-not-found", error))?;
         Ok(crate::usage_cache::get(&state, &profile))
     })

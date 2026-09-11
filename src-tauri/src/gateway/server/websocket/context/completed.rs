@@ -36,6 +36,8 @@ pub(super) fn normalize_completed_output(value: &Value) -> Result<Value, Context
     match required_string(item, "type", "response.completed output")?.as_str() {
         "message" => completed_message(item),
         "function_call" => completed_tool_call(item),
+        "custom_tool_call" => completed_custom_tool_call(item),
+        "tool_search_call" => completed_tool_search_call(item),
         "reasoning" => {
             allowed(
                 item,
@@ -72,6 +74,63 @@ pub(super) fn normalize_completed_output(value: &Value) -> Result<Value, Context
             "Responses output.type {kind} 不支持跨协议上下文重放"
         ))),
     }
+}
+
+fn completed_custom_tool_call(item: &Map<String, Value>) -> Result<Value, ContextError> {
+    allowed(
+        item,
+        &["type", "id", "call_id", "name", "input", "status"],
+        "Responses custom_tool_call",
+    )?;
+    required_nonempty_string(item, "id", "Responses custom_tool_call")?;
+    required_nonempty_string(item, "call_id", "Responses custom_tool_call")?;
+    required_nonempty_string(item, "name", "Responses custom_tool_call")?;
+    required_string(item, "input", "Responses custom_tool_call")?;
+    if required_string(item, "status", "Responses custom_tool_call")? != "completed" {
+        return Err(ContextError::invalid(
+            "Responses custom_tool_call 必须已完成",
+        ));
+    }
+    Ok(json!({
+        "type": "custom_tool_call",
+        "call_id": item["call_id"],
+        "name": item["name"],
+        "input": item["input"],
+    }))
+}
+
+fn completed_tool_search_call(item: &Map<String, Value>) -> Result<Value, ContextError> {
+    allowed(
+        item,
+        &["type", "id", "call_id", "status", "execution", "arguments"],
+        "Responses tool_search_call",
+    )?;
+    required_nonempty_string(item, "call_id", "Responses tool_search_call")?;
+    if required_string(item, "status", "Responses tool_search_call")? != "completed" {
+        return Err(ContextError::invalid(
+            "Responses tool_search_call 必须已完成",
+        ));
+    }
+    if required_string(item, "execution", "Responses tool_search_call")? != "client" {
+        return Err(ContextError::invalid(
+            "Responses tool_search_call.execution 必须是 client",
+        ));
+    }
+    let arguments = item
+        .get("arguments")
+        .ok_or_else(|| ContextError::invalid("Responses tool_search_call 缺少 arguments"))?;
+    if !arguments.is_object() {
+        return Err(ContextError::invalid(
+            "Responses tool_search_call.arguments 必须是对象",
+        ));
+    }
+    Ok(json!({
+        "type": "tool_search_call",
+        "call_id": item["call_id"],
+        "status": "completed",
+        "execution": "client",
+        "arguments": arguments,
+    }))
 }
 
 pub(super) fn normalize_completed_content(value: &Value) -> Result<Value, ContextError> {

@@ -5,6 +5,7 @@ import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { Table, type TableColumn } from "./Table";
 import { Time } from "./Time";
+import { RestoreIcon } from "./icons";
 
 interface Props {
   records: BackupRecord[];
@@ -132,7 +133,14 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
   ];
 
   if (records.length === 0) {
-    return <p className="asb-empty">暂无备份</p>;
+    return (
+      <div className="asb-empty-state">
+        <span className="asb-empty-state-icon" aria-hidden="true">
+          <RestoreIcon />
+        </span>
+        <h3 className="asb-section-title">暂无备份</h3>
+      </div>
+    );
   }
 
   return (

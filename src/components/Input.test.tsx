@@ -1,8 +1,13 @@
 import { useState } from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Input } from "./Input";
+
+const formsCss = readFileSync(resolve(process.cwd(), "src/styles/base/forms.css"), "utf8");
+const rootCss = readFileSync(resolve(process.cwd(), "src/styles/base/root.css"), "utf8");
 
 function Harness({ code = false, disabled = false }: { code?: boolean; disabled?: boolean }) {
   const [value, setValue] = useState("");
@@ -48,5 +53,14 @@ describe("Input", () => {
   it("applies the monospace code variant", () => {
     render(<Harness code />);
     expect(screen.getByRole("textbox")).toHaveClass("asb-code");
+  });
+
+  it("uses only its existing border as the keyboard focus cue", () => {
+    const focusRule = formsCss.match(/\.asb-input:focus-visible\s*\{[^}]*\}/)?.[0];
+
+    expect(focusRule).toContain("border-color: var(--asb-action)");
+    expect(focusRule).not.toContain("box-shadow");
+    expect(focusRule).not.toContain("outline");
+    expect(rootCss).toMatch(/:focus,\s*:focus-visible\s*\{\s*outline: none;/);
   });
 });

@@ -1,7 +1,8 @@
 import { useId, useMemo, useState } from "react";
-import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, ComposedChart, Line, Tooltip, XAxis, YAxis } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
 import { cx } from "@/utils/cx";
+import { ChartFrame } from "./ChartFrame";
 import {
   formatChartAxisTime,
   formatChartAxisValue,
@@ -156,7 +157,7 @@ function TrendCard({
 
       {/* Chart */}
       <div className="min-h-0 w-full flex-1">
-        <ResponsiveContainer width="100%" height="100%">
+        <ChartFrame>
           <ComposedChart
             data={rows}
             margin={{ top: 4, right: 6, bottom: 0, left: 0 }}
@@ -224,7 +225,7 @@ function TrendCard({
               />
             ))}
           </ComposedChart>
-        </ResponsiveContainer>
+        </ChartFrame>
       </div>
     </figure>
   );

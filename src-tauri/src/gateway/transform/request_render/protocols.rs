@@ -19,6 +19,7 @@ pub(super) fn render_chat(request: &CanonicalRequest) -> Result<Value, Transform
                         id,
                         content,
                         is_error,
+                        ..
                     } = part
                     {
                         if *is_error {
@@ -59,18 +60,40 @@ pub(super) fn render_chat(request: &CanonicalRequest) -> Result<Value, Transform
                 for part in &message.parts {
                     match part {
                         Part::Text(_) | Part::Image(_) => text.push(part.clone()),
-                        Part::Reasoning(value) => reasoning.push_str(&value.content),
+                        Part::Reasoning(value) => {
+                            // Chat history can only carry a readable trace. An
+                            // upstream opaque block belongs to another backend
+                            // and must not be silently dropped here.
+                            if value.content.is_empty() {
+                                return error(
+                                    "该推理是不透明上游块，无法用于 Chat Completions 历史",
+                                );
+                            }
+                            reasoning.push_str(&value.content);
+                        }
                         Part::ToolCall {
                             id,
                             name,
                             namespace,
+                            kind,
                             input,
-                        } => calls.push(json!({
-                            "id": id,
-                            "type": "function",
-                            "function": { "name": render_target_name(UpstreamProtocol::ChatCompletions, namespace.as_deref(), name)?, "arguments": serde_json::to_string(input).map_err(|_| TransformError("无法编码工具参数".to_string()))? },
-                        })),
-                        Part::ToolResult { .. } => return error("assistant 消息不能包含 tool_result"),
+                        } => {
+                            let arguments = match kind {
+                                ToolKind::Function => input.clone(),
+                                ToolKind::Custom => {
+                                    json!({ "input": input.as_str().ok_or_else(|| TransformError("custom 工具输入必须是字符串".to_string()))? })
+                                }
+                                ToolKind::ToolSearch => input.clone(),
+                            };
+                            calls.push(json!({
+                                "id": id,
+                                "type": "function",
+                                "function": { "name": render_target_name(UpstreamProtocol::ChatCompletions, namespace.as_deref(), name, *kind)?, "arguments": serde_json::to_string(&arguments).map_err(|_| TransformError("无法编码工具参数".to_string()))? },
+                            }));
+                        }
+                        Part::ToolResult { .. } => {
+                            return error("assistant 消息不能包含 tool_result")
+                        }
                     }
                 }
                 let mut output = Map::new();
@@ -134,9 +157,6 @@ pub(super) fn render_anthropic(request: &CanonicalRequest) -> Result<Value, Tran
     let max_tokens = request.max_tokens.ok_or_else(|| {
         TransformError("转换到 Anthropic Messages 时必须提供最大输出 token 数".to_string())
     })?;
-    if request.reasoning_effort.is_some() {
-        return error("Chat reasoning_effort 无法无损转换到 Anthropic thinking");
-    }
     let mut messages = Vec::new();
     for message in &request.messages {
         let role = match message.role {
@@ -162,6 +182,20 @@ pub(super) fn render_anthropic(request: &CanonicalRequest) -> Result<Value, Tran
     root.insert("model".to_string(), Value::String(request.model.clone()));
     root.insert("messages".to_string(), Value::Array(messages));
     root.insert("max_tokens".to_string(), Value::Number(max_tokens.into()));
+    if let Some(reasoning_effort) = request.reasoning_effort {
+        // The inverse of `parse_anthropic_output_effort`: Anthropic expresses
+        // the Codex reasoning level as the documented output effort control.
+        root.insert(
+            "output_config".to_string(),
+            json!({
+                "effort": match reasoning_effort {
+                    ReasoningEffort::Low => "low",
+                    ReasoningEffort::High => "high",
+                    ReasoningEffort::Max => "max",
+                },
+            }),
+        );
+    }
     if let Some(user_id) = &request.user_id {
         root.insert("metadata".to_string(), json!({ "user_id": user_id }));
     }
@@ -189,6 +223,7 @@ pub(super) fn render_anthropic(request: &CanonicalRequest) -> Result<Value, Tran
                                 UpstreamProtocol::AnthropicMessages,
                                 tool.namespace.as_deref(),
                                 &tool.name,
+                                tool.kind,
                             )?),
                         );
                         if let Some(description) = &tool.description {
@@ -232,6 +267,7 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
             match part {
                 Part::ToolResult {
                     id,
+                    kind,
                     content,
                     is_error,
                 } => {
@@ -243,16 +279,25 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
                     }
                     push_responses_message(&mut input, role, &ordinary)?;
                     ordinary.clear();
-                    input.push(json!({
-                        "type": "function_call_output",
-                        "call_id": id,
-                        "output": render_responses_content(content)?,
-                    }));
+                    match kind {
+                        ToolKind::Function => input.push(json!({
+                            "type": "function_call_output",
+                            "call_id": id,
+                            "output": render_responses_content(content)?,
+                        })),
+                        ToolKind::ToolSearch => {
+                            input.push(tool_search_output_from_content(id, content)?)
+                        }
+                        ToolKind::Custom => {
+                            return error("custom_tool_call_output 无法无损转换到 Responses")
+                        }
+                    }
                 }
                 Part::ToolCall {
                     id,
                     name,
                     namespace,
+                    kind,
                     input: arguments,
                 } => {
                     if message.role != Role::Assistant {
@@ -263,20 +308,54 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
                     let mut call = Map::new();
                     call.insert(
                         "type".to_string(),
-                        Value::String("function_call".to_string()),
+                        Value::String(
+                            match kind {
+                                ToolKind::Function => "function_call",
+                                ToolKind::Custom => "custom_tool_call",
+                                ToolKind::ToolSearch => "tool_search_call",
+                            }
+                            .to_string(),
+                        ),
                     );
                     call.insert("call_id".to_string(), Value::String(id.clone()));
                     call.insert("name".to_string(), Value::String(name.clone()));
                     if let Some(namespace) = namespace {
                         call.insert("namespace".to_string(), Value::String(namespace.clone()));
                     }
-                    call.insert(
-                        "arguments".to_string(),
-                        Value::String(
-                            serde_json::to_string(arguments)
-                                .map_err(|_| TransformError("无法编码工具参数".to_string()))?,
-                        ),
-                    );
+                    match kind {
+                        ToolKind::Function => {
+                            call.insert(
+                                "arguments".to_string(),
+                                Value::String(
+                                    serde_json::to_string(arguments).map_err(|_| {
+                                        TransformError("无法编码工具参数".to_string())
+                                    })?,
+                                ),
+                            );
+                        }
+                        ToolKind::Custom => {
+                            call.insert(
+                                "input".to_string(),
+                                Value::String(
+                                    arguments
+                                        .as_str()
+                                        .ok_or_else(|| {
+                                            TransformError(
+                                                "custom 工具输入必须是字符串".to_string(),
+                                            )
+                                        })?
+                                        .to_string(),
+                                ),
+                            );
+                        }
+                        ToolKind::ToolSearch => {
+                            call.insert(
+                                "execution".to_string(),
+                                Value::String("client".to_string()),
+                            );
+                            call.insert("arguments".to_string(), arguments.clone());
+                        }
+                    }
                     input.push(Value::Object(call));
                 }
                 Part::Reasoning(reasoning) => {
@@ -330,6 +409,23 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
         root.insert("top_p".to_string(), value.clone());
     }
     Ok(Value::Object(root))
+}
+
+fn tool_search_output_from_content(id: &str, content: &[Part]) -> Result<Value, TransformError> {
+    let [Part::Text(serialized)] = content else {
+        return error("tool_search_output 必须保留为单个 JSON 文本结果");
+    };
+    let item: Value = serde_json::from_str(serialized)
+        .map_err(|_| TransformError("tool_search_output 不是有效 JSON".to_string()))?;
+    let item = item
+        .as_object()
+        .ok_or_else(|| TransformError("tool_search_output 必须是对象".to_string()))?;
+    if item.get("type").and_then(Value::as_str) != Some("tool_search_output")
+        || item.get("call_id").and_then(Value::as_str) != Some(id)
+    {
+        return error("tool_search_output 与工具调用不一致");
+    }
+    Ok(Value::Object(item.clone()))
 }
 
 pub(super) fn push_responses_message(

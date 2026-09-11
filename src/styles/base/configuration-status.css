@@ -38,7 +38,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--asb-space-unit);
-  padding: 2px var(--asb-space-2);
+  padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-action);
   background: var(--asb-content);
@@ -48,8 +48,8 @@
 }
 
 .asb-status-pill-dot {
-  width: 6px;
-  height: 6px;
+  width: calc(var(--asb-space-unit) + var(--asb-space-hairline));
+  height: calc(var(--asb-space-unit) + var(--asb-space-hairline));
   border-radius: 50%;
   background: var(--asb-warning);
 }
@@ -126,8 +126,8 @@
 .asb-codex-reset-read-state {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 2px var(--asb-space-2);
+  min-height: var(--asb-control-height-micro);
+  padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-action);
   background: var(--asb-content);
@@ -280,10 +280,6 @@
 
 .asb-codex-reset-source-link:hover {
   color: var(--asb-text);
-}
-
-.asb-codex-reset-source-link:focus-visible {
-  outline: var(--asb-focus-ring);
 }
 
 /* The official account-reset summary sources from the machine's own Codex

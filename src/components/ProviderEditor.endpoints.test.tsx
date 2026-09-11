@@ -5,8 +5,13 @@ import * as client from "../api/client";
 import { ProviderEditor } from "../test/provider-editor";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-const props = { profile: null, initialApp: "codex" as const, busy: false, officialTakenApps: [],
+const props = { profile: null, initialApp: "claude" as const, busy: false, officialTakenApps: [],
   userConfigModel: null, onCancel: vi.fn(), onSave: vi.fn() };
+
+async function selectResponses(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("combobox", { name: "API 格式" }));
+  await user.click(await screen.findByRole("option", { name: /Responses/ }));
+}
 
 function deferred() {
   let resolve!: (value: client.ProviderEndpoints) => void;
@@ -16,9 +21,11 @@ function deferred() {
 }
 
 it("resolves a nonempty API root through the backend without sending credentials", async () => {
+  const user = userEvent.setup();
   const result = { requestUrl: "https://backend-selected.example/v2/responses", modelsUrl: "https://backend-selected.example/v2/models" };
   const resolve = vi.mocked(client.resolveProviderEndpoints).mockResolvedValue(result);
   render(<ProviderEditor {...props} />);
+  await selectResponses(user);
   expect(resolve).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText("API 密钥"), { target: { value: "private-test-key" } });
   expect(resolve).not.toHaveBeenCalled();
@@ -30,10 +37,12 @@ it("resolves a nonempty API root through the backend without sending credentials
 });
 
 it.each(["success", "failure"])("discards a late resolver %s after a newer address resolves", async (outcome) => {
+  const user = userEvent.setup();
   const first = deferred();
   const second = deferred();
   vi.mocked(client.resolveProviderEndpoints).mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise);
   render(<ProviderEditor {...props} />);
+  await selectResponses(user);
   const input = screen.getByLabelText("服务地址");
   fireEvent.change(input, { target: { value: "https://first.example" } });
   fireEvent.change(input, { target: { value: "https://second.example/v2" } });
@@ -52,6 +61,7 @@ it("uses the selected protocol to resolve the actual upstream address for a gate
     .mockResolvedValueOnce({ requestUrl: "https://upstream.example/responses", modelsUrl: "https://upstream.example/models" })
     .mockResolvedValueOnce({ requestUrl: "https://upstream.example/chat/completions", modelsUrl: "https://upstream.example/models" });
   render(<ProviderEditor {...props} />);
+  await selectResponses(user);
   fireEvent.change(screen.getByLabelText("服务地址"), { target: { value: "https://upstream.example" } });
   await screen.findByText("https://upstream.example/responses");
   await user.click(screen.getByRole("combobox", { name: "API 格式" }));
@@ -61,10 +71,12 @@ it("uses the selected protocol to resolve the actual upstream address for a gate
 });
 
 it("shows the backend path error beside the URL and clears the previous resolved address", async () => {
+  const user = userEvent.setup();
   const resolve = vi.mocked(client.resolveProviderEndpoints)
     .mockResolvedValueOnce({ requestUrl: "https://upstream.example/responses", modelsUrl: "https://upstream.example/models" })
     .mockRejectedValueOnce({ code: "provider-endpoint-invalid", message: "请填写 API 根地址，不要包含 /responses" });
   render(<ProviderEditor {...props} />);
+  await selectResponses(user);
   const input = screen.getByLabelText("服务地址");
   fireEvent.change(input, { target: { value: "https://upstream.example" } });
   await screen.findByText("https://upstream.example/responses");

@@ -1,7 +1,7 @@
 //! Side-effect-free previews of both switch flavours plus the shared
 //! current-file readers and paired hashing.
 
-use asb_core::{AdapterError, AppKind, SwitchPlan};
+use asb_core::{adapter, AdapterError, AppKind, SwitchPlan};
 use std::io::ErrorKind;
 use std::path::Path;
 
@@ -44,7 +44,8 @@ pub fn read_preview<Io: SwitchIo>(
             message: e.to_string(),
         })?;
     let content_hash = sha256_hex(&current);
-    let (mut preview, rendered) = super::upgrade::candidate(&current, plan, backup_dir)?;
+    let mut preview = adapter::preview(&current, plan, backup_dir).map_err(plan_rejected)?;
+    let rendered = adapter::render(&current, plan).map_err(plan_rejected)?;
     if !target_existed {
         preview
             .warnings

@@ -13,6 +13,7 @@ import {
   Ellipsis,
   Eye,
   EyeOff,
+  FolderOpen,
   GripVertical,
   Minus,
   Pencil,
@@ -60,5 +61,6 @@ export const RequestIcon = icon(Send, 16);
 export const ChevronDownIcon = icon(ChevronDown, 16, 2.4);
 export const ChevronUpIcon = icon(ChevronUp, 16, 2.4);
 export const SearchIcon = icon(Search, 16, 2.4);
+export const FolderOpenIcon = icon(FolderOpen, 16);
 export const CheckIcon = icon(Check, 14, 3.6);
 export const DashIcon = icon(Minus, 14, 3.6);

@@ -102,8 +102,8 @@ export function DiscoveryWarnings({
   return (
     <section className="asb-discovery-warnings" aria-label="发现警告">
       <div className="asb-banner asb-banner-warning asb-discovery-summary">
-        <button
-          type="button"
+        <Button
+          variant="unstyled"
           className="asb-banner-toggle asb-discovery-summary-toggle"
           aria-expanded={open}
           aria-controls={detailsId}
@@ -116,7 +116,7 @@ export function DiscoveryWarnings({
             {summary}
             {stale && "（上次扫描未更新）"}
           </span>
-        </button>
+        </Button>
         <div className="asb-discovery-summary-actions">
           {repairable > 0 ? (
             <Button

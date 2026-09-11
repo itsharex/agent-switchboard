@@ -9,6 +9,12 @@
   padding: 0;
   margin: 0;
   list-style: none;
+  animation: asb-provider-list-appear var(--asb-motion-fast) var(--asb-easing) both;
+}
+
+@keyframes asb-provider-list-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .asb-row-item {
@@ -21,6 +27,9 @@
   border-radius: var(--asb-radius-control);
   background: var(--asb-content);
   color: var(--asb-text);
+  transition:
+    background-color var(--asb-motion-fast) var(--asb-easing),
+    border-color var(--asb-motion-press) var(--asb-easing);
 }
 
 /* The horizontal row line inside a card; the card can also carry the
@@ -31,25 +40,23 @@
   align-items: center;
   gap: var(--asb-space-2);
   width: 100%;
-  min-height: 52px;
+  --asb-row-line-min-height: 52px;
+  min-height: var(--asb-row-line-min-height);
 }
 
-.asb-row-item:hover {
-  background: var(--asb-row-selected);
+.asb-row-item:hover,
+.asb-row-item.is-selected,
+.asb-row-item.is-live {
+  border-color: var(--asb-action);
+  background: var(--asb-provider-row-highlight);
 }
 
 /* An unfolded preview turns the card into a reading surface: hover stops
    tinting it (user directive 2026-09-01). :where keeps this exception at
    the base rule's specificity so the is-live card below still wins. */
-.asb-row-item:where(.is-previewing):hover {
+.asb-row-item.is-previewing {
   background: var(--asb-content);
-}
-
-/* Live-matched rows use a quiet fill and shadow; the status badge carries the
-   state, so module edges remain neutral. */
-.asb-row-item.is-live {
-  background: var(--asb-row-selected);
-  box-shadow: var(--asb-live-shadow);
+  border-color: var(--asb-hairline-strong);
 }
 
 /* The selectable region: avatar + texts. A reset button, visually flat —
@@ -60,7 +67,7 @@
   align-items: center;
   gap: var(--asb-space-2);
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--asb-row-min-height-compact);
   padding: 0;
   border: 0;
   background: transparent;
@@ -74,7 +81,7 @@
 .asb-iconcluster {
   display: inline-flex;
   align-items: center;
-  gap: var(--asb-space-1);
+  gap: 0;
   flex: none;
 }
 
@@ -101,12 +108,6 @@
 .asb-provider-usage-title {
   min-width: 0;
   gap: var(--asb-space-2);
-}
-
-.asb-provider-usage-title h3 {
-  margin: 0;
-  font: var(--asb-text-body);
-  font-weight: 600;
 }
 
 .asb-provider-usage-actions {
@@ -152,7 +153,8 @@
 
 .asb-chart-empty {
   display: grid;
-  min-height: 224px;
+  --asb-chart-empty-min-height: 224px;
+  min-height: var(--asb-chart-empty-min-height);
   place-items: center;
   padding: var(--asb-space-3);
   margin: 0;
@@ -243,8 +245,6 @@
   border-top: 1px solid var(--asb-hairline);
 }
 
-.asb-usage-history h4,
-.asb-usage-history-metric h5,
 .asb-usage-history-unit {
   margin: 0;
   font: var(--asb-text-label);
@@ -286,7 +286,7 @@
 }
 
 .asb-official-login-code > code {
-  padding: 2px var(--asb-space-1);
+  padding: var(--asb-space-hairline) var(--asb-space-1);
   border: 1px solid var(--asb-hairline-strong);
   border-radius: var(--asb-radius-pill);
   background: var(--asb-code-bg);
@@ -340,11 +340,14 @@
   flex: none;
   padding: 0;
   border: 0;
-  border-radius: calc(var(--asb-radius-control) - 6px);
+  border-radius: var(--asb-radius-check);
   background: transparent;
   color: var(--asb-text-muted);
   cursor: grab;
   touch-action: none;
+  transition:
+    background-color var(--asb-motion-press) var(--asb-easing),
+    color var(--asb-motion-press) var(--asb-easing);
 }
 
 .asb-row-grip:hover {
@@ -362,26 +365,78 @@
   position: relative;
   z-index: 1;
   border-color: var(--asb-action);
-  box-shadow: var(--asb-route-shadow);
 }
 
-/* Row-level action entries (启用 primary, 官方 重新登录 secondary) share
-   .asb-row-activate, and the reveal rule below owns their flex layout.
-   The buttons render on every non-live row but stay hidden until the card
-   is hovered. The primary CTA carries the ported gradient identity
-   (Frosted Relay primary button; white text and glow token-owned); its
-   icon/text spacing lives here. */
+/* Row-level actions stay collapsed until the row is hovered. Only opacity is
+   animated, so the action fades in without the old expanding/pop-out motion. */
+.asb-row-item .asb-row-activate {
+  display: inline-flex;
+  min-width: 0;
+  max-inline-size: 0;
+  padding-inline: 0;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--asb-motion-press) var(--asb-easing),
+    visibility 0s linear var(--asb-motion-press);
+}
+
+.asb-row-item:hover .asb-row-activate {
+  max-inline-size: 128px;
+  padding-inline: var(--asb-space-3);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.asb-row-item .asb-iconcluster {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--asb-motion-press) var(--asb-easing),
+    visibility 0s linear var(--asb-motion-press);
+}
+
+.asb-row-item:hover .asb-iconcluster,
+:root[data-focus-source="key"] .asb-row-item:focus-within .asb-iconcluster {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+/* The primary CTA carries the list's only action emphasis. */
 .asb-row-item .asb-btn-primary {
   min-width: 0;
 }
 
 .asb-row-item .asb-btn-primary:not(:disabled) {
-  background: var(--asb-gradient-button);
-  box-shadow: var(--asb-gradient-button-glow);
+  background: var(--asb-action);
+  box-shadow: none;
 }
 
 .asb-row-item .asb-btn-primary:not(:disabled):hover {
-  box-shadow: var(--asb-gradient-button-glow-hover);
+  background: color-mix(in srgb, var(--asb-action) 88%, var(--asb-text));
+  box-shadow: none;
+}
+
+/* List action glyphs stay deliberately quieter than the provider name and
+   the sole blue enable action. Their shared button geometry keeps them
+   legible inside the 40px click target. */
+.asb-row-item .asb-btn-icon {
+  color: var(--asb-text-muted);
+}
+
+.asb-row-item .asb-btn-icon:hover {
+  color: var(--asb-text);
+}
+
+.asb-row-item .asb-btn-icon.is-active {
+  color: var(--asb-action);
 }
 
 /* The three-dot more trigger anchors a small action menu (delete lives
@@ -393,12 +448,13 @@
 
 .asb-row-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + var(--asb-space-unit));
   right: 0;
   z-index: 30;
   display: flex;
   flex-direction: column;
-  min-width: 128px;
+  --asb-row-menu-min-width: 128px;
+  min-width: var(--asb-row-menu-min-width);
   padding: var(--asb-space-1);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
@@ -410,7 +466,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--asb-space-1);
-  min-height: 36px;
+  min-height: var(--asb-control-height);
   padding: 0 var(--asb-space-2);
   border: 0;
   border-radius: var(--asb-radius-action);
@@ -435,21 +491,24 @@
 .asb-avatar {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: var(--asb-square-control-size);
+  height: var(--asb-square-control-size);
   flex: none;
   border-radius: var(--asb-radius-control);
   background: var(--asb-surface-rail);
   font: 600 16px/1 var(--asb-font-display);
   color: var(--asb-text-muted);
+  transition:
+    background-color var(--asb-motion-press) var(--asb-easing),
+    color var(--asb-motion-press) var(--asb-easing);
 }
 
 .asb-pill-status {
   flex: none;
   display: inline-flex;
   align-items: center;
-  padding: 2px var(--asb-space-2);
-  border-radius: 999px;
+  padding: var(--asb-space-hairline) var(--asb-space-2);
+  border-radius: var(--asb-radius-pill);
   background: var(--asb-row-selected);
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
@@ -458,7 +517,7 @@
 .asb-row-main {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--asb-space-unit);
   min-width: 0;
 }
 

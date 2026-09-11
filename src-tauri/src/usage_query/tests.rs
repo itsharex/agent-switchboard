@@ -174,7 +174,10 @@ fn imported_ccswitch_script_uses_profile_inputs_and_keeps_each_plan() {
             ),
         };
     let proposal = asb_core::ccswitch::map_row(&row).expect("mapped provider");
-    let Some(UsageQuery::Script { source, .. }) = proposal.draft.usage_query else {
+    let asb_core::ccswitch::CcSwitchProviderDraft::Claude(draft) = proposal.draft else {
+        panic!("Claude source must produce a Claude import draft");
+    };
+    let Some(UsageQuery::Script { source, .. }) = draft.usage_query else {
         panic!("query script should import");
     };
 

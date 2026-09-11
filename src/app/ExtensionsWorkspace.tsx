@@ -1,6 +1,5 @@
 import { ClientPicker } from "../components/ClientPicker";
 import { GlobalPromptManager } from "../components/GlobalPromptManager";
-import { clientName } from "../lib/client-name";
 import { ExtensionsPage } from "../pages/ExtensionsPage";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
@@ -15,7 +14,6 @@ function GlobalInstructions({ model }: { model: ExtensionsWorkspaceModel }) {
     <div className="asb-ext-instructions">
       <div className="asb-ext-instructions-heading">
         <ClientPicker app={app} onChange={model.providers.selectApp} disabled={busy} label="全局指令客户端" />
-        <p className="asb-field-help">保存后写入 {clientName(app)} 的全局指令文件。</p>
       </div>
       <GlobalPromptManager document={prompts.documents[app]}
         draft={prompts.drafts[app] ?? prompts.documents[app]?.content ?? ""}

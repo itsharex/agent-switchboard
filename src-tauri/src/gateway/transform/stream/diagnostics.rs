@@ -19,6 +19,10 @@ impl<R: Read> SseTranscoder<R> {
     }
 
     pub(crate) fn fail_io(&mut self, error: &io::Error) {
+        if let Some(error) = crate::gateway::content_encoding::stream_decode_error(error) {
+            self.fail(&format!("无法解压上游 SSE：{error}"));
+            return;
+        }
         self.fail_kind(
             network_failure_kind(error),
             &format!("读取上游 SSE 时连接中断：{error}"),
@@ -61,8 +65,10 @@ impl<R: Read> SseTranscoder<R> {
             .get("type")
             .and_then(Value::as_str)
             .or(frame.event.as_deref());
-        if !matches!(kind, Some("error" | "response.failed"))
-            && !value.get("error").is_some_and(|error| !error.is_null())
+        if !matches!(
+            kind,
+            Some("error" | "response.failed" | "response.incomplete")
+        ) && !value.get("error").is_some_and(|error| !error.is_null())
         {
             return false;
         }

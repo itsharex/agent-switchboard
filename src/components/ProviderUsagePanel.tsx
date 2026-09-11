@@ -1,5 +1,6 @@
 import type { ProviderProfile } from "../api/client";
 import { ProviderUsageTrend } from "./ProviderUsageTrend";
+import { Button } from "./Button";
 import { Time } from "./Time";
 import { UsageReadingsTable } from "./UsageReadingsTable";
 import type { ProviderUsage } from "./use-provider-usage";
@@ -20,27 +21,27 @@ export function ProviderUsagePanel({ id, profile, usage, onConfigure }: Props) {
     <section id={id} className="asb-provider-usage" aria-label={`${profile.name} 用量`}>
       <header className="asb-provider-usage-head">
         <div className="asb-provider-usage-title">
-          <h3>用量</h3>
+          <h3 className="asb-section-title">用量</h3>
         </div>
         <div className="asb-provider-usage-actions">
           {summary && <Time iso={summary.at} />}
           {onConfigure && (
-            <button
-              type="button"
+            <Button
+              variant="unstyled"
               className="asb-provider-usage-configure"
               onClick={() => onConfigure(profile)}
             >
               编辑查询
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
+          <Button
+            variant="unstyled"
             className="asb-provider-usage-refresh"
             disabled={querying}
             onClick={() => void run()}
           >
             {querying ? "读取中…" : "刷新"}
-          </button>
+          </Button>
         </div>
       </header>
 

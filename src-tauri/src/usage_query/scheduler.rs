@@ -44,8 +44,30 @@ fn run_tick(app: &AppHandle) {
             return;
         }
     };
-    for record in records {
-        let profile = &record.profile;
+    let mut profiles = records
+        .into_iter()
+        .map(|record| record.profile)
+        .collect::<Vec<_>>();
+    let codex_records = match state.configuration().list_codex_providers() {
+        Ok(records) => records,
+        Err(error) => {
+            log::warn!("定时用量查询无法读取 Codex 供应商列表：{error}");
+            return;
+        }
+    };
+    for record in codex_records {
+        match state
+            .configuration()
+            .find_codex_provider_file(&record.profile.id)
+        {
+            Ok(file) => profiles.push(
+                file.client_projection()
+                    .into_profile(asb_core::contracts::AppKind::Codex),
+            ),
+            Err(error) => log::warn!("定时用量查询无法读取 Codex 供应商：{error}"),
+        }
+    }
+    for profile in &profiles {
         let Some(query) = profile.usage_query.as_ref() else {
             continue;
         };
@@ -97,4 +119,30 @@ pub(crate) fn execute_once(
             Err(error)
         }
     }
+}
+
+/// Resolves the credential-bearing query input at the backend boundary.
+/// Codex uses its specialized persisted file and only borrows the generic
+/// client projection transiently for the shared usage-query implementation.
+pub(crate) fn usage_profile(
+    state: &LocalState,
+    profile_id: &str,
+) -> Result<ProviderProfile, String> {
+    if state
+        .configuration()
+        .list_codex_providers()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .any(|record| record.profile.id == profile_id)
+    {
+        return state
+            .configuration()
+            .find_codex_provider_file(profile_id)
+            .map(|file| {
+                file.client_projection()
+                    .into_profile(asb_core::contracts::AppKind::Codex)
+            })
+            .map_err(|error| error.to_string());
+    }
+    state.configuration().find_provider(profile_id)
 }

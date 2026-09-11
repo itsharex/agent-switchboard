@@ -1,7 +1,7 @@
 //! Reversible names for Responses namespace tools on protocols that expose a
 //! flat function namespace.
 
-use super::{error, TransformError};
+use super::{error, ToolKind, TransformError, CODEX_TOOL_SEARCH_NAME};
 use asb_core::contracts::UpstreamProtocol;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
@@ -17,16 +17,36 @@ pub(super) fn render_target_name(
     protocol: UpstreamProtocol,
     namespace: Option<&str>,
     name: &str,
+    kind: ToolKind,
 ) -> Result<String, TransformError> {
     if name.is_empty() {
         return error("工具名不能为空");
     }
+    if kind == ToolKind::ToolSearch {
+        if namespace.is_some() || name != CODEX_TOOL_SEARCH_NAME {
+            return error("tool_search 必须使用保留的平铺名称");
+        }
+        return Ok(CODEX_TOOL_SEARCH_NAME.to_string());
+    }
     let limit = target_limit(protocol);
     let rendered = match namespace {
-        None if is_direct_name(name, limit) && !name.starts_with(PREFIX) => name.to_string(),
+        None if is_direct_name(name, limit)
+            && !name.starts_with(PREFIX)
+            && name != CODEX_TOOL_SEARCH_NAME =>
+        {
+            name.to_string()
+        }
         None => encode_flat_name(name),
         Some(namespace) if !namespace.is_empty() => encode_namespaced_name(namespace, name),
         Some(_) => return error("工具命名空间不能为空"),
+    };
+    let rendered = match kind {
+        ToolKind::Function => rendered,
+        // Custom calls must always retain a marker, including portable names,
+        // because a later upstream response otherwise cannot distinguish them
+        // from ordinary functions.
+        ToolKind::Custom => format!("{PREFIX}c_{}", encode_flat_name(&rendered)),
+        ToolKind::ToolSearch => unreachable!("handled before name encoding"),
     };
     if rendered.len() > limit {
         return error(format!(
@@ -41,19 +61,39 @@ pub(super) fn render_target_name(
 /// Decodes only values emitted by [`render_target_name`]. A source flat name
 /// beginning with the reserved prefix is always escaped, so malformed or
 /// forged envelopes are rejected instead of being treated as another tool.
-pub(super) fn parse_target_name(name: &str) -> Result<(Option<String>, String), TransformError> {
+pub(super) fn parse_target_name(
+    name: &str,
+) -> Result<(Option<String>, String, ToolKind), TransformError> {
+    if name == CODEX_TOOL_SEARCH_NAME {
+        return Ok((
+            None,
+            CODEX_TOOL_SEARCH_NAME.to_string(),
+            ToolKind::ToolSearch,
+        ));
+    }
     let Some(encoded) = name.strip_prefix(PREFIX) else {
-        return Ok((None, name.to_string()));
+        return Ok((None, name.to_string(), ToolKind::Function));
     };
+    if let Some(encoded) = encoded.strip_prefix("c_") {
+        let (namespace, inner, kind) = parse_target_name(encoded)?;
+        if kind != ToolKind::Function {
+            return error("custom 工具名编码无效");
+        }
+        return Ok((namespace, inner, ToolKind::Custom));
+    }
     if let Some(encoded) = encoded.strip_prefix("f_") {
-        return Ok((None, decode_component(encoded, "工具名")?));
+        return Ok((
+            None,
+            decode_component(encoded, "工具名")?,
+            ToolKind::Function,
+        ));
     }
     let Some(encoded) = encoded.strip_prefix("n_") else {
         return error("命名空间工具名编码无效");
     };
     let (namespace, encoded) = decode_prefixed_component(encoded, "工具命名空间")?;
     let name = decode_component(encoded, "工具名")?;
-    Ok((Some(namespace), name))
+    Ok((Some(namespace), name, ToolKind::Function))
 }
 
 fn encode_flat_name(name: &str) -> String {
@@ -162,7 +202,13 @@ mod tests {
     #[test]
     fn preserves_a_portable_flat_name() {
         assert_eq!(
-            render_target_name(UpstreamProtocol::ChatCompletions, None, "weather").unwrap(),
+            render_target_name(
+                UpstreamProtocol::ChatCompletions,
+                None,
+                "weather",
+                ToolKind::Function
+            )
+            .unwrap(),
             "weather"
         );
     }
@@ -173,11 +219,16 @@ mod tests {
             UpstreamProtocol::ChatCompletions,
             Some("functions."),
             "apply.patch",
+            ToolKind::Function,
         )
         .unwrap();
         assert_eq!(
             parse_target_name(&rendered).unwrap(),
-            (Some("functions.".to_string()), "apply.patch".to_string())
+            (
+                Some("functions.".to_string()),
+                "apply.patch".to_string(),
+                ToolKind::Function
+            )
         );
     }
 
@@ -187,6 +238,7 @@ mod tests {
             UpstreamProtocol::AnthropicMessages,
             None,
             "asbns_regular_tool",
+            ToolKind::Function,
         )
         .unwrap();
         assert_ne!(rendered, "asbns_regular_tool");
@@ -199,5 +251,21 @@ mod tests {
     #[test]
     fn rejects_a_malformed_envelope() {
         assert!(parse_target_name("asbns_n_4_dGVzdA_4_Zm9v").is_err());
+    }
+
+    #[test]
+    fn custom_tool_names_are_always_tagged_and_reversible() {
+        let rendered = render_target_name(
+            UpstreamProtocol::ChatCompletions,
+            None,
+            "apply_patch",
+            ToolKind::Custom,
+        )
+        .unwrap();
+        assert!(rendered.starts_with("asbns_c_"));
+        assert_eq!(
+            parse_target_name(&rendered).unwrap(),
+            (None, "apply_patch".to_string(), ToolKind::Custom)
+        );
     }
 }

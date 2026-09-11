@@ -12,7 +12,7 @@ const invokeMock = vi.mocked(invoke);
 
 const gateway: GatewayStatus = {
   configuredPort: 47821, listeningPort: 47821, baseUrl: "http://127.0.0.1:47821", status: "standby",
-  failure: null, blockedRecovery: null, routes: [],
+  failure: null, repairReason: null, blockedRecovery: null, routes: [],
   metrics: { startedAtMs: 0, totalRequests: 0, failedRequests: 0, samples: [] },
 };
 const runtime: RuntimeOverview = {

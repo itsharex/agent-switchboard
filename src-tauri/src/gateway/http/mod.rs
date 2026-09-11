@@ -1,6 +1,7 @@
 //! HTTP/1 listener with bounded handlers and cancellable WebSocket upgrades.
 mod request;
 mod upgrade;
+use super::server::UpstreamClient;
 use super::{BoundListener, GatewayInner, InflightGuard};
 use bytes::Bytes;
 use http_body_util::{combinators::UnsyncBoxBody, BodyExt, Full};
@@ -32,7 +33,6 @@ fn rejection(status: u16) -> hyper::Response<Body> {
 pub(super) fn serve(
     listener: BoundListener,
     inner: Arc<GatewayInner>,
-    client: Arc<reqwest::blocking::Client>,
     ready: std::sync::mpsc::SyncSender<Result<(), String>>,
 ) {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -44,6 +44,13 @@ pub(super) fn serve(
         Ok(runtime) => runtime,
         Err(error) => {
             let _ = ready.send(Err(format!("无法启动网关运行时：{error}")));
+            return;
+        }
+    };
+    let client = match UpstreamClient::new(runtime.handle().clone()) {
+        Ok(client) => Arc::new(client),
+        Err(error) => {
+            let _ = ready.send(Err(format!("无法初始化网关 HTTP 客户端：{error}")));
             return;
         }
     };
@@ -107,7 +114,7 @@ impl Drop for ConnectionGuard {
 async fn dispatch(
     mut incoming: hyper::Request<Incoming>,
     inner: Arc<GatewayInner>,
-    client: Arc<reqwest::blocking::Client>,
+    client: Arc<UpstreamClient>,
     stop: Arc<AtomicBool>,
 ) -> Result<hyper::Response<Body>, Infallible> {
     let websocket = incoming

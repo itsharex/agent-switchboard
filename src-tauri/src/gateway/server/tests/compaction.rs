@@ -1,39 +1,233 @@
 use super::*;
+use tiny_http::Header;
 
 #[test]
 fn legacy_and_v2_compaction_continue_through_each_protocol_without_exposing_payloads() {
     for protocol in [
-        UpstreamProtocol::Responses,
         UpstreamProtocol::ChatCompletions,
         UpstreamProtocol::AnthropicMessages,
     ] {
         run(protocol, false);
     }
-    run(UpstreamProtocol::Responses, true);
+}
+
+#[test]
+fn bridged_compaction_decodes_compressed_success_response() {
+    let upstream = Server::http(("127.0.0.1", 0)).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().join("state"));
+    let file = sandbox_codex_file(
+        &state,
+        "compressed compact",
+        endpoint(&upstream),
+        "vendor-key".into(),
+        CodexUpstream::ChatCompletions,
+    );
+    let gateway = GatewayController::start(&state);
+    let projection = gateway
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .unwrap();
+    gateway.commit(&projection, || Ok(())).unwrap();
+    let worker = thread::spawn(move || {
+        let request = upstream
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap()
+            .unwrap();
+        let response = json!({
+            "id": "compressed-summary",
+            "object": "chat.completion",
+            "model": "sandbox-model",
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": "compressed summary"},
+                "finish_reason": "stop"
+            }]
+        });
+        let compressed =
+            zstd::stream::encode_all(std::io::Cursor::new(response.to_string().into_bytes()), 0)
+                .unwrap();
+        request
+            .respond(
+                Response::from_data(compressed)
+                    .with_header(Header::from_bytes("Content-Encoding", "zstd").unwrap())
+                    .with_header(content_type("application/json")),
+            )
+            .unwrap();
+    });
+    let response = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap()
+        .post(format!("{}/compact", codex_endpoint(&projection)))
+        .body(json!({"model":"sandbox-model","input":[{"type":"message","role":"user","content":"history"}]}).to_string())
+        .send()
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    let body: Value = serde_json::from_str(&response.text().unwrap()).unwrap();
+    assert_eq!(body["output"][0]["type"], "compaction");
+    worker.join().unwrap();
+    gateway.shutdown();
+}
+
+#[test]
+fn native_responses_compact_is_forwarded_without_creating_a_summary() {
+    let upstream = Server::http(("127.0.0.1", 0)).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().join("state"));
+    let file = sandbox_codex_file(
+        &state,
+        "native compact",
+        endpoint(&upstream),
+        "vendor-key".into(),
+        CodexUpstream::Responses,
+    );
+    let gateway = GatewayController::start(&state);
+    let projection = gateway
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .unwrap();
+    gateway.commit(&projection, || Ok(())).unwrap();
+    let request_body = json!({
+        "model": "sandbox-model",
+        "input": [{ "type": "message", "role": "user", "content": "keep opaque" }]
+    });
+    let expected_body = request_body.clone();
+    let worker = thread::spawn(move || {
+        let mut request = upstream
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap()
+            .unwrap();
+        assert_eq!(request.method(), &Method::Post);
+        assert_eq!(request.url(), "/v1/responses/compact");
+        let mut received = String::new();
+        request.as_reader().read_to_string(&mut received).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&received).unwrap(),
+            expected_body
+        );
+        request
+            .respond(
+                Response::from_string(
+                    json!({
+                        "id": "compact_native",
+                        "object": "response.compaction",
+                        "output": [{
+                            "type": "compaction",
+                            "encrypted_content": "provider-owned-opaque"
+                        }]
+                    })
+                    .to_string(),
+                )
+                .with_header(content_type("application/json")),
+            )
+            .unwrap();
+    });
+    let response = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap()
+        .post(format!("{}/compact", codex_endpoint(&projection)))
+        .body(request_body.to_string())
+        .send()
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    let body: Value = serde_json::from_str(&response.text().unwrap()).unwrap();
+    assert_eq!(body["id"], "compact_native");
+    assert_eq!(
+        body["output"][0]["encrypted_content"],
+        "provider-owned-opaque"
+    );
+    worker.join().unwrap();
+    gateway.shutdown();
+}
+
+#[test]
+fn native_responses_v2_compaction_trigger_stays_on_responses() {
+    let upstream = Server::http(("127.0.0.1", 0)).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let state = LocalState::from_root(directory.path().join("state"));
+    let file = sandbox_codex_file(
+        &state,
+        "native v2 compact",
+        endpoint(&upstream),
+        "vendor-key".into(),
+        CodexUpstream::Responses,
+    );
+    let gateway = GatewayController::start(&state);
+    let projection = gateway
+        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .unwrap();
+    gateway.commit(&projection, || Ok(())).unwrap();
+    let request_body = json!({
+        "model": "sandbox-model",
+        "input": [
+            { "type": "compaction", "encrypted_content": "provider-owned-opaque" },
+            { "type": "compaction_trigger" }
+        ]
+    });
+    let expected_body = request_body.clone();
+    let worker = thread::spawn(move || {
+        let mut request = upstream
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap()
+            .unwrap();
+        assert_eq!(request.method(), &Method::Post);
+        assert_eq!(request.url(), "/v1/responses");
+        let mut received = String::new();
+        request.as_reader().read_to_string(&mut received).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&received).unwrap(),
+            expected_body
+        );
+        request
+            .respond(
+                Response::from_string(
+                    json!({
+                        "id": "resp_after_compact",
+                        "object": "response",
+                        "status": "completed",
+                        "model": "sandbox-model",
+                        "output": [],
+                        "error": null
+                    })
+                    .to_string(),
+                )
+                .with_header(content_type("application/json")),
+            )
+            .unwrap();
+    });
+    let response = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap()
+        .post(codex_endpoint(&projection))
+        .body(request_body.to_string())
+        .send()
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    let body: Value = serde_json::from_str(&response.text().unwrap()).unwrap();
+    assert_eq!(body["id"], "resp_after_compact");
+    worker.join().unwrap();
+    gateway.shutdown();
 }
 
 fn run(protocol: UpstreamProtocol, minimal: bool) {
     let upstream = Server::http(("127.0.0.1", 0)).unwrap();
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
-    let mut profile = sandbox_profile(
+    let file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
         "compact",
         endpoint(&upstream),
         "vendor-key".into(),
-        protocol,
+        codex_upstream(protocol),
     );
-    if minimal {
-        profile.responses_options.as_mut().unwrap().request_mode =
-            asb_core::contracts::ResponsesRequestMode::Minimal;
-    }
+    assert!(!minimal, "minimal is not a Codex profile storage mode");
     let gateway = GatewayController::start(&state);
     let projection = gateway
-        .project(&SwitchPlan::direct(
-            profile,
-            default_client_settings(AppKind::Codex),
-        ))
+        .project_codex(&file, default_client_settings(AppKind::Codex))
         .unwrap();
     gateway.commit(&projection, || Ok(())).unwrap();
     let worker = thread::spawn(move || summary_upstream(upstream, protocol));

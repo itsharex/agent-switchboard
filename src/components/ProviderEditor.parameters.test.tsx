@@ -1,23 +1,22 @@
 import { useState } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import * as client from "../api/client";
 import { ProviderEditor } from "../test/provider-editor";
-import { providerParameters, providerParametersCatalog } from "../test/provider-parameters";
+import { providerParameters } from "../test/provider-parameters";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 function profile(id = "a", effort: "low" | "high" = "low"): client.ProviderProfile {
-  const parameters = providerParameters("codex");
-  parameters.settings.model_reasoning_effort = { mode: "explicit", value: effort };
-  return { id, app: "codex", routeMode: "custom", name: `供应商 ${id}`, model: "gpt-5.4",
-    baseUrl: "https://relay.example/v1", apiKey: "test-key", upstreamProtocol: "responses",
-    responsesOptions: { requestMode: "standard" as const },
-    maxOutputTokens: null, modelOptions: null, parameters, websiteUrl: null };
+  const parameters = providerParameters("claude");
+  parameters.settings.effortLevel = { mode: "explicit", value: effort };
+  return { id, app: "claude", routeMode: "custom", name: `供应商 ${id}`, model: "claude-opus-4-1",
+    baseUrl: "https://relay.example", apiKey: "test-key", upstreamProtocol: "anthropicMessages",
+    responsesOptions: null, maxOutputTokens: null, modelOptions: null, parameters, websiteUrl: null };
 }
 
-const baseProps = { initialApp: "codex" as const, busy: false, officialTakenApps: [],
+const baseProps = { initialApp: "claude" as const, busy: false, officialTakenApps: [],
   userConfigModel: null, onCancel: vi.fn() };
 
 async function openParameters(user: ReturnType<typeof userEvent.setup>) {
@@ -27,7 +26,7 @@ async function openParameters(user: ReturnType<typeof userEvent.setup>) {
 
 function fillRequiredFields() {
   fireEvent.change(screen.getByLabelText("名称"), { target: { value: "新供应商" } });
-  fireEvent.change(screen.getByLabelText("服务地址"), { target: { value: "https://relay.example/v1" } });
+  fireEvent.change(screen.getByLabelText("服务地址"), { target: { value: "https://relay.example" } });
   fireEvent.change(screen.getByLabelText("API 密钥"), { target: { value: "test-key" } });
 }
 
@@ -39,14 +38,12 @@ describe("provider-owned parameter draft", () => {
     const saveClient = vi.spyOn(client, "saveClientSettings");
     render(<ProviderEditor {...baseProps} profile={savedProfile} onSave={onSave} />);
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "启用 1M 上下文窗口" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "更新名称" } });
     const effort = await openParameters(user);
     expect(screen.getByRole("heading", { name: "运行参数" })).toHaveFocus();
     expect(screen.queryByRole("button", { name: "返回供应商列表" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "名称" })).not.toBeInTheDocument();
     fireEvent.change(effort, { target: { value: "3" } });
-    await user.click(screen.getByRole("checkbox", { name: "启用 1M 上下文窗口" }));
     await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
     expect(screen.getByLabelText("名称")).toHaveValue("更新名称");
     expect(screen.getByRole("button", { name: "配置运行参数" })).toHaveFocus();
@@ -57,35 +54,9 @@ describe("provider-owned parameter draft", () => {
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: "更新名称",
       parameters: { settings: { ...savedProfile.parameters.settings,
-        model_reasoning_effort: { mode: "explicit", value: "high" } } },
-      modelOptions: { kind: "codex", contextWindow: 1_000_000 } }));
-    expect(savedProfile.parameters.settings.model_reasoning_effort).toEqual({ mode: "explicit", value: "low" });
-  });
-
-  it("stores the selected subagent model and slider effort with its provider", async () => {
-    const user = userEvent.setup();
-    const onSave = vi.fn();
-    const fetchModels = vi.spyOn(client, "fetchProviderModels").mockResolvedValue([
-      { id: "relay-coder", ownedBy: "Relay" },
-    ]);
-    render(<ProviderEditor {...baseProps} profile={profile()} onSave={onSave} />);
-
-    await openParameters(user);
-    const modelMode = screen.getByRole("radiogroup", { name: "默认子 agent 模型配置方式" });
-    await user.click(within(modelMode).getByRole("radio", { name: "指定" }));
-    await user.click(screen.getByRole("button", { name: "获取模型" }));
-    expect(fetchModels).toHaveBeenCalledWith("https://relay.example/v1", "test-key", "responses");
-    const picker = await screen.findByRole("button", { name: "选择默认子 agent 模型" });
-    await user.click(picker);
-    await user.click(screen.getByRole("option", { name: "relay-coder" }));
-    fireEvent.change(screen.getByRole("slider", { name: "默认推理强度" }), { target: { value: "4" } });
-
-    await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
-    await user.click(screen.getByRole("button", { name: "保存供应商" }));
-    expect(onSave.mock.calls[0][0].parameters.settings).toMatchObject({
-      "agents.default_subagent_model": { mode: "explicit", value: "relay-coder" },
-      "agents.default_subagent_reasoning_effort": { mode: "explicit", value: "high" },
-    });
+        effortLevel: { mode: "explicit", value: "high" } } },
+      modelOptions: null }));
+    expect(savedProfile.parameters.settings.effortLevel).toEqual({ mode: "explicit", value: "low" });
   });
 
   it("discards parameter edits when the whole supplier editor is cancelled", async () => {
@@ -115,13 +86,13 @@ describe("provider-owned parameter draft", () => {
     fireEvent.change(await openParameters(user), { target: { value: "2" } });
     rerender(<ProviderEditor {...baseProps} profile={second} onSave={onSave} />);
     expect(await openParameters(user)).toHaveValue("3");
-    await user.click(within(screen.getByRole("radiogroup", { name: "快速模式" })).getByRole("radio", { name: "开启" }));
+    await user.click(within(screen.getByRole("radiogroup", { name: "扩展思考" })).getByRole("radio", { name: "开启" }));
     await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
-    expect(onSave.mock.calls[0][0].parameters.settings.model_reasoning_effort).toEqual({ mode: "explicit", value: "high" });
+    expect(onSave.mock.calls[0][0].parameters.settings.effortLevel).toEqual({ mode: "explicit", value: "high" });
     rerender(<ProviderEditor {...baseProps} profile={first} onSave={onSave} />);
     expect(await openParameters(user)).toHaveValue("1");
-    expect(within(screen.getByRole("radiogroup", { name: "快速模式" })).getByRole("radio", { name: "自动" })).toBeChecked();
+    expect(within(screen.getByRole("radiogroup", { name: "扩展思考" })).getByRole("radio", { name: "自动" })).toBeChecked();
   });
 
   it("blocks a new profile until a failed catalog load is successfully retried", async () => {
@@ -140,29 +111,7 @@ describe("provider-owned parameter draft", () => {
     expect(await screen.findByRole("slider", { name: "推理强度" })).toHaveValue("0");
     await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
-    expect(onSave.mock.calls[0][0].parameters).toEqual(providerParameters("codex"));
-  });
-
-  it("ignores a late catalog response after changing clients", async () => {
-    let resolveCodex!: (catalog: client.ProviderParametersCatalog) => void;
-    const pending = new Promise<client.ProviderParametersCatalog>((resolve) => { resolveCodex = resolve; });
-    vi.mocked(client.getProviderParametersCatalog).mockImplementation((app) => app === "codex"
-      ? pending : Promise.resolve(providerParametersCatalog(app)));
-    const user = userEvent.setup();
-    const onSave = vi.fn();
-    render(<ProviderEditor {...baseProps} profile={null} onSave={onSave} />);
-    expect(screen.getByRole("button", { name: "保存供应商" })).toBeDisabled();
-    await user.click(screen.getByRole("combobox", { name: "客户端" }));
-    await user.click(screen.getByRole("option", { name: "Claude" }));
-    await act(async () => resolveCodex(providerParametersCatalog("codex")));
-    fillRequiredFields();
-    fireEvent.change(await openParameters(user), { target: { value: "3" } });
-    expect(screen.queryByRole("radiogroup", { name: "快速模式" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
-    await user.click(screen.getByRole("button", { name: "保存供应商" }));
-    expect(onSave.mock.calls[0][0].parameters).toEqual({ settings: {
-      ...providerParameters("claude").settings, effortLevel: { mode: "explicit", value: "high" },
-    } });
+    expect(onSave.mock.calls[0][0].parameters).toEqual(providerParameters("claude"));
   });
 
   it("allows official profiles to own parameters without custom model overrides", async () => {
@@ -172,12 +121,11 @@ describe("provider-owned parameter draft", () => {
       baseUrl: null, apiKey: "", upstreamProtocol: null, responsesOptions: null, modelOptions: null };
     render(<ProviderEditor {...baseProps} profile={official} onSave={onSave} />);
     fireEvent.change(await openParameters(user), { target: { value: "3" } });
-    expect(screen.queryByRole("checkbox", { name: "启用 1M 上下文窗口" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ routeMode: "official", modelOptions: null,
       parameters: { settings: { ...official.parameters.settings,
-        model_reasoning_effort: { mode: "explicit", value: "high" } } } }));
+        effortLevel: { mode: "explicit", value: "high" } } } }));
   });
 
   it("keeps an in-progress official login alive while navigating the parameter level", async () => {
@@ -211,6 +159,6 @@ describe("provider-owned parameter draft", () => {
     await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "保存供应商" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "保存供应商" }));
-    expect(onSave.mock.calls[0][0].parameters).toEqual(providerParameters("codex"));
+    expect(onSave.mock.calls[0][0].parameters).toEqual(providerParameters("claude"));
   });
 });

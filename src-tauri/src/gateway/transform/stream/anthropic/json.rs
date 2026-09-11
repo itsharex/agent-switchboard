@@ -1,6 +1,8 @@
 //! JSON accessors shared by the Anthropic SSE handlers.
 
 use super::*;
+use crate::gateway::transform::usage;
+use asb_core::contracts::UpstreamProtocol;
 
 pub(super) fn object<'a>(
     value: &'a Value,
@@ -48,21 +50,7 @@ pub(super) fn required_index(
 }
 
 pub(super) fn parse_usage(value: &Value) -> Result<Usage, TransformError> {
-    let map = object(value, "Anthropic SSE usage")?;
-    allowed(
-        map,
-        &["input_tokens", "output_tokens"],
-        "Anthropic SSE usage",
-    )?;
-    Ok(Usage {
-        input_tokens: map.get("input_tokens").and_then(Value::as_u64),
-        output_tokens: map.get("output_tokens").and_then(Value::as_u64),
-        total_tokens: map
-            .get("input_tokens")
-            .and_then(Value::as_u64)
-            .zip(map.get("output_tokens").and_then(Value::as_u64))
-            .map(|(input, output)| input + output),
-    })
+    usage::parse(UpstreamProtocol::AnthropicMessages, Some(value))
 }
 
 pub(super) fn parse_stop(value: &str) -> Result<StopReason, TransformError> {

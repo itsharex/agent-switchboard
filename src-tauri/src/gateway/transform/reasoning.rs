@@ -1,23 +1,57 @@
 use super::TransformError;
 use aes_gcm::aead::{
     rand_core::{OsRng, RngCore},
-    Aead, KeyInit, Payload,
+    Aead, KeyInit, Payload as AeadPayload,
 };
 use aes_gcm::{Aes256Gcm, Nonce};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-const CONTINUATION_PREFIX: &str = "asb-reasoning-v2.";
-const AAD: &[u8] = b"agent-switchboard/reasoning-continuation/v2";
+const CONTINUATION_PREFIX: &str = "asb-reasoning-v3.";
+/// Any version of this gateway's reasoning payload. Another version is a stale
+/// payload that must be rejected, never mistaken for an upstream block.
+const CONTINUATION_FAMILY: &str = "asb-reasoning-";
+const AAD: &[u8] = b"agent-switchboard/reasoning-continuation/v3";
 const NONCE_BYTES: usize = 12;
 
+/// What one upstream reasoning trace contains once this gateway has read it.
+///
+/// A trace is replayed verbatim to the backend that produced it: Anthropic
+/// signs its thinking blocks, and an opaque block is only readable by its own
+/// backend. Sealing the whole record keeps that replay possible across turns
+/// without ever handing a client the readable text.
+#[derive(Debug, Serialize, Deserialize)]
+struct Record {
+    /// The readable trace. Empty when the upstream returned only an opaque
+    /// block that this gateway cannot read.
+    text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    signature: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    redacted: Option<String>,
+}
+
+impl Record {
+    fn validate(&self) -> Result<(), TransformError> {
+        if self.text.is_empty() && self.redacted.is_none() {
+            return Err(TransformError("推理续接载荷不含内容".to_string()));
+        }
+        Ok(())
+    }
+}
+
 /// The gateway-local representation of one upstream reasoning trace. The
-/// cleartext is only used while rendering a Chat Completions request; the
-/// opaque continuation is the only form sent to Codex or Claude Code.
+/// cleartext is only used while rendering an upstream request; the opaque
+/// continuation is the only form sent to Codex or Claude Code.
 #[derive(Clone)]
 pub(crate) struct Reasoning {
     pub(crate) content: String,
     pub(crate) continuation: String,
+    /// The upstream signature that authenticates `content` for its own backend.
+    pub(crate) signature: Option<String>,
+    /// An upstream opaque block, replayable only to the backend that issued it.
+    pub(crate) redacted: Option<String>,
 }
 
 /// Uses a backend-bound continuation key independent of access capabilities.
@@ -46,28 +80,64 @@ impl ReasoningTransport {
         if content.is_empty() {
             return Err(TransformError("推理内容不能为空".to_string()));
         }
-        Ok(Reasoning {
-            continuation: self.seal(content.as_bytes())?,
-            content,
+        self.seal(Record {
+            text: content,
+            signature: None,
+            redacted: None,
         })
     }
 
+    /// Seals one Anthropic thinking block together with the signature that
+    /// makes it replayable to the backend that produced it.
+    pub(crate) fn from_anthropic_thinking(
+        &self,
+        text: String,
+        signature: Option<String>,
+    ) -> Result<Reasoning, TransformError> {
+        self.seal(Record {
+            text,
+            signature: signature.filter(|value| !value.is_empty()),
+            redacted: None,
+        })
+    }
+
+    /// Seals an upstream opaque block so the same backend receives it verbatim
+    /// on the next turn. No other backend can read it back.
+    pub(crate) fn from_redacted(&self, data: String) -> Result<Reasoning, TransformError> {
+        self.seal(Record {
+            text: String::new(),
+            signature: None,
+            redacted: Some(data),
+        })
+    }
+
+    /// Opens a payload this gateway issued to a client.
     pub(crate) fn from_continuation(
         &self,
         continuation: String,
     ) -> Result<Reasoning, TransformError> {
-        let content = String::from_utf8(self.open(&continuation)?)
-            .map_err(|_| TransformError("推理续接载荷不是 UTF-8 文本".to_string()))?;
-        if content.is_empty() {
-            return Err(TransformError("推理续接载荷不含内容".to_string()));
-        }
+        let record: Record = serde_json::from_slice(&self.open(&continuation)?)
+            .map_err(|_| TransformError("推理续接载荷格式无效".to_string()))?;
+        record.validate()?;
         Ok(Reasoning {
-            content,
+            content: record.text,
             continuation,
+            signature: record.signature,
+            redacted: record.redacted,
         })
     }
 
-    fn seal(&self, content: &[u8]) -> Result<String, TransformError> {
+    /// Whether a client- or upstream-supplied payload claims to be a gateway
+    /// continuation. A stale version is rejected by `open` rather than read as
+    /// an upstream opaque block.
+    pub(crate) fn is_continuation(value: &str) -> bool {
+        value.starts_with(CONTINUATION_FAMILY)
+    }
+
+    fn seal(&self, record: Record) -> Result<Reasoning, TransformError> {
+        record.validate()?;
+        let cleartext = serde_json::to_vec(&record)
+            .map_err(|_| TransformError("无法编码推理续接内容".to_string()))?;
         let cipher = Aes256Gcm::new_from_slice(&self.key)
             .map_err(|_| TransformError("无法初始化推理续接加密器".to_string()))?;
         let mut nonce = [0_u8; NONCE_BYTES];
@@ -75,8 +145,8 @@ impl ReasoningTransport {
         let encrypted = cipher
             .encrypt(
                 Nonce::from_slice(&nonce),
-                Payload {
-                    msg: content,
+                AeadPayload {
+                    msg: &cleartext,
                     aad: AAD,
                 },
             )
@@ -84,10 +154,12 @@ impl ReasoningTransport {
         let mut payload = Vec::with_capacity(nonce.len() + encrypted.len());
         payload.extend_from_slice(&nonce);
         payload.extend_from_slice(&encrypted);
-        Ok(format!(
-            "{CONTINUATION_PREFIX}{}",
-            URL_SAFE_NO_PAD.encode(payload)
-        ))
+        Ok(Reasoning {
+            content: record.text,
+            continuation: format!("{CONTINUATION_PREFIX}{}", URL_SAFE_NO_PAD.encode(payload)),
+            signature: record.signature,
+            redacted: record.redacted,
+        })
     }
 
     fn open(&self, continuation: &str) -> Result<Vec<u8>, TransformError> {
@@ -105,7 +177,7 @@ impl ReasoningTransport {
         cipher
             .decrypt(
                 Nonce::from_slice(nonce),
-                Payload {
+                AeadPayload {
                     msg: encrypted,
                     aad: AAD,
                 },
@@ -133,6 +205,57 @@ mod tests {
                 .content,
             "private chain of thought"
         );
+    }
+
+    #[test]
+    fn an_anthropic_signature_survives_the_client_round_trip() {
+        let transport = ReasoningTransport::from_continuation_key([4; 32]);
+        let reasoning = transport
+            .from_anthropic_thinking("private plan".to_string(), Some("sig-1".to_string()))
+            .expect("seal signed thinking");
+        let replayed = transport
+            .from_continuation(reasoning.continuation)
+            .expect("open the client replay");
+        assert_eq!(replayed.content, "private plan");
+        assert_eq!(replayed.signature.as_deref(), Some("sig-1"));
+        assert!(replayed.redacted.is_none());
+    }
+
+    #[test]
+    fn an_opaque_upstream_block_round_trips_without_readable_text() {
+        let transport = ReasoningTransport::from_continuation_key([5; 32]);
+        let reasoning = transport
+            .from_redacted("opaque-upstream-data".to_string())
+            .expect("seal opaque block");
+        assert!(reasoning.content.is_empty());
+        let replayed = transport
+            .from_continuation(reasoning.continuation)
+            .expect("open the client replay");
+        assert_eq!(replayed.redacted.as_deref(), Some("opaque-upstream-data"));
+    }
+
+    #[test]
+    fn an_empty_record_is_refused() {
+        assert!(ReasoningTransport::from_continuation_key([6; 32])
+            .from_anthropic_thinking(String::new(), None)
+            .is_err());
+    }
+
+    #[test]
+    fn only_this_gateway_format_is_recognized_as_a_continuation() {
+        assert!(ReasoningTransport::is_continuation("asb-reasoning-v3.abc"));
+        assert!(ReasoningTransport::is_continuation("asb-reasoning-v2.abc"));
+        assert!(!ReasoningTransport::is_continuation("upstream-opaque-blob"));
+    }
+
+    #[test]
+    fn a_stale_gateway_payload_is_rejected_rather_than_reinterpreted() {
+        let transport = ReasoningTransport::from_continuation_key([7; 32]);
+        let error = transport
+            .from_continuation("asb-reasoning-v2.stale-payload".to_string())
+            .err()
+            .expect("a stale payload must not be reopened");
+        assert!(error.0.contains("不属于当前本机网关"), "{}", error.0);
     }
 
     #[test]

@@ -5,6 +5,7 @@ import { Checkbox } from "../Checkbox";
 import type { SelectOption } from "../Select";
 import type { ExtensionDetailProps } from "./detail-types";
 import { FILE_STATE_LABELS, targetLabel, targetValue } from "./labels";
+import { ConnectivityIcon } from "../icons";
 
 function installOptions(item: ExtensionListItem, projects: ProjectRegistration[]): SelectOption[] {
   const options = EXTENSION_CLIENTS.filter((client) => itemSupportsClient(item, client)).map((client) => ({
@@ -37,9 +38,14 @@ export function ExtensionBindings({
 }: ExtensionDetailProps) {
   return (
     <section className="asb-ext-section">
-      <h4>已安装到</h4>
+      <h4 className="asb-section-title">已安装到</h4>
       {item.bindings.length === 0 ? (
-        <p className="asb-empty">尚未部署到任何客户端</p>
+        <div className="asb-empty-state">
+          <span className="asb-empty-state-icon" aria-hidden="true">
+            <ConnectivityIcon />
+          </span>
+          <h3 className="asb-section-title">尚未部署到任何客户端</h3>
+        </div>
       ) : (
         <ul className="asb-ext-binding-list">
           {item.bindings.map((binding) => (
@@ -94,7 +100,7 @@ export function ExtensionInstallTargets({
   if (options.length === 0) return null;
   return (
     <section className="asb-ext-section">
-      <h4>安装到其他位置</h4>
+      <h4 className="asb-section-title">安装到其他位置</h4>
       <div className="asb-ext-target-list" aria-label="安装目标">
         {options.map((option) => (
           <Checkbox

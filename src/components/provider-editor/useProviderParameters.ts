@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { getProviderParametersCatalog, type ProviderParametersCatalog } from "../../api/client";
-import type { ProviderEditorDraft } from "./draft";
+import { useCallback, useEffect, useState } from "react";
+import { getProviderParametersCatalog, type AppKind, type ProviderParametersCatalog, type SettingsValues } from "../../api/client";
 
+/** Loads one client's provider-parameter catalog and seeds the draft exactly
+ * once; the seed callback owns any staleness guard for its draft shape. */
 export function useProviderParameters(
-  draft: ProviderEditorDraft,
-  setDraft: Dispatch<SetStateAction<ProviderEditorDraft>>,
+  app: AppKind,
+  parameters: SettingsValues | null,
+  seed: (defaults: SettingsValues) => void,
 ) {
   const [catalog, setCatalog] = useState<ProviderParametersCatalog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
-  const app = draft.app;
 
   useEffect(() => {
     let active = true;
@@ -21,16 +22,16 @@ export function useProviderParameters(
         const loaded = await getProviderParametersCatalog(app);
         if (!active) return;
         setCatalog(loaded);
-        setDraft((current) => current.app === app && current.parameters === null
-          ? { ...current, parameters: { settings: { ...loaded.defaults.settings } } }
-          : current);
+        if (parameters === null) seed({ settings: { ...loaded.defaults.settings } });
       } catch (caught) {
         if (active) setError((caught as { message?: string }).message ?? "参数目录不可用");
       }
     })();
     return () => { active = false; };
-  }, [app, attempt, setDraft]);
+    // `parameters`/`seed` are excluded: seeding happens once per catalog load,
+    // and the seed callback owns its own staleness guard.
+  }, [app, attempt]);
 
   const currentCatalog = catalog?.app === app ? catalog : null;
-  return { catalog: currentCatalog, error, retry, ready: currentCatalog !== null && draft.parameters !== null };
+  return { catalog: currentCatalog, error, retry, ready: currentCatalog !== null && parameters !== null };
 }

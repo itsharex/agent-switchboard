@@ -17,7 +17,6 @@ pub(super) fn profile(app: AppKind) -> ProviderProfile {
         api_key: "test-api-key".into(),
         upstream_protocol: Some(UpstreamProtocol::Responses),
         responses_options: Some(crate::contracts::ResponsesOptions {
-
             request_mode: crate::contracts::ResponsesRequestMode::Standard,
         }),
         max_output_tokens: None.into(),

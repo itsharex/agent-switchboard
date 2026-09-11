@@ -19,6 +19,7 @@
 //! the only writer of real client files.
 
 pub mod client_settings;
+mod codex_providers;
 pub mod history;
 pub mod migration;
 pub mod providers;
@@ -26,6 +27,7 @@ pub mod snapshot;
 
 pub(crate) const SWITCH_INTENT_FILE: &str = "switch-intent.json";
 pub(crate) const PROFILE_PREIMAGE_FILE: &str = "save-before.json";
+pub(crate) const PROVIDER_POSITION_STEP: u64 = 100;
 
 use asb_core::contracts::AppKind;
 use asb_switch::io::{FsIo, SwitchIo};

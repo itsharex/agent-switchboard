@@ -69,7 +69,8 @@
   margin: 0;
   /* Fixed height: file content gaining or losing a line must not change the
      module's outer geometry (layout-shift fix, 2026-08-28). */
-  height: 320px;
+  --asb-filepreview-height: 320px;
+  height: var(--asb-filepreview-height);
   overflow: auto;
   scrollbar-gutter: stable;
   padding: var(--asb-space-3);
@@ -128,9 +129,12 @@
 .asb-slider {
   --asb-slider-motion-duration: var(--asb-motion-node);
   --asb-slider-thumb-radius: 14px;
+  --asb-slider-track-height: 24px;
+  --asb-slider-thumb-size: 28px;
+  --asb-slider-particle-size: 3px;
   position: relative;
   width: 100%;
-  height: 32px;
+  height: var(--asb-control-height-compact);
   touch-action: none;
 }
 
@@ -142,9 +146,9 @@
   position: absolute;
   inset-inline: 0;
   top: 50%;
-  height: 24px;
+  height: var(--asb-slider-track-height);
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--asb-radius-pill);
   background: color-mix(in srgb, var(--asb-ink) 9%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asb-ink) 26%, transparent);
   transform: translateY(-50%);
@@ -153,7 +157,7 @@
 .asb-slider-fill {
   position: absolute;
   inset: 0;
-  border-radius: 999px;
+  border-radius: var(--asb-radius-pill);
   background: var(--asb-gradient-energy);
   clip-path: inset(0 calc(100% - var(--asb-slider-fill-width)) 0 0);
   transition: clip-path var(--asb-slider-motion-duration) var(--asb-easing);
@@ -169,8 +173,8 @@
 
 .asb-slider-particle {
   position: absolute;
-  width: 3px;
-  height: 3px;
+  width: var(--asb-slider-particle-size);
+  height: var(--asb-slider-particle-size);
   border-radius: 50%;
   background: rgb(255 255 255 / 0.7);
   box-shadow: 0 0 5px rgb(255 255 255 / 0.3);
@@ -209,8 +213,8 @@
 .asb-slider-tick {
   position: absolute;
   top: 50%;
-  width: 4px;
-  height: 4px;
+  width: var(--asb-space-unit);
+  height: var(--asb-space-unit);
   border-radius: 50%;
   background: color-mix(in srgb, var(--asb-text) 42%, transparent);
   transform: translate(-50%, -50%);
@@ -233,8 +237,8 @@
   z-index: 3;
   top: 50%;
   left: var(--asb-slider-thumb-left);
-  width: 28px;
-  height: 28px;
+  width: var(--asb-slider-thumb-size);
+  height: var(--asb-slider-thumb-size);
   pointer-events: none;
   border: 1px solid var(--asb-hairline-strong);
   border-radius: 50%;
@@ -266,7 +270,7 @@
   z-index: 4;
   inset: 0;
   width: 100%;
-  height: 32px;
+  height: var(--asb-control-height-compact);
   margin: 0;
   cursor: pointer;
   appearance: none;
@@ -279,21 +283,16 @@
 }
 
 .asb-slider-input::-webkit-slider-runnable-track {
-  height: 24px;
+  height: var(--asb-slider-track-height);
   background: transparent;
 }
 
 .asb-slider-input::-webkit-slider-thumb {
-  width: 28px;
-  height: 28px;
+  width: var(--asb-slider-thumb-size);
+  height: var(--asb-slider-thumb-size);
   appearance: none;
   border: 0;
   border-radius: 50%;
   background: transparent;
-}
-
-:root[data-focus-source="key"] .asb-slider-input:focus-visible ~ .asb-slider-thumb {
-  outline: 2px solid var(--asb-action);
-  outline-offset: 2px;
 }
 

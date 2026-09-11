@@ -34,16 +34,16 @@ impl Request {
         std::mem::take(&mut self.body)
     }
 
-    pub(crate) fn stream_response(
+    pub(crate) fn stream_response_with_headers(
         mut self,
         status: u16,
-        headers: &[(&str, &str)],
+        headers: &[Header],
     ) -> io::Result<BodyWriter> {
         let (sender, receiver) = mpsc::channel(2);
         let body = StreamBody::new(ReceiverStream::new(receiver)).boxed_unsync();
         let mut builder = hyper::Response::builder().status(status);
-        for (name, value) in headers {
-            builder = builder.header(*name, *value);
+        for header in headers {
+            builder = builder.header(header.field.to_string(), header.value.to_string());
         }
         let response = builder.body(body).map_err(|_| closed())?;
         self.reply

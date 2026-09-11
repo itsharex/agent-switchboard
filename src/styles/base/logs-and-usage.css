@@ -7,14 +7,6 @@
   min-height: 0;
 }
 
-.asb-runtime-log-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--asb-space-2);
-}
-
 .asb-runtime-log-level-control {
   display: flex;
   align-items: center;
@@ -28,7 +20,7 @@
 }
 
 .asb-runtime-log-level-control .asb-select-trigger {
-  min-width: 108px;
+  min-width: var(--asb-select-min-width);
 }
 
 .asb-runtime-log-notice {
@@ -38,12 +30,15 @@
   font: var(--asb-text-label);
 }
 
+/* Frame modifier: the log panel's empty state fills the scrolling slot and
+   draws a recessed surface of its own. Internal layout — stacking, gap,
+   padding — belongs to .asb-empty-state, so this rule declares none of it. */
 .asb-runtime-log-empty {
-  display: grid;
+  --asb-runtime-log-empty-min-height: 180px;
+
   flex: 1;
-  place-items: center;
-  min-height: 180px;
-  padding: var(--asb-space-5);
+  justify-content: center;
+  min-height: var(--asb-runtime-log-empty-min-height);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
   background: var(--asb-content-muted);
@@ -56,8 +51,15 @@
   scrollbar-gutter: stable;
 }
 
+.asb-runtime-log-table-wrap .asb-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 .asb-runtime-log-table {
-  min-width: 680px;
+  --asb-runtime-log-table-min-width: 680px;
+  min-width: var(--asb-runtime-log-table-min-width);
 }
 
 .asb-runtime-log-action {
@@ -67,7 +69,7 @@
 .asb-runtime-log-level {
   display: inline-flex;
   align-items: center;
-  padding: 2px var(--asb-space-2);
+  padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-action);
   background: var(--asb-content);
@@ -142,12 +144,12 @@
   padding-left: calc(var(--asb-space-2) + var(--asb-space-2));
 }
 
+/* Frame modifier: the model-usage panel's empty state fills its slot. See
+   .asb-runtime-log-empty — .asb-empty-state owns the inside. */
 .asb-model-usage-empty {
-  display: grid;
   flex: 1;
-  place-items: center;
+  justify-content: center;
   min-height: 0;
-  padding: var(--asb-space-5);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
   background: var(--asb-content-muted);
@@ -158,6 +160,12 @@
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
+}
+
+.asb-model-usage-table-wrap .asb-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .asb-model-usage-content,
@@ -183,25 +191,11 @@
 }
 
 .asb-model-usage-trend,
-.asb-model-usage-distribution,
-.asb-model-usage-detail {
+.asb-model-usage-distribution {
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-2);
   min-width: 0;
-}
-
-.asb-model-usage-detail h3 {
-  margin: 0;
-  font: var(--asb-text-body);
-  font-weight: 600;
-}
-
-.asb-model-usage-detail {
-  padding: var(--asb-space-4);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-panel);
-  background: var(--asb-content-muted);
 }
 
 .asb-model-usage-table {

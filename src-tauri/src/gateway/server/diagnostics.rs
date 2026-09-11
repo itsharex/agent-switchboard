@@ -1,8 +1,8 @@
 use super::respond::content_type;
+use super::UpstreamResponse;
 use crate::gateway::http::Request;
 use crate::provider_diagnostics::{http_diagnostic, ProviderDiagnostic, ProviderFailureKind};
 use asb_core::contracts::UpstreamProtocol;
-use reqwest::blocking::Response as UpstreamResponse;
 use serde_json::{json, Value};
 use tiny_http::{Header, Response, StatusCode};
 
@@ -74,6 +74,11 @@ pub(super) fn respond_diagnostic(
         .with_header(content_type("application/json; charset=utf-8"));
     if let Some(id) = &diagnostic.request_id {
         if let Ok(header) = Header::from_bytes(b"x-request-id", id.as_bytes()) {
+            response.add_header(header);
+        }
+    }
+    if let Some(retry_after) = &diagnostic.retry_after {
+        if let Ok(header) = Header::from_bytes(b"retry-after", retry_after.as_bytes()) {
             response.add_header(header);
         }
     }

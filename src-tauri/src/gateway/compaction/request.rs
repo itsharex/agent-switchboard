@@ -27,6 +27,7 @@ pub(super) fn prepare(
         ));
     }
     expand_input(&mut root, Some(key))?;
+    reject_unbridgeable_input(&root)?;
     let input = root
         .get_mut("input")
         .and_then(Value::as_array_mut)

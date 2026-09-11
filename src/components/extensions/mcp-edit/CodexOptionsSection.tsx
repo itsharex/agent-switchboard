@@ -27,7 +27,7 @@ export function CodexOptionsSection({
 }: Props) {
   return (
     <div className="asb-ext-section">
-      <h4>Codex 选项（可选）</h4>
+      <h4 className="asb-section-title">Codex 选项（可选）</h4>
       <label className="asb-field">
         <span>工作目录</span>
         <Input

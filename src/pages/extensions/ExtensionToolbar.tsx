@@ -1,11 +1,14 @@
 import { Button as MenuButton, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
 import { EXTENSION_SECTIONS } from "../../app/navigation";
 import { Button } from "../../components/Button";
+import { ClientFilter } from "../../components/ClientFilter";
+import { ClientLogo } from "../../components/ClientLogo";
 import { Input } from "../../components/Input";
-import { Select } from "../../components/Select";
 import { Tabs } from "../../components/Tabs";
-import { CloseIcon, MoreIcon, PlusIcon, SearchIcon } from "../../components/icons";
-import { CLIENT_FILTER_OPTIONS, type ClientFilter } from "./list-filters";
+import { Tooltip } from "../../components/Tooltip";
+import { CloseIcon, MoreIcon, PlusIcon, SearchIcon, UpdateIcon } from "../../components/icons";
+import { clientDeployState, EXTENSION_CLIENTS } from "../../app/extensions/deployment-state";
+import { clientName } from "../../lib/client-name";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 const EXTENSION_TOOLBAR_TABS = EXTENSION_SECTIONS.map((tab) => ({
@@ -13,40 +16,102 @@ const EXTENSION_TOOLBAR_TABS = EXTENSION_SECTIONS.map((tab) => ({
   controls: `ext-workspace-${tab.value}-panel`,
 }));
 
+/**
+ * The library's single tool bar (2026-09-11 user directive).
+ *
+ * View controls — search and the client filter — sit left; library-wide
+ * actions — the per-client bulk deployment toggles and update-all — sit right.
+ * The old layout stacked a count bar, a search row and a result line, which
+ * put three different control heights on one screen; the client filter was
+ * additionally a tablist here and a radio group on the session page. There is
+ * now one bar, one client-filter idiom, and the list total is a caption under
+ * the list rather than a row of its own.
+ */
 export function ExtensionFilters({ workspace }: { workspace: ExtensionWorkspace }) {
-  const { nav } = workspace;
+  const { nav, updates, kindItems, writeBlocked } = workspace;
   if (nav.kind === null) return null;
+  const updatable = nav.kind === "skill" ? updates.updatable : [];
   return (
     <div className="asb-ext-toolbar">
-      <div className="asb-ext-search">
-        <span className="asb-ext-search-icon" aria-hidden="true">
-          <SearchIcon />
-        </span>
-        <Input
-          type="search"
-          placeholder={nav.kind === "skill" ? "搜索 Skills 名称或描述" : "搜索 MCP 名称、命令或传输方式"}
-          aria-label="搜索扩展"
-          value={nav.search}
-          onChange={(event) => nav.setSearch(event.target.value)}
-        />
-        {nav.search && (
-          <button
-            type="button"
-            className="asb-ext-search-clear"
-            aria-label="清除搜索"
-            onClick={() => nav.setSearch("")}
-          >
-            <CloseIcon />
-          </button>
-        )}
+      <div className="asb-ext-toolbar-view">
+        <div className="asb-ext-search">
+          <span className="asb-ext-search-icon" aria-hidden="true">
+            <SearchIcon />
+          </span>
+          <Input
+            type="search"
+            placeholder={nav.kind === "skill" ? "搜索 Skills 名称或描述" : "搜索 MCP 名称、命令或传输方式"}
+            aria-label="搜索扩展"
+            value={nav.search}
+            onChange={(event) => nav.setSearch(event.target.value)}
+          />
+          {nav.search && (
+            <Button
+              variant="unstyled"
+              className="asb-ext-search-clear"
+              aria-label="清除搜索"
+              onClick={() => nav.setSearch("")}
+            >
+              <CloseIcon />
+            </Button>
+          )}
+        </div>
+        <div className="asb-ext-filter">
+          <ClientFilter
+            value={nav.client}
+            onChange={nav.setClient}
+            label="客户端过滤"
+            showLogos
+          />
+        </div>
       </div>
-      <div className="asb-ext-filter">
-        <Select
-          value={nav.client}
-          options={CLIENT_FILTER_OPTIONS}
-          ariaLabel="客户端过滤"
-          onChange={(value) => nav.setClient(value as ClientFilter)}
-        />
+      <div className="asb-ext-toolbar-actions">
+        <div
+          className="asb-ext-count-chips"
+          role="group"
+          aria-label="扩展库客户端启用数量"
+        >
+          {EXTENSION_CLIENTS.map((client) => {
+            const state = clientDeployState(kindItems, client);
+            const action = `${state.all ? "停用" : "启用"}全部扩展的 ${clientName(client)} 部署`;
+            return (
+              <Tooltip
+                key={client}
+                label={
+                  state.applicable === 0
+                    ? "没有支持此客户端的扩展"
+                    : `${action}，包含当前搜索结果以外的条目`
+                }
+              >
+                <Button
+                  variant="unstyled"
+                  role="checkbox"
+                  data-client={client}
+                  data-state={state.all ? "all" : state.partial ? "partial" : "none"}
+                  aria-checked={state.partial ? "mixed" : state.all}
+                  aria-label={`${action}（当前 ${state.enabled} 项）`}
+                  disabled={writeBlocked || state.applicable === 0}
+                  onClick={() => void workspace.toggleAll(client)}
+                  className="asb-ext-count-chip"
+                >
+                  <ClientLogo app={client} className="asb-ext-count-logo" />
+                  <span>{clientName(client)}</span>
+                  <span className="asb-ext-count-value">{state.enabled}</span>
+                </Button>
+              </Tooltip>
+            );
+          })}
+        </div>
+        {updatable.length > 0 && (
+          <Button
+            variant="secondary"
+            disabled={writeBlocked}
+            onClick={() => void updates.update(updatable)}
+          >
+            <UpdateIcon />
+            全部更新（{updatable.length}）
+          </Button>
+        )}
       </div>
     </div>
   );

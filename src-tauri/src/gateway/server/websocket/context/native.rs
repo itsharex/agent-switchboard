@@ -4,6 +4,7 @@ use super::*;
 pub(super) fn normalize(text: &str) -> Result<NormalizedRequest, ContextError> {
     let value: Value = serde_json::from_str(text)
         .map_err(|_| ContextError::invalid("Codex WebSocket 请求不是有效 JSON"))?;
+    let session_id = session_id(&value)?;
     let mut root = object(&value, "Codex WebSocket 请求")?.clone();
     if root.remove("type").as_ref().and_then(Value::as_str) != Some("response.create") {
         return Err(ContextError::invalid(
@@ -44,6 +45,7 @@ pub(super) fn normalize(text: &str) -> Result<NormalizedRequest, ContextError> {
         stream: true,
         generate,
         previous_response_id,
+        session_id,
     })
 }
 

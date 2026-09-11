@@ -111,6 +111,25 @@ it("keeps the client draft mounted across settings categories and puts updates u
   expect(draft).toHaveValue("已保留的偏好，继续编辑");
 });
 
+it("opens about and updates with the product logo beside the product name", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<SettingsHarness />);
+
+  await user.click(screen.getByRole("button", { name: "关于与更新" }));
+  const product = container.querySelector(".asb-about-product");
+  expect(product).toHaveTextContent("Agent Switchboard");
+
+  const logo = product?.querySelector("img.asb-about-logo");
+  // Vite inlines assets as data URIs in tests, so only presence is stable.
+  expect(logo?.getAttribute("src")?.length ?? 0).toBeGreaterThan(0);
+  expect(logo).toBeVisible();
+  // Decorative: the adjacent product name already carries the meaning.
+  expect(logo).toHaveAttribute("alt", "");
+
+  const about = screen.getByRole("region", { name: "关于与更新" });
+  expect(about).toContainElement(logo as HTMLElement);
+});
+
 it("offers a return to the provider workspace for directed settings entry", async () => {
   const user = userEvent.setup();
   const onReturnToProviders = vi.fn();

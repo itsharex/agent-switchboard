@@ -20,26 +20,22 @@ fn actual_codex_cli_completes_through_the_isolated_http_gateway() {
 
     let directory = tempfile::tempdir().expect("temporary sandbox root");
     let state = LocalState::from_root(directory.path().join("state"));
-    let mut profile = sandbox_profile(
+    let mut file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
         "Codex CLI black-box sandbox",
         upstream_url,
         upstream_key.clone(),
-        UpstreamProtocol::ChatCompletions,
+        CodexUpstream::ChatCompletions,
     );
     let gateway = GatewayController::start(&state);
-    profile.parameters.settings.insert(
+    file.parameters.settings.insert(
         "web_search".to_string(),
         SettingValue::Explicit {
             value: ConfigValue::Str("live".to_string()),
         },
     );
     let projection = gateway
-        .project(&SwitchPlan::direct(
-            profile,
-            default_client_settings(AppKind::Codex),
-        ))
+        .project_codex(&file, default_client_settings(AppKind::Codex))
         .expect("project route");
 
     let (codex_home, workdir) =
@@ -47,6 +43,10 @@ fn actual_codex_cli_completes_through_the_isolated_http_gateway() {
 
     let output = run_isolated_cli(&codex_home, workdir);
     assert_cli_output(&output, &upstream_key, &projection_token(&projection));
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("Falling back from WebSockets"),
+        "Codex CLI must complete through the local WebSocket gateway"
+    );
 
     let (authorization, body) = observed_receiver
         .recv_timeout(Duration::from_secs(5))
@@ -89,16 +89,15 @@ fn verify_responses_cli(mode: ResponsesRequestMode) {
     let worker = serve_cli_upstream(upstream, sender, UpstreamProtocol::Responses);
     let directory = tempfile::tempdir().unwrap();
     let state = LocalState::from_root(directory.path().join("state"));
-    let mut profile = sandbox_profile(
+    let mut file = sandbox_codex_file(
         &state,
-        AppKind::Codex,
         "Native HTTP sandbox",
         upstream_url,
         upstream_key.clone(),
-        UpstreamProtocol::Responses,
+        CodexUpstream::Responses,
     );
-    profile.responses_options.as_mut().unwrap().request_mode = mode;
-    profile.parameters.settings.insert(
+    file.profile.request_mode = mode;
+    file.parameters.settings.insert(
         "web_search".to_string(),
         SettingValue::Explicit {
             value: ConfigValue::Str("disabled".to_string()),
@@ -106,10 +105,7 @@ fn verify_responses_cli(mode: ResponsesRequestMode) {
     );
     let gateway = GatewayController::start(&state);
     let projection = gateway
-        .project(&SwitchPlan::direct(
-            profile,
-            default_client_settings(AppKind::Codex),
-        ))
+        .project_codex(&file, default_client_settings(AppKind::Codex))
         .unwrap();
     assert!(projection.plan.profile.requires_gateway());
     let (codex_home, workdir) =
@@ -230,6 +226,12 @@ pub(super) fn prepare_client(
     let fixture_auth = fake_official_auth();
     fs::write(&auth, &fixture_auth).unwrap();
     fs::write(&config, "cli_auth_credentials_store = \"file\"\nchatgpt_base_url = \"http://127.0.0.1:9/isolated\"\n").unwrap();
+    let catalog = projection
+        .codex_catalog
+        .as_ref()
+        .expect("Codex projection must carry its catalog artifact");
+    let catalog_path = codex_home.join(&catalog.file_name);
+    fs::write(&catalog_path, &catalog.content).expect("write isolated model catalog");
     let preview = asb_switch::read_preview(
         &io,
         &config,
@@ -258,6 +260,7 @@ pub(super) fn prepare_client(
     assert!(!rendered.contains("model_providers"));
     assert!(!rendered.contains("experimental_bearer_token"));
     assert_eq!(fs::read(&auth).unwrap(), fixture_auth);
+    assert_eq!(fs::read_to_string(catalog_path).unwrap(), catalog.content);
 
     (codex_home, workdir)
 }

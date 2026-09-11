@@ -68,7 +68,11 @@ pub enum DiagnosticCode {
 /// decides the class. Auto means the repair planner may re-verify and fix
 /// it; Manual means a person decides; Info never counts as a fault.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum DiagnosticRemediation {
     Auto { reason: String },
     Manual { reason: String },
@@ -78,10 +82,12 @@ pub enum DiagnosticRemediation {
 /// The typed object a diagnostic is about. Real paths never cross this
 /// boundary: entries and bindings are named by id, scan locations by a
 /// renderer-safe scope label.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
 )]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum DiagnosticSubject {
     /// One row of the discovery table (observed skill or MCP entry).
     DiscoveryEntry { observation_id: String },

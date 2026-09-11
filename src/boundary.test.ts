@@ -1,8 +1,13 @@
+// @vitest-environment node
+// Pure Node fs/path assertions. The one assertion that loads the Vite config
+// probes it in a clean child process instead: loading the config pulls in
+// esbuild, whose realm invariant breaks inside a shared worker that already
+// ran jsdom suites.
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfigFromFile } from "vite";
 
 const srcRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(srcRoot);
@@ -48,19 +53,34 @@ describe("UI boundary", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("derives the Vite listener from the Tauri development URL", async () => {
+  it("derives the Vite listener from the Tauri development URL", () => {
     const tauriConfig = JSON.parse(
       readFileSync(join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8"),
     ) as { build: { devUrl: string } };
     const configuredUrl = new URL(tauriConfig.build.devUrl);
-    const loadedViteConfig = await loadConfigFromFile(
-      { command: "serve", mode: "test" },
-      join(repoRoot, "vite.config.ts"),
-    );
+    const loadedServer = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "--eval",
+          `const { loadConfigFromFile } = await import("vite");
+           const loaded = await loadConfigFromFile(
+             { command: "serve", mode: "test" },
+             ${JSON.stringify(join(repoRoot, "vite.config.ts"))},
+           );
+           process.stdout.write(JSON.stringify({
+             host: loaded?.config.server?.host ?? null,
+             port: loaded?.config.server?.port ?? null,
+           }));`,
+        ],
+        { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      ),
+    ) as { host: string | null; port: number | null };
 
     expect(configuredUrl.origin).toBe("http://127.0.0.1:1420");
-    expect(loadedViteConfig?.config.server?.host).toBe(configuredUrl.hostname);
-    expect(loadedViteConfig?.config.server?.port).toBe(Number(configuredUrl.port));
+    expect(loadedServer.host).toBe(configuredUrl.hostname);
+    expect(loadedServer.port).toBe(Number(configuredUrl.port));
   });
 
   it("keeps the platform bundle contracts in their own Tauri config files", () => {

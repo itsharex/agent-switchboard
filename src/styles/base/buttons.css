@@ -1,5 +1,5 @@
 /* Buttons. The Button component owns the geometry contract: it always emits
-   .asb-btn plus exactly one variant surface class below; base.css owns the
+   .asb-btn plus exactly one variant surface class below; this file owns the
    surfaces and the per-variant geometry deltas. */
 button {
   font: var(--asb-text-body);
@@ -11,15 +11,19 @@ button:disabled {
   opacity: 0.45;
 }
 
-.asb-btn {
+/* `unstyled` is a marker: custom action classes own every visual property. */
+.asb-btn:not(.asb-btn-unstyled) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: calc(var(--asb-space-unit) + var(--asb-space-hairline));
   min-height: var(--asb-touch-target);
-  min-width: 88px;
   padding: 0 var(--asb-space-3);
   border-radius: var(--asb-radius-action);
+}
+
+:where(.asb-btn:not(.asb-btn-unstyled):not(.asb-btn-icon):not(.asb-btn-back)) {
+  min-width: var(--asb-button-min-width);
 }
 
 .asb-btn-primary {
@@ -58,9 +62,18 @@ button:disabled {
   height: var(--asb-touch-target);
   padding: 0;
   border: 0;
-  border-radius: calc(var(--asb-radius-control) - 6px);
+  border-radius: var(--asb-radius-check);
   background: transparent;
   color: var(--asb-text);
+}
+
+/* A 40px target needs a 20px glyph to remain legible. Keep the glyph size
+   with the shared icon-button contract so individual action rows cannot
+   accidentally shrink it. */
+.asb-btn-icon > svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
 }
 
 .asb-btn-icon:hover {
@@ -75,25 +88,19 @@ button:disabled {
   color: var(--asb-action);
 }
 
-/* New-provider pill: tab-minus touch height; carbon-black premium surface
-   with the violet energy zone (Frosted Relay premium button; white text and
-   glow token-owned, no drop shadow). */
+/* New-provider action uses the same solid action surface as every primary
+   command. It remains compact to align with the client tab row. */
 .asb-btn-plus {
-  min-height: calc(var(--asb-touch-target) - 8px);
+  min-height: var(--asb-control-height);
   border: 0;
   border-radius: var(--asb-radius-pill);
-  background: var(--asb-gradient-premium-button);
+  background: var(--asb-action);
   color: var(--asb-text-on-action);
   font-weight: 600;
-  box-shadow: var(--asb-gradient-premium-button-glow);
-  transition:
-    box-shadow var(--asb-motion-fast) var(--asb-easing),
-    filter var(--asb-motion-fast) var(--asb-easing);
 }
 
 .asb-btn-plus:not(:disabled):hover {
-  box-shadow: var(--asb-gradient-premium-button-glow-hover);
-  filter: brightness(var(--asb-premium-button-hover-brightness));
+  background: color-mix(in srgb, var(--asb-action) 88%, var(--asb-text));
 }
 
 /* Page-level back icon button in the provider editor header. */

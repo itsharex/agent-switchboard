@@ -54,7 +54,7 @@ fn confirmed_port_change_rewrites_clients_and_keeps_tokens_stable() {
     let saved: GatewayStateFile =
         serde_json::from_str(&fs::read_to_string(state.gateway_state_path()).unwrap()).unwrap();
     assert_eq!(saved.port, to_port);
-    assert!(saved.active.contains_key(&AppKind::Claude));
+    assert!(saved.claude_route.is_some());
     assert!(!state
         .gateway_state_path()
         .with_file_name("gateway-port-journal.json")

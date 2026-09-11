@@ -9,7 +9,6 @@
 mod preview;
 mod rendered;
 mod switch;
-mod upgrade;
 
 pub(crate) use preview::read_current_or_empty;
 pub use preview::read_preview;

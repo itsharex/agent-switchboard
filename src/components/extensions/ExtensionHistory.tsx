@@ -2,6 +2,7 @@ import type { ExtensionListItem, ExtensionOperationRecord } from "../../api/clie
 import { Button } from "../Button";
 import { Time } from "../Time";
 import { OPERATION_LABELS, outcomeText, targetLabel } from "./labels";
+import { UpdateIcon } from "../icons";
 
 interface Props {
   records: ExtensionOperationRecord[];
@@ -15,7 +16,15 @@ interface Props {
  * per-target outcomes; each one can be re-planned as a restore through the
  * standard preview flow. */
 export function ExtensionHistory({ records, items, busy, projectNames, onRestore }: Props) {
-  if (records.length === 0) return <p className="asb-empty">还没有扩展操作记录</p>;
+  if (records.length === 0)
+    return (
+      <div className="asb-empty-state">
+        <span className="asb-empty-state-icon" aria-hidden="true">
+          <UpdateIcon />
+        </span>
+        <h3 className="asb-section-title">还没有扩展操作记录</h3>
+      </div>
+    );
   const nameOf = (definitionId: string) =>
     items.find((item) => item.id === definitionId)?.name ?? definitionId;
 

@@ -38,6 +38,9 @@ pub(crate) struct ProviderDiagnostic {
     pub(crate) transport: &'static str,
     pub(crate) status: Option<u16>,
     pub(crate) request_id: Option<String>,
+    /// Upstream throttling guidance is safe to expose and must survive the
+    /// gateway's protocol-specific error envelope.
+    pub(crate) retry_after: Option<String>,
     pub(crate) body: Option<String>,
     pub(crate) body_truncated: bool,
     pub(crate) message: String,
@@ -51,6 +54,7 @@ impl ProviderDiagnostic {
             transport: "http",
             status: None,
             request_id: None,
+            retry_after: None,
             body: None,
             body_truncated: false,
             message: message.to_string(),
@@ -123,6 +127,12 @@ pub(crate) fn http_diagnostic(
     result.endpoint = redact_text(&result.endpoint, secrets);
     result.status = Some(status);
     result.request_id = request_id(headers).map(|value| redact_text(&value, secrets));
+    result.retry_after = headers
+        .get("retry-after")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| redact_text(value, secrets));
     let mut sanitized = redact::body(&text, secrets, truncated);
     let mut boundary = sanitized.len().min(MAX_DIAGNOSTIC_BODY_BYTES);
     while !sanitized.is_char_boundary(boundary) {

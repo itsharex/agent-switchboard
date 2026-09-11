@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
+import appIcon from "../assets/app-icon.png";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { AppSettingsForm } from "../components/AppSettingsForm";
@@ -75,8 +76,11 @@ function AboutSettings(props: SettingsPageProps) {
   return (
     <div className="asb-app-settings">
       <div className="asb-about-product">
-        <h3>Agent Switchboard</h3>
-        <p className="asb-field-help">Codex 与 Claude Code 的本地配置控制台。</p>
+        <img className="asb-about-logo" src={appIcon} alt="" />
+        <div className="asb-about-copy">
+          <h3 className="asb-section-title">Agent Switchboard</h3>
+          <p className="asb-field-help">Codex 与 Claude Code 的本地配置控制台。</p>
+        </div>
       </div>
       <UpdateSection channel={props.updateChannel} appVersion={props.appVersion}
         result={props.updateCheck} busy={props.busy || props.updateChecking} installing={props.updateInstalling}
@@ -94,7 +98,7 @@ function SettingsPanel({ section, selected, children }: {
   const title = SETTINGS_SECTIONS.find((item) => item.value === section)!.label;
   return (
     <section className="asb-panel" hidden={selected !== section} aria-label={title}>
-      <div className="asb-panel-heading"><h2 className="asb-panel-title">{title}</h2></div>
+      <div className="asb-panel-heading"><h3 className="asb-section-title">{title}</h3></div>
       {children}
     </section>
   );
@@ -111,8 +115,8 @@ export function SettingsPage(props: SettingsPageProps) {
         </div>
         <nav className="asb-settings-navigation" aria-label="设置分类">
           {SETTINGS_SECTIONS.map(({ value, label }) => (
-            <button key={value} type="button" aria-current={section === value ? "page" : undefined}
-              className="asb-settings-category" onClick={() => onSectionChange(value)}>{label}</button>
+            <Button key={value} variant="unstyled" aria-current={section === value ? "page" : undefined}
+              className="asb-settings-category" onClick={() => onSectionChange(value)}>{label}</Button>
           ))}
         </nav>
       </aside>

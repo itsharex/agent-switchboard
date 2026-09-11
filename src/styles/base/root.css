@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+/* Focus keeps native interaction semantics without adding a visual state. */
+:focus,
+:focus-visible {
+  outline: none;
+}
+
 /* The `hidden` attribute owns route-level visibility (App.tsx session panel).
    Author `display` declarations otherwise defeat the UA default, so restore
    it as an app-wide hard contract. */
@@ -21,6 +27,26 @@ body {
   color: var(--asb-text);
   background: var(--asb-canvas);
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Headings carry no browser defaults. Every heading is styled by the class
+ * that claims it — `.asb-panel-title` for the page h2, `.asb-section-title`
+ * for a module h3 — so an unclaimed heading can never silently fall back to
+ * the UA's `1.17em` bold plus margins and outrank the type ramp.
+ * `font: inherit` resets size, weight, family and line-height in one
+ * declaration; margin is the UA's other default. Values live in tokens.css
+ * (DESIGN.md §5, user directive 2026-09-11). Enforced by
+ * src/styles/tokens.test.ts.
+ */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font: inherit;
 }
 
 #root {
@@ -54,8 +80,8 @@ body {
   border-radius: var(--asb-radius-pill);
   background-color: var(--asb-scrollbar-thumb);
   background-clip: padding-box;
-  min-height: 32px;
-  min-width: 32px;
+  min-height: var(--asb-scrollbar-thumb-min);
+  min-width: var(--asb-scrollbar-thumb-min);
 }
 
 ::-webkit-scrollbar-thumb:hover {

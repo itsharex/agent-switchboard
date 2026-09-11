@@ -5,7 +5,7 @@ import { TRANSPORT_LABELS } from "./labels";
 
 function Facts({ rows }: { rows: Array<[string, ReactNode]> }) {
   return (
-    <dl className="asb-ext-facts">
+    <dl className="asb-fact-row">
       {rows.map(([label, content]) => (
         <div key={label}>
           <dt>{label}</dt>
@@ -34,7 +34,7 @@ function SecretMap({ title, values }: { title: string; values: Record<string, Cr
   if (Object.keys(values).length === 0) return null;
   return (
     <div className="asb-ext-section">
-      <h4>{title}</h4>
+      <h4 className="asb-group-title">{title}</h4>
       <ul className="asb-ext-secret-list">
         {Object.entries(values).map(([key, value]) => (
           <li key={key}>
@@ -72,7 +72,7 @@ function SkillFacts({ item }: { item: Extract<ExtensionListItem, { kind: "skill"
       <Facts rows={rows} />
       {item.compatibility.length > 0 && (
         <div className="asb-ext-section">
-          <h4>兼容诊断</h4>
+          <h4 className="asb-group-title">兼容诊断</h4>
           <ul className="asb-ext-secret-list">
             {item.compatibility.map((note) => (
               <li key={note.code}>{note.message}</li>
@@ -81,7 +81,7 @@ function SkillFacts({ item }: { item: Extract<ExtensionListItem, { kind: "skill"
         </div>
       )}
       <div className="asb-ext-section">
-        <h4>依赖状态</h4>
+        <h4 className="asb-group-title">依赖状态</h4>
         {item.dependencyStates.length === 0 ? (
           <p className="asb-empty">未声明依赖</p>
         ) : (
@@ -117,7 +117,7 @@ export function ExtensionResourceFacts({ item }: { item: ExtensionListItem }) {
       )}
       {item.transport === "http" && item.bearer && (
         <div className="asb-ext-section">
-          <h4>Bearer 凭据</h4>
+          <h4 className="asb-group-title">Bearer 凭据</h4>
           <SecretValue value={item.bearer} />
         </div>
       )}

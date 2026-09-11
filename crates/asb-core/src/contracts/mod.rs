@@ -4,6 +4,7 @@
 //! This module is the single owner of every field list. Nothing else may
 //! redefine these shapes.
 
+mod codex;
 mod kinds;
 mod model;
 mod plan;
@@ -15,11 +16,18 @@ mod subagents;
 mod tests;
 mod usage;
 
+pub use codex::{
+    codex_model_catalog_document, CodexCapabilities, CodexCatalogEntry, CodexChatEffortMode,
+    CodexChatEffortParameter, CodexChatReasoning, CodexChatThinkingParameter, CodexEndpoint,
+    CodexModelRoute, CodexOperation, CodexProviderDraft, CodexProviderFile, CodexProviderProfile,
+    CodexProviderRecord, CodexReasoningLevel, CodexRouteSnapshot, CodexUpstream,
+    CODEX_PROVIDER_SCHEMA_VERSION,
+};
 pub use kinds::{AppKind, AuthenticationScheme, GlobalPromptDocument, RouteMode, UpstreamProtocol};
 pub use model::{ClaudeModelSettings, CodexModelSettings, ExplicitMaxOutputTokens, ModelOptions};
 pub use plan::{
-    BackupRecord, ChangeKind, ConfigWriteRecord, ImportProposal, KeyChange, MatchStatus,
-    RouteState, SwitchPlan, SwitchPreview, WriteOperation,
+    BackupRecord, ChangeKind, ConfigWriteRecord, KeyChange, MatchStatus, RouteState, SwitchPlan,
+    SwitchPreview, WriteOperation,
 };
 pub use provider::{
     classify_profile_save, ProfileSaveKind, ProviderDraft, ProviderFile, ProviderProfile,

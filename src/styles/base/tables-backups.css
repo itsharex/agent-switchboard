@@ -4,9 +4,8 @@
    carried by spacing alone, every column left-aligned. Rows lift on hover.
    The table carries its own hairline border and control-radius corner frame
    (2026-09-02 user directive); the band and the last row's hover surface
-   clip to those corners. Separate borders keep the sticky band pinned.
-   Scroll ownership stays with each module's own region (.asb-backups,
-   .asb-runtime-log-table-wrap). */
+   clip to those corners. Sticky headers are opt-in only for modules that
+   own a table scroll region. */
 .asb-table {
   width: 100%;
   border-collapse: separate;
@@ -18,9 +17,6 @@
 }
 
 .asb-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   padding: var(--asb-space-2) var(--asb-space-3);
   background: var(--asb-content-muted);
   font: var(--asb-text-label);
@@ -58,7 +54,8 @@
 }
 
 .asb-table .asb-btn-secondary {
-  min-width: 64px;
+  --asb-table-action-min-width: 64px;
+  min-width: var(--asb-table-action-min-width);
 }
 
 /* A data table never shares an edge with the trend block above it (user
@@ -106,6 +103,12 @@
   scrollbar-gutter: stable;
 }
 
+.asb-backups .asb-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 /* The cloud-backup controls fill their own tab and remain a clearly bounded
    encrypted remote operation, never a second glass card. */
 .asb-cloud-backup {
@@ -127,7 +130,6 @@
 }
 
 .asb-cloud-backup-guide-title,
-.asb-cloud-backup-guide-list h4,
 .asb-cloud-backup-guide-list p {
   margin: 0;
 }
@@ -161,10 +163,6 @@
   border-top: 1px solid var(--asb-hairline);
 }
 
-.asb-cloud-backup-guide-list h4 {
-  color: var(--asb-text);
-  font: var(--asb-text-body);
-}
 
 .asb-cloud-backup-guide-list p {
   margin-top: var(--asb-space-1);
@@ -185,9 +183,5 @@
 
 .asb-cloud-backup-guide-link:hover {
   color: var(--asb-text);
-}
-
-.asb-cloud-backup-guide-link:focus-visible {
-  outline: var(--asb-focus-ring);
 }
 

@@ -30,6 +30,10 @@ const baseCss = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../styles/base.css"),
   "utf8",
 );
+const providerCardsCss = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../styles/base/provider-cards.css"),
+  "utf8",
+);
 
 const profiles: ProviderProfile[] = [
   {
@@ -204,7 +208,7 @@ describe("ProviderList", () => {
     );
   });
 
-  it("keeps selection semantic without a persistent card highlight", () => {
+  it("uses the selected row's blue-to-white highlight treatment", () => {
     render(
       <ProviderList
         profiles={profiles}
@@ -217,7 +221,7 @@ describe("ProviderList", () => {
     const selectedRow = screen.getByRole("option", { name: /官方 OpenAI/ });
     expect(selectedRow).toHaveAttribute("aria-selected", "true");
     const selectedCard = selectedRow.closest("li");
-    expect(selectedCard).not.toHaveClass("is-selected");
+    expect(selectedCard).toHaveClass("is-selected");
   });
 
   it("swaps the preview eye for a closed-eye toggle when that row's preview is open", async () => {
@@ -726,12 +730,39 @@ describe("ProviderList", () => {
     expect(onActivate).toHaveBeenCalledWith(profiles[1]);
   });
 
-  it("reveals 启用 only while its provider card is hovered", () => {
-    const activationRule = baseCss.match(/\.asb-row-item:hover \.asb-row-activate \{[^}]+\}/)?.[0] ?? "";
+  it("transitions card actions into view only while their provider card is hovered", () => {
+    const activationBaseRule = providerCardsCss.match(/\.asb-row-item \.asb-row-activate \{[^}]+\}/)?.[0] ?? "";
+    const activationRule = providerCardsCss.match(/\.asb-row-item:hover \.asb-row-activate \{[^}]+\}/)?.[0] ?? "";
+    const iconClusterRule = providerCardsCss.match(/\.asb-row-item \.asb-iconcluster \{[^}]+\}/)?.[0] ?? "";
 
-    expect(activationRule).toContain("display: inline-flex");
-    expect(baseCss).not.toContain(":focus-within .asb-row-activate");
-    expect(baseCss).not.toContain('[aria-selected="true"] + .asb-row-activate');
+    expect(activationRule).toContain("opacity: 1");
+    expect(activationRule).toContain("visibility: visible");
+    expect(activationBaseRule).toContain("transition:");
+    expect(activationBaseRule).not.toContain("max-inline-size var(");
+    expect(activationBaseRule).not.toContain("padding-inline var(");
+    expect(iconClusterRule).toContain("opacity: 0");
+    expect(providerCardsCss).not.toContain(":focus-within .asb-row-activate");
+    expect(providerCardsCss).not.toContain('[aria-selected="true"] + .asb-row-activate');
+  });
+
+  it("animates the list surface with the shared motion tokens", () => {
+    expect(providerCardsCss).toContain("asb-provider-list-appear");
+    expect(providerCardsCss).toContain("var(--asb-motion-fast)");
+    expect(providerCardsCss).toContain("var(--asb-motion-press)");
+  });
+
+  it("marks the selected provider row for the blue-to-white list treatment", () => {
+    render(
+      <ProviderList
+        profiles={profiles}
+        activeProfileId={null}
+        selectedId="codex-relay-a"
+        onSelect={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: /中继 A/ }).closest(".asb-row-item")).toHaveClass("is-selected");
+    expect(providerCardsCss).toContain("--asb-provider-row-highlight");
   });
 
   it("keeps the host link quiet until hovered", () => {

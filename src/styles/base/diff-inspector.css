@@ -17,7 +17,7 @@
 .asb-diff-row {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
   padding: var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius-control);
@@ -89,7 +89,7 @@
 .asb-kv {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
   padding: var(--asb-space-2) 0;
   border-top: 1px solid var(--asb-hairline);
 }

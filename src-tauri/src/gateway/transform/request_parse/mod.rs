@@ -1,6 +1,6 @@
 use super::super::{
     error, CanonicalRequest, ImageSource, Message, Part, ReasoningEffort, ReasoningTransport, Role,
-    Tool, ToolChoice, TransformError,
+    Tool, ToolChoice, ToolKind, TransformError, CODEX_TOOL_SEARCH_NAME,
 };
 use asb_core::contracts::UpstreamProtocol;
 use serde_json::{json, Map, Value};
@@ -28,3 +28,6 @@ use json::*;
 use messages::*;
 use protocols::{parse_anthropic, parse_chat, parse_responses};
 use tools::*;
+
+#[cfg(test)]
+mod tool_search_tests;

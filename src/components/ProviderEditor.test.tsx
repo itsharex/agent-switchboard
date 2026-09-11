@@ -7,15 +7,17 @@ import { ProviderEditor } from "../test/provider-editor";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 describe("ProviderEditor", () => {
-  it("decorates the client field with the selected client's brand mark", async () => {
+  it("hands the session to the other client's editor instead of swapping in place", async () => {
     const user = userEvent.setup();
+    const onSwitchClient = vi.fn();
     render(
       <ProviderEditor
         profile={null}
-        initialApp="codex"
+        initialApp="claude"
         busy={false}
         officialTakenApps={[]}
         userConfigModel={null}
+        onSwitchClient={onSwitchClient}
         onSave={vi.fn()}
         onCancel={() => {}}
       />,
@@ -25,16 +27,17 @@ describe("ProviderEditor", () => {
       .closest(".asb-client-control")
       ?.querySelector("img.asb-edit-logo");
     expect(mark).not.toBeNull();
-    // Vite inlines assets as data URIs in tests, so only distinctness is stable.
-    const codexSrc = mark?.getAttribute("src") ?? "";
-    expect(codexSrc.length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("combobox", { name: "客户端" }));
-    await user.click(await screen.findByRole("option", { name: "Claude" }));
+    await user.click(await screen.findByRole("option", { name: "Codex" }));
 
-    expect(screen.getByLabelText("客户端").closest(".asb-client-control")
-      ?.querySelector("img.asb-edit-logo")
-      ?.getAttribute("src")).not.toBe(codexSrc);
+    expect(onSwitchClient).toHaveBeenCalledWith("codex");
+    // The Claude draft stays mounted; the parent replaces the session.
+    expect(
+      screen.getByLabelText("客户端").closest(".asb-client-control")
+        ?.querySelector("img.asb-edit-logo")
+        ?.getAttribute("src"),
+    ).toBe(mark?.getAttribute("src"));
   });
 
   it("places shared supplier testing outside the main-model field", () => {
@@ -143,46 +146,6 @@ describe("ProviderEditor", () => {
         },
       }),
     );
-  });
-
-  it("submits a Codex draft with model options and an API key", async () => {
-    const user = userEvent.setup();
-    const onSave = vi.fn();
-    render(
-      <ProviderEditor
-        profile={null}
-        initialApp="codex"
-        busy={false}
-        officialTakenApps={[]}
-        userConfigModel={null}
-        onSave={onSave}
-        onCancel={() => {}}
-      />,
-    );
-
-    await user.type(screen.getByLabelText("名称"), "本机网关");
-    await user.type(screen.getByLabelText("服务地址"), "https://gateway.example/v1");
-    await user.type(screen.getByLabelText("主模型"), "gpt-5.3-codex");
-    await user.type(screen.getByLabelText("API 密钥"), "sk-test-codex");
-    await user.click(screen.getByRole("button", { name: "保存供应商" }));
-
-    expect(onSave).toHaveBeenCalledWith({
-      app: "codex",
-      routeMode: "custom",
-      name: "本机网关",
-      model: "gpt-5.3-codex",
-      baseUrl: "https://gateway.example/v1",
-      apiKey: "sk-test-codex",
-      upstreamProtocol: "responses",
-      responsesOptions: { requestMode: "standard" as const },
-      maxOutputTokens: null,
-      notes: null,
-      websiteUrl: null,
-      usageQuery: null,
-      officialQuotaRefreshIntervalMinutes: null,
-      parameters: providerParameters("codex"),
-      modelOptions: null,
-    });
   });
 
   it("reveals and hides the API key only on explicit action", async () => {

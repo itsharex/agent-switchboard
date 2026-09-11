@@ -1,6 +1,5 @@
 import type {
   AppKind,
-  CodexModelSettings,
   ClaudeModelSettings,
   ModelOptions,
   ProviderDraft,
@@ -14,8 +13,6 @@ import { normalizeUsageQuery } from "../../lib/usage-query";
 export type ProviderEditorDraft = Omit<ProviderDraft, "parameters"> & {
   parameters: SettingsValues | null;
 };
-
-export const CONTEXT_WINDOW_1M = 1_000_000;
 
 /** What each wire format means for the endpoint the user is about to enter. */
 export const PROTOCOL_NOTES: Record<UpstreamProtocol, string> = {
@@ -38,7 +35,7 @@ export function defaultConnection(app: AppKind): Pick<ProviderDraft,
   return {
     upstreamProtocol: NATIVE_PROTOCOL[app],
     maxOutputTokens: null,
-    responsesOptions: app === "codex" ? { requestMode: "standard" } : null,
+    responsesOptions: null,
   };
 }
 
@@ -91,7 +88,7 @@ export function prepareDraft(draft: ProviderEditorDraft): ProviderDraft | null {
     apiKey: draft.apiKey.trim(),
     notes: optional(draft.notes ?? ""),
     websiteUrl: optional(draft.websiteUrl ?? ""),
-    modelOptions: codexOptionsAreEmpty(draft.modelOptions) ? null : draft.modelOptions,
+    modelOptions: draft.modelOptions,
     usageQuery: normalizeUsageQuery(draft.usageQuery),
   };
 }
@@ -111,15 +108,6 @@ export function optional(value: string): string | null {
   return normalized || null;
 }
 
-export function codexOptions(
-  current: ModelOptions | null,
-  patch: Partial<CodexModelSettings>,
-): ModelOptions {
-  const base: CodexModelSettings =
-    current?.kind === "codex" ? current : { contextWindow: null };
-  return { kind: "codex", ...base, ...patch };
-}
-
 export function claudeOptions(
   current: ModelOptions | null,
   patch: Partial<ClaudeModelSettings>,
@@ -137,8 +125,4 @@ export function claudeOptions(
           availableModels: null,
         };
   return { kind: "claude", ...base, ...patch };
-}
-
-export function codexOptionsAreEmpty(options: ModelOptions | null): boolean {
-  return !options || (options.kind === "codex" && options.contextWindow === null);
 }

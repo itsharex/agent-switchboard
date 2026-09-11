@@ -1,13 +1,14 @@
-import type { AppKind, DiscoveredFile, DiscoveryReport, ImportProposal } from "../../api/client";
+import type { ClaudeImportProposal, DiscoveredFile, DiscoveryReport } from "../../api/client";
 import { Button } from "../../components/Button";
+import { SearchIcon } from "../../components/icons";
 import { clientName } from "../../lib/client-name";
 
 interface LocalConfigImportProps {
-  app: AppKind;
+  app: "claude";
   discovery: DiscoveryReport | null;
   busy: boolean;
   onScan: () => void;
-  onImport: (app: AppKind) => void;
+  onImport: () => void;
 }
 
 function stateLabel(file: DiscoveredFile): string {
@@ -43,9 +44,9 @@ function LocalRouteFacts({ file }: { file: DiscoveredFile }) {
 
 function LocalConfigCard({ file, proposal, busy, onImport }: {
   file: DiscoveredFile;
-  proposal: ImportProposal | undefined;
+  proposal: ClaudeImportProposal | undefined;
   busy: boolean;
-  onImport: (app: AppKind) => void;
+  onImport: () => void;
 }) {
   return (
     <article className="asb-status-card" aria-label={`${clientName(file.app)} 扫描结果`}>
@@ -67,7 +68,7 @@ function LocalConfigCard({ file, proposal, busy, onImport }: {
       </dl>
       {proposal && <div className="asb-discovery-import">
         <p className="asb-discovery-basis">{proposal.basis}</p>
-        <Button variant="secondary" disabled={busy} onClick={() => onImport(proposal.app)}>导入供应商</Button>
+        <Button variant="secondary" disabled={busy} onClick={onImport}>导入供应商</Button>
       </div>}
     </article>
   );
@@ -81,8 +82,15 @@ export function LocalConfigImport({ app, discovery, busy, onScan, onImport }: Lo
         <Button variant="secondary" disabled={busy} onClick={onScan}>{discovery ? "刷新配置" : "扫描配置"}</Button>
       </div>
       {discovery ? <LocalConfigCard file={discovery[app]} busy={busy} onImport={onImport}
-        proposal={discovery.importProposals.find((item) => item.app === app)} />
-        : <p className="asb-empty">尚未扫描 {clientName(app)} 配置。</p>}
+        proposal={app === "claude" ? discovery.claudeImportProposals[0] : undefined} />
+        : (
+          <div className="asb-empty-state">
+            <span className="asb-empty-state-icon" aria-hidden="true">
+              <SearchIcon />
+            </span>
+            <h3 className="asb-section-title">尚未扫描 {clientName(app)} 配置。</h3>
+          </div>
+        )}
     </section>
   );
 }

@@ -16,16 +16,22 @@ const SAMPLE_CAPACITY: usize = 512;
 
 /// One completed gateway request, recorded exactly once at the boundary that
 /// answered the client. `status` is the HTTP status for direct HTTP traffic
-/// and `Some(200)` / `None` for a served / failed WebSocket message exchange.
-/// `profile_id` and `upstream_protocol` are set only when the capability
-/// token matched a route; rejected or unmatched traffic stays unattributed
-/// instead of wearing placeholder values.
+/// and `Some(101)` for an accepted WebSocket upgrade or `Some(200)` / `None`
+/// for a served / failed WebSocket message exchange.
+/// `profile_id`, `route_revision`, and `upstream_protocol` are set together
+/// only when the capability token matched an immutable route snapshot.
+/// Rejected or unmatched traffic stays unattributed instead of wearing
+/// placeholder values.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GatewaySample {
     pub(crate) at_ms: u64,
     pub(crate) app: AppKind,
     pub(crate) profile_id: Option<String>,
+    /// The exact immutable route revision that accepted this request. This
+    /// lets the status UI distinguish traffic accepted before and after a
+    /// hot switch of the same provider profile.
+    pub(crate) route_revision: Option<String>,
     pub(crate) client_protocol: UpstreamProtocol,
     pub(crate) upstream_protocol: Option<UpstreamProtocol>,
     pub(crate) status: Option<u16>,
@@ -110,6 +116,7 @@ pub(crate) struct RequestSpan {
     app: AppKind,
     client_protocol: UpstreamProtocol,
     profile_id: Option<String>,
+    route_revision: Option<String>,
     upstream_protocol: Option<UpstreamProtocol>,
     request_bytes: u64,
     started: Instant,
@@ -126,14 +133,24 @@ impl RequestSpan {
             app,
             client_protocol,
             profile_id: None,
+            route_revision: None,
             upstream_protocol: None,
             request_bytes: 0,
             started: Instant::now(),
         }
     }
 
-    pub(crate) fn bind_route(&mut self, profile_id: &str, upstream_protocol: UpstreamProtocol) {
+    /// Binds one request to the exact route snapshot that admitted it. The
+    /// revision must travel with the profile id so a later route replacement
+    /// cannot cause traffic to be attributed to the currently active route.
+    pub(crate) fn bind_route(
+        &mut self,
+        profile_id: &str,
+        route_revision: &str,
+        upstream_protocol: UpstreamProtocol,
+    ) {
         self.profile_id = Some(profile_id.to_string());
+        self.route_revision = Some(route_revision.to_string());
         self.upstream_protocol = Some(upstream_protocol);
     }
 
@@ -148,6 +165,7 @@ impl RequestSpan {
             at_ms: unix_now_ms(),
             app: self.app,
             profile_id: self.profile_id,
+            route_revision: self.route_revision,
             client_protocol: self.client_protocol,
             upstream_protocol: self.upstream_protocol,
             status,
@@ -182,7 +200,7 @@ mod tests {
         let metrics = Arc::new(GatewayMetrics::new());
         span(&metrics).finish(Some(200), 10);
         let mut rejected = span(&metrics);
-        rejected.bind_route("p1", UpstreamProtocol::ChatCompletions);
+        rejected.bind_route("p1", "revision-p1", UpstreamProtocol::ChatCompletions);
         rejected.finish(Some(401), 0);
         span(&metrics).finish(None, 0);
 
@@ -192,15 +210,20 @@ mod tests {
         assert_eq!(snapshot.samples.len(), 3);
         let unbound = &snapshot.samples[2];
         assert_eq!(unbound.profile_id, None);
+        assert_eq!(unbound.route_revision, None);
         assert_eq!(unbound.upstream_protocol, None);
         let sample = &snapshot.samples[1];
         assert_eq!(sample.profile_id.as_deref(), Some("p1"));
+        assert_eq!(sample.route_revision.as_deref(), Some("revision-p1"));
         assert_eq!(
             sample.upstream_protocol,
             Some(UpstreamProtocol::ChatCompletions)
         );
         assert_eq!(sample.status, Some(401));
         assert!(sample.failed());
+
+        let rendered = serde_json::to_value(sample).expect("serialize metric sample");
+        assert_eq!(rendered["routeRevision"], "revision-p1");
     }
 
     #[test]
@@ -213,5 +236,25 @@ mod tests {
         assert_eq!(snapshot.samples.len(), SAMPLE_CAPACITY);
         assert_eq!(snapshot.total_requests, (SAMPLE_CAPACITY + 10) as u64);
         assert_eq!(snapshot.failed_requests, 0);
+    }
+
+    #[test]
+    fn keeps_each_accepted_requests_bound_route_revision() {
+        let metrics = Arc::new(GatewayMetrics::new());
+        let mut before_switch = span(&metrics);
+        before_switch.bind_route("p1", "revision-a", UpstreamProtocol::Responses);
+        before_switch.finish(Some(200), 0);
+
+        let mut after_switch = span(&metrics);
+        after_switch.bind_route("p1", "revision-b", UpstreamProtocol::Responses);
+        after_switch.finish(Some(200), 0);
+
+        let snapshot = metrics.snapshot();
+        let revisions: Vec<_> = snapshot
+            .samples
+            .iter()
+            .map(|sample| sample.route_revision.as_deref())
+            .collect();
+        assert_eq!(revisions, [Some("revision-a"), Some("revision-b")]);
     }
 }

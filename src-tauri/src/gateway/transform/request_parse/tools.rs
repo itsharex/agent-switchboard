@@ -2,6 +2,33 @@
 
 use super::*;
 
+const TOOL_SEARCH_DESCRIPTION: &str =
+    "Search and load Codex tools, plugins, connectors, and MCP namespaces for the current task.";
+
+fn tool_search_definition() -> Tool {
+    Tool {
+        name: CODEX_TOOL_SEARCH_NAME.to_string(),
+        kind: ToolKind::ToolSearch,
+        namespace: None,
+        description: Some(TOOL_SEARCH_DESCRIPTION.to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query for tools or connectors to load."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of tool groups to return."
+                }
+            },
+            "required": ["query"]
+        }),
+        strict: false,
+    }
+}
+
 pub(super) fn parse_responses_tools(value: Option<&Value>) -> Result<Vec<Tool>, TransformError> {
     let Some(value) = value else {
         return Ok(vec![]);
@@ -18,6 +45,7 @@ pub(super) fn parse_responses_tools(value: Option<&Value>) -> Result<Vec<Tool>, 
                 )?;
                 tools.push(Tool {
                     name: string(item.get("name"), "tool.name")?,
+                    kind: ToolKind::Function,
                     namespace: None,
                     description: optional_string(item, "description", "Responses function tool")?,
                     input_schema: item
@@ -53,6 +81,7 @@ pub(super) fn parse_responses_tools(value: Option<&Value>) -> Result<Vec<Tool>, 
                     }
                     tools.push(Tool {
                         name: string(nested.get("name"), "namespace tool.name")?,
+                        kind: ToolKind::Function,
                         namespace: Some(namespace.clone()),
                         description: merge_namespace_description(
                             namespace_description.as_deref(),
@@ -70,6 +99,67 @@ pub(super) fn parse_responses_tools(value: Option<&Value>) -> Result<Vec<Tool>, 
                 return error(
                     "Responses web_search 是服务端工具，无法由 Chat Completions 或 Anthropic Messages 无损承载",
                 );
+            }
+            "tool_search" => {
+                allowed(
+                    item,
+                    &["type", "execution", "description", "parameters"],
+                    "Responses tool_search tool",
+                )?;
+                if let Some(execution) = item.get("execution") {
+                    if execution.as_str() != Some("client") {
+                        return error("Responses tool_search.execution 必须是 client");
+                    }
+                }
+                let mut definition = tool_search_definition();
+                if let Some(description) =
+                    optional_string(item, "description", "Responses tool_search tool")?
+                {
+                    definition.description = Some(description);
+                }
+                if let Some(parameters) = item.get("parameters") {
+                    if !parameters.is_object() {
+                        return error("Responses tool_search.parameters 必须是对象");
+                    }
+                    definition.input_schema = parameters.clone();
+                }
+                tools.push(definition);
+            }
+            "custom" => {
+                allowed(
+                    item,
+                    &["type", "name", "description", "format"],
+                    "Responses custom tool",
+                )?;
+                let description = optional_string(item, "description", "Responses custom tool")?;
+                let format = item.get("format").cloned();
+                let description = match (description, format) {
+                    (Some(description), None) => Some(description),
+                    (None, Some(format)) => Some(format!(
+                        "Custom tool definition:\n{}",
+                        serde_json::to_string(&format)
+                            .map_err(|_| TransformError("无法编码 custom 工具格式".to_string()))?
+                    )),
+                    (Some(description), Some(format)) => Some(format!(
+                        "{description}\n\nCustom tool definition:\n{}",
+                        serde_json::to_string(&format)
+                            .map_err(|_| TransformError("无法编码 custom 工具格式".to_string()))?
+                    )),
+                    (None, None) => None,
+                };
+                tools.push(Tool {
+                    name: string(item.get("name"), "custom tool.name")?,
+                    kind: ToolKind::Custom,
+                    namespace: None,
+                    description,
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": { "input": { "type": "string", "description": "Raw custom tool input. Preserve exactly." } },
+                        "required": ["input"],
+                        "additionalProperties": false,
+                    }),
+                    strict: false,
+                });
             }
             other => return error(format!("Responses 工具类型 {other} 不支持跨协议转换")),
         }
@@ -113,6 +203,7 @@ pub(super) fn parse_chat_tools(value: Option<&Value>) -> Result<Vec<Tool>, Trans
         )?;
         tools.push(Tool {
             name: string(function.get("name"), "tool.function.name")?,
+            kind: ToolKind::Function,
             namespace: None,
             description: optional_string(function, "description", "tool.function")?,
             input_schema: function
@@ -139,6 +230,7 @@ pub(super) fn parse_anthropic_tools(value: Option<&Value>) -> Result<Vec<Tool>, 
         )?;
         tools.push(Tool {
             name: string(item.get("name"), "tool.name")?,
+            kind: ToolKind::Function,
             namespace: None,
             description: optional_string(item, "description", "Anthropic tool")?,
             input_schema: item
@@ -159,12 +251,26 @@ pub(super) fn parse_responses_tool_choice(
         Some(Value::String(value)) => parse_tool_choice_word(value),
         Some(Value::Object(map)) => {
             allowed(map, &["type", "name", "namespace"], "Responses tool_choice")?;
-            if string(map.get("type"), "tool_choice.type")? != "function" {
-                return error("Responses tool_choice 仅支持 function");
+            let kind = match string(map.get("type"), "tool_choice.type")?.as_str() {
+                "function" => ToolKind::Function,
+                "custom" => ToolKind::Custom,
+                "tool_search" => ToolKind::ToolSearch,
+                _ => return error("Responses tool_choice 仅支持 function、custom 或 tool_search"),
+            };
+            if kind == ToolKind::ToolSearch {
+                if map.len() != 1 {
+                    return error("Responses tool_search tool_choice 只能包含 type");
+                }
+                return Ok(ToolChoice::Named {
+                    name: CODEX_TOOL_SEARCH_NAME.to_string(),
+                    namespace: None,
+                    kind,
+                });
             }
             Ok(ToolChoice::Named {
                 name: string(map.get("name"), "tool_choice.name")?,
                 namespace: optional_string(map, "namespace", "Responses tool_choice")?,
+                kind,
             })
         }
         _ => error("Responses tool_choice 格式不支持"),
@@ -189,6 +295,7 @@ pub(super) fn parse_chat_tool_choice(value: Option<&Value>) -> Result<ToolChoice
             Ok(ToolChoice::Named {
                 name: string(function.get("name"), "tool_choice.function.name")?,
                 namespace: None,
+                kind: ToolKind::Function,
             })
         }
         _ => error("Chat tool_choice 格式不支持"),
@@ -213,6 +320,7 @@ pub(super) fn parse_anthropic_tool_choice(
         "tool" => Ok(ToolChoice::Named {
             name: string(map.get("name"), "tool_choice.name")?,
             namespace: None,
+            kind: ToolKind::Function,
         }),
         other => error(format!("Anthropic tool_choice.type {other} 不支持")),
     }

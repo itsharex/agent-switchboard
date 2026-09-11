@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ShapePath = System.Windows.Shapes.Path;
 using System.Windows.Shell;
 
@@ -52,9 +53,9 @@ namespace AgentSwitchboard.Installer
             FontFamily = (FontFamily)Resources["InterfaceFont"];
             UseLayoutRounding = true;
             WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 60, ResizeBorderThickness = new Thickness(0), CornerRadius = new CornerRadius(0), GlassFrameThickness = new Thickness(0) });
-            var frame = new Grid { Background = Brush("Surface") };
+            var frame = new Grid { Background = BackgroundBrush() };
             Content = frame;
-            SourceInitialized += delegate { ApplySystemMaterial(frame); };
+            SourceInitialized += delegate { ApplySystemMaterial(); };
             var layout = new Grid { Margin = new Thickness(28, 8, 28, 24) };
             frame.Children.Add(layout);
             layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -162,6 +163,18 @@ namespace AgentSwitchboard.Installer
 
         private string T(string zh, string en) { return chinese ? zh : en; }
         private Brush Brush(string key) { return (Brush)Resources[key]; }
+        private Brush BackgroundBrush()
+        {
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("AgentSwitchboard.Installer.Assets.InstallerBackground.wdp"))
+            {
+                if (stream == null) return Brush("Surface");
+                var decoder = new WmpBitmapDecoder(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                if (decoder.Frames.Count == 0) return Brush("Surface");
+                var image = new ImageBrush(decoder.Frames[0]) { Stretch = Stretch.Fill };
+                image.Freeze();
+                return image;
+            }
+        }
         private TextBlock Text(string value, string size) { return new TextBlock { Text = value, FontSize = (double)Resources[size] }; }
         private Button MakeButton(string label, bool main) { return new Button { Content = label, Style = (Style)Resources[main ? (object)"Primary" : typeof(Button)] }; }
 
@@ -196,7 +209,7 @@ namespace AgentSwitchboard.Installer
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 
-        private void ApplySystemMaterial(Grid frame)
+        private void ApplySystemMaterial()
         {
             var handle = new WindowInteropHelper(this).Handle;
             // DWM owns the outer contour; the WPF surface fills the client area without another frame.
@@ -204,12 +217,6 @@ namespace AgentSwitchboard.Installer
             DwmSetWindowAttribute(handle, 33, ref round, sizeof(int));
             int noBorder = unchecked((int)0xFFFFFFFE);
             DwmSetWindowAttribute(handle, 34, ref noBorder, sizeof(int));
-            int acrylic = 3;
-            if (DwmSetWindowAttribute(handle, 38, ref acrylic, sizeof(int)) < 0) return;
-            WindowChrome.GetWindowChrome(this).GlassFrameThickness = new Thickness(-1);
-            HwndSource.FromHwnd(handle).CompositionTarget.BackgroundColor = Colors.Transparent;
-            Background = Brushes.Transparent;
-            frame.Background = Brush("GlassSurface");
         }
 
         private void UpdateExisting()

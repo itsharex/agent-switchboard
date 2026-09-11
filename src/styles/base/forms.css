@@ -75,7 +75,7 @@
   display: contents;
 }
 
-.asb-model-actions > button {
+.asb-model-actions > .asb-btn {
   flex: none;
 }
 
@@ -87,9 +87,7 @@
   background: var(--asb-canvas);
   color: var(--asb-text);
   font: var(--asb-text-body);
-  transition:
-    border-color var(--asb-motion-press) var(--asb-easing),
-    box-shadow var(--asb-motion-press) var(--asb-easing);
+  transition: border-color var(--asb-motion-press) var(--asb-easing);
 }
 
 .asb-input::placeholder {
@@ -101,9 +99,7 @@
 }
 
 .asb-input:focus-visible {
-  outline: none;
   border-color: var(--asb-action);
-  box-shadow: var(--asb-focus-ring);
 }
 
 .asb-input:disabled {
@@ -250,7 +246,7 @@
 .asb-font-menu,
 .asb-model-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + var(--asb-space-unit));
   right: 0;
   z-index: 60;
   display: flex;
@@ -278,17 +274,17 @@
   transition: border-color var(--asb-motion-press) var(--asb-easing);
 }
 
-.asb-font-search:focus-within,
-.asb-model-search:focus-within {
-  border-color: var(--asb-action);
-}
-
 .asb-font-search svg,
 .asb-model-search svg {
   flex: none;
   width: 16px;
   height: 16px;
   color: var(--asb-text-muted);
+}
+
+.asb-font-search:has(.asb-input:focus-visible),
+.asb-model-search:has(.asb-input:focus-visible) {
+  border-color: var(--asb-action);
 }
 
 .asb-font-search input,
@@ -303,14 +299,6 @@
   outline: none;
 }
 
-/* The embedded input is the global .asb-input field, but the wrapping search
-   label owns the chrome and draws the focus border via :focus-within; this
-   override keeps the global :focus-visible ring from duplicating it. */
-.asb-font-search input:focus-visible,
-.asb-model-search input:focus-visible {
-  box-shadow: none;
-}
-
 .asb-font-search input::placeholder,
 .asb-model-search input::placeholder {
   color: var(--asb-text-muted);
@@ -320,7 +308,7 @@
 .asb-model-options {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--asb-space-hairline);
   max-height: 18rem;
   margin: 0 var(--asb-space-1) var(--asb-space-1);
   overflow-y: auto;
@@ -343,9 +331,7 @@
 }
 
 .asb-font-option:hover,
-.asb-font-option:focus-visible,
-.asb-model-option:hover,
-.asb-model-option:focus-visible {
+.asb-model-option:hover {
   background: var(--asb-row-selected);
 }
 
@@ -370,8 +356,8 @@
 .asb-model-check {
   flex: none;
   display: flex;
-  width: 14px;
-  height: 14px;
+  width: var(--asb-icon-size-xs);
+  height: var(--asb-icon-size-xs);
   color: var(--asb-text);
 }
 

@@ -10,6 +10,8 @@ import userEvent from "@testing-library/user-event";
 import App from "./App";
 import * as client from "./api/client";
 import {
+  codexFilePreview,
+  codexProfiles,
   filePreview,
   invokeMock,
   openProviderImport,
@@ -35,7 +37,15 @@ beforeEach(() => {
 function primeActiveProvider() {
   primeBackend();
   vi.spyOn(client, "getConfigStatus").mockResolvedValue([
-    { ...statuses[0], activeProfileId: profiles[0].profile.id },
+    statuses[0],
+    { ...statuses[1], activeProfileId: profiles[0].profile.id },
+  ]);
+}
+
+function primeActiveCodexProvider() {
+  primeBackend();
+  vi.spyOn(client, "getConfigStatus").mockResolvedValue([
+    { ...statuses[0], activeProfileId: codexProfiles[0].profile.id },
     statuses[1],
   ]);
 }
@@ -48,7 +58,7 @@ describe("workspace navigation", () => {
   it("opens the supplier workspace with exactly five named destinations", async () => {
     primeBackend();
     render(<App />);
-    await screen.findByRole("region", { name: "Codex 当前连接" });
+    await screen.findByRole("region", { name: "Codex 供应商" });
     expect(
       navigation()
         .getAllByRole("button")
@@ -102,6 +112,7 @@ describe("workspace navigation", () => {
       });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await user.click(
       await screen.findByRole("button", { name: "预览 备用网关 变更" }),
     );
@@ -141,6 +152,40 @@ describe("workspace navigation", () => {
     );
   });
 
+  it("saves Codex preferences and opens the specialized Codex confirmation preview", async () => {
+    primeActiveCodexProvider();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openSettingsSection(user, "偏好设置");
+    await screen.findByText("桌面通知");
+    await user.click(
+      within(screen.getByRole("radiogroup", { name: "桌面通知" })).getByRole(
+        "radio",
+        { name: "开启" },
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "保存并预览应用" }));
+
+    const preview = await screen.findByLabelText("C:/Users/test/.codex/config.toml 配置预览");
+    expect(preview).toHaveTextContent("openai_base_url");
+    expect(invokeMock).toHaveBeenCalledWith("preview_switch", {
+      profileId: codexProfiles[0].profile.id,
+    });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "preview_switch")).toHaveLength(1);
+    expect(invokeMock.mock.calls.some(([command]) => command === "execute_switch")).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "确认切换" }));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("execute_switch", {
+        profileId: codexProfiles[0].profile.id,
+        expectedHash: codexFilePreview.contentHash,
+        expectedRenderedHash: codexFilePreview.renderedHash,
+        confirmWrite: true,
+      }),
+    );
+  });
+
   it("keeps a failed preference draft in place and never advances to an apply preview", async () => {
     primeActiveProvider();
     vi.spyOn(client, "saveClientSettings").mockRejectedValue({
@@ -150,6 +195,7 @@ describe("workspace navigation", () => {
     const preview = vi.spyOn(client, "previewSwitch");
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await user.click(await screen.findByRole("button", { name: "偏好设置" }));
     await user.click(
       within(screen.getByRole("radiogroup", { name: "桌面通知" })).getByRole(
@@ -180,6 +226,7 @@ describe("workspace navigation", () => {
     primeActiveProvider();
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await openProviderImport(user);
     await openSettingsSection(user, "偏好设置");
     await user.click(
@@ -203,6 +250,7 @@ describe("workspace navigation", () => {
     });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await user.click(
       await screen.findByRole("button", { name: "配置 备用网关 用量" }),
     );
@@ -217,9 +265,8 @@ describe("workspace navigation", () => {
     expect(
       screen.getByText("请先保存或取消用量查询编辑，再预览应用。"),
     ).toBeVisible();
+    await user.click(screen.getByRole("radio", { name: "Codex" }));
     await user.click(screen.getByRole("radio", { name: "Claude" }));
-    await user.click(screen.getByRole("button", { name: "官方设置目录" }));
-    await user.keyboard("{Escape}");
     await user.click(navigation().getByRole("button", { name: "供应商" }));
     expect(screen.getByRole("textbox", { name: "用量查询地址" })).toHaveValue(
       "{{baseUrl}}/unsaved",
@@ -231,7 +278,7 @@ describe("workspace navigation", () => {
     const picker = await screen.findByRole("radiogroup", {
       name: "供应商客户端",
     });
-    expect(within(picker).getByRole("radio", { name: "Codex" })).toBeChecked();
+    expect(within(picker).getByRole("radio", { name: "Claude" })).toBeChecked();
     expect(screen.getByRole("option", { name: /备用网关/ })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -242,6 +289,7 @@ describe("workspace navigation", () => {
     primeActiveProvider();
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await user.click(
       await screen.findByRole("button", { name: "编辑 备用网关" }),
     );
@@ -253,6 +301,7 @@ describe("workspace navigation", () => {
     expect(
       screen.getByRole("button", { name: "保存并预览应用" }),
     ).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "Codex" }));
     await user.click(screen.getByRole("radio", { name: "Claude" }));
     await user.click(navigation().getByRole("button", { name: "供应商" }));
     expect(
@@ -269,7 +318,7 @@ describe("workspace navigation", () => {
         expect.objectContaining({
           profileId: profiles[0].profile.id,
           draft: expect.objectContaining({
-            app: "codex",
+            app: "claude",
             name: "未保存的供应商名称",
           }),
           expectedFileHash: profiles[0].fileHash,

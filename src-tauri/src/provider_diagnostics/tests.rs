@@ -6,6 +6,7 @@ use serde_json::json;
 fn http_errors_preserve_status_endpoint_id_body_and_specific_kind() {
     let mut headers = HeaderMap::new();
     headers.insert("x-request-id", HeaderValue::from_static("req-provider-123"));
+    headers.insert("retry-after", HeaderValue::from_static("30"));
     let cases = [
         (
             400,
@@ -42,6 +43,7 @@ fn http_errors_preserve_status_endpoint_id_body_and_specific_kind() {
         assert_eq!(diagnostic.kind, kind);
         assert_eq!(diagnostic.status, Some(status));
         assert_eq!(diagnostic.request_id.as_deref(), Some("req-provider-123"));
+        assert_eq!(diagnostic.retry_after.as_deref(), Some("30"));
         assert!(diagnostic
             .summary()
             .contains("https://provider.example/api/responses"));

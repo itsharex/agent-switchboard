@@ -11,9 +11,9 @@ function rule(selector: RegExp): string {
 
 describe("primary navigation state", () => {
   it("uses text hierarchy for the current page instead of a selected surface", () => {
-    const idle = rule(/\.asb-nav button\s*\{([^}]*)\}/);
-    const hover = rule(/\.asb-nav button:hover\s*\{([^}]*)\}/);
-    const current = rule(/\.asb-nav button\[aria-current="page"\]\s*\{([^}]*)\}/);
+    const idle = rule(/\.asb-nav \.asb-btn\s*\{([^}]*)\}/);
+    const hover = rule(/\.asb-nav \.asb-btn:hover\s*\{([^}]*)\}/);
+    const current = rule(/\.asb-nav \.asb-btn\[aria-current="page"\]\s*\{([^}]*)\}/);
 
     expect(idle).toContain("font-weight: 500");
     expect(hover).toContain("color: var(--asb-text)");

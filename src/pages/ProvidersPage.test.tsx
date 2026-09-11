@@ -29,6 +29,23 @@ const profile: ProviderProfile = {
   usageQuery: null,
 };
 
+const claudeProfile: ProviderProfile = {
+  id: "relay-claude",
+  app: "claude",
+  routeMode: "custom",
+  name: "中继 Claude",
+  model: null,
+  baseUrl: "https://relay.example",
+  apiKey: "test-key",
+  upstreamProtocol: "anthropicMessages",
+  responsesOptions: null,
+  maxOutputTokens: null,
+  parameters: providerParameters("claude"),
+  modelOptions: null,
+  websiteUrl: null,
+  usageQuery: null,
+};
+
 const previewFile: FilePreview = {
   contentHash: "hash-1",
   renderedHash: "rendered-1",
@@ -72,9 +89,8 @@ function renderPage(overrides: Partial<PageProps> = {}) {
     onImport() {},
     onOpenClientSettings() {},
     onOpenHistory() {},
-    onOpenDiagnostics() {},
-    onOpenQuota() {},
     onCloseEditor() {},
+    onSwitchClient() {},
     onSelect() {},
     onReorder() {},
     onToggleUsage() {},
@@ -173,17 +189,17 @@ describe("ProvidersPage editing", () => {
   it("opens an existing official profile when that mode is chosen in a new form", async () => {
     const user = userEvent.setup();
     const official: ProviderProfile = {
-      id: "codex-official",
-      app: "codex",
+      id: "claude-official",
+      app: "claude",
       routeMode: "official",
-      name: "Codex 官方登录",
+      name: "Claude 官方登录",
       model: null,
       baseUrl: null,
       apiKey: "",
       upstreamProtocol: null,
       responsesOptions: null,
       maxOutputTokens: null,
-      parameters: providerParameters("codex"),
+      parameters: providerParameters("claude"),
       modelOptions: null,
       websiteUrl: null,
       usageQuery: null,
@@ -192,15 +208,16 @@ describe("ProvidersPage editing", () => {
     const onEdit = vi.fn();
 
     renderPage({
-      profiles: [profile, official],
-      editorSession: { app: "codex", record: null },
+      profiles: [claudeProfile, official],
+      appFilter: "claude",
+      editorSession: { app: "claude", record: null },
       onSelectApp,
       onEdit,
     });
 
     await user.click(screen.getByRole("radio", { name: "官方登录" }));
 
-    expect(onSelectApp).toHaveBeenCalledWith("codex");
+    expect(onSelectApp).toHaveBeenCalledWith("claude");
     expect(onEdit).toHaveBeenCalledWith(official);
   });
 });
@@ -221,7 +238,7 @@ describe("ProvidersPage navigation", () => {
       selectedId: "some-other-profile",
     });
     expect(within(cards).getByText("gpt-5.3-codex")).toBeInTheDocument();
-    expect(container.querySelectorAll("canvas")).toHaveLength(2);
+    expect(container.querySelector("canvas")).toBeNull();
     rerenderPage({ active: false });
     expect(container.querySelector("canvas")).toBeNull();
   });
@@ -266,7 +283,8 @@ describe("ProvidersPage navigation", () => {
     ).not.toBeInTheDocument();
     rerenderPage({
       active: true,
-      editorSession: { app: "codex", record: null },
+      appFilter: "claude",
+      editorSession: { app: "claude", record: null },
     });
     expect(
       screen.getByRole("form", { name: "新建供应商" }),
@@ -280,13 +298,13 @@ describe("ProvidersPage navigation", () => {
 describe("ProvidersPage draft lifetime", () => {
   it("retains the editor and runtime-parameter draft when another workspace changes the selected client", async () => {
     vi.spyOn(client, "getProviderParametersCatalog").mockResolvedValue(
-      providerParametersCatalog("codex"),
+      providerParametersCatalog("claude"),
     );
     const editorSession = {
-      app: "codex" as const,
-      record: { profile, fileHash: "editing-hash" },
+      app: "claude" as const,
+      record: { profile: claudeProfile, fileHash: "editing-hash" },
     };
-    const { rerenderPage } = renderPage({ editorSession });
+    const { rerenderPage } = renderPage({ editorSession, appFilter: "claude" });
     const user = userEvent.setup();
     fireEvent.change(screen.getByLabelText("名称"), {
       target: { value: "保留的供应商草稿" },
@@ -295,18 +313,18 @@ describe("ProvidersPage draft lifetime", () => {
     expect(
       screen.getByRole("heading", { name: "运行参数" }),
     ).toBeInTheDocument();
-    rerenderPage({ active: false, appFilter: "claude" });
+    rerenderPage({ active: false, appFilter: "codex" });
     expect(
       screen.queryByRole("heading", { name: "运行参数" }),
     ).not.toBeInTheDocument();
-    rerenderPage({ active: true, appFilter: "claude" });
+    rerenderPage({ active: true, appFilter: "codex" });
     expect(
       screen.getByRole("heading", { name: "运行参数" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "返回供应商编辑" }));
     expect(screen.getByLabelText("名称")).toHaveValue("保留的供应商草稿");
     expect(screen.getByRole("combobox", { name: "客户端" })).toHaveTextContent(
-      "Codex",
+      "Claude",
     );
   });
 

@@ -16,7 +16,7 @@ export function ClientPicker({ app, onChange, disabled, label }: {
         <label key={value} className={`asb-seg-opt${app === value ? " is-active" : ""}`}>
           <input type="radio" name={name} checked={app === value} disabled={disabled}
             onChange={() => onChange(value)} />
-          <ClientLogo app={value} className="asb-tab-logo" />
+          <ClientLogo app={value} className="asb-seg-logo" />
           {clientName(value)}
         </label>
       ))}

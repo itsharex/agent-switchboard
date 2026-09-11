@@ -10,7 +10,7 @@ pub(super) const TEST_KEY: &str = "isolated-verification-secret";
 
 pub(super) fn draft(protocol: UpstreamProtocol, base: &str) -> ProviderDraft {
     ProviderDraft {
-        app: AppKind::Codex,
+        app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "Isolated provider".to_string(),
         model: Some("configured-model".to_string()),
@@ -28,7 +28,7 @@ pub(super) fn draft(protocol: UpstreamProtocol, base: &str) -> ProviderDraft {
             None.into()
         },
         model_options: None,
-        parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
         notes: None,
         website_url: None,
         usage_query: None,

@@ -6,28 +6,44 @@ pub(super) fn respond(
     span: RequestSpan,
     route: &ActiveRoute,
     inner: &GatewayInner,
-    client: &Client,
+    client: &UpstreamClient,
     body: &[u8],
     legacy: bool,
 ) {
+    let stream = match serde_json::from_slice::<serde_json::Value>(body) {
+        Ok(value) => value.get("stream").and_then(serde_json::Value::as_bool),
+        Err(_) => None,
+    };
+    // The V2 contract is an SSE response on the ordinary /responses route.
+    // Keep the legacy /responses/compact JSON contract unchanged, including
+    // its historical tolerance for a `stream` field.
+    if !legacy && stream != Some(true) {
+        let diagnostic = ProviderDiagnostic::new(
+            ProviderFailureKind::RequestParameters,
+            &inner.configured_base_url(),
+            "Responses compaction_trigger 请求必须启用 stream=true",
+        );
+        span.finish(Some(422), 0);
+        respond_diagnostic(request, UpstreamProtocol::Responses, 422, &diagnostic);
+        return;
+    }
     let result = match super::super::compaction::execute(
         client,
         route,
         &inner.configured_base_url(),
+        request.url(),
         body,
+        Some(request.headers()),
     ) {
         Ok(result) => result,
         Err(diagnostic) => {
-            span.finish(Some(502), 0);
-            respond_diagnostic(request, UpstreamProtocol::Responses, 502, &diagnostic);
+            let status = diagnostic_status(&diagnostic);
+            span.finish(Some(status), 0);
+            respond_diagnostic(request, UpstreamProtocol::Responses, status, &diagnostic);
             return;
         }
     };
-    let stream = !legacy
-        && serde_json::from_slice::<serde_json::Value>(body)
-            .ok()
-            .is_some_and(|value| value["stream"] == true);
-    let (content, mime) = if stream {
+    let (content, mime) = if !legacy && stream == Some(true) {
         let events = result
             .events()
             .into_iter()
@@ -56,4 +72,59 @@ pub(super) fn respond(
         .with_header(Header::from_bytes("Content-Type", mime).expect("static header"));
     let delivered = request.respond(response).is_ok();
     span.finish(delivered.then_some(200), size);
+}
+
+fn diagnostic_status(diagnostic: &ProviderDiagnostic) -> u16 {
+    if let Some(status) = diagnostic.status {
+        if status == 401 {
+            return 502;
+        }
+        if (400..=599).contains(&status) {
+            return status;
+        }
+    }
+    match diagnostic.kind {
+        ProviderFailureKind::RequestParameters => 422,
+        ProviderFailureKind::RateLimit => 429,
+        _ => 502,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn diagnostic(kind: ProviderFailureKind, status: Option<u16>) -> ProviderDiagnostic {
+        let mut diagnostic = ProviderDiagnostic::new(kind, "http://127.0.0.1/upstream", "error");
+        diagnostic.status = status;
+        diagnostic
+    }
+
+    #[test]
+    fn compact_errors_keep_upstream_request_and_rate_limit_statuses() {
+        assert_eq!(
+            diagnostic_status(&diagnostic(ProviderFailureKind::Upstream, Some(422))),
+            422
+        );
+        assert_eq!(
+            diagnostic_status(&diagnostic(ProviderFailureKind::RateLimit, Some(429))),
+            429
+        );
+    }
+
+    #[test]
+    fn compact_oauth_status_isolated_to_gateway_failure() {
+        assert_eq!(
+            diagnostic_status(&diagnostic(ProviderFailureKind::Authentication, Some(401))),
+            502
+        );
+    }
+
+    #[test]
+    fn local_compaction_parameter_failures_use_unprocessable_entity() {
+        assert_eq!(
+            diagnostic_status(&diagnostic(ProviderFailureKind::RequestParameters, None)),
+            422
+        );
+    }
 }

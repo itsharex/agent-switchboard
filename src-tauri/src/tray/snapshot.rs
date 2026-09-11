@@ -70,7 +70,7 @@ pub fn read(state: &LocalState, gateway: &GatewayController, switching: bool) ->
         .list_providers()
         .map_err(|error| errors.push(error.to_string()))
         .unwrap_or_default();
-    let providers = records
+    let mut providers = records
         .iter()
         .map(|record| {
             project(
@@ -79,7 +79,28 @@ pub fn read(state: &LocalState, gateway: &GatewayController, switching: bool) ->
                 crate::usage_cache::get(state, &record.profile),
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let codex_records = state
+        .configuration()
+        .list_codex_providers()
+        .map_err(|error| errors.push(error.to_string()))
+        .unwrap_or_default();
+    for record in codex_records {
+        match state
+            .configuration()
+            .find_codex_provider_file(&record.profile.id)
+        {
+            Ok(file) => {
+                let profile = file.client_projection().into_profile(AppKind::Codex);
+                providers.push(project(
+                    &profile,
+                    &statuses,
+                    crate::usage_cache::get(state, &profile),
+                ));
+            }
+            Err(error) => errors.push(error.to_string()),
+        }
+    }
     TraySnapshot {
         providers,
         settings,
@@ -98,17 +119,15 @@ mod tests {
         let profile = ProviderProfile::from_draft(
             "p".into(),
             ProviderDraft {
-                parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
-                app: AppKind::Codex,
+                parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+                app: AppKind::Claude,
                 route_mode: RouteMode::Custom,
                 name: "供应商".into(),
                 model: Some("model".into()),
                 base_url: Some("https://example.invalid".into()),
                 api_key: "private-test-key".into(),
-                upstream_protocol: Some(UpstreamProtocol::Responses),
-                responses_options: Some(asb_core::contracts::ResponsesOptions {
-                    request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
-                }),
+                upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+                responses_options: None,
                 max_output_tokens: None.into(),
                 model_options: None,
                 notes: None,
@@ -124,13 +143,13 @@ mod tests {
         assert!(!value.to_string().contains("private-test-key"));
         assert!(!value.to_string().contains("example.invalid"));
         let status = ConfigFileStatus {
-            app: AppKind::Codex,
+            app: AppKind::Claude,
             path: String::new(),
             exists: true,
             syntax_ok: true,
             route: Some(asb_core::adapter::route_state(
-                AppKind::Codex,
-                "model = \"live-model\"\n",
+                AppKind::Claude,
+                r#"{"env":{"ANTHROPIC_MODEL":"live-model"}}"#,
             )),
             read_error: None,
             match_status: asb_core::contracts::MatchStatus::ExternallyModified {

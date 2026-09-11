@@ -80,42 +80,6 @@ describe("ProviderEditor.official", () => {
     expect(onOpenOfficial).toHaveBeenCalledWith("codex");
   });
 
-  it("starts a new empty draft when the selected client changes", async () => {
-    const user = userEvent.setup();
-    render(
-      <ProviderEditor
-        profile={null}
-        initialApp="codex"
-        busy={false}
-        officialTakenApps={[]}
-        userConfigModel={null}
-        onSave={vi.fn()}
-        onCancel={() => {}}
-      />,
-    );
-
-    await user.type(screen.getByLabelText("名称"), "Codex 中继");
-    await user.type(screen.getByLabelText("官网地址"), "https://codex.example");
-    await user.type(screen.getByLabelText("备注"), "Codex 记录");
-    await user.type(screen.getByLabelText("服务地址"), "https://relay.example");
-    await user.type(screen.getByLabelText("API 密钥"), "sk-test-key");
-
-    await user.click(screen.getByRole("combobox", { name: "客户端" }));
-    await user.click(await screen.findByRole("option", { name: "Claude" }));
-    await user.click(screen.getByRole("radio", { name: "官方登录" }));
-    expect(screen.getByLabelText("名称")).toHaveValue("Claude 官方登录");
-
-    await user.click(screen.getByRole("combobox", { name: "客户端" }));
-    await user.click(await screen.findByRole("option", { name: "Codex" }));
-
-    expect(screen.getByRole("radio", { name: "自定义 API 中继" })).toBeChecked();
-    expect(screen.getByLabelText("名称")).toHaveValue("");
-    expect(screen.getByLabelText("官网地址")).toHaveValue("");
-    expect(screen.getByLabelText("备注")).toHaveValue("");
-    expect(screen.getByLabelText("服务地址")).toHaveValue("");
-    expect(screen.getByLabelText("API 密钥")).toHaveValue("");
-  });
-
   it("hides custom fields in official mode and gates saving until the login completes", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockImplementation((command: string) => {

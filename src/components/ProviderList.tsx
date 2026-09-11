@@ -1,20 +1,3 @@
-import { CSS } from "@dnd-kit/utilities";
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
 import type { ProviderProfile, ProviderRequestTarget } from "../api/client";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMemo, useRef, useState, type ReactNode } from "react";
@@ -22,7 +5,6 @@ import {
   ConnectivityIcon,
   EditIcon,
   EyeOffIcon,
-  GripIcon,
   PlayIcon,
   PreviewIcon,
   UsageIcon,
@@ -30,10 +12,10 @@ import {
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
+import { ProviderRowShell, SortableProviderRows } from "./ProviderWorkspaceShell";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
 import { formatUsageSummary } from "../lib/usage-format";
-import { cx } from "@/utils/cx";
 import { Tooltip } from "./Tooltip";
 import { ProviderMoreActions } from "./ProviderMoreActions";
 import { ProviderTestPanel } from "./ProviderTestPanel";
@@ -106,9 +88,9 @@ function ConfiguredProviderRow(props: RowProps) {
   return <ProviderRow {...props} usage={usage} />;
 }
 
-/** Provider cards use the app's compact routing layout. The grip handle is
- * the only drag affordance; the row body stays a plain click-to-select
- * target. */
+/** Provider cards use the app's compact routing layout: grip, avatar, name
+ * over a detail line, primary action, status pill, and the icon cluster —
+ * all owned by the shared row shell. */
 function ProviderRow({
   profile,
   active,
@@ -129,11 +111,6 @@ function ProviderRow({
   renderPreview,
   usage,
 }: RowProps & { usage?: ProviderUsage }) {
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
-    id: profile.id,
-    disabled: !sortable,
-  });
-  const initial = profile.name.trim().charAt(0).toUpperCase() || "?";
   const baseUrl = profile.baseUrl;
   const websiteUrl = profile.websiteUrl;
   const [reloginOpen, setReloginOpen] = useState(false);
@@ -169,73 +146,51 @@ function ProviderRow({
       onEdit ||
       onDelete,
   );
+  const showsMeta = Boolean(modelText || websiteUrl || official || (usage && !usageOpen));
+  const meta = !showsMeta ? null : (
+    <>
+      {modelText}
+      {modelText && (websiteUrl || official) && " · "}
+      {websiteUrl ? (
+        <a
+          className="asb-row-host"
+          href={websiteUrl}
+          title={websiteUrl}
+          onClick={(event) => {
+            // wry blocks webview new-window requests; the opener plugin
+            // routes the URL to the system browser instead.
+            event.preventDefault();
+            void openUrl(websiteUrl);
+          }}
+        >
+          {hostLabel(websiteUrl)}
+        </a>
+      ) : official ? (
+        <span>官方登录</span>
+      ) : null}
+      {usage && !usageOpen && (
+        <span aria-label={`${profile.name} 用量摘要`} title={usage.error ?? undefined}>
+          {(modelText || websiteUrl || official) && " · "}
+          {usage.data ? formatUsageSummary(usage.data) : usage.error ? "用量查询失败" : "用量读取中…"}
+          {usage.data && usage.error && "（更新失败，显示上次读数）"}
+          {usage.data && usage.querying && "（更新中…）"}
+        </span>
+      )}
+    </>
+  );
 
   return (
-    <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`asb-row-item${active ? " is-live" : ""}${isDragging ? " is-dragging" : ""}${previewOpen ? " is-previewing" : ""}`}
-    >
-      <div className="asb-row-line">
-      {sortable && (
-        <Tooltip label={`拖动调整 ${profile.name} 的顺序`}>
-          <button
-            type="button"
-            className="asb-row-grip"
-            aria-label={`拖动调整 ${profile.name} 的顺序`}
-            {...attributes}
-            {...listeners}
-          >
-            <GripIcon />
-          </button>
-        </Tooltip>
-      )}
-      <button
-        type="button"
-        role="option"
-        aria-selected={selected}
-        className="asb-row"
-        onClick={() => onSelect(profile.id)}
-      >
-        <span className="asb-avatar" aria-hidden="true">
-          {initial}
-        </span>
-        <span className="asb-row-main">
-          <span className="asb-row-name">{profile.name}</span>
-          {(modelText || websiteUrl || official || (usage && !usageOpen)) && (
-            <span className={cx("asb-row-meta", usage && !usageOpen && "asb-row-meta-with-usage")}>
-              {modelText}
-              {modelText && (websiteUrl || official) && " · "}
-              {websiteUrl ? (
-                <a
-                  className="asb-row-host"
-                  href={websiteUrl}
-                  title={websiteUrl}
-                  onClick={(event) => {
-                    // wry blocks webview new-window requests; the opener plugin
-                    // routes the URL to the system browser instead.
-                    event.preventDefault();
-                    void openUrl(websiteUrl);
-                  }}
-                >
-                  {hostLabel(websiteUrl)}
-                </a>
-              ) : official ? (
-                <span>官方登录</span>
-              ) : null}
-              {usage && !usageOpen && (
-                <span aria-label={`${profile.name} 用量摘要`} title={usage.error ?? undefined}>
-                  {(modelText || websiteUrl || official) && " · "}
-                  {usage.data ? formatUsageSummary(usage.data) : usage.error ? "用量查询失败" : "用量读取中…"}
-                  {usage.data && usage.error && "（更新失败，显示上次读数）"}
-                  {usage.data && usage.querying && "（更新中…）"}
-                </span>
-              )}
-            </span>
-          )}
-        </span>
-      </button>
-      {onActivate && !active && (
+    <ProviderRowShell
+      id={profile.id}
+      name={profile.name}
+      active={active}
+      selected={selected}
+      previewOpen={previewOpen}
+      sortable={sortable}
+      onSelect={() => onSelect(profile.id)}
+      meta={meta}
+      metaWithUsage={Boolean(usage && !usageOpen)}
+      primaryAction={onActivate && !active ? (
         <Tooltip label={`启用 ${profile.name}`}>
           <Button
             variant="primary"
@@ -247,9 +202,8 @@ function ProviderRow({
             启用
           </Button>
         </Tooltip>
-      )}
-      {active && <span className="asb-pill-status">使用中</span>}
-      {official && (
+      ) : undefined}
+      secondaryAction={official ? (
         <Tooltip label={reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`}>
           <Button
             variant="secondary"
@@ -261,9 +215,9 @@ function ProviderRow({
             {reloginOpen ? "收起登录" : "重新登录"}
           </Button>
         </Tooltip>
-      )}
-      {hasClusterActions && (
-        <span className="asb-iconcluster" role="group" aria-label={`${profile.name} 操作`}>
+      ) : undefined}
+      actions={hasClusterActions ? (
+        <>
           {onEdit && (
             <Tooltip label={`编辑 ${profile.name}`}>
               <Button
@@ -271,7 +225,7 @@ function ProviderRow({
                 aria-label={`编辑 ${profile.name}`}
                 onClick={() => onEdit(profile)}
               >
-                <EditIcon size={20} />
+                <EditIcon />
               </Button>
             </Tooltip>
           )}
@@ -284,7 +238,7 @@ function ProviderRow({
                 aria-expanded={previewOpen}
                 onClick={() => onPreview(profile)}
               >
-                {previewOpen ? <EyeOffIcon size={20} /> : <PreviewIcon size={20} />}
+                {previewOpen ? <EyeOffIcon /> : <PreviewIcon />}
               </Button>
             </Tooltip>
           )}
@@ -299,7 +253,7 @@ function ProviderRow({
                 aria-expanded={testOpen}
                 onClick={() => setTestOpen((open) => !open)}
               >
-                <ConnectivityIcon size={20} />
+                <ConnectivityIcon />
               </Button>
             </Tooltip>
           )}
@@ -313,7 +267,7 @@ function ProviderRow({
                 aria-expanded={quotaOpen}
                 onClick={() => onToggleUsage(profile)}
               >
-                <UsageIcon size={20} />
+                <UsageIcon />
               </Button>
             </Tooltip>
           )}
@@ -330,14 +284,14 @@ function ProviderRow({
                   else onConfigureUsage?.(profile);
                 }}
               >
-                <UsageIcon size={20} />
+                <UsageIcon />
               </Button>
             </Tooltip>
           )}
           {onDelete && <ProviderMoreActions name={profile.name} onDelete={() => onDelete(profile)} />}
-        </span>
-      )}
-      </div>
+        </>
+      ) : undefined}
+    >
       {!official && baseUrl && testOpen && (
         <ProviderTestPanel id={testId} name={profile.name} url={baseUrl} target={target}
           onClose={() => { setTestOpen(false); testTriggerRef.current?.focus(); }} />
@@ -369,7 +323,7 @@ function ProviderRow({
         />
       )}
       {previewOpen && renderPreview && renderPreview(profile)}
-    </li>
+    </ProviderRowShell>
   );
 }
 
@@ -391,55 +345,36 @@ export function ProviderList({
   onDelete,
   renderPreview,
 }: Props) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
   const ids = profiles.map((profile) => profile.id);
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    onReorder?.(arrayMove(ids, oldIndex, newIndex));
-  };
-  if (profiles.length === 0) {
-    return <p className="asb-empty">尚无供应商</p>;
-  }
   return (
-    <ul className="asb-rows" role="listbox" aria-label="供应商列表">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          {profiles.map((profile) => {
-            const Row = profile.usageQuery ? ConfiguredProviderRow : ProviderRow;
-            return <Row
-              key={profile.id}
-              profile={profile}
-              active={profile.id === activeProfileId}
-              userConfigModel={userConfigModel}
-              selected={selectedId === profile.id}
-              previewOpen={profile.id === openPreviewId}
-              usageOpen={Boolean(profile.usageQuery) && !collapsedUsageIds.includes(profile.id)}
-              quotaOpen={
-                profile.routeMode === "official" &&
-                profile.app === "codex" &&
-                !collapsedUsageIds.includes(profile.id)
-              }
-              sortable={Boolean(onReorder)}
-              onSelect={onSelect}
-              onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
-              onSaveQuotaInterval={onSaveQuotaInterval}
-              onActivate={onActivate}
-              onPreview={onPreview}
-              onEdit={onEdit}
-              onConfigureUsage={onConfigureUsage}
-              onDelete={onDelete}
-              renderPreview={renderPreview}
-            />;
-          })}
-        </SortableContext>
-      </DndContext>
-    </ul>
+    <SortableProviderRows ids={ids} onReorder={onReorder}>
+      {profiles.map((profile) => {
+        const Row = profile.usageQuery ? ConfiguredProviderRow : ProviderRow;
+        return <Row
+          key={profile.id}
+          profile={profile}
+          active={profile.id === activeProfileId}
+          userConfigModel={userConfigModel}
+          selected={selectedId === profile.id}
+          previewOpen={profile.id === openPreviewId}
+          usageOpen={Boolean(profile.usageQuery) && !collapsedUsageIds.includes(profile.id)}
+          quotaOpen={
+            profile.routeMode === "official" &&
+            profile.app === "codex" &&
+            !collapsedUsageIds.includes(profile.id)
+          }
+          sortable={Boolean(onReorder)}
+          onSelect={onSelect}
+          onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
+          onSaveQuotaInterval={onSaveQuotaInterval}
+          onActivate={onActivate}
+          onPreview={onPreview}
+          onEdit={onEdit}
+          onConfigureUsage={onConfigureUsage}
+          onDelete={onDelete}
+          renderPreview={renderPreview}
+        />;
+      })}
+    </SortableProviderRows>
   );
 }

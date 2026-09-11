@@ -1,6 +1,6 @@
 use crate::config_store::{
     content_revision, parse_strict, read_optional, write_json_atomic, ConfigStore,
-    ProfileStoreError,
+    ProfileStoreError, PROVIDER_POSITION_STEP,
 };
 use asb_core::contracts::{
     AppKind, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord, RouteMode,
@@ -10,11 +10,23 @@ use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-pub(super) const POSITION_STEP: u64 = 100;
+pub(super) const POSITION_STEP: u64 = PROVIDER_POSITION_STEP;
 /// One loaded provider file with its storage revision.
 pub(super) struct LoadedProvider {
     pub(super) file: ProviderFile,
     pub(super) hash: String,
+}
+
+/// The directory one client's generic provider files live in. Claude keeps
+/// official-login records with its other providers; Codex third-party records
+/// own the strict `providers/codex` store, so Codex official-login records
+/// live in the `providers/codex/official` subdirectory (the strict reader
+/// skips directory entries because they carry no `.json` extension).
+fn provider_dir(store: &ConfigStore, app: AppKind) -> PathBuf {
+    match app {
+        AppKind::Claude => store.providers_dir(app),
+        AppKind::Codex => store.providers_dir(app).join("official"),
+    }
 }
 
 fn load_client(
@@ -22,7 +34,7 @@ fn load_client(
     app: AppKind,
 ) -> Result<Vec<LoadedProvider>, ProfileStoreError> {
     store.ensure_layout()?;
-    let dir = store.providers_dir(app);
+    let dir = provider_dir(store, app);
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
@@ -41,7 +53,7 @@ fn load_client(
             .ok_or(ProfileStoreError::Unsupported)?
             .to_string();
         let text = read_optional(&path)?.ok_or(ProfileStoreError::Unsupported)?;
-        let file: ProviderFile = parse_strict(&text)?;
+        let file = parse_strict::<ProviderFile>(&text)?;
         if Uuid::parse_str(&file.id).is_err() || file.id != stem {
             return Err(ProfileStoreError::Unsupported);
         }
@@ -77,21 +89,16 @@ fn load_client(
     Ok(loaded)
 }
 
-/// Loads both provider directories and enforces the globally stable UUID
-/// namespace used by every provider command. The directory determines the
-/// client, but an id alone remains an unambiguous application identity.
+/// Loads the generic provider boundary: every Claude provider plus the Codex
+/// official-login records. Codex third-party providers stay in their own
+/// typed store and are never projected through `ProviderFile` here.
 pub(super) fn load_all(
     store: &ConfigStore,
 ) -> Result<(Vec<LoadedProvider>, Vec<LoadedProvider>), ProfileStoreError> {
-    let codex = load_client(store, AppKind::Codex)?;
-    let claude = load_client(store, AppKind::Claude)?;
-    let mut seen_ids = HashSet::new();
-    for provider in codex.iter().chain(&claude) {
-        if !seen_ids.insert(provider.file.id.clone()) {
-            return Err(ProfileStoreError::Unsupported);
-        }
-    }
-    Ok((codex, claude))
+    Ok((
+        load_client(store, AppKind::Codex)?,
+        load_client(store, AppKind::Claude)?,
+    ))
 }
 
 pub(super) fn check_expected_files(
@@ -132,13 +139,17 @@ pub(crate) fn load_provider_files(
 }
 
 /// Writes one provider file through the validating, atomic boundary and
-/// returns the new storage revision.
+/// returns the new storage revision. Codex accepts official-login records
+/// only; its third-party providers must use the dedicated strict store.
 pub(super) fn write_provider_file(
     store: &ConfigStore,
     app: AppKind,
     file: &ProviderFile,
 ) -> Result<String, String> {
     let profile = file.clone().into_profile(app);
+    if app == AppKind::Codex && profile.route_mode != RouteMode::Official {
+        return Err("Codex 第三方供应商必须使用专用档案格式".to_string());
+    }
     profile.validate().map_err(|error| error.to_string())?;
     if let Some(query) = &file.usage_query {
         crate::usage_query::validate_persisted(query)?;
@@ -152,7 +163,7 @@ pub(super) fn write_provider_file(
 }
 
 pub(super) fn provider_path(store: &ConfigStore, app: AppKind, id: &str) -> PathBuf {
-    store.providers_dir(app).join(format!("{id}.json"))
+    provider_dir(store, app).join(format!("{id}.json"))
 }
 
 pub(super) fn next_position(loaded: &[LoadedProvider]) -> u64 {

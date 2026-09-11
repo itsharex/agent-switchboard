@@ -10,6 +10,10 @@ use sha2::{Digest, Sha256};
 const PREFIX: &str = "asb-compaction-v1.";
 const DOMAIN: &[u8] = b"agent-switchboard/compaction/v1";
 
+pub(super) fn is_owned_payload(content: &str) -> bool {
+    content.starts_with(PREFIX)
+}
+
 fn cipher(key: &[u8; 32]) -> Aes256Gcm {
     let mut digest = Sha256::new();
     digest.update(DOMAIN);

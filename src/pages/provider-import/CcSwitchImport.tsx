@@ -2,6 +2,7 @@ import type { CcSwitchImportOutcome, CcSwitchScan, CcSwitchScanItem } from "../.
 import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { Table, type TableColumn } from "../../components/Table";
+import { SearchIcon } from "../../components/icons";
 import { clientName } from "../../lib/client-name";
 
 interface CcImportRow {
@@ -21,6 +22,8 @@ interface CcSwitchImportProps {
   onSelect: (key: string, checked: boolean) => void;
   onScan: () => void;
   onImport: () => void;
+  /** Opens the Codex editor pre-filled with one row's completion seed. */
+  onSeed: (key: string) => void;
 }
 
 function providerDetail(item: CcSwitchScanItem): string {
@@ -34,7 +37,10 @@ function importRows(scan: CcSwitchScan | null): CcImportRow[] {
   return [
     ...scan.providers.map((item) => ({
       key: item.key, item, name: item.name, detail: providerDetail(item),
-      status: item.existing ? "已存在相同档案，导入将跳过" : null, warnings: item.warnings,
+      status: item.app === "codex"
+        ? (item.existing ? "已存在相同路由；可再次补全导入" : null)
+        : (item.existing ? "已存在相同档案，导入将跳过" : null),
+      warnings: item.warnings,
     })),
     ...scan.skipped.map((skip) => ({ key: skip.key, item: null, name: skip.name, detail: null,
       status: `无法导入：${skip.reason}`, warnings: [],
@@ -42,12 +48,21 @@ function importRows(scan: CcSwitchScan | null): CcImportRow[] {
   ];
 }
 
-function importColumns({ selected, busy, onSelect }: Pick<CcSwitchImportProps, "selected" | "busy" | "onSelect">): Array<TableColumn<CcImportRow>> {
+function importColumns({ selected, busy, onSelect, onSeed }: Omit<CcSwitchImportProps, "scan" | "result" | "onScan" | "onImport">): Array<TableColumn<CcImportRow>> {
   return [
     { key: "provider", header: "供应商", render: (row) => {
       const item = row.item;
-      return item ? <Checkbox label={row.name} checked={Boolean(selected[item.key]) && !item.existing}
-        disabled={busy || item.existing} onChange={(checked) => onSelect(item.key, checked)} /> : row.name;
+      if (!item) return row.name;
+      if (item.app === "codex") {
+        return (
+          <div>
+            <div>{row.name}</div>
+            <Button variant="secondary" disabled={busy} onClick={() => onSeed(item.key)}>补全导入</Button>
+          </div>
+        );
+      }
+      return <Checkbox label={row.name} checked={Boolean(selected[item.key]) && !item.existing}
+        disabled={busy || item.existing} onChange={(checked) => onSelect(item.key, checked)} />;
     } },
     { key: "detail", header: "详情", render: (row) => row.detail },
     { key: "status", header: "状态", render: (row) => <>{row.status}
@@ -78,9 +93,11 @@ function ImportResult({ result }: { result: CcSwitchImportOutcome | null }) {
   );
 }
 
+/** Claude rows batch-import; Codex rows are completed one by one in the
+ * editor because their catalog and capabilities must be user-confirmed. */
 export function CcSwitchImport(props: CcSwitchImportProps) {
   const rows = importRows(props.scan);
-  const selectedCount = rows.filter(({ item }) => item && !item.existing && props.selected[item.key]).length;
+  const selectedCount = rows.filter(({ item }) => item && item.app === "claude" && !item.existing && props.selected[item.key]).length;
   return (
     <section className="asb-panel" aria-label="从 CC Switch 导入">
       <div className="asb-panel-heading">
@@ -88,14 +105,27 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
         <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>扫描 CC Switch（只读）</Button>
       </div>
       {props.scan ? <div className="asb-ccscan">
-        {rows.length === 0 ? <p className="asb-empty">CC Switch 中没有供应商。</p>
-          : <Table columns={importColumns(props)} rows={rows} rowKey={(row) => row.key} ariaLabel="CC Switch 扫描结果" />}
+        {rows.length === 0 ? (
+          <div className="asb-empty-state">
+            <span className="asb-empty-state-icon" aria-hidden="true">
+              <SearchIcon />
+            </span>
+            <h3 className="asb-section-title">CC Switch 中没有供应商。</h3>
+          </div>
+        ) : <Table columns={importColumns(props)} rows={rows} rowKey={(row) => row.key} ariaLabel="CC Switch 扫描结果" />}
         <div className="asb-form-actions">
           <Button variant="primary" disabled={props.busy || selectedCount === 0} onClick={props.onImport}>
             导入所选 {selectedCount} 项
           </Button>
         </div>
-      </div> : <p className="asb-empty">扫描后选择要导入的 Codex 与 Claude 档案。</p>}
+      </div> : (
+        <div className="asb-empty-state">
+          <span className="asb-empty-state-icon" aria-hidden="true">
+            <SearchIcon />
+          </span>
+          <h3 className="asb-section-title">扫描后选择可导入的供应商档案。</h3>
+        </div>
+      )}
       <ImportResult result={props.result} />
     </section>
   );

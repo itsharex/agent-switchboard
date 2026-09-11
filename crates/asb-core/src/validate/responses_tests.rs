@@ -13,7 +13,6 @@ fn custom_responses_requires_declared_capabilities_for_each_client() {
             Err(ValidationError::ResponsesRequiresOptions)
         );
         candidate.responses_options = Some(ResponsesOptions {
-
             request_mode: ResponsesRequestMode::Standard,
         });
         assert!(candidate.validate().is_ok());
@@ -44,7 +43,6 @@ fn only_responses_accepts_capability_settings() {
 fn minimal_requests_require_http_and_a_valid_api_root() {
     let mut candidate = profile(AppKind::Codex);
     candidate.responses_options = Some(ResponsesOptions {
-
         request_mode: ResponsesRequestMode::Minimal,
     });
     assert!(candidate.validate().is_ok());

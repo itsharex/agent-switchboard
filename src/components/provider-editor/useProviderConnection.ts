@@ -1,14 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchProviderModels, getGatewayStatus, resolveProviderEndpoints,
-  type ProviderEndpoints, type ProviderModel, type UpstreamProtocol } from "../../api/client";
+  type AppKind, type ProviderEndpoints, type ProviderModel,
+  type ResponsesOptions, type UpstreamProtocol } from "../../api/client";
 import { clientName } from "../../lib/client-name";
 import { NATIVE_PROTOCOL, PROTOCOL_LABELS, requiresGateway } from "../../lib/protocol";
-import type { ProviderEditorDraft } from "./draft";
 
-function useGatewayWarning(draft: ProviderEditorDraft) {
+/** The routing facts every editor needs; both provider contracts project onto it. */
+export interface ProviderConnectionInput {
+  app: AppKind;
+  routeMode: "official" | "custom";
+  baseUrl: string | null;
+  apiKey: string;
+  upstreamProtocol: UpstreamProtocol | null;
+  responsesOptions: ResponsesOptions | null;
+}
+
+function useGatewayWarning(input: ProviderConnectionInput) {
   const [address, setAddress] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const routed = requiresGateway(draft);
+  const routed = requiresGateway(input);
   useEffect(() => {
     let active = true;
     setAddress(null);
@@ -22,10 +32,10 @@ function useGatewayWarning(draft: ProviderEditorDraft) {
     }
     return () => { active = false; };
   }, [routed]);
-  const minimal = draft.upstreamProtocol === "responses" && draft.responsesOptions?.requestMode === "minimal";
-  const lead = draft.app === "codex" ? "先完成官方登录；切换时保留登录，provider 统一为 openai。" : minimal ? "Responses 最小请求模式："
-    : `与 ${clientName(draft.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[draft.app]]}）不同：`;
-  const action = minimal ? "按最小字段集" : draft.upstreamProtocol === NATIVE_PROTOCOL[draft.app] ? "通过 HTTP/SSE" : "转换为该协议后";
+  const minimal = input.upstreamProtocol === "responses" && input.responsesOptions?.requestMode === "minimal";
+  const lead = input.app === "codex" ? "先完成官方登录；切换时保留登录，provider 统一为 openai。" : minimal ? "Responses 最小请求模式："
+    : `与 ${clientName(input.app)} 原生协议（${PROTOCOL_LABELS[NATIVE_PROTOCOL[input.app]]}）不同：`;
+  const action = minimal ? "按最小字段集" : input.upstreamProtocol === NATIVE_PROTOCOL[input.app] ? "通过 HTTP/SSE" : "转换为该协议后";
   return address
     ? `${lead}切换到该供应商时，客户端的服务地址会被改写为本机协议网关 ${address}（仅监听本机），请求由网关${action}转发到所填服务地址；请保持本应用运行，退出后第三方请求会停止，重新打开本应用可恢复网关。`
     : failed
@@ -60,33 +70,37 @@ function useResolvedEndpoints(baseUrl: string, upstreamProtocol: UpstreamProtoco
     resolvingEndpoint: Boolean(baseUrl && upstreamProtocol && !current) };
 }
 
-export function useProviderConnection(draft: ProviderEditorDraft) {
+export function useProviderConnection(input: ProviderConnectionInput) {
   const [models, setModels] = useState<ProviderModel[] | null>(null);
   const [modelsBusy, setModelsBusy] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const modelsVersion = useRef(0);
-  const baseUrl = draft.baseUrl?.trim() ?? "";
-  const endpoints = useResolvedEndpoints(baseUrl, draft.upstreamProtocol);
-  const gatewayRouteWarning = useGatewayWarning(draft);
+  const baseUrl = input.baseUrl?.trim() ?? "";
+  const endpoints = useResolvedEndpoints(baseUrl, input.upstreamProtocol);
+  const gatewayRouteWarning = useGatewayWarning(input);
   useEffect(() => {
     modelsVersion.current += 1;
     setModels(null);
     setModelsError(null);
     setModelsBusy(false);
-  }, [baseUrl, draft.upstreamProtocol]);
+  }, [baseUrl, input.upstreamProtocol]);
 
-  const fetchModels = async () => {
-    if (modelsBusy || !baseUrl || !draft.upstreamProtocol) return;
+  /** Fetches the upstream model list; resolves with the fetched models, or
+   * null when the request was skipped or superseded. */
+  const fetchModels = async (): Promise<ProviderModel[] | null> => {
+    if (modelsBusy || !baseUrl || !input.upstreamProtocol) return null;
     const version = modelsVersion.current;
     setModelsBusy(true);
     setModelsError(null);
     try {
-      const fetched = await fetchProviderModels(baseUrl, draft.apiKey, draft.upstreamProtocol);
+      const fetched = await fetchProviderModels(baseUrl, input.apiKey, input.upstreamProtocol);
       if (modelsVersion.current === version) setModels(fetched);
+      return modelsVersion.current === version ? fetched : null;
     } catch (caught) {
       if (modelsVersion.current === version) {
         setModelsError((caught as { message?: string }).message ?? "无法获取模型列表");
       }
+      return null;
     } finally {
       if (modelsVersion.current === version) setModelsBusy(false);
     }

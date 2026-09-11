@@ -1,11 +1,7 @@
 import type { AppKind, ConfigFileStatus, LockStatus, ProviderProfile, RouteState } from "../api/client";
-import type { DiagnosticSection } from "../app/navigation";
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
-import { requiresGateway } from "../lib/protocol";
-import { Button } from "./Button";
 import { ClientLogo } from "./ClientLogo";
-import { StarlightLayer } from "./experience/StarlightLayer";
 import "../styles/base/route-cards.css";
 
 interface RouteCardProps {
@@ -13,8 +9,6 @@ interface RouteCardProps {
   status: ConfigFileStatus | undefined;
   profiles: ProviderProfile[];
   lock: LockStatus | undefined;
-  onOpenDiagnostics: (section: DiagnosticSection) => void;
-  onOpenQuota: () => void;
 }
 
 function configurationNotes(status: ConfigFileStatus | undefined): string[] {
@@ -50,17 +44,15 @@ function accessLabel(route: RouteState | null): string {
 
 /** Summarizes observed configuration facts without treating valid syntax as health. */
 function RouteCard({
-  app, status, profiles, lock, onOpenDiagnostics, onOpenQuota,
+  app, status, profiles, lock,
 }: RouteCardProps) {
   const readable = status && !status.readError && status.exists && status.syntaxOk;
   const route = readable ? status.route : null;
-  const activeProfile = profiles.find((profile) => profile.app === app && profile.id === status?.activeProfileId);
   const notes = configurationNotes(status);
   const lockWarning = lockNote(lock);
   if (lockWarning) notes.push(lockWarning);
   return (
     <section className={`asb-route-card${route ? " is-on" : ""}`} data-app={app} aria-label={`${clientName(app)} 当前连接`}>
-      {route && <StarlightLayer variant={app === "codex" ? "cool" : "violet"} />}
       <div className="asb-route-card-body">
         <div>
           <div className="asb-route-ident">
@@ -79,17 +71,6 @@ function RouteCard({
             {notes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}
           </ul>
         )}
-        <div className="asb-route-actions">
-          <Button variant="secondary" onClick={() => onOpenDiagnostics("configuration")}>
-            {notes.length > 0 ? "查看诊断" : "配置与环境"}
-          </Button>
-          {route && activeProfile && requiresGateway(activeProfile) && (
-            <Button variant="secondary" onClick={() => onOpenDiagnostics("gateway")}>网关诊断</Button>
-          )}
-          {app === "codex" && route?.routeMode === "official" && (
-            <Button variant="secondary" onClick={onOpenQuota}>官方额度详情</Button>
-          )}
-        </div>
       </div>
     </section>
   );
@@ -105,17 +86,15 @@ interface DualRelayProps {
   statuses: ConfigFileStatus[] | null;
   profiles: ProviderProfile[];
   locks: Partial<Record<AppKind, LockStatus>>;
-  onOpenDiagnostics: RouteCardProps["onOpenDiagnostics"];
-  onOpenQuota: () => void;
 }
 
 /** Both cards describe observed client files, independently of list selection. */
-export function DualRelay({ statuses, profiles, locks, onOpenDiagnostics, onOpenQuota }: DualRelayProps) {
+export function DualRelay({ statuses, profiles, locks }: DualRelayProps) {
   return (
     <div className="asb-route-cards" role="group" aria-label="当前启用配置">
       {(["codex", "claude"] as const).map((app) => (
         <RouteCard key={app} app={app} status={statuses?.find((status) => status.app === app)}
-          profiles={profiles} lock={locks[app]} onOpenDiagnostics={onOpenDiagnostics} onOpenQuota={onOpenQuota} />
+          profiles={profiles} lock={locks[app]} />
       ))}
     </div>
   );

@@ -107,7 +107,7 @@ export function AppSettingsForm({
   return (
     <div className="asb-app-settings">
       <section className="asb-app-settings-group" aria-labelledby="appearance-settings">
-        <h3 id="appearance-settings" className="asb-toggle-group-title">
+        <h3 id="appearance-settings" className="asb-section-title">
           外观
         </h3>
         <SegmentSetting
@@ -132,7 +132,7 @@ export function AppSettingsForm({
         />
       </section>
       <section className="asb-app-settings-group" aria-labelledby="window-tray-settings">
-        <h3 id="window-tray-settings" className="asb-toggle-group-title">
+        <h3 id="window-tray-settings" className="asb-section-title">
           窗口与托盘
         </h3>
         <SegmentSetting
@@ -167,7 +167,7 @@ export function AppSettingsForm({
       </section>
       {isWindows && (
         <section className="asb-app-settings-group" aria-labelledby="performance-settings">
-        <h3 id="performance-settings" className="asb-toggle-group-title">
+        <h3 id="performance-settings" className="asb-section-title">
           性能
         </h3>
         <div className="asb-app-setting-row">

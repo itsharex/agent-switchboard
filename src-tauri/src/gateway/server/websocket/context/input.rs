@@ -14,6 +14,9 @@ pub(super) fn normalize_input_item(value: &Value) -> Result<Value, ContextError>
         "message" => message_input(item),
         "function_call_output" => tool_output_input(item),
         "function_call" => tool_call_input(item),
+        "custom_tool_call_output" => custom_tool_output_input(item),
+        "tool_search_call" => tool_search_call_input(item),
+        "tool_search_output" => tool_search_output_input(item),
         "reasoning" => reasoning_input(item),
         _ => Err(ContextError::invalid(format!(
             "input.type {kind} 不支持跨协议转换"
@@ -81,6 +84,100 @@ fn tool_call_input(item: &Map<String, Value>) -> Result<Value, ContextError> {
     }
     output.insert("arguments".to_string(), item["arguments"].clone());
     Ok(Value::Object(output))
+}
+
+fn custom_tool_output_input(item: &Map<String, Value>) -> Result<Value, ContextError> {
+    allowed(
+        item,
+        &["type", "call_id", "output"],
+        "custom_tool_call_output",
+    )?;
+    required_nonempty_string(item, "call_id", "custom_tool_call_output")?;
+    Ok(Value::Object(item.clone()))
+}
+
+fn tool_search_call_input(item: &Map<String, Value>) -> Result<Value, ContextError> {
+    allowed(
+        item,
+        &["type", "id", "call_id", "status", "execution", "arguments"],
+        "tool_search_call",
+    )?;
+    if let Some(id) = item.get("id") {
+        nonempty_string(id, "tool_search_call.id")?;
+    }
+    required_nonempty_string(item, "call_id", "tool_search_call")?;
+    require_completed_client_item(item, "tool_search_call")?;
+    let arguments = item
+        .get("arguments")
+        .ok_or_else(|| ContextError::invalid("tool_search_call 缺少 arguments"))?;
+    if !arguments.is_object() {
+        return Err(ContextError::invalid(
+            "tool_search_call.arguments 必须是对象",
+        ));
+    }
+    Ok(json!({
+        "type": "tool_search_call",
+        "call_id": item["call_id"],
+        "status": "completed",
+        "execution": "client",
+        "arguments": arguments,
+    }))
+}
+
+fn tool_search_output_input(item: &Map<String, Value>) -> Result<Value, ContextError> {
+    allowed(
+        item,
+        &["type", "call_id", "status", "execution", "tools", "output"],
+        "tool_search_output",
+    )?;
+    required_nonempty_string(item, "call_id", "tool_search_output")?;
+    validate_optional_completed_client_item(item, "tool_search_output")?;
+    if let Some(tools) = item.get("tools") {
+        if !tools.is_array() {
+            return Err(ContextError::invalid("tool_search_output.tools 必须是数组"));
+        }
+    }
+    Ok(Value::Object(item.clone()))
+}
+
+fn validate_optional_completed_client_item(
+    item: &Map<String, Value>,
+    context: &str,
+) -> Result<(), ContextError> {
+    if item
+        .get("status")
+        .is_some_and(|status| status.as_str() != Some("completed"))
+    {
+        return Err(ContextError::invalid(format!(
+            "{context}.status 必须是 completed"
+        )));
+    }
+    if item
+        .get("execution")
+        .is_some_and(|execution| execution.as_str() != Some("client"))
+    {
+        return Err(ContextError::invalid(format!(
+            "{context}.execution 必须是 client"
+        )));
+    }
+    Ok(())
+}
+
+fn require_completed_client_item(
+    item: &Map<String, Value>,
+    context: &str,
+) -> Result<(), ContextError> {
+    if item.get("status").and_then(Value::as_str) != Some("completed") {
+        return Err(ContextError::invalid(format!(
+            "{context}.status 必须是 completed"
+        )));
+    }
+    if item.get("execution").and_then(Value::as_str) != Some("client") {
+        return Err(ContextError::invalid(format!(
+            "{context}.execution 必须是 client"
+        )));
+    }
+    Ok(())
 }
 
 fn reasoning_input(item: &Map<String, Value>) -> Result<Value, ContextError> {

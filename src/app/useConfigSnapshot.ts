@@ -3,11 +3,13 @@ import {
   getConfigStatus,
   getLockStatus,
   listBackups,
+  listCodexProfiles,
   listProfiles,
   onTrayChanged,
   type AppKind,
   type BackupRecord,
   type CommandError,
+  type CodexProviderRecord,
   type ConfigFileStatus,
   type LockStatus,
   type ProviderRecord,
@@ -15,6 +17,12 @@ import {
 
 interface SnapshotDeps {
   onError: (error: CommandError) => void;
+}
+
+/** The complete set of provider records produced by one consistent refresh. */
+export interface ProviderInventory {
+  claude: ProviderRecord[];
+  codex: CodexProviderRecord[];
 }
 
 /**
@@ -25,6 +33,8 @@ interface SnapshotDeps {
 export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const [statuses, setStatuses] = useState<ConfigFileStatus[] | null>(null);
   const [records, setRecords] = useState<ProviderRecord[]>([]);
+  const [codexOfficialRecords, setCodexOfficialRecords] = useState<ProviderRecord[]>([]);
+  const [codexRecords, setCodexRecords] = useState<CodexProviderRecord[]>([]);
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [locks, setLocks] = useState<Partial<Record<AppKind, LockStatus>>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -35,25 +45,34 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     try {
-      const [nextStatuses, nextRecords, nextBackups, codexLock, claudeLock] =
+      const [nextStatuses, allRecords, nextCodexRecords, nextBackups, codexLock, claudeLock] =
         await Promise.all([
           getConfigStatus(),
           listProfiles(),
+          listCodexProfiles(),
           listBackups(),
           getLockStatus("codex"),
           getLockStatus("claude"),
         ]);
       if (refreshVersion.current !== version) return;
       setStatuses(nextStatuses);
+      // The generic store serves Claude providers and the Codex official-login
+      // record; Codex third-party providers come from their own strict store.
+      const nextRecords = allRecords.filter((record) => record.profile.app === "claude");
+      const nextCodexOfficial = allRecords.filter((record) => record.profile.app === "codex");
       setRecords(nextRecords);
+      setCodexOfficialRecords(nextCodexOfficial);
+      setCodexRecords(nextCodexRecords);
       setBackups(nextBackups);
       setLocks({ codex: codexLock, claude: claudeLock });
       setSelectedId((current) =>
-        current && nextRecords.some((record) => record.profile.id === current)
+        current && (nextRecords.some((record) => record.profile.id === current)
+          || nextCodexOfficial.some((record) => record.profile.id === current)
+          || nextCodexRecords.some((record) => record.profile.id === current))
           ? current
           : null,
       );
-      return nextRecords;
+      return { claude: nextRecords, codex: nextCodexRecords } satisfies ProviderInventory;
     } catch (caught) {
       if (refreshVersion.current !== version) return;
       onError(caught as CommandError);
@@ -100,9 +119,13 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
 
   return {
     statuses,
-    /** Provider files with their storage revisions; the write boundary. */
+    /** Claude provider files with their storage revisions; the write boundary. */
     records,
     setRecords,
+    /** The Codex official-login record, stored in the same generic boundary. */
+    codexOfficialRecords,
+    codexRecords,
+    setCodexRecords,
     /** Display projections of the stored provider files. */
     profiles,
     backups,

@@ -4,7 +4,7 @@ use crate::contracts::{
 };
 use crate::ownership::{
     provider_absent_action, setting_specs, ProviderAbsentAction, SettingControl, SettingOwner,
-    CODEX_PROVIDER_BASE_URL_KEY, CODEX_PROVIDER_ID, CODEX_WEB_SEARCH_KEY,
+    CODEX_MODEL_CATALOG_KEY, CODEX_PROVIDER_BASE_URL_KEY, CODEX_PROVIDER_ID, CODEX_WEB_SEARCH_KEY,
 };
 
 fn absent_provider_entry(key: &str) -> OverlayEntry {
@@ -22,6 +22,9 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
         CODEX_PROVIDER_BASE_URL_KEY => plan
             .client_base_url()
             .map(|url| ConfigValue::Str(url.into())),
+        CODEX_MODEL_CATALOG_KEY => plan
+            .codex_model_catalog()
+            .map(|pointer| ConfigValue::Str(pointer.to_string())),
         "model_context_window" => match &profile.model_options {
             Some(ModelOptions::Codex(settings)) => settings
                 .context_window

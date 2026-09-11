@@ -14,6 +14,25 @@ pub fn upstream_endpoint(base_url: &str, protocol: UpstreamProtocol) -> Result<S
     append(base_url, protocol, request_path(protocol))
 }
 
+/// The native Codex compact endpoint. It is deliberately separate from a
+/// generated Responses request: callers must not turn a provider-supported
+/// compact operation into a normal model summary.
+pub fn compact_endpoint(base_url: &str) -> Result<String, String> {
+    append(base_url, UpstreamProtocol::Responses, "/responses/compact")
+}
+
+/// A sibling endpoint exposed by a Codex-compatible OpenAI API root.
+///
+/// The caller must supply one of its fixed protocol paths. Keeping URL
+/// assembly here prevents individual gateway operations from treating a
+/// configured API root as an arbitrary forwarding URL.
+pub fn codex_endpoint(base_url: &str, path: &str) -> Result<String, String> {
+    if !path.starts_with('/') || path.contains('?') || path.contains('#') {
+        return Err("Codex 操作路径无效".to_string());
+    }
+    append(base_url, UpstreamProtocol::Responses, path)
+}
+
 pub fn models_endpoint(base_url: &str, protocol: UpstreamProtocol) -> Result<String, String> {
     let suffix = match protocol {
         UpstreamProtocol::Responses | UpstreamProtocol::ChatCompletions => "/models",
@@ -136,6 +155,23 @@ mod tests {
             assert!(validate_base_url(&endpoint, protocol).is_err());
             assert!(validate_base_url(&format!("{endpoint}/"), protocol).is_err());
         }
+    }
+
+    #[test]
+    fn compact_endpoint_uses_the_declared_responses_api_root() {
+        assert_eq!(
+            compact_endpoint("https://example.test/tenant/v1").unwrap(),
+            "https://example.test/tenant/v1/responses/compact"
+        );
+    }
+
+    #[test]
+    fn codex_operation_endpoints_are_siblings_of_the_declared_api_root() {
+        assert_eq!(
+            codex_endpoint("https://example.test/tenant/v1", "/images/generations").unwrap(),
+            "https://example.test/tenant/v1/images/generations"
+        );
+        assert!(codex_endpoint("https://example.test/v1", "models?all=true").is_err());
     }
 
     #[test]

@@ -24,11 +24,14 @@ export const configurationAssembly = {
         "control": "slider",
         "options": [
           "automatic",
+          "none",
           "minimal",
           "low",
           "medium",
           "high",
-          "xhigh"
+          "xhigh",
+          "max",
+          "ultra"
         ]
       }
     ],

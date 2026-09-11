@@ -38,6 +38,7 @@ function gatewayStatus(): GatewayStatus {
     baseUrl: "http://127.0.0.1:47821",
     status: "running",
     failure: null,
+    repairReason: null,
     blockedRecovery: null,
     routes: [{ app: "codex", profileId: "p1", upstreamProtocol: "chatCompletions" }],
     metrics: {
@@ -49,6 +50,7 @@ function gatewayStatus(): GatewayStatus {
           atMs: now - 60_000,
           app: "codex",
           profileId: "p1",
+          routeRevision: "route-a",
           clientProtocol: "responses",
           upstreamProtocol: "chatCompletions",
           status: 200,
@@ -60,6 +62,7 @@ function gatewayStatus(): GatewayStatus {
           atMs: now - 30_000,
           app: "codex",
           profileId: "p1",
+          routeRevision: "route-b",
           clientProtocol: "responses",
           upstreamProtocol: "chatCompletions",
           status: 500,
@@ -71,6 +74,7 @@ function gatewayStatus(): GatewayStatus {
           atMs: now - 10_000,
           app: "claude",
           profileId: null,
+          routeRevision: null,
           clientProtocol: "anthropicMessages",
           upstreamProtocol: null,
           status: null,
@@ -138,7 +142,9 @@ describe("GatewayPage", () => {
     expect(within(table).getByText("HTTP 500")).toBeInTheDocument();
     expect(within(table).getByText("中断")).toBeInTheDocument();
     expect(within(table).getByText("未匹配路由")).toBeInTheDocument();
-    expect(within(table).getAllByText("—")).toHaveLength(1);
+    expect(within(table).getByText("route-a")).toBeInTheDocument();
+    expect(within(table).getByText("route-b")).toBeInTheDocument();
+    expect(within(table).getAllByText("—")).toHaveLength(2);
 
     expect(screen.getByRole("figure", { name: "近 60 分钟请求趋势" })).toBeInTheDocument();
   });
@@ -330,6 +336,19 @@ describe("GatewayPage", () => {
       expect(screen.getByText("运行中", { selector: "[role=status]" })).toBeInTheDocument();
     });
     expect(invokeMock).toHaveBeenCalledWith("gateway_discard_port_change", { confirmWrite: true });
+  });
+
+  it("显示后端提供的旧 Codex 路由修复原因", async () => {
+    const broken = gatewayStatus();
+    broken.status = "needsRepair";
+    broken.repairReason = "旧版本机协议网关状态已被隔离；旧 Codex 路由不会恢复。请重新创建并应用 Codex 档案。";
+    invokeMock.mockResolvedValue(broken);
+
+    render(<GatewayPage active profiles={[]} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "旧版本机协议网关状态已被隔离；旧 Codex 路由不会恢复。请重新创建并应用 Codex 档案。",
+    );
   });
 
   it("无路由与无请求时显示空状态", async () => {

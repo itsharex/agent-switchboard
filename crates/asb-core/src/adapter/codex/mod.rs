@@ -5,7 +5,6 @@
 //! `toml_edit` instead of re-serializing from a typed mirror.
 
 mod document;
-mod import;
 mod overlay;
 mod preview;
 mod render;
@@ -15,15 +14,12 @@ mod subagents;
 mod tests;
 
 pub(crate) use document::{check_syntax, parse};
-pub(crate) use import::import_responses_options;
 pub(crate) use preview::preview;
 pub(crate) use render::render_gateway_base_url;
 pub(crate) use render::{render, render_client_settings};
 pub(crate) use state::{matches_provider_settings, owned_diff};
 pub use state::{route_state, OFFICIAL_PROVIDER};
-pub use subagents::{
-    deprecated_subagent_keys, read_subagent_settings, render_subagent_settings,
-};
+pub use subagents::{deprecated_subagent_keys, read_subagent_settings, render_subagent_settings};
 
 fn validate_projection(
     plan: &crate::contracts::SwitchPlan,
@@ -54,5 +50,7 @@ pub fn is_gateway_base_url(value: &str) -> bool {
         && url.query().is_none()
         && url.fragment().is_none()
         && matches!(segments.as_slice(), ["", "codex", capability, "v1"]
-            if !capability.is_empty() && capability.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'))
+        if capability.strip_prefix("asb_codex_").is_some_and(|secret| {
+            secret.len() == 64 && secret.bytes().all(|c| c.is_ascii_hexdigit())
+        }))
 }

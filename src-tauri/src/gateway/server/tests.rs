@@ -3,9 +3,14 @@ mod codex_cli;
 mod codex_compact_cli;
 mod compaction;
 mod lifecycle;
+mod native_compaction;
+mod operations;
 mod protocol_pairs;
 mod provider_failures;
+mod query;
+mod route_revisions;
 mod streaming;
+mod transport_encoding;
 mod websocket_roundtrip;
 
 use super::respond::content_type;
@@ -13,8 +18,10 @@ use super::*;
 use crate::gateway::GatewayController;
 use crate::local_state::LocalState;
 use asb_core::contracts::{
-    AppKind, AuthenticationScheme, ConfigValue, ProviderDraft, RouteMode, SettingValue, SwitchPlan,
-    UpstreamProtocol,
+    AppKind, AuthenticationScheme, CodexCapabilities, CodexCatalogEntry, CodexChatEffortMode,
+    CodexChatEffortParameter, CodexChatReasoning, CodexChatThinkingParameter, CodexEndpoint,
+    CodexModelRoute, CodexProviderDraft, CodexProviderFile, CodexUpstream, ConfigValue,
+    ProviderDraft, RouteMode, SettingValue, SwitchPlan, UpstreamProtocol,
 };
 use asb_core::ownership::default_client_settings;
 use asb_switch::io::FsIo;
@@ -38,6 +45,90 @@ fn endpoint(server: &Server) -> String {
         .expect("loopback address")
         .port();
     format!("http://127.0.0.1:{port}")
+}
+
+pub(crate) fn sandbox_codex_file(
+    state: &LocalState,
+    name: &str,
+    upstream_url: String,
+    api_key: String,
+    upstream: CodexUpstream,
+) -> CodexProviderFile {
+    let endpoint = if upstream == CodexUpstream::AnthropicMessages {
+        upstream_url
+    } else {
+        format!("{upstream_url}/v1")
+    };
+    let chat_reasoning = if upstream == CodexUpstream::ChatCompletions {
+        CodexChatReasoning::Configured {
+            thinking_parameter: CodexChatThinkingParameter::None,
+            effort_parameter: CodexChatEffortParameter::ReasoningEffort,
+            effort_mode: CodexChatEffortMode::LowHigh,
+        }
+    } else {
+        CodexChatReasoning::Unsupported
+    };
+    let record = state
+        .configuration()
+        .create_codex_provider(CodexProviderDraft {
+            name: name.to_string(),
+            endpoint: CodexEndpoint(endpoint),
+            api_key,
+            upstream,
+            request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
+            default_model: "sandbox-model".to_string(),
+            catalog: vec![CodexCatalogEntry {
+                id: "sandbox-model".to_string(),
+                context_window: 128_000,
+                max_output_tokens: 16_384,
+                function_tools: true,
+                custom_tools: true,
+                tool_search: true,
+                reasoning: true,
+                default_reasoning_level: asb_core::contracts::CodexReasoningLevel::High,
+                supported_reasoning_levels: vec![
+                    asb_core::contracts::CodexReasoningLevel::None,
+                    asb_core::contracts::CodexReasoningLevel::High,
+                ],
+                images: true,
+                compact: true,
+            }],
+            model_routes: vec![CodexModelRoute {
+                client_model: "sandbox-model".to_string(),
+                upstream_model: "sandbox-model".to_string(),
+            }],
+            capabilities: CodexCapabilities {
+                responses: true,
+                compact: true,
+                models: true,
+                chat_completions: true,
+                alpha_search: true,
+                image_generation: true,
+                image_edit: true,
+                function_tools: true,
+                custom_tools: true,
+                tool_search: true,
+                reasoning: true,
+                chat_reasoning,
+            },
+            parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
+            notes: None,
+            website_url: None,
+            usage_query: None,
+        })
+        .expect("create Codex provider");
+    state
+        .configuration()
+        .find_codex_provider_file(&record.profile.id)
+        .expect("load Codex provider")
+}
+
+fn codex_upstream(protocol: UpstreamProtocol) -> CodexUpstream {
+    match protocol {
+        UpstreamProtocol::Responses => CodexUpstream::Responses,
+        UpstreamProtocol::ChatCompletions => CodexUpstream::ChatCompletions,
+        UpstreamProtocol::AnthropicMessages => CodexUpstream::AnthropicMessages,
+    }
 }
 
 fn sandbox_profile(
@@ -89,6 +180,59 @@ fn projection_token(projection: &crate::gateway::GatewayProjection) -> String {
         crate::gateway::GatewayActivation::Routed(route) => route.client_token.clone(),
         _ => panic!("test requires an activated gateway route"),
     }
+}
+
+fn assert_metric_attribution(
+    gateway: &GatewayController,
+    state: &LocalState,
+    projection: &crate::gateway::GatewayProjection,
+    expected_status: Option<u16>,
+) {
+    let observation = gateway.observe(state);
+    let sample = observation
+        .metrics
+        .samples
+        .last()
+        .expect("completed gateway metric");
+    let crate::gateway::GatewayActivation::Routed(route) = &projection.activation else {
+        panic!("test requires an activated gateway route");
+    };
+    assert_eq!(
+        sample.profile_id.as_deref(),
+        Some(route.profile_id.as_str())
+    );
+    assert_eq!(
+        sample.route_revision.as_deref(),
+        Some(route.fingerprint.as_str())
+    );
+    assert_eq!(sample.upstream_protocol, Some(route.upstream_protocol));
+    assert_eq!(sample.status, expected_status);
+}
+
+fn assert_metric_statuses_for_projection(
+    gateway: &GatewayController,
+    state: &LocalState,
+    projection: &crate::gateway::GatewayProjection,
+    expected_statuses: &[Option<u16>],
+) {
+    let crate::gateway::GatewayActivation::Routed(route) = &projection.activation else {
+        panic!("test requires an activated gateway route");
+    };
+    let samples = gateway.observe(state).metrics.samples;
+    let attributed: Vec<_> = samples
+        .iter()
+        .filter(|sample| {
+            sample.profile_id.as_deref() == Some(route.profile_id.as_str())
+                && sample.route_revision.as_deref() == Some(route.fingerprint.as_str())
+        })
+        .collect();
+    assert_eq!(
+        attributed
+            .iter()
+            .map(|sample| sample.status)
+            .collect::<Vec<_>>(),
+        expected_statuses
+    );
 }
 
 fn codex_endpoint(projection: &crate::gateway::GatewayProjection) -> String {

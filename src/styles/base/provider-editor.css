@@ -19,7 +19,6 @@
 }
 
 .asb-provider-section:first-child { padding-top: 0; }
-.asb-provider-section h3 { margin: 0; font: var(--asb-text-body); font-weight: 600; }
 .asb-provider-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--asb-space-3); }
 .asb-provider-field-grid > .asb-field { align-self: start; }
 .asb-provider-field-grid > .asb-field:has(textarea) { grid-column: 1 / -1; }
@@ -74,6 +73,30 @@
   flex-basis: 100%;
 }
 
+.asb-provider-catalog { display: grid; gap: var(--asb-space-3); }
+.asb-provider-catalog-row {
+  display: grid;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+}
+.asb-provider-catalog-row-head { display: flex; align-items: flex-end; gap: var(--asb-space-2); }
+.asb-provider-catalog-row-head .asb-field { flex: 1; min-width: 0; }
+.asb-provider-catalog-row-levels { display: grid; gap: var(--asb-space-2); }
+.asb-catalog-levels-label { font: var(--asb-text-label); color: var(--asb-text-muted); }
+.asb-catalog-levels-options { display: flex; flex-wrap: wrap; gap: var(--asb-space-2) var(--asb-space-4); }
+.asb-provider-catalog-row-flags { display: flex; flex-wrap: wrap; gap: var(--asb-space-2) var(--asb-space-4); }
+.asb-provider-mapping-list { display: grid; gap: var(--asb-space-2); }
+.asb-provider-mapping-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+.asb-provider-mapping-arrow { color: var(--asb-text-muted); }
+.asb-provider-chat-reasoning { padding-top: var(--asb-space-2); }
+
 @media (max-width: 820px) {
   .asb-provider-section { grid-template-columns: minmax(0, 1fr); gap: var(--asb-space-3); }
 }
@@ -83,4 +106,6 @@
   .asb-provider-disclosure summary { flex-wrap: wrap; }
   .asb-provider-resolved-endpoint { grid-template-columns: minmax(0, 1fr); gap: var(--asb-space-1); }
   .asb-provider-subagent-model-control { flex-basis: 100%; max-width: none; }
+  .asb-provider-mapping-row { grid-template-columns: minmax(0, 1fr); }
+  .asb-provider-mapping-arrow { display: none; }
 }

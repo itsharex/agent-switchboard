@@ -54,21 +54,28 @@ export function ConfirmSheet({
   }, [onCancel]);
 
   return (
-    <div className="asb-sheet-backdrop" onClick={(e) => e.target === e.currentTarget && onCancel()}>
+    <div
+      className="asb-dialog-backdrop is-inline"
+      onClick={(e) => e.target === e.currentTarget && onCancel()}
+    >
       <div
         ref={sheetRef}
-        className="asb-sheet"
+        className="asb-dialog is-narrow"
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <h2 className="asb-panel-title">{title}</h2>
-        <ul className="asb-sheet-details">
-          {details.map((detail, index) => (
-            <li key={index}>{detail}</li>
-          ))}
-        </ul>
-        <div className="asb-sheet-actions">
+        <header className="asb-dialog-heading">
+          <h2 className="asb-dialog-title">{title}</h2>
+        </header>
+        <div className="asb-dialog-body">
+          <ul className="asb-dialog-details">
+            {details.map((detail, index) => (
+              <li key={index}>{detail}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="asb-dialog-footer">
           <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
             取消
           </Button>

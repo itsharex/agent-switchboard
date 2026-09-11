@@ -4,7 +4,6 @@ fn responses_draft() -> ProviderDraft {
     let mut draft = super::classification_draft();
     draft.upstream_protocol = Some(UpstreamProtocol::Responses);
     draft.responses_options = Some(ResponsesOptions {
-
         request_mode: ResponsesRequestMode::Standard,
     });
     draft
@@ -34,12 +33,9 @@ fn responses_options_round_trip_and_reapply_an_active_provider() {
     let file = ProviderFile::from_profile(&profile, 100);
     let stored: ProviderFile = serde_json::from_value(serde_json::to_value(file).unwrap()).unwrap();
     assert_eq!(stored.into_profile(AppKind::Codex), profile);
-    for changed in [
-        ResponsesOptions {
-
-            request_mode: ResponsesRequestMode::Minimal,
-        },
-    ] {
+    for changed in [ResponsesOptions {
+        request_mode: ResponsesRequestMode::Minimal,
+    }] {
         let mut edited = draft.clone();
         edited.responses_options = Some(changed);
         assert_eq!(
@@ -75,7 +71,12 @@ fn gateway_requirement_has_one_protocol_and_request_mode_owner() {
 fn gateway_projection_retains_upstream_profile_and_hides_client_secrets() {
     let profile = ProviderProfile::from_draft("gateway".into(), responses_draft());
     let settings = crate::ownership::default_client_settings(AppKind::Codex);
-    let plan = SwitchPlan::through_gateway(profile.clone(), settings, "http://127.0.0.1/codex/secret/v1".into(), "local-secret".into());
+    let plan = SwitchPlan::through_gateway(
+        profile.clone(),
+        settings,
+        "http://127.0.0.1/codex/secret/v1".into(),
+        "local-secret".into(),
+    );
     assert_eq!(plan.profile, profile);
     assert!(plan.is_gateway());
     assert_eq!(plan.client_authentication(), None);

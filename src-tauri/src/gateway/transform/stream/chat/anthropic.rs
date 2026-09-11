@@ -1,6 +1,6 @@
 use super::super::{anthropic_stop_reason, append_event, Frame};
 use super::{merge_identity, parse_chat_frame, AnthropicCall, CallDelta, ChatSource, TextOutput};
-use crate::gateway::transform::{ReasoningTransport, TransformError};
+use crate::gateway::transform::{usage, ReasoningTransport, TransformError};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -88,7 +88,7 @@ impl ChatToAnthropic {
                     "content": [],
                     "stop_reason": null,
                     "stop_sequence": null,
-                    "usage": { "input_tokens": self.source.usage.input_tokens.unwrap_or(0), "output_tokens": 0 },
+                    "usage": usage::anthropic_message_start_json(&self.source.usage),
                 },
             }),
         );
@@ -300,7 +300,7 @@ impl ChatToAnthropic {
             json!({
                 "type": "message_delta",
                 "delta": { "stop_reason": anthropic_stop_reason(self.source.stop()), "stop_sequence": null },
-                "usage": { "output_tokens": self.source.usage.output_tokens.unwrap_or(0) },
+                "usage": usage::anthropic_message_delta_json(&self.source.usage),
             }),
         );
         append_event(output, "message_stop", json!({ "type": "message_stop" }));

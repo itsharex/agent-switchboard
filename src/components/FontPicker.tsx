@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { listSystemFonts } from "../api/client";
 import { quotedFontFamily } from "../lib/font-family";
 import { Input } from "./Input";
+import { Button } from "./Button";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
 /** Web fonts bundled with the app: always offered and renderable, even when
@@ -122,8 +123,8 @@ export function FontPicker({ value, busy, onChange }: Props) {
         }
       }}
     >
-      <button
-        type="button"
+      <Button
+        variant="unstyled"
         ref={trigger}
         className="asb-select-trigger asb-font-trigger"
         aria-haspopup="listbox"
@@ -138,7 +139,7 @@ export function FontPicker({ value, busy, onChange }: Props) {
         <span className="asb-select-chevron" aria-hidden="true">
           <ChevronDownIcon />
         </span>
-      </button>
+      </Button>
 
       {open ? (
         <div className="asb-font-menu" onKeyDown={onMenuKeyDown}>
@@ -161,8 +162,8 @@ export function FontPicker({ value, busy, onChange }: Props) {
           >
             {fonts.length > 0 ? (
               fonts.map((font) => (
-                <button
-                  type="button"
+                <Button
+                  variant="unstyled"
                   role="option"
                   aria-selected={font === value}
                   className="asb-font-option"
@@ -178,7 +179,7 @@ export function FontPicker({ value, busy, onChange }: Props) {
                   <span className="asb-font-check" aria-hidden="true">
                     {font === value && <CheckIcon />}
                   </span>
-                </button>
+                </Button>
               ))
             ) : (
               <p className="asb-font-empty">没有找到相关字体</p>

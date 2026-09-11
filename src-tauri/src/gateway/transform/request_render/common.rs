@@ -21,6 +21,7 @@ pub(super) fn insert_common_chat(
                                 UpstreamProtocol::ChatCompletions,
                                 tool.namespace.as_deref(),
                                 &tool.name,
+                                tool.kind,
                             )?),
                         );
                         if let Some(description) = &tool.description {
@@ -85,6 +86,10 @@ pub(super) fn render_responses_tools(tools: &[Tool]) -> Value {
     let mut values = Vec::new();
     let mut namespaces = std::collections::BTreeMap::<String, usize>::new();
     for tool in tools {
+        if tool.kind == ToolKind::ToolSearch {
+            values.push(json!({ "type": "tool_search" }));
+            continue;
+        }
         match &tool.namespace {
             None => values.push(render_responses_function(tool)),
             Some(namespace) => {
@@ -132,10 +137,26 @@ pub(super) fn render_responses_tool_choice(choice: &ToolChoice) -> Value {
         ToolChoice::Auto => Value::String("auto".to_string()),
         ToolChoice::Required => Value::String("required".to_string()),
         ToolChoice::None => Value::String("none".to_string()),
-        ToolChoice::Named { name, namespace } => {
+        ToolChoice::Named {
+            name,
+            namespace,
+            kind,
+        } => {
             let mut value = Map::new();
-            value.insert("type".to_string(), Value::String("function".to_string()));
-            value.insert("name".to_string(), Value::String(name.clone()));
+            value.insert(
+                "type".to_string(),
+                Value::String(
+                    match kind {
+                        ToolKind::Function => "function",
+                        ToolKind::Custom => "custom",
+                        ToolKind::ToolSearch => "tool_search",
+                    }
+                    .to_string(),
+                ),
+            );
+            if *kind != ToolKind::ToolSearch {
+                value.insert("name".to_string(), Value::String(name.clone()));
+            }
             if let Some(namespace) = namespace {
                 value.insert("namespace".to_string(), Value::String(namespace.clone()));
             }
@@ -149,9 +170,13 @@ pub(super) fn render_chat_tool_choice(choice: &ToolChoice) -> Result<Value, Tran
         ToolChoice::Auto => Value::String("auto".to_string()),
         ToolChoice::Required => Value::String("required".to_string()),
         ToolChoice::None => Value::String("none".to_string()),
-        ToolChoice::Named { name, namespace } => json!({
+        ToolChoice::Named {
+            name,
+            namespace,
+            kind,
+        } => json!({
             "type": "function",
-            "function": { "name": render_target_name(UpstreamProtocol::ChatCompletions, namespace.as_deref(), name)? },
+            "function": { "name": render_target_name(UpstreamProtocol::ChatCompletions, namespace.as_deref(), name, *kind)? },
         }),
     })
 }
@@ -163,12 +188,17 @@ pub(super) fn render_anthropic_tool_choice(
     let mut value = match choice {
         ToolChoice::Auto => json!({ "type": "auto" }),
         ToolChoice::Required => json!({ "type": "any" }),
-        ToolChoice::Named { name, namespace } => json!({
+        ToolChoice::Named {
+            name,
+            namespace,
+            kind,
+        } => json!({
             "type": "tool",
             "name": render_target_name(
                 UpstreamProtocol::AnthropicMessages,
                 namespace.as_deref(),
                 name,
+                *kind,
             )?,
         }),
         ToolChoice::None => return error("Anthropic Messages 无法无损表达 tool_choice=none"),

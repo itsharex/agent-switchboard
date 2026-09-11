@@ -1,20 +1,19 @@
 use super::*;
-use crate::contracts::{ConfigValue, ModelOptions, SettingValue};
-use crate::test_support::{CLAUDE_JSON, CODEX_AUTH_JSON, CODEX_TOML};
+use crate::contracts::{ConfigValue, ModelOptions, RouteMode, SettingValue};
+use crate::test_support::{CLAUDE_JSON, CODEX_TOML};
 
 #[test]
 fn missing_files_are_reported_not_guessed() {
     let report = discover(
         &DiscoveryPaths {
             codex: "~/.codex/config.toml".into(),
-            codex_auth: "~/.codex/auth.json".into(),
             claude: "~/.claude/settings.json".into(),
         },
         |_| Ok(None),
     );
     assert_eq!(report.codex.state, DiscoveredState::Missing);
     assert_eq!(report.claude.state, DiscoveredState::Missing);
-    assert!(report.import_proposals.is_empty());
+    assert!(report.claude_import_proposals.is_empty());
 }
 
 #[test]
@@ -22,7 +21,6 @@ fn parse_errors_carry_line_and_scrubbed_message() {
     let report = discover(
         &DiscoveryPaths {
             codex: "c".into(),
-            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |p| {
@@ -44,14 +42,11 @@ fn test_configuration_produces_routes_and_imports_api_keys() {
     let report = discover(
         &DiscoveryPaths {
             codex: "c".into(),
-            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |p| {
             if p == "c" {
                 Ok(Some(CODEX_TOML.to_string()))
-            } else if p == "a" {
-                Ok(Some(CODEX_AUTH_JSON.to_string()))
             } else {
                 Ok(Some(CLAUDE_JSON.to_string()))
             }
@@ -64,14 +59,10 @@ fn test_configuration_produces_routes_and_imports_api_keys() {
     assert_eq!(route.route_mode, RouteMode::Custom);
     assert_eq!(route.provider_name.as_deref(), Some("openai"));
     assert_eq!(route.wire_api, None);
-    assert!(!report
-        .import_proposals
-        .iter()
-        .any(|proposal| proposal.app == AppKind::Codex));
+    assert!(!report.claude_import_proposals.is_empty());
     let claude_proposal = report
-        .import_proposals
-        .iter()
-        .find(|proposal| proposal.app == AppKind::Claude)
+        .claude_import_proposals
+        .first()
         .expect("claude proposal");
     assert_eq!(claude_proposal.draft.api_key, "TEST_CLAUDE_IMPORT_KEY");
 
@@ -79,10 +70,10 @@ fn test_configuration_produces_routes_and_imports_api_keys() {
     let cached = report.cached_display();
     assert!(!format!("{:?}", cached.codex).contains("fixture-a"));
     assert_eq!(cached.claude, report.claude);
-    for proposal in &cached.import_proposals {
+    for proposal in &cached.claude_import_proposals {
         assert_eq!(proposal.draft.api_key, "");
     }
-    for proposal in &report.import_proposals {
+    for proposal in &report.claude_import_proposals {
         assert!(!proposal.draft.api_key.is_empty());
     }
 }
@@ -91,7 +82,7 @@ fn test_configuration_produces_routes_and_imports_api_keys() {
 fn importing_claude_configuration_decodes_lowercase_one_m_into_semantic_state() {
     let current = r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.internal","ANTHROPIC_AUTH_TOKEN":"TEST_CLAUDE_IMPORT_KEY","ANTHROPIC_MODEL":"claude-opus-4-1[1m]","ANTHROPIC_DEFAULT_SONNET_MODEL":"claude-sonnet-4-6[1m]","ANTHROPIC_DEFAULT_OPUS_MODEL":"claude-opus-4-1[1m]"}}"#;
     let file = inspect(AppKind::Claude, "s", Some(current));
-    let proposal = import_proposal(&file, Some(current), None).expect("must be importable");
+    let proposal = claude_import_proposal(&file, Some(current)).expect("must be importable");
 
     assert_eq!(proposal.draft.model.as_deref(), Some("claude-opus-4-1"));
     let Some(ModelOptions::Claude(settings)) = proposal.draft.model_options.as_ref() else {
@@ -122,7 +113,7 @@ fn importing_claude_configuration_rejects_uppercase_one_m_before_import() {
     assert!(warnings
         .iter()
         .any(|warning| warning.contains("1M 标记无效")));
-    assert!(import_proposal(&file, Some(current), None).is_none());
+    assert!(claude_import_proposal(&file, Some(current)).is_none());
 }
 
 #[test]
@@ -141,7 +132,7 @@ fn plaintext_token_gets_a_warning() {
 }
 
 #[test]
-fn codex_provider_without_a_table_is_not_imported() {
+fn codex_configuration_requires_a_new_specialized_profile() {
     let current = r#"
 model_provider = "gateway"
 experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
@@ -156,97 +147,8 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
         panic!("should parse");
     };
     assert!(!importable);
-    assert!(warnings.iter().any(|w| w.contains("无法导入")));
-    assert!(import_proposal(&file, Some(current), None).is_none());
-}
-
-#[test]
-fn codex_anthropic_configuration_is_not_imported_without_an_explicit_limit() {
-    let current = r#"
-model_provider = "relay"
-model = "claude-sandbox"
-
-[model_providers.relay]
-base_url = "https://relay.example/v1"
-wire_api = "anthropic"
-"#;
-    let auth = r#"{"auth_mode":"apikey","OPENAI_API_KEY":"TEST_CODEX_IMPORT_KEY"}"#;
-    let file = inspect(AppKind::Codex, "c", Some(current));
-    let DiscoveredState::Ok {
-        warnings,
-        importable,
-        ..
-    } = &file.state
-    else {
-        panic!("should parse");
-    };
-    assert!(!importable);
-    assert!(warnings
-        .iter()
-        .any(|warning| warning.contains("最大输出 token")));
-    assert!(import_proposal(&file, Some(current), Some(auth)).is_none());
-}
-
-#[test]
-fn default_responses_protocol_and_codex_run_options_are_imported() {
-    let current = CODEX_TOML.replace("http://127.0.0.1:47821/codex/fixture-a/v1", "https://relay.example/v1").replace(
-        "threads = 8",
-        "threads = 8\nmodel_reasoning_effort = \"xhigh\"\nmodel_context_window = 272000",
-    );
-    let file = inspect(AppKind::Codex, "c", Some(&current));
-
-    let DiscoveredState::Ok {
-        route, importable, ..
-    } = &file.state
-    else {
-        panic!("should parse");
-    };
-    assert!(*importable);
-    assert_eq!(route.wire_api, None);
-    let proposal =
-        import_proposal(&file, Some(&current), Some(CODEX_AUTH_JSON)).expect("must be importable");
-    let Some(ModelOptions::Codex(options)) = proposal.draft.model_options else {
-        panic!("Codex run options should be retained");
-    };
-    assert_eq!(options.context_window, Some(272000));
-    assert_eq!(
-        proposal.draft.parameters.value("model_reasoning_effort"),
-        Some(&SettingValue::Explicit {
-            value: ConfigValue::Str("xhigh".into())
-        })
-    );
-    assert!(!proposal
-        .draft
-        .parameters
-        .settings
-        .contains_key("tui.animations"));
-}
-
-#[test]
-fn codex_official_route_is_imported_without_reading_a_token() {
-    let current = "model = \"gpt-5\"\nthreads = 8\nmodel_reasoning_effort = \"high\"\n";
-    let file = inspect(AppKind::Codex, "c", Some(&current));
-
-    let DiscoveredState::Ok {
-        warnings,
-        importable,
-        ..
-    } = &file.state
-    else {
-        panic!("should parse");
-    };
-    assert!(*importable);
-    assert!(warnings.is_empty());
-    let proposal = import_proposal(&file, Some(&current), None).expect("official route imports");
-    assert_eq!(proposal.draft.route_mode, RouteMode::Official);
-    assert!(proposal.draft.api_key.is_empty());
-    assert!(proposal.draft.base_url.is_none());
-    assert_eq!(
-        proposal.draft.parameters.value("model_reasoning_effort"),
-        Some(&SettingValue::Explicit {
-            value: ConfigValue::Str("high".into())
-        })
-    );
+    assert!(warnings.iter().any(|w| w.contains("新建专用档案")));
+    assert!(claude_import_proposal(&file, Some(current)).is_none());
 }
 
 #[test]
@@ -254,7 +156,6 @@ fn read_errors_are_distinct_from_missing_files() {
     let report = discover(
         &DiscoveryPaths {
             codex: "c".into(),
-            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |path| {
@@ -270,7 +171,7 @@ fn read_errors_are_distinct_from_missing_files() {
         report.codex.state,
         DiscoveredState::ReadError { .. }
     ));
-    assert!(report.import_proposals.is_empty());
+    assert!(report.claude_import_proposals.is_empty());
 }
 
 #[test]
@@ -281,7 +182,7 @@ fn claude_official_route_discards_custom_model_tiers_on_import() {
         panic!("should parse");
     };
     assert!(*importable);
-    let proposal = import_proposal(&file, Some(current), None).expect("official route imports");
+    let proposal = claude_import_proposal(&file, Some(current)).expect("official route imports");
     assert_eq!(proposal.draft.route_mode, RouteMode::Official);
     assert!(proposal.draft.model.is_none());
 }
@@ -291,7 +192,7 @@ fn claude_import_preserves_explicit_parameters_without_client_preferences() {
     let current =
         r#"{"effortLevel":"high","alwaysThinkingEnabled":false,"spinnerTipsEnabled":true}"#;
     let file = inspect(AppKind::Claude, "settings.json", Some(current));
-    let proposal = import_proposal(&file, Some(current), None).unwrap();
+    let proposal = claude_import_proposal(&file, Some(current)).unwrap();
     assert_eq!(
         proposal.draft.parameters.value("effortLevel"),
         Some(&SettingValue::Explicit {
@@ -317,23 +218,11 @@ fn claude_import_preserves_explicit_parameters_without_client_preferences() {
 
 #[test]
 fn invalid_provider_parameters_stop_import_instead_of_becoming_automatic() {
-    for (app, current, key) in [
-        (
-            AppKind::Codex,
-            "model_reasoning_effort = 'unsupported'",
-            "model_reasoning_effort",
-        ),
-        (
-            AppKind::Codex,
-            "[model_reasoning_effort]\nvalue = 'high'",
-            "model_reasoning_effort",
-        ),
-        (
-            AppKind::Claude,
-            r#"{"alwaysThinkingEnabled":"false"}"#,
-            "alwaysThinkingEnabled",
-        ),
-    ] {
+    for (app, current, key) in [(
+        AppKind::Claude,
+        r#"{"alwaysThinkingEnabled":"false"}"#,
+        "alwaysThinkingEnabled",
+    )] {
         let file = inspect(app, "configuration", Some(current));
         let DiscoveredState::Ok {
             importable,
@@ -345,6 +234,6 @@ fn invalid_provider_parameters_stop_import_instead_of_becoming_automatic() {
         };
         assert!(!importable);
         assert!(warnings.iter().any(|warning| warning.contains(key)));
-        assert!(import_proposal(&file, Some(current), None).is_none());
+        assert!(claude_import_proposal(&file, Some(current)).is_none());
     }
 }

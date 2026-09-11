@@ -151,7 +151,10 @@ fn codex_routing_keys_own_custom_provider_capabilities_and_retired_override() {
     assert!(is_owned(AppKind::Codex, "model_provider"));
     assert!(is_owned(AppKind::Codex, "openai_base_url"));
     assert!(is_owned(AppKind::Codex, CODEX_PROVIDER_BASE_URL_KEY));
-    assert!(!is_owned(AppKind::Codex, "model_providers.agent_switchboard.name"));
+    assert!(!is_owned(
+        AppKind::Codex,
+        "model_providers.agent_switchboard.name"
+    ));
     assert!(!is_owned(AppKind::Codex, "model_providers.OpenAi.base_url"));
     assert!(is_owned(AppKind::Codex, "model_reasoning_effort"));
     assert!(is_owned(AppKind::Codex, "model_context_window"));

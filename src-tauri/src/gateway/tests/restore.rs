@@ -1,15 +1,28 @@
 use super::*;
 
 fn saved_route(local: &LocalState, gateway: &GatewayController, app: AppKind) -> String {
-    let mut draft = claude_gateway_draft("fixture-key");
-    draft.app = app;
-    draft.parameters = asb_core::ownership::default_provider_parameters(app);
-    let profile = local
-        .configuration()
-        .create_provider(draft)
-        .unwrap()
-        .profile;
-    let projection = gateway.project(&plan(profile)).unwrap();
+    let projection = match app {
+        AppKind::Codex => {
+            let file = crate::gateway::server::tests::sandbox_codex_file(
+                local,
+                "restore fixture",
+                "http://127.0.0.1:18080".to_string(),
+                "fixture-key".to_string(),
+                asb_core::contracts::CodexUpstream::Responses,
+            );
+            gateway
+                .project_codex(&file, asb_core::ownership::default_client_settings(app))
+                .unwrap()
+        }
+        AppKind::Claude => {
+            let profile = local
+                .configuration()
+                .create_provider(claude_gateway_draft("fixture-key"))
+                .unwrap()
+                .profile;
+            gateway.project(&plan(profile)).unwrap()
+        }
+    };
     adapter::render(
         if app == AppKind::Codex {
             "# keep this comment\nmodel = 'old-model'\n"
@@ -32,7 +45,10 @@ fn restore_rebuilds_only_the_port_and_preserves_the_route_identity() {
         let archived = original.replace(&base, "http://127.0.0.1:12345");
         let rebuilt = gateway.prepare_restored(&local, app, &archived).unwrap();
         assert_eq!(rebuilt, original);
-        let invalid = archived.replace("asb_local_", "asb_local_0");
+        let invalid = match app {
+            AppKind::Codex => archived.replace("asb_codex_", "asb_codex_0"),
+            AppKind::Claude => archived.replace("asb_local_", "asb_local_0"),
+        };
         assert!(gateway.prepare_restored(&local, app, &invalid).is_err());
     }
     gateway.shutdown();
@@ -73,6 +89,8 @@ fn restore_rejects_retired_provider_and_reserved_provider_overrides() {
         "model_provider = 12",
         "[model_providers.openai]\nname='openai'",
         "model_provider = 'agent_switchboard'",
+        "model_provider = 'openai'\n[model_providers.agent_switchboard]\nbase_url = 'https://old.example'",
+        "model_provider = 'openai'\n[model_providers.OpenAi]\nbase_url = 'https://old.example'",
     ] {
         assert!(gateway
             .prepare_restored(&local, AppKind::Codex, config)

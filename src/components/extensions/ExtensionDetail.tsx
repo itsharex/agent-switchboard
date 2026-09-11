@@ -67,7 +67,7 @@ function SkillUpdateDetails({ item, updateReport: report, busy, onApplyUpdate }:
       </div>
       {!current && report.changedFiles.length > 0 && (
         <>
-          <h4>与来源的文件差异</h4>
+          <h4 className="asb-section-title">与来源的文件差异</h4>
           <ul className="asb-ext-file-list">
             {report.changedFiles.map((file) => (
               <li key={`${file.action}-${file.relativePath}`}>

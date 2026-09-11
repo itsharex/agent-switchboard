@@ -25,15 +25,15 @@ impl GatewayController {
         let mut next = state.clone();
         match activation {
             GatewayActivation::Direct { .. } => {
-                next.active.remove(&app);
+                next.set_route(app, None);
             }
             GatewayActivation::Routed(route) => {
-                next.active.insert(
+                next.set_route(
                     app,
-                    PersistedRoute {
+                    Some(PersistedRoute {
                         profile_id: route.profile_id.clone(),
-                        fingerprint: route.fingerprint.clone(),
-                    },
+                        revision: route.fingerprint.clone(),
+                    }),
                 );
             }
         }
@@ -98,22 +98,13 @@ impl GatewayController {
         let Some(valid) = self.recoverable_routes(local) else {
             return;
         };
-        let expected: BTreeMap<AppKind, PersistedRoute> = valid
-            .iter()
-            .map(|(app, route)| {
-                (
-                    *app,
-                    PersistedRoute {
-                        profile_id: route.profile_id.clone(),
-                        fingerprint: route.fingerprint.clone(),
-                    },
-                )
-            })
-            .collect();
         if let Ok(mut state) = self.inner.state.lock() {
-            if state.active != expected {
+            let codex = valid.get(&AppKind::Codex).map(persisted_route);
+            let claude = valid.get(&AppKind::Claude).map(persisted_route);
+            if state.codex_route != codex || state.claude_route != claude {
                 let mut next = state.clone();
-                next.active = expected;
+                next.codex_route = codex;
+                next.claude_route = claude;
                 if write_state(&self.inner.state_path, &next).is_ok() {
                     *state = next;
                 } else {
@@ -132,21 +123,35 @@ impl GatewayController {
     }
 
     fn recoverable_routes(&self, local: &LocalState) -> Option<BTreeMap<AppKind, ActiveRoute>> {
-        let persisted = self.inner.state.lock().ok()?.active.clone();
+        let persisted = self.inner.state.lock().ok()?.clone();
         let mut valid = BTreeMap::new();
-        for (app, saved) in persisted {
-            let Ok(profile) = local.configuration().find_provider(&saved.profile_id) else {
-                log::warn!("本机协议网关无法恢复一个已删除的供应商路由");
+        for app in [AppKind::Codex, AppKind::Claude] {
+            let Some(saved) = persisted.route(app).cloned() else {
                 continue;
             };
-            if profile.app != app
-                || route_fingerprint(&profile).ok().as_deref() != Some(&saved.fingerprint)
-            {
-                log::warn!("本机协议网关拒绝恢复已变更的供应商路由");
-                continue;
-            }
-            let Ok(route) = self.route_for_profile(&profile) else {
-                log::warn!("本机协议网关拒绝恢复不再需要转换的供应商路由");
+            let route = match app {
+                AppKind::Codex => local
+                    .configuration()
+                    .find_codex_provider_file(&saved.profile_id)
+                    .map_err(|error| error.to_string())
+                    .and_then(|file| {
+                        (codex_route_fingerprint(&file)? == saved.revision)
+                            .then_some(file)
+                            .ok_or_else(|| "Codex 路由已改变".to_string())
+                    })
+                    .and_then(|file| self.route_for_codex_file(&file)),
+                AppKind::Claude => local
+                    .configuration()
+                    .find_provider(&saved.profile_id)
+                    .and_then(|profile| {
+                        (profile.app == app && route_fingerprint(&profile)? == saved.revision)
+                            .then_some(profile)
+                            .ok_or_else(|| "Claude 路由已改变".to_string())
+                    })
+                    .and_then(|profile| self.route_for_profile(&profile)),
+            };
+            let Ok(route) = route else {
+                log::warn!("本机协议网关拒绝恢复已删除或已变更的供应商路由");
                 continue;
             };
             let Ok(target) = local.target(app) else {
@@ -199,6 +204,9 @@ impl GatewayController {
         &self,
         profile: &ProviderProfile,
     ) -> Result<ActiveRoute, String> {
+        if profile.app == AppKind::Codex {
+            return Err("Codex 必须从专用档案创建网关路由".to_string());
+        }
         if profile.route_mode != RouteMode::Custom {
             return Err("官方登录不应创建本机协议网关路由".to_string());
         }
@@ -223,7 +231,7 @@ impl GatewayController {
         Ok(ActiveRoute {
             app: profile.app,
             profile_id: profile.id.clone(),
-            client_token: route_token(&identity, &profile.id, &fingerprint),
+            client_token: route_token(&identity, profile.app, &profile.id, &fingerprint),
             continuation_key: continuation_key(&identity, profile),
             fingerprint,
             upstream_base_url,
@@ -231,6 +239,44 @@ impl GatewayController {
             responses_options: profile.responses_options.clone(),
             max_output_tokens: profile.max_output_tokens.value(),
             api_key: profile.api_key.clone(),
+            codex: None,
+        })
+    }
+
+    pub(super) fn route_for_codex_file(
+        &self,
+        file: &asb_core::contracts::CodexProviderFile,
+    ) -> Result<ActiveRoute, String> {
+        let fingerprint = codex_route_fingerprint(file)?;
+        let snapshot = asb_core::contracts::CodexRouteSnapshot::from_profile(
+            &file.profile,
+            fingerprint.clone(),
+        )?;
+        let projection = file.client_projection().into_profile(AppKind::Codex);
+        let identity = self
+            .inner
+            .state
+            .lock()
+            .map_err(|_| "本机协议网关状态锁不可用".to_string())?
+            .identity
+            .clone();
+        Ok(ActiveRoute {
+            app: AppKind::Codex,
+            profile_id: file.profile.id.clone(),
+            client_token: route_token(&identity, AppKind::Codex, &file.profile.id, &fingerprint),
+            continuation_key: codex_continuation_key(&identity, &file.profile.id, &fingerprint),
+            fingerprint,
+            upstream_base_url: file.profile.endpoint.0.clone(),
+            upstream_protocol: file.profile.upstream.protocol(),
+            responses_options: projection.responses_options,
+            max_output_tokens: file
+                .profile
+                .catalog
+                .iter()
+                .find(|entry| entry.id == file.profile.default_model)
+                .map(|entry| entry.max_output_tokens),
+            api_key: file.profile.api_key.clone(),
+            codex: Some(snapshot),
         })
     }
 
@@ -271,6 +317,13 @@ impl GatewayController {
     }
 }
 
+fn persisted_route(route: &ActiveRoute) -> PersistedRoute {
+    PersistedRoute {
+        profile_id: route.profile_id.clone(),
+        revision: route.fingerprint.clone(),
+    }
+}
+
 /// The capability-token prefix this application writes into client
 /// configurations. Combined with a loopback endpoint it identifies a client
 /// that depends on this gateway without needing the listener to be up.
@@ -292,7 +345,7 @@ pub(super) fn config_points_at_gateway(app: AppKind, configuration: &str) -> boo
         return false;
     }
     match app {
-        AppKind::Codex => base_url.contains("/codex/asb_local_") && base_url.ends_with("/v1"),
+        AppKind::Codex => asb_core::adapter::codex::is_gateway_base_url(&base_url),
         AppKind::Claude => configuration.contains(CLIENT_TOKEN_PREFIX),
     }
 }

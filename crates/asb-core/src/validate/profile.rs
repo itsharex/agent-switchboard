@@ -1,6 +1,6 @@
 use crate::contracts::{
     AppKind, ClaudeModelSettings, CodexModelSettings, ModelOptions, ProviderDraft, ProviderProfile,
-    ResponsesOptions,  RouteMode, UpstreamProtocol, UsageQuery,
+    ResponsesOptions, RouteMode, UpstreamProtocol, UsageQuery,
 };
 
 use crate::validate::error::{ValidationError, MAX_AUTO_REFRESH_INTERVAL_MINUTES, MAX_NOTES_LEN};

@@ -39,7 +39,7 @@ fn plan_b() -> SwitchPlan {
             official_quota_refresh_interval_minutes: None,
         },
         default_client_settings(AppKind::Codex),
-        "http://127.0.0.1:47821/codex/fixture-capability/v1".into(),
+        "http://127.0.0.1:47821/codex/asb_codex_abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd/v1".into(),
         String::new(),
     )
 }
@@ -258,7 +258,7 @@ fn gateway_capability_is_redacted_in_preview() {
         .unwrap();
     assert_eq!(change.before.as_deref(), Some(crate::redact::REDACTED));
     assert_eq!(change.after.as_deref(), Some(crate::redact::REDACTED));
-    assert!(!format!("{preview:?}").contains("fixture-capability"));
+    assert!(!format!("{preview:?}").contains("asb_codex_abcdef"));
 }
 
 #[test]
@@ -279,7 +279,7 @@ fn render_preserves_host_content_and_comments() {
     assert!(rendered.contains("model = \"gpt-5.2\""));
     assert!(rendered.contains("model_provider = \"openai\""));
     assert!(rendered
-        .contains("openai_base_url = \"http://127.0.0.1:47821/codex/fixture-capability/v1\""));
+        .contains("openai_base_url = \"http://127.0.0.1:47821/codex/asb_codex_abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd/v1\""));
     assert!(!rendered.contains("[model_providers.OpenAi]"));
     // Output stays valid TOML.
     rendered
@@ -311,7 +311,7 @@ wire_api = "responses"
     let rendered = render(legacy, &plan_b()).expect("render custom route");
     assert!(rendered.contains("model_provider = \"openai\""));
     assert!(rendered
-        .contains("openai_base_url = \"http://127.0.0.1:47821/codex/fixture-capability/v1\""));
+        .contains("openai_base_url = \"http://127.0.0.1:47821/codex/asb_codex_abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd/v1\""));
     let doc = rendered.parse::<DocumentMut>().expect("valid TOML");
     assert!(item_at(&doc, "experimental_bearer_token").is_none());
     assert!(item_at(&doc, "model_providers.OpenAi.experimental_bearer_token").is_none());
@@ -372,7 +372,7 @@ fn route_state_reads_managed_custom_provider_and_model() {
     assert_eq!(state.model.as_deref(), Some("gpt-5.1"));
     assert_eq!(
         state.base_url.as_deref(),
-        Some("http://127.0.0.1:47821/codex/fixture-a/v1")
+        Some("http://127.0.0.1:47821/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1")
     );
     assert!(state.scope_warnings.is_empty());
 }
@@ -397,12 +397,9 @@ wire_api = "responses"
 "#;
     let state = route_state(external);
     assert_eq!(state.route_mode, RouteMode::Custom);
-    assert_eq!(state.provider_name.as_deref(), Some("Gateway"));
-    assert_eq!(
-        state.base_url.as_deref(),
-        Some("https://gateway.internal/v1")
-    );
-    assert_eq!(state.wire_api.as_deref(), Some("responses"));
+    assert_eq!(state.provider_name.as_deref(), Some("gateway"));
+    assert!(state.base_url.is_none());
+    assert!(state.wire_api.is_none());
 }
 
 #[test]

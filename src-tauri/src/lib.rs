@@ -105,6 +105,7 @@ pub fn run() {
         }))
         .plugin(runtime_log::plugin(log_directory))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -142,6 +143,7 @@ pub fn run() {
             app.manage(gateway::GatewayController::start(&local));
             app.manage(gateway::PortChangePreparations::default());
             app.manage(commands::switching::ProfileSavePreparations::default());
+            app.manage(commands::switching::CodexProfileSavePreparations::default());
             app.manage(provider_request::ProviderRequests::default());
             if configuration_ready {
                 commands::switching::recover_pending_profile_save(app.handle())
@@ -239,12 +241,18 @@ pub fn run() {
             commands::gateway::gateway_cancel_port_change,
             commands::gateway::gateway_discard_port_change,
             commands::list_profiles,
+            commands::list_codex_profiles,
+            commands::create_codex_profile,
+            commands::delete_codex_profile,
+            commands::reorder_codex_profiles,
             commands::reset_profile_store,
             commands::switching::prepare_profile_save,
             commands::switching::commit_profile_save,
+            commands::switching::prepare_codex_profile_save,
+            commands::switching::commit_codex_profile_save,
             commands::delete_profile,
             commands::reorder_profiles,
-            commands::import_discovered_profile,
+            commands::import_discovered_claude_profile,
             commands::client_settings::get_provider_parameters_catalog,
             commands::client_settings::get_client_settings_editor,
             commands::client_settings::save_client_settings,
@@ -297,12 +305,14 @@ pub fn run() {
             commands::get_session_messages,
             commands::resume_session,
             commands::scan_ccswitch,
-            commands::import_ccswitch_profiles,
+            commands::import_ccswitch_claude_profiles,
+            commands::prepare_ccswitch_codex_seed,
             commands::window::window_minimize,
             commands::window::window_toggle_maximize,
             commands::window::window_is_maximized,
             commands::window::window_close,
             commands::window::restart_application,
+            commands::window::pick_directory,
             distribution::update_channel,
             commands::get_app_settings,
             commands::set_app_settings,

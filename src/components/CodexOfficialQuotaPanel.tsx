@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { queryCodexOfficialQuota, type CodexOfficialQuota } from "../api/client";
 import { Input } from "./Input";
+import { Button } from "./Button";
 import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
@@ -90,18 +91,18 @@ export function CodexOfficialQuotaPanel({
     <section id={id} className="asb-official-quota" aria-label={`${profileName} 官方订阅额度`}>
       <header className="asb-provider-usage-head">
         <div className="asb-provider-usage-title">
-          <h3>订阅额度</h3>
+          <h3 className="asb-section-title">订阅额度</h3>
         </div>
         <div className="asb-provider-usage-actions">
           {reading?.at && <Time iso={reading.at} />}
-          <button
-            type="button"
+          <Button
+            variant="unstyled"
             className="asb-provider-usage-refresh"
             disabled={querying}
             onClick={() => void run()}
           >
             {querying ? "读取中…" : "刷新"}
-          </button>
+          </Button>
         </div>
       </header>
 

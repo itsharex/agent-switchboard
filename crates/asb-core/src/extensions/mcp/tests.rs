@@ -81,8 +81,7 @@ fn malformed_mcp_collections_and_transports_are_typed_not_silently_empty() {
 
     // Claude: a non-object `mcpServers` is a typed problem as well.
     let claude_broken = r#"{ "mcpServers": ["not", "an", "object"] }"#;
-    let document =
-        read_claude_servers(claude_broken, |root| root.get("mcpServers")).unwrap();
+    let document = read_claude_servers(claude_broken, |root| root.get("mcpServers")).unwrap();
     assert!(document.servers.is_empty());
     assert_eq!(
         document.collection_problem,
@@ -98,8 +97,7 @@ fn malformed_mcp_collections_and_transports_are_typed_not_silently_empty() {
       "no_command": { "type": "stdio" },
       "odd_type": { "type": "carrier-pigeon", "url": "x" }
     } }"#;
-    let document =
-        read_claude_servers(claude_entries, |root| root.get("mcpServers")).unwrap();
+    let document = read_claude_servers(claude_entries, |root| root.get("mcpServers")).unwrap();
     assert_eq!(
         document.servers[0].problem,
         McpEntryProblem::TransportMissing

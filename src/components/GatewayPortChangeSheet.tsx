@@ -97,52 +97,59 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
   };
 
   return (
-    <div className="asb-sheet-backdrop" onClick={(event) => event.target === event.currentTarget && cancel()}>
-      <div className="asb-sheet" role="dialog" aria-modal="true" aria-label="修改监听端口">
-        <h2 className="asb-panel-title">修改监听端口</h2>
-        {state.stage === "input" && (
-          <>
-            <label className="asb-field">
-              <span>新监听端口（当前 {configuredPort}）</span>
-              <Input
-                type="number"
-                min={MIN_PORT}
-                max={MAX_PORT}
-                step={1}
-                value={state.port ?? ""}
-                autoFocus
-                onChange={(event) => onState({ ...state, port: event.target.value, error: null })}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void prepare();
-                  }
-                }}
-              />
-            </label>
-            <p className="m-0 text-body-2-medium text-text-tertiary">
-              允许 {MIN_PORT}–{MAX_PORT} 之间的整数；冲突或被系统拒绝时不会改动任何配置。
+    <div
+      className="asb-dialog-backdrop is-inline"
+      onClick={(event) => event.target === event.currentTarget && cancel()}
+    >
+      <div className="asb-dialog is-narrow" role="dialog" aria-modal="true" aria-label="修改监听端口">
+        <header className="asb-dialog-heading">
+          <h2 className="asb-dialog-title">修改监听端口</h2>
+        </header>
+        <div className="asb-dialog-body">
+          {state.stage === "input" && (
+            <>
+              <label className="asb-field">
+                <span>新监听端口（当前 {configuredPort}）</span>
+                <Input
+                  type="number"
+                  min={MIN_PORT}
+                  max={MAX_PORT}
+                  step={1}
+                  value={state.port ?? ""}
+                  autoFocus
+                  onChange={(event) => onState({ ...state, port: event.target.value, error: null })}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void prepare();
+                    }
+                  }}
+                />
+              </label>
+              <p className="asb-scope-note">
+                允许 {MIN_PORT}–{MAX_PORT} 之间的整数；冲突或被系统拒绝时不会改动任何配置。
+              </p>
+            </>
+          )}
+          {state.stage === "preview" && state.plan && <Preview plan={state.plan} />}
+          {state.stage === "done" && (
+            <>
+              <p className="asb-scope-note" role="status">
+                监听端口已改为 {state.resultToPort}。配置文件已更新，但正在运行的客户端不会自动重新读取；
+                请重新启动相关客户端或会话，使新地址生效。
+              </p>
+              {state.warnings?.map((warning) => (
+                <p key={warning} className="asb-warn-text" role="status">{warning}</p>
+              ))}
+            </>
+          )}
+          {state.error && (
+            <p className="asb-scope-note asb-fail-text" role="alert">
+              {state.error}
             </p>
-          </>
-        )}
-        {state.stage === "preview" && state.plan && <Preview plan={state.plan} />}
-        {state.stage === "done" && (
-          <>
-            <p className="m-0 text-body-medium text-text-primary" role="status">
-              监听端口已改为 {state.resultToPort}。配置文件已更新，但正在运行的客户端不会自动重新读取；
-              请重新启动相关客户端或会话，使新地址生效。
-            </p>
-            {state.warnings?.map((warning) => (
-              <p key={warning} className="asb-warn-text" role="status">{warning}</p>
-            ))}
-          </>
-        )}
-        {state.error && (
-          <p className="m-0 text-body-medium text-text-error-primary" role="alert">
-            {state.error}
-          </p>
-        )}
-        <div className="asb-sheet-actions">
+          )}
+        </div>
+        <div className="asb-dialog-footer">
           {state.stage === "input" && (
             <>
               <Button variant="secondary" onClick={cancel}>取消</Button>
@@ -168,15 +175,15 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
 
 function Preview({ plan }: { plan: GatewayPortChangePlan }) {
   return (
-    <ul className="asb-sheet-details">
+    <ul className="asb-dialog-details">
       <li>监听端口：{plan.fromPort} → {plan.toPort}</li>
       {plan.clients.length === 0 ? (
         <li>没有客户端正在使用本网关，仅更新网关监听端口。</li>
       ) : plan.clients.map((client) => (
         <li key={`${client.app}:${client.profileId}`}>
           {client.profileName}（{APP_LABELS[client.app]}）服务地址：<br />
-          <span className="tabular-nums">{client.currentBaseUrl}</span><br />
-          → <span className="tabular-nums">{client.newBaseUrl}</span>
+          <span className="asb-num">{client.currentBaseUrl}</span><br />
+          → <span className="asb-num">{client.newBaseUrl}</span>
         </li>
       ))}
       <li>上游地址、API 密钥与供应商参数保持不变；本机能力令牌不轮换。</li>

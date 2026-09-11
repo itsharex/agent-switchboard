@@ -59,11 +59,6 @@
   background: var(--asb-surface-rail);
 }
 
-.asb-settings-category:focus-visible {
-  outline: none;
-  box-shadow: var(--asb-focus-ring);
-}
-
 .asb-settings-content {
   min-width: 0;
 }
@@ -143,9 +138,28 @@
   flex-wrap: wrap;
 }
 
-.asb-about-product h3 {
-  margin: 0;
-  font: var(--asb-text-title);
+/* About & updates opens with the product's own mark: the same gem app icon the
+   title bar and tray already own, so the category identifies the product by
+   logo instead of text alone. The mark stays bare — no decorative tile,
+   gradient card or glow behind it. */
+.asb-about-product {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-about-logo {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.asb-about-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .asb-about-product .asb-field-help {

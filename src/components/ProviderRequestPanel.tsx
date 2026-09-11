@@ -71,7 +71,7 @@ function RequestReceipt({ view }: { view: RequestView }) {
   return (
     <div className="asb-request-receipt" data-phase={success ? "success" : failure ? "failure" : phase}
       role="status" aria-label="请求结果" aria-live="polite">
-      <h4>
+      <h4 className="asb-section-title">
         {success ? <CheckIcon /> : failure ? <CloseIcon /> : <RequestIcon />}
         {diagnostic ? DIAGNOSTIC_TITLES[diagnostic.kind] : result ? OUTCOME_TITLES[result.outcome] : PHASE_TITLES[phase]}
       </h4>

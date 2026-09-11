@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ExtensionKind, ExtensionListItem, McpEditViewEnvelope } from "../../api/client";
 import type { ExtensionSection } from "../../app/navigation";
-import type { ClientFilter } from "./list-filters";
+import type { ClientFilterValue } from "../../components/ClientFilter";
 
 export type ExtensionDialogView =
   | { type: "detail" | "skillEditor"; definitionId: string }
@@ -15,7 +15,7 @@ export interface ExtensionNavigation {
 }
 
 export function useExtensionView({ section, onSectionChange }: ExtensionNavigation) {
-  const [client, setClient] = useState<ClientFilter>("all");
+  const [client, setClient] = useState<ClientFilterValue>("all");
   const [search, setSearch] = useState("");
   const [sourceBrowser, setSourceBrowser] = useState(false);
   const [dialog, setDialog] = useState<ExtensionDialogView | null>(null);

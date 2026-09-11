@@ -152,7 +152,7 @@ export function CodexSubagentSettingsPanel({
     return (
       <section className="asb-toggle-group asb-subagent-settings" aria-labelledby={headingId}>
         <div className="asb-toggle-group-head">
-          <h3 id={headingId} className="asb-toggle-group-title">子 agent 运行</h3>
+          <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
         </div>
         <p className="asb-empty">正在读取 Codex 子 agent 设置</p>
       </section>
@@ -163,7 +163,7 @@ export function CodexSubagentSettingsPanel({
     return (
       <section className="asb-toggle-group asb-subagent-settings" aria-labelledby={headingId}>
         <div className="asb-toggle-group-head">
-          <h3 id={headingId} className="asb-toggle-group-title">子 agent 运行</h3>
+          <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
         </div>
         <div className="asb-empty" role="alert">
           <p>无法读取 Codex 子 agent 设置：{state.error?.message ?? "用户级配置不可用"}</p>
@@ -178,7 +178,7 @@ export function CodexSubagentSettingsPanel({
     <section className="asb-toggle-group asb-subagent-settings" aria-labelledby={headingId}>
       <div className="asb-toggle-group-head">
         <div className="asb-subagent-heading">
-          <h3 id={headingId} className="asb-toggle-group-title">子 agent 运行</h3>
+          <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
           <p className="asb-field-help">这些设置管理 Codex 的全局运行策略；默认模型与推理强度请在对应供应商的“运行参数”中设置。</p>
         </div>
         <Button variant="secondary" disabled={working} onClick={onReset}>恢复 Codex 默认值</Button>

@@ -67,12 +67,16 @@ impl StreamTransformer {
             (UpstreamProtocol::ChatCompletions, UpstreamProtocol::AnthropicMessages) => Ok(
                 Self::ChatToAnthropic(chat::ChatToAnthropic::new(reasoning_transport)),
             ),
-            (UpstreamProtocol::AnthropicMessages, UpstreamProtocol::Responses) => Ok(
-                Self::AnthropicToResponses(anthropic::AnthropicToResponses::default()),
-            ),
-            (UpstreamProtocol::Responses, UpstreamProtocol::AnthropicMessages) => Ok(
-                Self::ResponsesToAnthropic(responses::ResponsesToAnthropic::default()),
-            ),
+            (UpstreamProtocol::AnthropicMessages, UpstreamProtocol::Responses) => {
+                Ok(Self::AnthropicToResponses(
+                    anthropic::AnthropicToResponses::new(reasoning_transport),
+                ))
+            }
+            (UpstreamProtocol::Responses, UpstreamProtocol::AnthropicMessages) => {
+                Ok(Self::ResponsesToAnthropic(
+                    responses::ResponsesToAnthropic::new(reasoning_transport),
+                ))
+            }
             _ => Err(TransformError("该 SSE 协议组合不支持转换".to_string())),
         }
     }
@@ -177,38 +181,68 @@ where
         bytes: &[u8],
     ) -> Result<Vec<u8>, TransformError> {
         let Some(frame) = frame else {
-            return Ok(if matches!(self.mode, StreamMode::Direct) {
-                [bytes, b"\n\n"].concat()
+            return Ok(if matches!(&self.mode, StreamMode::Direct) {
+                self.redact_direct_frame(bytes)?
             } else {
                 vec![]
             });
         };
+        if matches!(&self.mode, StreamMode::Direct) {
+            return self.convert_direct_frame(frame, bytes);
+        }
         if self.upstream_failed(&frame) {
             return Ok(Vec::new());
         }
         match &mut self.mode {
             StreamMode::Converting(transformer) => transformer.on_frame(frame),
-            StreamMode::Direct => {
-                let value = json_data(&frame, "上游 SSE data")?;
-                let kind = value
-                    .get("type")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| TransformError("上游 SSE 事件缺少 type".to_string()))?;
-                if frame.event.as_deref().is_some_and(|event| event != kind) {
-                    return Err(TransformError("上游 SSE event 与 type 不一致".to_string()));
-                }
-                if self.direct_completed {
-                    return Err(TransformError(
-                        "上游 SSE 在终止事件后继续发送数据".to_string(),
-                    ));
-                }
-                self.direct_completed = matches!(
-                    kind,
-                    "response.completed" | "response.incomplete" | "message_stop"
-                );
-                Ok([bytes, b"\n\n"].concat())
-            }
+            StreamMode::Direct => unreachable!("direct mode handled above"),
         }
+    }
+
+    fn convert_direct_frame(
+        &mut self,
+        frame: Frame,
+        bytes: &[u8],
+    ) -> Result<Vec<u8>, TransformError> {
+        if self.direct_completed {
+            return Err(TransformError(
+                "上游 SSE 在终止事件后继续发送数据".to_string(),
+            ));
+        }
+        if frame.data.trim() == "[DONE]" {
+            if self.target != UpstreamProtocol::ChatCompletions || frame.event.is_some() {
+                return Err(TransformError(
+                    "当前原生 SSE 协议不支持 [DONE] 终止帧".to_string(),
+                ));
+            }
+            self.direct_completed = true;
+            return self.redact_direct_frame(bytes);
+        }
+        let value = json_data(&frame, "上游 SSE data")?;
+        let kind = value
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| TransformError("上游 SSE 事件缺少 type".to_string()))?;
+        if frame.event.as_deref().is_some_and(|event| event != kind) {
+            return Err(TransformError("上游 SSE event 与 type 不一致".to_string()));
+        }
+        self.direct_completed = matches!(
+            kind,
+            "response.completed"
+                | "response.failed"
+                | "response.incomplete"
+                | "error"
+                | "message_stop"
+        );
+        self.redact_direct_frame(bytes)
+    }
+
+    fn redact_direct_frame(&self, bytes: &[u8]) -> Result<Vec<u8>, TransformError> {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| TransformError("上游 SSE 不是 UTF-8 文本".to_string()))?;
+        let secrets = self.secrets.iter().map(String::as_str).collect::<Vec<_>>();
+        let text = crate::provider_diagnostics::redact_text(text, &secrets);
+        Ok([text.as_bytes(), b"\n\n"].concat())
     }
 
     fn finish_source(&mut self) {
@@ -292,8 +326,11 @@ pub(super) fn responses_complete(response: &CanonicalResponse) -> Result<Value, 
     super::response::render_response(UpstreamProtocol::Responses, response)
 }
 
-pub(super) fn parse_responses_complete(value: &Value) -> Result<CanonicalResponse, TransformError> {
-    super::response::parse_response(UpstreamProtocol::Responses, value, None)
+pub(super) fn parse_responses_complete(
+    value: &Value,
+    reasoning_transport: Option<&ReasoningTransport>,
+) -> Result<CanonicalResponse, TransformError> {
+    super::response::parse_response(UpstreamProtocol::Responses, value, reasoning_transport)
 }
 
 pub(super) fn anthropic_stop_reason(stop: StopReason) -> &'static str {
@@ -345,6 +382,9 @@ fn parse_frame(bytes: &[u8]) -> Result<Option<Frame>, TransformError> {
     }))
 }
 
+#[cfg(test)]
+#[path = "stream/anthropic_thinking_tests.rs"]
+mod anthropic_thinking_tests;
 #[cfg(test)]
 #[path = "stream/diagnostic_tests.rs"]
 mod diagnostic_tests;

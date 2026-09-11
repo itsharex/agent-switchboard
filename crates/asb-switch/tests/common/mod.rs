@@ -48,7 +48,10 @@ pub fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> Switch
             official_quota_refresh_interval_minutes: None,
         },
         default_client_settings(AppKind::Codex),
-        format!("http://127.0.0.1:18900/codex/{}/v1", "a".repeat(64)),
+        format!(
+            "http://127.0.0.1:18900/codex/asb_codex_{}/v1",
+            "a".repeat(64)
+        ),
         "".into(),
     )
 }

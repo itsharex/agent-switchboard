@@ -34,8 +34,7 @@ pub fn inspect(app: AppKind, path: &str, text: Option<&str>) -> DiscoveredFile {
         AppKind::Codex => inspect_codex(text),
         AppKind::Claude => inspect_claude(text),
     };
-    let importable =
-        !(app == AppKind::Codex && managed) && import_supported(app, text, &route, &mut warnings);
+    let importable = import_supported(app, text, &route, &mut warnings);
     DiscoveredFile {
         app,
         path: path.to_string(),
@@ -55,24 +54,17 @@ fn import_supported(
     route: &RouteState,
     warnings: &mut Vec<String>,
 ) -> bool {
-    let claude_import_error = (app == AppKind::Claude)
-        .then(|| claude_import_model_fields(route).err())
-        .flatten();
-    let mut importable = if route.route_mode == RouteMode::Official {
-        true
-    } else {
-        match app {
-            AppKind::Codex => match super::codex::import_route(text, route) {
-                Ok(_) => true,
-                Err(error) => {
-                    warnings.push(format!("当前 Codex 配置无法导入：{error}"));
-                    false
-                }
-            },
-            AppKind::Claude => route.base_url.is_some() && claude_import_error.is_none(),
-        }
-    };
-    if app == AppKind::Claude && route.route_mode == RouteMode::Custom {
+    if app == AppKind::Codex {
+        warnings.push(
+            "Codex 配置不能导入；第三方档案必须显式提供模型目录、映射、能力和请求模式，请新建专用档案"
+                .to_string(),
+        );
+        return false;
+    }
+    let claude_import_error = claude_import_model_fields(route).err();
+    let mut importable = route.route_mode == RouteMode::Official
+        || (route.base_url.is_some() && claude_import_error.is_none());
+    if route.route_mode == RouteMode::Custom {
         if let Some(error) = claude_import_error {
             warnings.push(format!("当前 Claude 配置无法作为供应商档案导入：{error}"));
         }

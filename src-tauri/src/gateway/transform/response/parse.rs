@@ -1,53 +1,10 @@
 //! Protocol-specific response parsers and their JSON accessors.
-
 use super::*;
+mod accessors;
+mod reasoning;
 
-pub(super) fn object<'a>(
-    value: &'a Value,
-    name: &str,
-) -> Result<&'a Map<String, Value>, TransformError> {
-    value
-        .as_object()
-        .ok_or_else(|| TransformError(format!("{name} 必须是对象")))
-}
-
-pub(super) fn array<'a>(value: &'a Value, name: &str) -> Result<&'a Vec<Value>, TransformError> {
-    value
-        .as_array()
-        .ok_or_else(|| TransformError(format!("{name} 必须是数组")))
-}
-
-pub(super) fn string(value: Option<&Value>, name: &str) -> Result<String, TransformError> {
-    value
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| TransformError(format!("{name} 必须是字符串")))
-}
-
-pub(super) fn optional_string(
-    map: &Map<String, Value>,
-    key: &str,
-    context: &str,
-) -> Result<Option<String>, TransformError> {
-    match map.get(key) {
-        None => Ok(None),
-        Some(Value::String(value)) => Ok(Some(value.clone())),
-        Some(_) => error(format!("{context}.{key} 必须是字符串")),
-    }
-}
-
-pub(super) fn allowed(
-    map: &Map<String, Value>,
-    fields: &[&str],
-    context: &str,
-) -> Result<(), TransformError> {
-    for key in map.keys() {
-        if !fields.contains(&key.as_str()) {
-            return error(format!("{context} 包含无法安全转换的字段 {key}"));
-        }
-    }
-    Ok(())
-}
+pub(super) use accessors::*;
+use reasoning::responses_reasoning_text;
 
 pub(super) fn parse_responses(
     value: &Value,
@@ -153,9 +110,34 @@ pub(super) fn parse_responses(
                     id: string(item.get("call_id"), "function_call.call_id")?,
                     name: string(item.get("name"), "function_call.name")?,
                     namespace: optional_string(item, "namespace", "Responses function_call")?,
+                    kind: ToolKind::Function,
                     input: serde_json::from_str(&arguments).map_err(|_| {
                         TransformError("Responses function_call.arguments 不是 JSON".to_string())
                     })?,
+                });
+            }
+            "custom_tool_call" => {
+                content.push(parse_custom_tool_call(item)?);
+            }
+            "tool_search_call" => {
+                allowed(
+                    item,
+                    &["type", "id", "call_id", "status", "execution", "arguments"],
+                    "Responses tool_search_call",
+                )?;
+                if item.get("execution").and_then(Value::as_str) != Some("client") {
+                    return error("Responses tool_search_call.execution 必须是 client");
+                }
+                let input = item.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                if !input.is_object() {
+                    return error("Responses tool_search_call.arguments 必须是对象");
+                }
+                content.push(ResponsePart::ToolCall {
+                    id: string(item.get("call_id"), "tool_search_call.call_id")?,
+                    name: CODEX_TOOL_SEARCH_NAME.to_string(),
+                    namespace: None,
+                    kind: ToolKind::ToolSearch,
+                    input,
                 });
             }
             "reasoning" => {
@@ -181,16 +163,25 @@ pub(super) fn parse_responses(
                         return error("Responses reasoning.summary 必须是数组");
                     }
                 }
-                if let Some(content) = item.get("content") {
-                    if content.as_array().is_none_or(|parts| !parts.is_empty()) {
-                        return error("Responses reasoning.content 必须是空数组");
-                    }
-                }
                 let transport = reasoning_transport
                     .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
-                content.push(ResponsePart::Reasoning(transport.from_continuation(
-                    string(item.get("encrypted_content"), "reasoning.encrypted_content")?,
-                )?));
+                let encrypted = match item.get("encrypted_content") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::String(value)) if !value.is_empty() => Some(value.as_str()),
+                    Some(Value::String(_)) => {
+                        return error("Responses reasoning.encrypted_content 不能为空")
+                    }
+                    Some(_) => {
+                        return error("Responses reasoning.encrypted_content 必须是字符串或 null")
+                    }
+                };
+                let reasoning = if let Some(encrypted) = encrypted {
+                    transport.from_continuation(encrypted.to_string())?
+                } else {
+                    let text = responses_reasoning_text(item)?;
+                    transport.from_chat_content(text)?
+                };
+                content.push(ResponsePart::Reasoning(reasoning));
             }
             other => return error(format!("Responses output.type {other} 不支持转换")),
         }
@@ -208,10 +199,9 @@ pub(super) fn parse_responses(
         } else {
             StopReason::MaxTokens
         },
-        usage: parse_responses_usage(map.get("usage"))?,
+        usage: super::super::usage::parse(UpstreamProtocol::Responses, map.get("usage"))?,
     })
 }
-
 pub(super) fn parse_chat(
     value: &Value,
     reasoning_transport: Option<&ReasoningTransport>,
@@ -323,6 +313,7 @@ pub(super) fn parse_chat(
                 id: string(call.get("id"), "tool_call.id")?,
                 name: string(function.get("name"), "tool_call.function.name")?,
                 namespace: None,
+                kind: ToolKind::Function,
                 input: serde_json::from_str(&string(
                     function.get("arguments"),
                     "tool_call.function.arguments",
@@ -336,7 +327,7 @@ pub(super) fn parse_chat(
         model: string(map.get("model"), "model")?,
         content,
         stop: parse_chat_stop(choice.get("finish_reason"))?,
-        usage: parse_chat_usage(map.get("usage"))?,
+        usage: super::super::usage::parse(UpstreamProtocol::ChatCompletions, map.get("usage"))?,
     })
 }
 
@@ -386,19 +377,49 @@ pub(super) fn parse_anthropic(
                     id: string(part.get("id"), "tool_use.id")?,
                     name: string(part.get("name"), "tool_use.name")?,
                     namespace: None,
+                    kind: ToolKind::Function,
                     input: part
                         .get("input")
                         .cloned()
                         .ok_or_else(|| TransformError("tool_use 缺少 input".to_string()))?,
                 });
             }
+            "thinking" => {
+                allowed(
+                    part,
+                    &["type", "thinking", "signature"],
+                    "Anthropic thinking",
+                )?;
+                // The upstream signature authenticates this exact trace, so it
+                // is sealed with the text and replayed verbatim on the next
+                // turn instead of being replaced by a local placeholder.
+                let signature = match part.get("signature") {
+                    None | Some(Value::Null) => None,
+                    Some(value) => Some(string(Some(value), "thinking.signature")?),
+                };
+                let thinking = string(part.get("thinking"), "thinking")?;
+                if !thinking.is_empty() {
+                    let transport = reasoning_transport.ok_or_else(|| {
+                        TransformError("当前转换缺少本机推理续接通道".to_string())
+                    })?;
+                    content.push(ResponsePart::Reasoning(
+                        transport.from_anthropic_thinking(thinking, signature)?,
+                    ));
+                }
+            }
             "redacted_thinking" => {
                 allowed(part, &["type", "data"], "Anthropic redacted_thinking")?;
                 let transport = reasoning_transport
                     .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
-                content.push(ResponsePart::Reasoning(transport.from_continuation(
-                    string(part.get("data"), "redacted_thinking.data")?,
-                )?));
+                let data = string(part.get("data"), "redacted_thinking.data")?;
+                // A payload this gateway issued is reopened; anything else is
+                // the upstream's own opaque block and is sealed for replay.
+                let reasoning = if ReasoningTransport::is_continuation(&data) {
+                    transport.from_continuation(data)?
+                } else {
+                    transport.from_redacted(data)?
+                };
+                content.push(ResponsePart::Reasoning(reasoning));
             }
             other => return error(format!("Anthropic content.type {other} 不支持转换")),
         }
@@ -408,95 +429,6 @@ pub(super) fn parse_anthropic(
         model: string(map.get("model"), "model")?,
         content,
         stop: parse_anthropic_stop(map.get("stop_reason"))?,
-        usage: parse_anthropic_usage(map.get("usage"))?,
+        usage: super::super::usage::parse(UpstreamProtocol::AnthropicMessages, map.get("usage"))?,
     })
-}
-
-pub(super) fn parse_responses_usage(value: Option<&Value>) -> Result<Usage, TransformError> {
-    let Some(value) = value else {
-        return Ok(Usage::default());
-    };
-    let map = object(value, "Responses usage")?;
-    allowed(
-        map,
-        &[
-            "input_tokens",
-            "output_tokens",
-            "total_tokens",
-            "input_tokens_details",
-            "output_tokens_details",
-        ],
-        "Responses usage",
-    )?;
-    Ok(Usage {
-        input_tokens: map.get("input_tokens").and_then(Value::as_u64),
-        output_tokens: map.get("output_tokens").and_then(Value::as_u64),
-        total_tokens: map.get("total_tokens").and_then(Value::as_u64),
-    })
-}
-
-pub(super) fn parse_chat_usage(value: Option<&Value>) -> Result<Usage, TransformError> {
-    let Some(value) = value else {
-        return Ok(Usage::default());
-    };
-    let map = object(value, "Chat usage")?;
-    allowed(
-        map,
-        &[
-            "prompt_tokens",
-            "completion_tokens",
-            "total_tokens",
-            "prompt_tokens_details",
-            "completion_tokens_details",
-        ],
-        "Chat usage",
-    )?;
-    Ok(Usage {
-        input_tokens: map.get("prompt_tokens").and_then(Value::as_u64),
-        output_tokens: map.get("completion_tokens").and_then(Value::as_u64),
-        total_tokens: map.get("total_tokens").and_then(Value::as_u64),
-    })
-}
-
-pub(super) fn parse_anthropic_usage(value: Option<&Value>) -> Result<Usage, TransformError> {
-    let Some(value) = value else {
-        return Ok(Usage::default());
-    };
-    let map = object(value, "Anthropic usage")?;
-    allowed(
-        map,
-        &[
-            "input_tokens",
-            "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
-        ],
-        "Anthropic usage",
-    )?;
-    let input = map.get("input_tokens").and_then(Value::as_u64);
-    let output = map.get("output_tokens").and_then(Value::as_u64);
-    Ok(Usage {
-        input_tokens: input,
-        output_tokens: output,
-        total_tokens: input.zip(output).map(|(left, right)| left + right),
-    })
-}
-
-pub(super) fn parse_chat_stop(value: Option<&Value>) -> Result<StopReason, TransformError> {
-    match value.and_then(Value::as_str) {
-        Some("tool_calls") => Ok(StopReason::ToolUse),
-        Some("length") => Ok(StopReason::MaxTokens),
-        Some("stop") | None => Ok(StopReason::EndTurn),
-        Some(other) => error(format!("Chat finish_reason {other} 不支持转换")),
-    }
-}
-
-pub(super) fn parse_anthropic_stop(value: Option<&Value>) -> Result<StopReason, TransformError> {
-    match value.and_then(Value::as_str) {
-        Some("tool_use") => Ok(StopReason::ToolUse),
-        Some("max_tokens") => Ok(StopReason::MaxTokens),
-        Some("stop_sequence") => Ok(StopReason::StopSequence),
-        Some("end_turn") | None => Ok(StopReason::EndTurn),
-        Some(other) => error(format!("Anthropic stop_reason {other} 不支持转换")),
-    }
 }

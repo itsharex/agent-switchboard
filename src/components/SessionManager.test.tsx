@@ -77,7 +77,10 @@ describe("SessionManager", () => {
     expect(screen.getByText("Claude Code：一个历史目录不可读")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("list_sessions");
 
-    await user.click(screen.getByRole("radio", { name: "Claude Code" }));
+    // The client filter is the shared segment control, so it carries the short
+    // label every other client control uses ("Claude"); only the session's own
+    // prose names the product in full.
+    await user.click(screen.getByRole("radio", { name: "Claude" }));
     expect(screen.getByText("整理会话记录")).toBeInTheDocument();
     expect(screen.queryByText("修复供应商预览")).not.toBeInTheDocument();
 

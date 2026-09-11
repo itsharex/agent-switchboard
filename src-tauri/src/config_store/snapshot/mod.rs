@@ -4,7 +4,6 @@
 
 pub(crate) mod activation;
 mod decode;
-pub(crate) mod previous;
 
 #[cfg(test)]
 mod tests;
@@ -12,14 +11,16 @@ mod tests;
 pub use activation::enable_snapshot;
 pub(crate) use decode::decode_cloud_backup_snapshot;
 
-use super::{history, providers, ConfigStore, ProfileStoreError};
-use asb_core::contracts::{AppKind, ConfigWriteRecord, ProviderFile, RouteMode, SettingsValues};
+use super::{codex_providers, history, providers, ConfigStore, ProfileStoreError};
+use asb_core::contracts::{
+    AppKind, CodexProviderFile, ConfigWriteRecord, ProviderFile, RouteMode, SettingsValues,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// The only plaintext configuration snapshot format written to cloud backup.
 /// The AES-GCM envelope has its own version and is intentionally independent.
-pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 5;
+pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 7;
 
 /// The complete persisted configuration of both clients. Provider files are
 /// grouped by the directory that owns their client association; secrets stay
@@ -28,14 +29,19 @@ pub const CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION: u8 = 5;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConfigurationSnapshot {
     pub schema_version: u8,
-    pub providers: BTreeMap<AppKind, Vec<ProviderFile>>,
+    pub codex_providers: Vec<CodexProviderFile>,
+    /// The Codex official-login records of the generic store, staged into
+    /// `providers/codex/official`. Claude official records stay inside
+    /// `claude_providers`.
+    pub codex_official: Vec<ProviderFile>,
+    pub claude_providers: Vec<ProviderFile>,
     pub client_settings: BTreeMap<AppKind, SettingsValues>,
     pub history: BTreeMap<AppKind, Vec<ConfigWriteRecord>>,
 }
 
 impl ConfigurationSnapshot {
     pub fn provider_count(&self) -> usize {
-        self.providers.values().map(Vec::len).sum()
+        self.codex_providers.len() + self.codex_official.len() + self.claude_providers.len()
     }
 }
 
@@ -44,17 +50,17 @@ impl ConfigurationSnapshot {
 pub fn read_configuration_snapshot(
     store: &ConfigStore,
 ) -> Result<ConfigurationSnapshot, ProfileStoreError> {
-    let mut providers = BTreeMap::new();
     let mut client_settings = BTreeMap::new();
     let mut history_map = BTreeMap::new();
     for app in [AppKind::Codex, AppKind::Claude] {
-        providers.insert(app, providers::load_provider_files(store, app)?);
         client_settings.insert(app, store.get_client_settings(app)?.settings);
         history_map.insert(app, store.load_history(app)?);
     }
     Ok(ConfigurationSnapshot {
         schema_version: CLOUD_BACKUP_SNAPSHOT_SCHEMA_VERSION,
-        providers,
+        codex_providers: codex_providers::load_codex_provider_files(store)?,
+        codex_official: providers::load_provider_files(store, AppKind::Codex)?,
+        claude_providers: providers::load_provider_files(store, AppKind::Claude)?,
         client_settings,
         history: history_map,
     })
@@ -68,34 +74,6 @@ pub fn validate_snapshot(snapshot: &ConfigurationSnapshot) -> Result<(), String>
     }
     let mut seen_ids = std::collections::HashSet::new();
     for app in [AppKind::Codex, AppKind::Claude] {
-        let files = snapshot
-            .providers
-            .get(&app)
-            .ok_or_else(|| format!("快照缺少 {app:?} 供应商分组"))?;
-        let mut previous_position = 0;
-        let mut has_official_route = false;
-        for file in files {
-            if uuid::Uuid::parse_str(&file.id).is_err() || !seen_ids.insert(file.id.clone()) {
-                return Err(format!("供应商标识无效或重复：{}", file.id));
-            }
-            if file.position <= previous_position {
-                return Err(format!("供应商排序位置无效：{}", file.name));
-            }
-            previous_position = file.position;
-            file.clone()
-                .into_profile(app)
-                .validate()
-                .map_err(|error| error.to_string())?;
-            if let Some(query) = &file.usage_query {
-                crate::usage_query::validate_persisted(query)?;
-            }
-            if file.route_mode == RouteMode::Official {
-                if has_official_route {
-                    return Err(format!("{app:?} 存在重复的官方登录入口"));
-                }
-                has_official_route = true;
-            }
-        }
         let settings = snapshot
             .client_settings
             .get(&app)
@@ -109,6 +87,81 @@ pub fn validate_snapshot(snapshot: &ConfigurationSnapshot) -> Result<(), String>
             .ok_or_else(|| format!("快照缺少 {app:?} 写入历史"))?
         {
             history::validate_write_record(app, record)?;
+        }
+    }
+    validate_codex_files(&snapshot.codex_providers, &mut seen_ids)?;
+    validate_codex_official_files(&snapshot.codex_official, &mut seen_ids)?;
+    validate_claude_files(&snapshot.claude_providers, &mut seen_ids)?;
+    Ok(())
+}
+
+fn validate_codex_files(
+    files: &[CodexProviderFile],
+    seen_ids: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    let mut previous_position = 0;
+    for file in files {
+        file.validate()?;
+        let id = &file.profile.id;
+        if uuid::Uuid::parse_str(id).is_err() || !seen_ids.insert(id.clone()) {
+            return Err(format!("供应商标识无效或重复：{id}"));
+        }
+        if file.position <= previous_position {
+            return Err(format!("供应商排序位置无效：{}", file.profile.name));
+        }
+        previous_position = file.position;
+    }
+    Ok(())
+}
+
+/// The Codex official-login directory holds at most one record, and it must
+/// actually be an official-login record.
+fn validate_codex_official_files(
+    files: &[ProviderFile],
+    seen_ids: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    for file in files {
+        if uuid::Uuid::parse_str(&file.id).is_err() || !seen_ids.insert(file.id.clone()) {
+            return Err(format!("供应商标识无效或重复：{}", file.id));
+        }
+        let profile = file.clone().into_profile(AppKind::Codex);
+        if profile.route_mode != RouteMode::Official {
+            return Err("Codex 官方登录目录只允许官方登录档案".to_string());
+        }
+        profile.validate().map_err(|error| error.to_string())?;
+    }
+    if files.len() > 1 {
+        return Err("Codex 存在重复的官方登录入口".to_string());
+    }
+    Ok(())
+}
+
+fn validate_claude_files(
+    files: &[ProviderFile],
+    seen_ids: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    let mut previous_position = 0;
+    let mut has_official_route = false;
+    for file in files {
+        if uuid::Uuid::parse_str(&file.id).is_err() || !seen_ids.insert(file.id.clone()) {
+            return Err(format!("供应商标识无效或重复：{}", file.id));
+        }
+        if file.position <= previous_position {
+            return Err(format!("供应商排序位置无效：{}", file.name));
+        }
+        previous_position = file.position;
+        file.clone()
+            .into_profile(AppKind::Claude)
+            .validate()
+            .map_err(|error| error.to_string())?;
+        if let Some(query) = &file.usage_query {
+            crate::usage_query::validate_persisted(query)?;
+        }
+        if file.route_mode == RouteMode::Official {
+            if has_official_route {
+                return Err("Claude 存在重复的官方登录入口".to_string());
+            }
+            has_official_route = true;
         }
     }
     Ok(())

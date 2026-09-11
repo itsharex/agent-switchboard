@@ -7,6 +7,7 @@ import { useConfigSnapshot } from "./useConfigSnapshot";
 vi.mock("../api/client", () => ({
   getConfigStatus: vi.fn(),
   listProfiles: vi.fn(() => Promise.resolve([])),
+  listCodexProfiles: vi.fn(() => Promise.resolve([])),
   listBackups: vi.fn(() => Promise.resolve([])),
   getLockStatus: vi.fn(() => Promise.resolve({ state: "free" })),
   onTrayChanged: vi.fn(() => Promise.resolve(() => {})),
