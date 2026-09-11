@@ -301,63 +301,6 @@ describe("CodexProviderEditor", () => {
     expect(draft.modelRoutes).toEqual([{ clientModel: "relay-pro", upstreamModel: "vendor-pro" }]);
   });
 
-  it("fills from a CC Switch seed, surfaces its warnings, and saves as a new profile", async () => {
-    const user = userEvent.setup();
-    const onSave = vi.fn();
-    mount({
-      source: {
-        kind: "seed",
-        seedKey: "codex:id-4",
-        seed: {
-          name: "Codex 中继",
-          endpoint: "https://relay.codex.example/v1",
-          apiKey: "sk-relay",
-          upstream: "chatCompletions",
-          requestMode: "standard",
-          defaultModel: "gpt-5-codex",
-          catalog: [{
-            model: "gpt-5-codex",
-            contextWindow: 272_000,
-            images: true,
-            defaultReasoningLevel: "high",
-            reasoningLevels: ["low", "medium", "high"],
-          }],
-          parameters: providerParameters("codex"),
-          notes: "从 CC Switch 导入",
-          websiteUrl: null,
-          usageQuery: null,
-          warnings: ["未导入: meta.costMultiplier"],
-        },
-      },
-      onSave,
-    });
-    expect(screen.getByRole("heading", { name: "新建 Codex 供应商" })).toBeInTheDocument();
-    expect(screen.getByText(/来自 CC Switch 的未导入字段/)).toBeInTheDocument();
-    expect(screen.getByText(/未导入: meta\.costMultiplier/)).toBeInTheDocument();
-    expect(screen.getByLabelText("名称")).toHaveValue("Codex 中继");
-    expect(screen.getByLabelText("服务地址")).toHaveValue("https://relay.codex.example/v1");
-    expect(screen.getByLabelText("API 密钥")).toHaveValue("sk-relay");
-    expect(screen.getByLabelText("模型标识 1")).toHaveValue("gpt-5-codex");
-    expect(screen.getByLabelText("gpt-5-codex 上下文窗口")).toHaveValue(272_000);
-    expect(screen.getByRole("combobox", { name: "gpt-5-codex 默认推理档位" })).toHaveTextContent("高");
-
-    await user.click(screen.getByRole("button", { name: "保存供应商" }));
-    await waitFor(() => expect(onSave).toHaveBeenCalled());
-    const draft = onSave.mock.calls[0][0] as client.CodexProviderDraft;
-    expect(draft.name).toBe("Codex 中继");
-    expect(draft.notes).toBe("从 CC Switch 导入");
-    expect(draft.upstream).toBe("chatCompletions");
-    expect(draft.defaultModel).toBe("gpt-5-codex");
-    expect(draft.catalog[0]).toMatchObject({
-      id: "gpt-5-codex",
-      contextWindow: 272_000,
-      images: true,
-      defaultReasoningLevel: "high",
-      supportedReasoningLevels: ["low", "medium", "high"],
-    });
-    expect(draft.modelRoutes).toEqual([]);
-  });
-
   it("prepares a real request from the draft through the shared protocol contract", async () => {
     const user = userEvent.setup();
     invokeMock.mockReset();

@@ -290,3 +290,119 @@ fn nonterminating_source_is_interrupted() {
     assert!(ScriptProgram::new("(() => { while (true) {} })()").is_err());
     assert!(started.elapsed() < Duration::from_secs(2));
 }
+
+/// The vendored template scripts synthesized by the import must run as real
+/// native programs: the engine drives request and extract end to end.
+#[test]
+fn imported_template_scripts_run_in_the_script_engine() {
+    let row = asb_core::ccswitch::CcSwitchRow {
+        id: "tpl-1".to_string(),
+        app_type: "claude".to_string(),
+        name: "DeepSeek".to_string(),
+        settings_config: r#"{"env":{"ANTHROPIC_BASE_URL":"https://api.deepseek.com","ANTHROPIC_AUTH_TOKEN":"token","ANTHROPIC_MODEL":"deepseek-chat"}}"#.to_string(),
+        website_url: None,
+        notes: None,
+        meta: Some(
+            r#"{"usage_script":{"enabled":true,"language":"javascript","code":"","templateType":"balance"}}"#.to_string(),
+        ),
+    };
+    let proposal = asb_core::ccswitch::map_row(&row).expect("row maps");
+    let query = match proposal.draft {
+        asb_core::ccswitch::CcSwitchProviderDraft::Claude(draft) => {
+            draft.usage_query.expect("synthesized balance query")
+        }
+        _ => panic!("expected a Claude proposal"),
+    };
+    let source = match query {
+        UsageQuery::Script { source, .. } => source,
+        other => panic!("expected a script query, got {other:?}"),
+    };
+    let program = ScriptProgram::new(&source).expect("program parses");
+
+    let request = program
+        .request("engine-key", Some("https://api.deepseek.com"))
+        .expect("request builds");
+    assert_eq!(request.url, "https://api.deepseek.com/user/balance");
+    assert_eq!(
+        request.headers.get("Authorization").map(String::as_str),
+        Some("Bearer engine-key")
+    );
+
+    let summary = program
+        .extract(
+            &serde_json::json!({
+                "is_available": true,
+                "balance_infos": [
+                    {"currency": "CNY", "total_balance": "110.00"},
+                    {"currency": "USD", "total_balance": 2.5}
+                ]
+            }),
+            200,
+            "2026-09-11T22:00:00Z".to_string(),
+        )
+        .expect("extract builds");
+    assert_eq!(summary.readings.len(), 2);
+    assert_eq!(summary.readings[0].remaining, Some(110.0));
+    assert_eq!(summary.readings[0].unit.as_deref(), Some("CNY"));
+    assert_eq!(summary.readings[1].remaining, Some(2.5));
+}
+
+/// The vendored coding-plan scripts run end to end in the script engine; the
+/// Kimi shape covers the absolute-limit tier projection.
+#[test]
+fn imported_kimi_token_plan_script_runs_in_the_script_engine() {
+    let row = asb_core::ccswitch::CcSwitchRow {
+        id: "kimi-1".to_string(),
+        app_type: "codex".to_string(),
+        name: "Kimi".to_string(),
+        settings_config: serde_json::json!({
+            "auth": { "OPENAI_API_KEY": "kimi-key" },
+            "config": "model_provider = \"custom\"\nmodel = \"kimi-latest\"\n\n[model_providers.custom]\nbase_url = \"https://api.kimi.com/coding\"\nwire_api = \"responses\"\n"
+        })
+        .to_string(),
+        website_url: None,
+        notes: None,
+        meta: Some(
+            r#"{"usage_script":{"enabled":true,"language":"javascript","code":"","templateType":"token_plan","codingPlanProvider":"kimi"}}"#
+                .to_string(),
+        ),
+    };
+    let proposal = asb_core::ccswitch::map_row(&row).expect("row maps");
+    let query = match proposal.draft {
+        asb_core::ccswitch::CcSwitchProviderDraft::Codex(seed) => {
+            seed.usage_query.expect("synthesized Kimi query")
+        }
+        _ => panic!("expected a Codex proposal"),
+    };
+    let source = match query {
+        UsageQuery::Script { source, .. } => source,
+        other => panic!("expected a script query, got {other:?}"),
+    };
+    let program = ScriptProgram::new(&source).expect("program parses");
+
+    let request = program
+        .request("kimi-key", Some("https://api.kimi.com/coding"))
+        .expect("request builds");
+    assert_eq!(request.url, "https://api.kimi.com/coding/v1/usages");
+    assert_eq!(
+        request.headers.get("Authorization").map(String::as_str),
+        Some("Bearer kimi-key")
+    );
+
+    let summary = program
+        .extract(
+            &serde_json::json!({
+                "limits": [{ "detail": { "limit": 120.0, "remaining": 90.5, "resetTime": "2026-09-12" } }],
+                "usage": { "limit": 900.0, "remaining": 800.0, "resetTime": "2026-09-14" }
+            }),
+            200,
+            "2026-09-11T22:00:00Z".to_string(),
+        )
+        .expect("extract builds");
+    assert_eq!(summary.readings.len(), 2);
+    assert_eq!(summary.readings[0].total, Some(120.0));
+    assert_eq!(summary.readings[0].remaining, Some(90.5));
+    assert_eq!(summary.readings[0].used, Some(29.5));
+    assert_eq!(summary.readings[0].plan_name.as_deref(), Some("5 小时窗口"));
+    assert_eq!(summary.readings[1].used, Some(100.0));
+}

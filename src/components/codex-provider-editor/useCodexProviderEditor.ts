@@ -3,11 +3,10 @@ import type { CodexProviderDraft, SettingsValues } from "../../api/client";
 import type { CodexEditorSource } from "../../app/useProviders";
 import { useProviderConnection } from "../provider-editor/useProviderConnection";
 import { useProviderParameters } from "../provider-editor/useProviderParameters";
-import { codexDraftFrom, codexDraftFromSeed, prepareCodexDraft, validateCodexDraft, type CodexEditorDraft } from "./draft";
+import { codexDraftFrom, prepareCodexDraft, validateCodexDraft, type CodexEditorDraft } from "./draft";
 
 function codexDraftFromSource(source: CodexEditorSource | null): CodexEditorDraft {
   if (source?.kind === "record") return codexDraftFrom(source.record);
-  if (source?.kind === "seed") return codexDraftFromSeed(source.seed);
   return codexDraftFrom(null);
 }
 

@@ -11,7 +11,9 @@ const TOKEN: &str = "<placeholder>";
 fn claude_draft(outcome: &CcSwitchProposal) -> &ProviderDraft {
     match &outcome.draft {
         CcSwitchProviderDraft::Claude(draft) => draft,
-        CcSwitchProviderDraft::Codex(_) => panic!("expected a Claude import proposal"),
+        CcSwitchProviderDraft::Codex(_) | CcSwitchProviderDraft::CodexOfficial(_) => {
+            panic!("expected a Claude import proposal")
+        }
     }
 }
 
@@ -140,7 +142,9 @@ fn disabled_or_template_usage_scripts_are_not_activated_on_import() {
         .iter()
         .any(|warning| warning.contains("脚本已禁用")));
 
-    let mut template = row("claude", "usage-3", "内建模板", &claude_custom());
+    // Built-in templates carry no code; the import synthesizes the vendored
+    // native program instead of warning.
+    let mut template = row("claude", "usage-3", "余额模板", &claude_custom());
     template.meta = Some(
         serde_json::json!({
             "usage_script": {
@@ -153,11 +157,203 @@ fn disabled_or_template_usage_scripts_are_not_activated_on_import() {
         .to_string(),
     );
     let template = map_row(&template).expect("provider should still map");
-    assert!(claude_draft(&template).usage_query.is_none());
-    assert!(template
+    match &claude_draft(&template).usage_query {
+        Some(crate::contracts::UsageQuery::Script { source, .. }) => {
+            assert!(source.contains("/user/balance"));
+            assert!(source.contains("api.deepseek.com"));
+            assert!(source.contains("api.novita.ai"));
+        }
+        other => panic!("expected a synthesized balance script, got {other:?}"),
+    }
+    assert!(!template
         .warnings
         .iter()
         .any(|warning| warning.contains("templateType")));
+
+    let mut general = row("claude", "usage-5", "通用模板", &claude_custom());
+    general.meta = Some(
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": "",
+                "templateType": "general"
+            }
+        })
+        .to_string(),
+    );
+    let general = map_row(&general).expect("provider should still map");
+    match &claude_draft(&general).usage_query {
+        Some(crate::contracts::UsageQuery::Script { source, .. }) => {
+            assert!(source.contains("/user/balance"));
+        }
+        other => panic!("expected a synthesized general script, got {other:?}"),
+    }
+}
+
+#[test]
+fn token_plan_templates_import_zhipu_and_skip_other_plans_precisely() {
+    let zhipu_meta = |provider: &str| {
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": "",
+                "templateType": "token_plan",
+                "codingPlanProvider": provider
+            }
+        })
+        .to_string()
+    };
+
+    let mut zhipu = row("claude", "plan-1", "智谱", &claude_custom());
+    zhipu.meta = Some(zhipu_meta("zhipu"));
+    let zhipu = map_row(&zhipu).expect("provider should still map");
+    match &claude_draft(&zhipu).usage_query {
+        Some(crate::contracts::UsageQuery::Script { source, .. }) => {
+            assert!(source.contains("/api/monitor/usage/quota/limit"));
+            assert!(source.contains("open.bigmodel.cn"));
+        }
+        other => panic!("expected a synthesized Zhipu script, got {other:?}"),
+    }
+    assert!(!zhipu
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("codingPlanProvider")));
+
+    // Every data-plane coding-plan provider synthesizes its vendored program.
+    for (provider, marker) in [
+        ("kimi", "api.kimi.com/coding/v1/usages"),
+        ("minimax", "coding_plan/remains"),
+        ("zenmux", "usage_percentage"),
+        ("opencode_go", "opencode.ai/zen/go/v1/usage"),
+    ] {
+        let mut source = row("claude", "plan-x", provider, &claude_custom());
+        source.meta = Some(zhipu_meta(provider));
+        let mapped = map_row(&source).expect("provider should still map");
+        match &claude_draft(&mapped).usage_query {
+            Some(crate::contracts::UsageQuery::Script { source, .. }) => {
+                assert!(source.contains(marker), "{provider}: {source}");
+            }
+            other => panic!("expected a synthesized {provider} script, got {other:?}"),
+        }
+    }
+
+    // The team plan bakes its source-configured identifiers and consumes them.
+    let mut team = row("claude", "plan-team", "智谱团队", &claude_custom());
+    team.meta = Some(
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": "",
+                "templateType": "token_plan",
+                "codingPlanProvider": "zhipu_team",
+                "teamOrganizationId": "org-\"x",
+                "teamProjectId": "proj_1"
+            }
+        })
+        .to_string(),
+    );
+    let team = map_row(&team).expect("provider should still map");
+    match &claude_draft(&team).usage_query {
+        Some(crate::contracts::UsageQuery::Script { source, .. }) => {
+            assert!(source.contains("type=2"));
+            assert!(source.contains("bigmodel-organization"));
+            assert!(source.contains("org-\\\"x"));
+            assert!(source.contains("proj_1"));
+        }
+        other => panic!("expected a synthesized team script, got {other:?}"),
+    }
+    assert!(!team
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("teamOrganizationId")));
+
+    // A team plan without its identifiers is skipped precisely.
+    let mut team_missing = row("claude", "plan-team-2", "智谱团队缺配置", &claude_custom());
+    team_missing.meta = Some(zhipu_meta("zhipu_team"));
+    let team_missing = map_row(&team_missing).expect("provider should still map");
+    assert!(claude_draft(&team_missing).usage_query.is_none());
+    assert!(team_missing
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("teamOrganizationId 与 teamProjectId")));
+
+    // Volcengine needs control-plane AccessKey credentials: not representable.
+    let mut volcengine = row("claude", "plan-v", "火山", &claude_custom());
+    volcengine.meta = Some(zhipu_meta("volcengine"));
+    let volcengine = map_row(&volcengine).expect("provider should still map");
+    assert!(claude_draft(&volcengine).usage_query.is_none());
+    assert!(volcengine
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("AccessKey ID/Secret")));
+
+    let mut unknown = row("claude", "plan-u", "未知", &claude_custom());
+    unknown.meta = Some(zhipu_meta("mistral"));
+    let unknown = map_row(&unknown).expect("provider should still map");
+    assert!(claude_draft(&unknown).usage_query.is_none());
+    assert!(unknown
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("未知 Coding Plan 供应商 mistral")));
+
+    let mut missing = row("claude", "plan-3", "缺供应商", &claude_custom());
+    missing.meta = Some(
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": "",
+                "templateType": "token_plan"
+            }
+        })
+        .to_string(),
+    );
+    let missing = map_row(&missing).expect("provider should still map");
+    assert!(claude_draft(&missing).usage_query.is_none());
+    assert!(missing
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("缺少 codingPlanProvider")));
+}
+
+#[test]
+fn non_representable_usage_templates_skip_with_precise_reasons() {
+    let skip = |template: &str| {
+        let mut source = row("claude", "skip-1", "不可表达", &claude_custom());
+        source.meta = Some(
+            serde_json::json!({
+                "usage_script": {
+                    "enabled": true,
+                    "language": "javascript",
+                    "code": "",
+                    "templateType": template
+                }
+            })
+            .to_string(),
+        );
+        let mapped = map_row(&source).expect("provider should still map");
+        let reason = mapped
+            .warnings
+            .iter()
+            .find(|warning| warning.contains("meta.usage_script（"))
+            .map(String::as_str)
+            .unwrap_or_default()
+            .to_string();
+        (claude_draft(&mapped).usage_query.is_none(), reason)
+    };
+
+    let (skipped, reason) = skip("newapi");
+    assert!(skipped);
+    assert!(reason.contains("站点独立凭据"));
+    let (skipped, reason) = skip("github_copilot");
+    assert!(skipped);
+    assert!(reason.contains("GitHub 登录凭据"));
+    let (skipped, reason) = skip("official_subscription");
+    assert!(skipped);
+    assert!(reason.contains("官方登录档案"));
 }
 
 #[test]

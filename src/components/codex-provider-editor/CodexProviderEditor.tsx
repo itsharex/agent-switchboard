@@ -37,16 +37,9 @@ function CodexProviderForm({ editor, ...props }: Props & { editor: CodexEditorSt
   const { draft, setDraft } = editor;
   const { busy, onCancel, onSave } = props;
   const editing = props.source?.kind === "record";
-  const seed = props.source?.kind === "seed" ? props.source.seed : null;
   return (
     <form className="asb-provider-form" aria-label={editing ? "编辑 Codex 供应商" : "新建 Codex 供应商"}
       onSubmit={(event) => { event.preventDefault(); editor.save(onSave); }}>
-      {seed && seed.warnings.length > 0 && (
-        <div className="asb-banner asb-banner-warning" role="status" aria-label="来自 CC Switch 的未导入字段">
-          <span>来自 CC Switch 的未导入字段：</span>
-          {seed.warnings.map((warning) => <div key={warning}>{warning}</div>)}
-        </div>
-      )}
       <CodexIdentityFields draft={draft} busy={busy} editing={editing}
         setDraft={setDraft} onSwitchClient={props.onSwitchClient}
         onSwitchAccessMode={(official) => props.onSwitchAccessMode(official, null)} />
@@ -166,8 +159,6 @@ export function CodexProviderEditor(props: Props) {
     return <CodexOfficialSession key={props.source.record?.profile.id ?? "new-codex-official"} {...props} />;
   }
   const source = props.source;
-  const key = source?.kind === "record"
-    ? source.record.profile.id
-    : source?.kind === "seed" ? `ccswitch-${source.seedKey}` : "new-codex";
+  const key = source?.kind === "record" ? source.record.profile.id : "new-codex";
   return <CodexProviderEditorSession key={key} {...props} />;
 }

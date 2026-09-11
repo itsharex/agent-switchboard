@@ -1,14 +1,7 @@
 import { invoke } from "./client";
 import type { AppKind } from "./shared";
 import type { RouteState } from "./switching";
-import type {
-  CodexReasoningLevel,
-  CodexRequestMode,
-  CodexUpstream,
-  ProviderDraft,
-} from "./providers";
-import type { SettingsValues } from "./settings";
-import type { UsageQuery } from "./usage";
+import type { ProviderDraft } from "./providers";
 
 export type DiscoveredState =
   | { kind: "missing" }
@@ -67,48 +60,16 @@ export interface CcSwitchImportOutcome {
   notImported: CcSwitchSkip[];
 }
 
-/** Source-owned Codex facts for one imported row. The catalog limits and
- * capability statements the strict profile contract requires are completed
- * and confirmed in the editor; a seed never persists directly. */
-export interface CodexCcSwitchCatalogSeed {
-  model: string;
-  contextWindow: number | null;
-  images: boolean | null;
-  defaultReasoningLevel: CodexReasoningLevel | null;
-  reasoningLevels: CodexReasoningLevel[] | null;
-}
-
-export interface CodexCcSwitchSeed {
-  name: string;
-  endpoint: string;
-  /** Empty when the source row exposed no usable credential. */
-  apiKey: string;
-  upstream: CodexUpstream;
-  requestMode: CodexRequestMode;
-  defaultModel: string;
-  catalog: CodexCcSwitchCatalogSeed[];
-  parameters: SettingsValues;
-  notes: string | null;
-  websiteUrl: string | null;
-  usageQuery: UsageQuery | null;
-  warnings: string[];
-}
-
 export function scanCcswitch(): Promise<CcSwitchScan> {
   return invoke<CcSwitchScan>("scan_ccswitch");
 }
 
-/** Batch import for Claude rows only. Codex rows are completed per row in
- * the editor via `prepareCcswitchCodexSeed`. */
+/** One-click batch import for every selected row. Claude rows and the Codex
+ * official record land in the generic store; third-party Codex rows are
+ * completed into the strict store entirely inside the backend, so imported
+ * credentials never cross the IPC boundary. */
 export function importCcswitchClaudeProfiles(keys: string[]): Promise<CcSwitchImportOutcome> {
   return invoke<CcSwitchImportOutcome>("import_ccswitch_claude_profiles", { keys });
-}
-
-/** The completion seed for one deliberately chosen Codex row. The only
- * boundary where an imported credential reaches the renderer; nothing is
- * persisted by this command. */
-export function prepareCcswitchCodexSeed(key: string): Promise<CodexCcSwitchSeed> {
-  return invoke<CodexCcSwitchSeed>("prepare_ccswitch_codex_seed", { key });
 }
 
 export function discoverLocal(): Promise<DiscoveryReport> {

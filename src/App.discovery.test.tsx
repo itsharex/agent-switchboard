@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { providerParameters } from "./test/provider-parameters";
-import { invokeMock, statuses, profiles, defaultSettings, openProviderImport, runtimeOverview, primeBackend, ccScan, codexSeed } from "./test/app-fixtures";
+import { invokeMock, statuses, profiles, defaultSettings, openProviderImport, runtimeOverview, primeBackend, ccScan } from "./test/app-fixtures";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onResized: () => Promise.resolve(() => {}) }) }));
@@ -171,7 +171,7 @@ describe("App.discovery", () => {
       if (command === "scan_ccswitch") return Promise.resolve(ccScan);
       if (command === "import_ccswitch_claude_profiles") {
         return Promise.resolve({
-          importedCount: 1,
+          importedCount: 3,
           usageScriptImportedCount: 1,
           skippedExisting: [],
           notImported: [],
@@ -189,32 +189,41 @@ describe("App.discovery", () => {
 
     expect(await screen.findByText("中继 A")).toBeInTheDocument();
     expect(screen.getByText(/将导入用量查询脚本/)).toBeInTheDocument();
-    expect(screen.getByText(/无法导入：客户端 gemini 超出本应用支持范围/)).toBeInTheDocument();
+    // Foreign-client rows are invisible and the official Codex row is an
+    // importable checkbox, not a skip wall.
+    expect(screen.queryByText(/无法导入/)).not.toBeInTheDocument();
+    expect(screen.queryByText("双子")).not.toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("scan_ccswitch");
 
-    // Codex rows are completed in the editor, so only Claude rows are
-    // batch-selected and importable.
+    // Every importable row is batch-selected, across both stores.
     expect(screen.getByRole("checkbox", { name: "中继 A" })).toBeChecked();
-    expect(screen.queryByRole("checkbox", { name: "Codex 中继" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Codex 官方登录" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Codex 中继" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Codex 官方登录" })).toBeChecked();
 
-    await user.click(screen.getByRole("button", { name: "导入所选 1 项" }));
+    await user.click(screen.getByRole("button", { name: "导入所选 3 项" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("import_ccswitch_claude_profiles", {
-        keys: ["claude:id-1"],
+        keys: ["claude:id-1", "codex:id-4", "codex:id-2"],
       }),
     );
     expect(await screen.findByRole("region", { name: "供应商工作区" })).toBeInTheDocument();
   });
 
-  it("seeds a scanned Codex row into the editor instead of batch-importing it", async () => {
+  it("imports scanned Codex rows in one click, official login included", async () => {
     primeBackend();
     invokeMock.mockImplementation((command: string) => {
       if (command === "runtime_overview") return Promise.resolve(runtimeOverview);
       if (command === "get_app_settings") return Promise.resolve(defaultSettings);
       if (command === "discover_cached") return Promise.resolve(null);
       if (command === "scan_ccswitch") return Promise.resolve(ccScan);
-      if (command === "prepare_ccswitch_codex_seed") return Promise.resolve(codexSeed);
+      if (command === "import_ccswitch_claude_profiles") {
+        return Promise.resolve({
+          importedCount: 2,
+          usageScriptImportedCount: 0,
+          skippedExisting: [],
+          notImported: [],
+        });
+      }
       return Promise.resolve([]);
     });
     const user = userEvent.setup();
@@ -227,16 +236,14 @@ describe("App.discovery", () => {
 
     expect(await screen.findByText("Codex 中继")).toBeInTheDocument();
     expect(screen.getByText(/未导入: meta\.costMultiplier/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "补全导入" }));
+    expect(screen.getByRole("checkbox", { name: "Codex 中继" })).toBeChecked();
 
-    expect(await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("prepare_ccswitch_codex_seed", { key: "codex:id-4" }),
-    )).toBeTruthy();
-    // The editor opens on the Codex list page, prefilled with the seed.
-    const heading = await screen.findByRole("heading", { name: "新建 Codex 供应商" });
-    expect(heading).toBeInTheDocument();
-    expect((screen.getByLabelText("名称") as HTMLInputElement).value).toBe("Codex 中继");
-    expect((screen.getByLabelText("服务地址") as HTMLInputElement).value).toBe("https://relay.codex.example/v1");
-    expect(screen.getByText(/来自 CC Switch 的未导入字段/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "导入所选 3 项" }));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("import_ccswitch_claude_profiles", {
+        keys: ["claude:id-1", "codex:id-4", "codex:id-2"],
+      }),
+    );
+    expect(await screen.findByRole("region", { name: "供应商工作区" })).toBeInTheDocument();
   });
 });

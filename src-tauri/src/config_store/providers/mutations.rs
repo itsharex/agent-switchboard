@@ -209,18 +209,19 @@ impl ConfigStore {
 
     /// Imports one draft as a provider file: an exactly equal provider is a
     /// no-op, a routing-identical one gains the missing usage query, and
-    /// anything else creates a new file.
+    /// anything else creates a new file. Codex accepts its official-login
+    /// record only; third-party Codex stays in the dedicated store.
     pub fn import_provider(
         &self,
         draft: ProviderDraft,
     ) -> Result<ProviderRecord, StoreOperationError> {
-        if draft.app == AppKind::Codex {
-            return Err("Codex 供应商必须使用专用档案格式".into());
+        if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
+            return Err("Codex 第三方供应商必须使用专用档案格式".into());
         }
         draft.validate().map_err(|error| error.to_string())?;
-        let (_, claude) = load_all(self)?;
+        let (codex_official, claude) = load_all(self)?;
         let existing = match draft.app {
-            AppKind::Codex => unreachable!("Codex uses dedicated provider storage"),
+            AppKind::Codex => codex_official,
             AppKind::Claude => claude,
         };
         if let Some(loaded) = existing
@@ -250,7 +251,7 @@ impl ConfigStore {
     /// Whether an exactly equal provider already exists (scan-side view of
     /// the import dedup rule).
     pub fn provider_exists(&self, draft: &ProviderDraft) -> bool {
-        if draft.app == AppKind::Codex {
+        if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
             return false;
         }
         match load_all(self) {
@@ -270,7 +271,7 @@ impl ConfigStore {
     /// Whether a selected source import will enrich its otherwise matching
     /// local provider with a currently absent usage query.
     pub fn provider_will_receive_usage_query(&self, draft: &ProviderDraft) -> bool {
-        if draft.app == AppKind::Codex {
+        if draft.app == AppKind::Codex && draft.route_mode != RouteMode::Official {
             return false;
         }
         if draft.usage_query.is_none() {

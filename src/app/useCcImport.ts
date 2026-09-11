@@ -1,13 +1,11 @@
 import { useCallback, useState } from "react";
 import {
   importCcswitchClaudeProfiles,
-  prepareCcswitchCodexSeed,
   scanCcswitch,
   type CcSwitchImportOutcome,
   type CcSwitchScan,
   type CommandError,
   type AppKind,
-  type CodexCcSwitchSeed,
   type CodexProviderRecord,
   type ProviderRecord,
 } from "../api/client";
@@ -57,11 +55,11 @@ export function useCcImport({
       const scan = await scanCcswitch();
       setCcScan(scan);
       setCcResult(null);
-      // Fresh scan: batch-select importable Claude rows; exact duplicates
-      // stay off. Codex rows are completed one by one in the editor.
+      // Fresh scan: batch-select every importable row (Claude, Codex
+      // third-party, and the Codex official record); duplicates stay off.
       const selection: Record<string, boolean> = {};
       for (const item of scan.providers) {
-        selection[item.key] = item.app === "claude" && !item.existing;
+        selection[item.key] = !item.existing;
       }
       setCcSelected(selection);
     } catch (caught) {
@@ -74,7 +72,7 @@ export function useCcImport({
   const runCcImport = useCallback(async () => {
     if (busy || !ccScan) return false;
     const keys = ccScan.providers
-      .filter((item) => item.app === "claude" && ccSelected[item.key])
+      .filter((item) => !item.existing && ccSelected[item.key])
       .map((item) => item.key);
     if (keys.length === 0) return false;
     invalidateCandidates();
@@ -111,21 +109,5 @@ export function useCcImport({
   }, [busy, ccScan, ccSelected, clearError, invalidateCandidates, onError, refresh, setBusy,
     records, codexRecords, preferredApp, selectProfile, setAppFilter]);
 
-  /** Fetches the completion seed for one Codex row. This is the deliberate
-   * single-row credential boundary; the editor owns what happens next. */
-  const prepareCodexSeed = useCallback(async (key: string): Promise<CodexCcSwitchSeed | null> => {
-    if (busy) return null;
-    setBusy(true);
-    clearError();
-    try {
-      return await prepareCcswitchCodexSeed(key);
-    } catch (caught) {
-      onError(caught as CommandError);
-      return null;
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, clearError, onError, setBusy]);
-
-  return { ccScan, ccSelected, setCcSelected, ccResult, runCcScan, runCcImport, prepareCodexSeed };
+  return { ccScan, ccSelected, setCcSelected, ccResult, runCcScan, runCcImport };
 }

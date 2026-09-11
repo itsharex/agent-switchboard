@@ -11,7 +11,6 @@ import {
   resetProfileStore,
   type AppKind,
   type CommandError,
-  type CodexCcSwitchSeed,
   type CodexProviderDraft,
   type CodexProviderRecord,
   type FilePreview,
@@ -21,12 +20,11 @@ import {
   type UsageQuery,
 } from "../api/client";
 
-/** What a Codex editor session edits: a stored third-party record, an import
- * completion seed, or the client's official-login record. The variants never
- * convert into each other; only their shared editor shape is editable. */
+/** What a Codex editor session edits: a stored third-party record or the
+ * client's official-login record. The variants never convert into each other;
+ * only their shared editor shape is editable. */
 export type CodexEditorSource =
   | { kind: "record"; record: CodexProviderRecord }
-  | { kind: "seed"; seedKey: string; seed: CodexCcSwitchSeed }
   | { kind: "official"; record: ProviderRecord | null };
 
 /** One open editor. Claude owns the generic contract; Codex owns its strict
@@ -108,18 +106,6 @@ function useProviderEditorSession(deps: ProvidersDeps) {
     },
     [setSelectedId],
   );
-  /** Opens the Codex editor pre-filled with an import completion seed. The
-   * seed's catalog defaults and capabilities stay editable drafts until the
-   * user saves through the normal create command. */
-  const openCodexEditorWithSeed = useCallback(
-    (seed: CodexCcSwitchSeed, seedKey: string) => {
-      retractPreview();
-      setAppFilter("codex");
-      setSelectedId(null);
-      setEditorSession({ app: "codex", source: { kind: "seed", seedKey, seed } });
-    },
-    [retractPreview, setAppFilter, setSelectedId],
-  );
   const newEditor = useCallback(() => {
     retractPreview();
     setEditorSession(
@@ -153,7 +139,7 @@ function useProviderEditorSession(deps: ProvidersDeps) {
   );
 
   return { editorSession, setEditorSession, openEditor, openCodexEditor, openCodexOfficialEditor,
-    openCodexEditorWithSeed, switchCodexAccessMode, newEditor, newEditorFor, closeEditor, selectApp };
+    switchCodexAccessMode, newEditor, newEditorFor, closeEditor, selectApp };
 }
 
 /** One save awaiting its explicit write confirmation. `store` selects the

@@ -22,8 +22,6 @@ interface CcSwitchImportProps {
   onSelect: (key: string, checked: boolean) => void;
   onScan: () => void;
   onImport: () => void;
-  /** Opens the Codex editor pre-filled with one row's completion seed. */
-  onSeed: (key: string) => void;
 }
 
 function providerDetail(item: CcSwitchScanItem): string {
@@ -37,9 +35,11 @@ function importRows(scan: CcSwitchScan | null): CcImportRow[] {
   return [
     ...scan.providers.map((item) => ({
       key: item.key, item, name: item.name, detail: providerDetail(item),
-      status: item.app === "codex"
-        ? (item.existing ? "已存在相同路由；可再次补全导入" : null)
-        : (item.existing ? "已存在相同档案，导入将跳过" : null),
+      status: item.existing
+        ? item.app === "codex" && item.routeMode === "custom"
+          ? "已存在相同路由，导入将跳过"
+          : "已存在相同档案，导入将跳过"
+        : null,
       warnings: item.warnings,
     })),
     ...scan.skipped.map((skip) => ({ key: skip.key, item: null, name: skip.name, detail: null,
@@ -48,19 +48,11 @@ function importRows(scan: CcSwitchScan | null): CcImportRow[] {
   ];
 }
 
-function importColumns({ selected, busy, onSelect, onSeed }: Omit<CcSwitchImportProps, "scan" | "result" | "onScan" | "onImport">): Array<TableColumn<CcImportRow>> {
+function importColumns({ selected, busy, onSelect }: Omit<CcSwitchImportProps, "scan" | "result" | "onScan" | "onImport">): Array<TableColumn<CcImportRow>> {
   return [
     { key: "provider", header: "供应商", render: (row) => {
       const item = row.item;
       if (!item) return row.name;
-      if (item.app === "codex") {
-        return (
-          <div>
-            <div>{row.name}</div>
-            <Button variant="secondary" disabled={busy} onClick={() => onSeed(item.key)}>补全导入</Button>
-          </div>
-        );
-      }
       return <Checkbox label={row.name} checked={Boolean(selected[item.key]) && !item.existing}
         disabled={busy || item.existing} onChange={(checked) => onSelect(item.key, checked)} />;
     } },
@@ -93,11 +85,11 @@ function ImportResult({ result }: { result: CcSwitchImportOutcome | null }) {
   );
 }
 
-/** Claude rows batch-import; Codex rows are completed one by one in the
- * editor because their catalog and capabilities must be user-confirmed. */
+/** One click imports every selected row: Claude relays, third-party Codex
+ * rows (completed inside the backend), and the Codex official record. */
 export function CcSwitchImport(props: CcSwitchImportProps) {
   const rows = importRows(props.scan);
-  const selectedCount = rows.filter(({ item }) => item && item.app === "claude" && !item.existing && props.selected[item.key]).length;
+  const selectedCount = rows.filter(({ item }) => item && !item.existing && props.selected[item.key]).length;
   return (
     <section className="asb-panel" aria-label="从 CC Switch 导入">
       <div className="asb-panel-heading">

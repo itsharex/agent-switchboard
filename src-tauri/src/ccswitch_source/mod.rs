@@ -2,10 +2,9 @@
 //!
 //! The database is opened with `mode=ro&immutable=1` so a running source
 //! instance is never locked or written. Only the `providers` table is read.
-//! Claude credentials stay inside the backend until the batch import writes
-//! profiles; a Codex credential only leaves through the single-row
-//! `prepare_codex_seed` completion command, and scan diagnostics expose
-//! field names only.
+//! Source credentials never cross the IPC boundary: scans expose routing
+//! facts and field names only, and both Claude and Codex rows are imported
+//! entirely inside the backend through the batch command.
 
 mod db;
 
@@ -15,7 +14,7 @@ mod tests;
 use crate::config_store::StoreOperationError;
 use crate::local_state::LocalState;
 use asb_core::ccswitch;
-use asb_core::contracts::{AppKind, ProviderDraft, RouteMode};
+use asb_core::contracts::{AppKind, RouteMode};
 use db::{db_path, scan_db};
 use serde::Serialize;
 use std::path::Path;
@@ -77,17 +76,24 @@ pub fn scan_at(path: &Path, state: &LocalState) -> Result<CcSwitchScan, String> 
         .into_iter()
         .map(|proposal| scan_item(state, proposal))
         .collect();
+    // The scan response carries only rows this application can act on. Rows
+    // of foreign clients are invisible, never a "cannot import" wall.
+    let skipped = raw
+        .skipped
+        .into_iter()
+        .filter(|skip| matches!(skip.app_type.as_str(), "claude" | "codex"))
+        .collect();
     Ok(CcSwitchScan {
         db_path: path.to_string_lossy().into_owned(),
         providers,
-        skipped: raw.skipped,
+        skipped,
     })
 }
 
 /// Re-scans the real user database (so a stale preview can never import) and
-/// imports the requested Claude keys. Writes only the app's own profile
-/// store. Codex rows are completed in the editor instead: passing one to
-/// this command is a caller bug and fails before any write.
+/// imports the requested keys: Claude rows and the Codex official record go
+/// to the generic store, third-party Codex rows complete into the strict
+/// store inside the backend. Writes only the app's own profile store.
 pub fn import(
     state: &LocalState,
     keys: &[String],
@@ -103,21 +109,10 @@ pub fn import_at(
     keys: &[String],
 ) -> Result<CcSwitchImportOutcome, StoreOperationError> {
     let raw = scan_db(path)?;
-    if raw.proposals.iter().any(|proposal| {
-        keys.contains(&proposal.key)
-            && matches!(proposal.draft, ccswitch::CcSwitchProviderDraft::Codex(_))
-    }) {
-        return Err(
-            "Codex 供应商必须逐项补全导入；请在扫描列表中选择该供应商的「补全导入」".into(),
-        );
-    }
-    let claude_proposals: Vec<(&str, &ProviderDraft)> = raw
+    let proposals: Vec<(&str, &ccswitch::CcSwitchProviderDraft)> = raw
         .proposals
         .iter()
-        .filter_map(|proposal| match &proposal.draft {
-            ccswitch::CcSwitchProviderDraft::Claude(draft) => Some((proposal.key.as_str(), draft)),
-            ccswitch::CcSwitchProviderDraft::Codex(_) => None,
-        })
+        .map(|proposal| (proposal.key.as_str(), &proposal.draft))
         .collect();
     let mut outcome = CcSwitchImportOutcome {
         imported_count: 0,
@@ -126,7 +121,7 @@ pub fn import_at(
         not_imported: Vec::new(),
     };
     for key in keys {
-        let Some(draft) = claude_proposals
+        let Some(draft) = proposals
             .iter()
             .find(|(proposal_key, _)| proposal_key == &key.as_str())
             .map(|(_, draft)| *draft)
@@ -143,43 +138,64 @@ pub fn import_at(
             });
             continue;
         };
-        if state.configuration().provider_exists(draft) {
-            outcome.skipped_existing.push(draft.name.clone());
-            continue;
+        match draft {
+            ccswitch::CcSwitchProviderDraft::Claude(draft)
+            | ccswitch::CcSwitchProviderDraft::CodexOfficial(draft) => {
+                if state.configuration().provider_exists(draft) {
+                    outcome.skipped_existing.push(draft.name.clone());
+                    continue;
+                }
+                state.configuration().import_provider(draft.clone())?;
+                if draft.usage_query.is_some() {
+                    outcome.usage_script_imported_count += 1;
+                }
+                outcome.imported_count += 1;
+            }
+            ccswitch::CcSwitchProviderDraft::Codex(seed) => {
+                if state
+                    .configuration()
+                    .codex_route_exists(&seed.endpoint, seed.upstream)
+                {
+                    // A route-identical profile gains the source's missing
+                    // usage query; a query-less row or an already-queried
+                    // profile is a true duplicate.
+                    let enriched = match seed.usage_query.clone() {
+                        Some(query) => state.configuration().enrich_codex_route_usage_query(
+                            &seed.endpoint,
+                            seed.upstream,
+                            query,
+                        )?,
+                        None => false,
+                    };
+                    if !enriched {
+                        outcome.skipped_existing.push(seed.name.clone());
+                        continue;
+                    }
+                    outcome.usage_script_imported_count += 1;
+                    outcome.imported_count += 1;
+                    continue;
+                }
+                let draft = match seed.completion_draft() {
+                    Ok(draft) => draft,
+                    Err(reason) => {
+                        outcome.not_imported.push(ccswitch::CcSwitchSkip {
+                            key: key.clone(),
+                            app_type: "codex".to_string(),
+                            name: seed.name.clone(),
+                            reason,
+                        });
+                        continue;
+                    }
+                };
+                state.configuration().create_codex_provider(draft)?;
+                if seed.usage_query.is_some() {
+                    outcome.usage_script_imported_count += 1;
+                }
+                outcome.imported_count += 1;
+            }
         }
-        state.configuration().import_provider(draft.clone())?;
-        if draft.usage_query.is_some() {
-            outcome.usage_script_imported_count += 1;
-        }
-        outcome.imported_count += 1;
     }
     Ok(outcome)
-}
-
-/// Re-scans the real user database and returns the completion seed for one
-/// Codex row. This is the only boundary where a source credential crosses to
-/// the renderer — one deliberately chosen row at a time, never the whole
-/// scan — and nothing is persisted here; the editor saves through the normal
-/// create command after the user confirms the catalog and capabilities.
-pub fn prepare_codex_seed(key: &str) -> Result<ccswitch::CodexImportSeed, String> {
-    prepare_codex_seed_at(&db_path()?, key)
-}
-
-/// Returns the completion seed for one Codex row from an explicit database
-/// path (test entry point; still strictly read-only).
-pub fn prepare_codex_seed_at(path: &Path, key: &str) -> Result<ccswitch::CodexImportSeed, String> {
-    let raw = scan_db(path)?;
-    let Some(proposal) = raw
-        .proposals
-        .into_iter()
-        .find(|proposal| proposal.key == key)
-    else {
-        return Err(format!("扫描结果已变化，请重新扫描: {key}"));
-    };
-    match proposal.draft {
-        ccswitch::CcSwitchProviderDraft::Codex(seed) => Ok(seed),
-        ccswitch::CcSwitchProviderDraft::Claude(_) => Err(format!("{key} 不是 Codex 供应商")),
-    }
 }
 
 fn scan_item(state: &LocalState, proposal: ccswitch::CcSwitchProposal) -> CcSwitchScanItem {
@@ -209,9 +225,13 @@ fn scan_item(state: &LocalState, proposal: ccswitch::CcSwitchProposal) -> CcSwit
             }
         }
         ccswitch::CcSwitchProviderDraft::Codex(seed) => {
-            let existing = state
+            let route_exists = state
                 .configuration()
                 .codex_route_exists(&seed.endpoint, seed.upstream);
+            let route_has_query = route_exists
+                && state
+                    .configuration()
+                    .codex_route_has_usage_query(&seed.endpoint, seed.upstream);
             CcSwitchScanItem {
                 key,
                 app: AppKind::Codex,
@@ -220,10 +240,28 @@ fn scan_item(state: &LocalState, proposal: ccswitch::CcSwitchProposal) -> CcSwit
                 model: Some(seed.default_model),
                 base_url: Some(seed.endpoint.0),
                 usage_script_importable: seed.usage_query.is_some(),
-                // Codex rows are completed in the editor; there is no batch
-                // enrichment path that could update an existing profile.
-                usage_script_updates_existing: false,
+                // The strict store's mirror of the generic boundary: a
+                // routing-identical profile gains the missing query; only a
+                // query-less row or an already-queried route is a duplicate.
+                usage_script_updates_existing: seed.usage_query.is_some()
+                    && route_exists
+                    && !route_has_query,
                 warnings: seed.warnings,
+                existing: route_exists && (seed.usage_query.is_none() || route_has_query),
+            }
+        }
+        ccswitch::CcSwitchProviderDraft::CodexOfficial(draft) => {
+            let existing = state.configuration().provider_exists(&draft);
+            CcSwitchScanItem {
+                key,
+                app: AppKind::Codex,
+                route_mode: RouteMode::Official,
+                name: draft.name,
+                model: None,
+                base_url: None,
+                usage_script_importable: false,
+                usage_script_updates_existing: false,
+                warnings,
                 existing,
             }
         }

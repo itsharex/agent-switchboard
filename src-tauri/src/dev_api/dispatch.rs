@@ -122,9 +122,6 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                     argument(&request.args, "keys")?,
                 ))
             }
-            "prepare_ccswitch_codex_seed" => command!(commands::prepare_ccswitch_codex_seed(
-                argument(&request.args, "key")?,
-            )),
             "get_provider_parameters_catalog" => as_json(Ok::<_, CommandError>(
                 commands::client_settings::get_provider_parameters_catalog(argument::<AppKind>(
                     &request.args,

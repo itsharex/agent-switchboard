@@ -19,13 +19,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
           onBack={() => model.setProviderView({ kind: "list" })}
           onScanLocal={() => void discoveryState.runDiscovery()} onImportLocal={discoveryState.runImport}
           onScanCc={() => void ccImport.runCcScan()} onImportCc={ccImport.runCcImport}
-          onSelectCc={(key, checked) => ccImport.setCcSelected((current) => ({ ...current, [key]: checked }))}
-          onSeedCc={(key) => { void (async () => {
-            const seed = await ccImport.prepareCodexSeed(key);
-            if (!seed) return;
-            providers.openCodexEditorWithSeed(seed, key);
-            model.setProviderView({ kind: "list" });
-          })(); }} />
+          onSelectCc={(key, checked) => ccImport.setCcSelected((current) => ({ ...current, [key]: checked }))} />
       </div>}
       <CodexProvidersPage
         active={active && !importing && appFilter === "codex"} records={snapshot.codexRecords}

@@ -77,6 +77,8 @@ fn has_invalid_usage_query(proposal: &ccswitch::CcSwitchProposal) -> bool {
     let usage_query = match &proposal.draft {
         ccswitch::CcSwitchProviderDraft::Claude(draft) => draft.usage_query.as_ref(),
         ccswitch::CcSwitchProviderDraft::Codex(draft) => draft.usage_query.as_ref(),
+        // Official rows never carry a usage query.
+        ccswitch::CcSwitchProviderDraft::CodexOfficial(_) => None,
     };
     usage_query.is_some_and(|query| crate::usage_query::validate_persisted(query).is_err())
 }
@@ -85,5 +87,6 @@ fn clear_usage_query(proposal: &mut ccswitch::CcSwitchProposal) {
     match &mut proposal.draft {
         ccswitch::CcSwitchProviderDraft::Claude(draft) => draft.usage_query = None,
         ccswitch::CcSwitchProviderDraft::Codex(draft) => draft.usage_query = None,
+        ccswitch::CcSwitchProviderDraft::CodexOfficial(_) => {}
     }
 }

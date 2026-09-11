@@ -737,9 +737,15 @@ describe("ProviderList", () => {
 
     expect(activationRule).toContain("opacity: 1");
     expect(activationRule).toContain("visibility: visible");
+    // The reveal must never change layout: the button reserves its space
+    // permanently (constant padding, no width collapse), so hovering cannot
+    // snap the row's right cluster sideways.
     expect(activationBaseRule).toContain("transition:");
-    expect(activationBaseRule).not.toContain("max-inline-size var(");
-    expect(activationBaseRule).not.toContain("padding-inline var(");
+    expect(activationBaseRule).toContain("flex: none");
+    expect(activationBaseRule).toContain("padding-inline: var(--asb-space-3)");
+    expect(activationBaseRule).not.toContain("max-inline-size");
+    expect(activationRule).not.toContain("max-inline-size");
+    expect(activationRule).not.toContain("padding-inline");
     expect(iconClusterRule).toContain("opacity: 0");
     expect(providerCardsCss).not.toContain(":focus-within .asb-row-activate");
     expect(providerCardsCss).not.toContain('[aria-selected="true"] + .asb-row-activate');

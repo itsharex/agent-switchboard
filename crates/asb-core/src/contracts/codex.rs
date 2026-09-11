@@ -137,6 +137,20 @@ pub struct CodexCapabilities {
     pub chat_reasoning: CodexChatReasoning,
 }
 
+/// The full reasoning ladder a generated catalog row declares when neither
+/// the source nor the user narrows it. The editor mirrors this order in
+/// `REASONING_LEVELS` (src/components/codex-provider-editor/draft.ts).
+pub const CODEX_REASONING_LADDER: [CodexReasoningLevel; 8] = [
+    CodexReasoningLevel::None,
+    CodexReasoningLevel::Minimal,
+    CodexReasoningLevel::Low,
+    CodexReasoningLevel::Medium,
+    CodexReasoningLevel::High,
+    CodexReasoningLevel::Xhigh,
+    CodexReasoningLevel::Max,
+    CodexReasoningLevel::Ultra,
+];
+
 impl CodexCapabilities {
     pub const fn supports_operation(&self, operation: CodexOperation) -> bool {
         match operation {
@@ -149,6 +163,44 @@ impl CodexCapabilities {
             CodexOperation::ImageEdit => self.image_edit,
         }
     }
+}
+
+/// The capability declaration a generated provider starts from: the full
+/// Codex-compatible surface except the chat-completions-only extras. The
+/// editor mirrors this constant as its interactive default
+/// (`DEFAULT_CODEX_CAPABILITIES` in src/components/codex-provider-editor/draft.ts);
+/// this one owns what a one-click import persists.
+pub const DEFAULT_CODEX_CAPABILITIES: CodexCapabilities = CodexCapabilities {
+    responses: true,
+    compact: true,
+    models: true,
+    chat_completions: false,
+    alpha_search: false,
+    image_generation: false,
+    image_edit: false,
+    function_tools: true,
+    custom_tools: true,
+    tool_search: true,
+    reasoning: true,
+    chat_reasoning: CodexChatReasoning::Unsupported,
+};
+
+/// Official published model limits, cited per official model id (OpenAI model
+/// pages, 2026-09). A source-stated fact always wins; the editor mirrors this
+/// table as `OFFICIAL_MODEL_LIMITS` in src/components/codex-provider-editor/draft.ts.
+pub fn official_model_limits(model_id: &str) -> Option<(u64, u64)> {
+    match model_id {
+        "gpt-6-astra" | "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna" => {
+            Some((1_050_000, 128_000))
+        }
+        _ => None,
+    }
+}
+
+/// The single owner of "leave empty" limit resolution: official published
+/// limits for a known official id, the generic positive defaults otherwise.
+pub fn default_model_limits(model_id: &str) -> (u64, u64) {
+    official_model_limits(model_id).unwrap_or((128_000, 8_192))
 }
 
 /// A client-visible model. The model directory is application-owned input;

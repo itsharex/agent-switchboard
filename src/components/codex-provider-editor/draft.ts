@@ -1,7 +1,6 @@
 import type {
   CodexCapabilities,
   CodexCatalogEntry,
-  CodexCcSwitchSeed,
   CodexModelRoute,
   CodexProviderDraft,
   CodexProviderRecord,
@@ -125,38 +124,6 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
     notes: record.notes ?? "",
     websiteUrl: record.websiteUrl ?? "",
     usageQuery: record.usageQuery ?? null,
-  };
-}
-
-/** Prefills an editor draft from one import completion seed. Only
- * source-owned facts are copied; catalog rows and capabilities start from
- * the same editable defaults as a new provider, narrowed by the seed's
- * explicit facts, and stay user-confirmable until save. */
-export function codexDraftFromSeed(seed: CodexCcSwitchSeed): CodexEditorDraft {
-  const capabilities = { ...DEFAULT_CODEX_CAPABILITIES };
-  return {
-    name: seed.name,
-    endpoint: seed.endpoint,
-    apiKey: seed.apiKey,
-    upstream: seed.upstream,
-    requestMode: seed.requestMode,
-    defaultModel: seed.defaultModel,
-    catalog: seed.catalog.map((entry) => catalogEntryFromModel(
-      { id: entry.model, ownedBy: null },
-      capabilities,
-      {
-        contextWindow: entry.contextWindow,
-        images: entry.images,
-        defaultReasoningLevel: entry.defaultReasoningLevel,
-        reasoningLevels: entry.reasoningLevels,
-      },
-    )),
-    modelRoutes: [],
-    capabilities,
-    parameters: { settings: { ...seed.parameters.settings } },
-    notes: seed.notes ?? "",
-    websiteUrl: seed.websiteUrl ?? "",
-    usageQuery: seed.usageQuery ?? null,
   };
 }
 

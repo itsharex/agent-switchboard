@@ -367,14 +367,15 @@
   border-color: var(--asb-action);
 }
 
-/* Row-level actions stay collapsed until the row is hovered. Only opacity is
-   animated, so the action fades in without the old expanding/pop-out motion. */
+/* Row-level actions stay invisible until the row is hovered. The activate
+   button reserves its layout space permanently — like the icon cluster — so
+   the reveal animates only opacity and visibility; a collapsed width snapped
+   the whole right cluster sideways on every hover and twitched the list
+   (2026-09-11 user report). */
 .asb-row-item .asb-row-activate {
+  flex: none;
   display: inline-flex;
-  min-width: 0;
-  max-inline-size: 0;
-  padding-inline: 0;
-  overflow: hidden;
+  padding-inline: var(--asb-space-3);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -384,8 +385,6 @@
 }
 
 .asb-row-item:hover .asb-row-activate {
-  max-inline-size: 128px;
-  padding-inline: var(--asb-space-3);
   opacity: 1;
   visibility: visible;
   pointer-events: auto;

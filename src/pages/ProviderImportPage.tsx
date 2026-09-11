@@ -19,7 +19,6 @@ interface ProviderImportPageProps {
   onScanCc: () => void;
   onSelectCc: (key: string, checked: boolean) => void;
   onImportCc: () => Promise<boolean>;
-  onSeedCc: (key: string) => void;
 }
 
 /** Local discovery uses the selected client; batch import stays cross-client. */
@@ -52,8 +51,7 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
       {source === "local" ? <LocalConfigImport app="claude" discovery={props.discovery} busy={props.busy}
         onScan={props.onScanLocal} onImport={() => void importLocal()} />
         : <CcSwitchImport scan={props.ccScan} selected={props.ccSelected} result={props.ccResult}
-          busy={props.busy} onScan={props.onScanCc} onSelect={props.onSelectCc} onImport={() => void importCc()}
-          onSeed={props.onSeedCc} />}
+          busy={props.busy} onScan={props.onScanCc} onSelect={props.onSelectCc} onImport={() => void importCc()} />}
     </div>
   );
 }

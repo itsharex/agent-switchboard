@@ -147,19 +147,3 @@ pub async fn import_ccswitch_claude_profiles(
     })
     .await
 }
-
-/// Returns the completion seed for one deliberately chosen Codex row. The
-/// seed carries that row's source credential — the only boundary where a CC
-/// Switch credential reaches the renderer. Nothing is persisted here; the
-/// editor saves through the normal create command after the user confirms
-/// the catalog and capabilities.
-#[tauri::command]
-pub async fn prepare_ccswitch_codex_seed(
-    key: String,
-) -> Result<asb_core::ccswitch::CodexImportSeed, CommandError> {
-    blocking(move || {
-        crate::ccswitch_source::prepare_codex_seed(&key)
-            .map_err(|error| CommandError::new("ccswitch-seed-unavailable", error))
-    })
-    .await
-}

@@ -57,7 +57,7 @@
 
 ### 在落盘之前看见改变
 
-Codex 第三方服务地址必须是**包含 API 前缀的完整 API 根地址**。例如 `https://example.com/v1` 对应 `/v1/responses`，`https://example.com/openai/v2` 对应 `/openai/v2/responses`；Codex 不接受只填域名的档案。导入的裸 OpenAI 地址在扫描与补全种子中规范为 `/v1`，经编辑器核对保存后才写入新档案；Claude 行仍走勾选批量导入。Claude Code 保持自己的服务根规则，Anthropic 地址在根后追加 `/v1/messages`。完整请求 endpoint、URL 凭据、查询参数和片段不能作为服务地址保存。
+Codex 第三方服务地址必须是**包含 API 前缀的完整 API 根地址**。例如 `https://example.com/v1` 对应 `/v1/responses`，`https://example.com/openai/v2` 对应 `/openai/v2/responses`；Codex 不接受只填域名的档案。导入的裸 OpenAI 地址在扫描与后端补全中规范为 `/v1`；所有可导入行（Claude、Codex 第三方、Codex 官方登录）统一复选，由底部「导入所选」一键导入，Codex 行在后端自动补全成完整严格档案。Claude Code 保持自己的服务根规则，Anthropic 地址在根后追加 `/v1/messages`。完整请求 endpoint、URL 凭据、查询参数和片段不能作为服务地址保存。
 
 Codex 档案显式保存 `requestMode`（`standard` / `minimal`）以及每个模型与操作的能力声明。Codex 到网关支持 HTTP/SSE 和 WebSocket；网关到第三方统一使用 HTTP/SSE，不提供 WebSocket 或保留登录开关。第三方配置仅写 `model_provider = "openai"` 与带稳定本机 capability 的 `openai_base_url`，第三方密钥留在应用档案中，官方 OAuth 不转发给第三方。
 

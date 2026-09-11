@@ -7,7 +7,9 @@ use crate::ccswitch::row::{
 };
 use crate::ccswitch::usage::map_usage_query;
 use crate::contracts::{
-    AppKind, CodexEndpoint, CodexReasoningLevel, CodexUpstream, ResponsesRequestMode,
+    default_model_limits, AppKind, CodexCapabilities, CodexCatalogEntry, CodexEndpoint,
+    CodexProviderDraft, CodexReasoningLevel, CodexUpstream, ProviderDraft, ResponsesRequestMode,
+    RouteMode, SettingsValues, CODEX_REASONING_LADDER, DEFAULT_CODEX_CAPABILITIES,
 };
 
 const SOURCE_TABLE_KEYS: [&str; 6] = [
@@ -27,13 +29,22 @@ const SOURCE_CATALOG_ENTRY_KEYS: [&str; 5] = [
     "defaultReasoningLevel",
 ];
 
-/// Maps one current imported Codex row into a completion seed. The source
-/// owns routing, credential, and model facts; the catalog limits and capability
-/// statements the strict profile contract requires are confirmed by the user
-/// in the editor before anything persists.
+/// Maps one current imported Codex row into an importable proposal: a
+/// third-party row becomes a completion seed the backend resolves into the
+/// strict profile store; an official-login row (no custom endpoint) becomes
+/// the generic store's official record.
 pub(crate) fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchProposal, String> {
     let (settings, mut warnings) = parse_settings(&row.settings_config)?;
     let document = parse_document(&settings.config)?;
+    let parameters = crate::adapter::read_provider_parameters(AppKind::Codex, &settings.config)
+        .map_err(|error| error.to_string())?;
+    if official_route(&document) {
+        return Ok(CcSwitchProposal {
+            key,
+            draft: CcSwitchProviderDraft::CodexOfficial(official_codex_draft(parameters)),
+            warnings,
+        });
+    }
     let (route, route_warnings) = selected_route(&document)?;
     warnings.extend(route_warnings);
     let (metadata, meta_warnings) = SourceMetadata::parse(row.meta.as_deref())?;
@@ -42,12 +53,10 @@ pub(crate) fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchPropos
     let endpoint = normalize_endpoint(&route.base_url, upstream)?;
     let (api_key, key_from_auth) = source_api_key(&settings.auth, &route, &document);
     if api_key.is_empty() {
-        warnings.push("来源未提供可用 API 密钥；请在编辑器中填写".to_string());
+        warnings.push("来源未提供可用 API 密钥；导入前请补全".to_string());
     }
     warn_ignored_auth(&settings.auth, key_from_auth, &mut warnings);
     let default_model = required_top_level_string(&document, "model", "主模型")?;
-    let parameters = crate::adapter::read_provider_parameters(AppKind::Codex, &settings.config)
-        .map_err(|error| error.to_string())?;
     let usage_query = map_usage_query(row.meta.as_deref(), &mut warnings);
     let catalog = catalog_seeds(settings.catalog.as_ref(), &default_model, &mut warnings);
     let seed = CodexImportSeed {
@@ -70,6 +79,122 @@ pub(crate) fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchPropos
         draft: CcSwitchProviderDraft::Codex(seed),
         warnings,
     })
+}
+
+/// Whether the row routes to Codex's own login instead of a custom endpoint.
+/// Official credentials stay client-owned; only the selectable route is
+/// imported, exactly like a Claude official row.
+fn official_route(document: &DocumentMut) -> bool {
+    let provider = document
+        .get("model_provider")
+        .and_then(Item::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("openai");
+    provider == "openai" && item_string(document.get("openai_base_url")).is_none()
+}
+
+fn official_codex_draft(parameters: SettingsValues) -> ProviderDraft {
+    ProviderDraft {
+        app: AppKind::Codex,
+        route_mode: RouteMode::Official,
+        name: "Codex 官方登录".to_string(),
+        model: None,
+        base_url: None,
+        api_key: String::new(),
+        upstream_protocol: None,
+        responses_options: None,
+        max_output_tokens: None.into(),
+        model_options: None,
+        parameters,
+        notes: None,
+        website_url: None,
+        usage_query: None,
+        official_quota_refresh_interval_minutes: None,
+    }
+}
+
+impl CodexImportSeed {
+    /// The one completion owner behind one-click Codex import: turns the
+    /// source facts into a strict `CodexProviderDraft` with the declared
+    /// default capabilities, catalog rows narrowed by the source's explicit
+    /// facts, and materialized model limits. The result goes through the same
+    /// strict validation as an editor save.
+    pub fn completion_draft(&self) -> Result<CodexProviderDraft, String> {
+        if self.api_key.trim().is_empty() {
+            return Err("来源未提供可用 API 密钥，无法导入".to_string());
+        }
+        let capabilities = DEFAULT_CODEX_CAPABILITIES;
+        let catalog = self
+            .catalog
+            .iter()
+            .map(|seed| completed_catalog_entry(seed, &capabilities))
+            .collect::<Vec<_>>();
+        Ok(CodexProviderDraft {
+            name: self.name.trim().to_string(),
+            endpoint: self.endpoint.clone(),
+            api_key: self.api_key.trim().to_string(),
+            upstream: self.upstream,
+            request_mode: self.request_mode,
+            default_model: self.default_model.trim().to_string(),
+            catalog,
+            model_routes: Vec::new(),
+            capabilities,
+            parameters: self.parameters.clone(),
+            notes: self.notes.clone(),
+            website_url: self.website_url.clone(),
+            usage_query: self.usage_query.clone(),
+        })
+    }
+}
+
+/// Materializes one catalog row: explicit source facts win, then the
+/// officially published limits, then the generic positive defaults. Flags
+/// follow the declared capabilities; reasoning levels narrow to the source's
+/// explicit ladder or fall back to the full ladder.
+fn completed_catalog_entry(
+    seed: &CodexCatalogSeed,
+    capabilities: &CodexCapabilities,
+) -> CodexCatalogEntry {
+    let levels = match &seed.reasoning_levels {
+        Some(levels) if !levels.is_empty() => {
+            let mut narrowed = Vec::with_capacity(levels.len());
+            for level in levels {
+                if !narrowed.contains(level) {
+                    narrowed.push(*level);
+                }
+            }
+            narrowed
+        }
+        _ => CODEX_REASONING_LADDER.to_vec(),
+    };
+    let default_level = seed
+        .default_reasoning_level
+        .filter(|level| levels.contains(level))
+        .unwrap_or_else(|| {
+            levels
+                .iter()
+                .find(|level| **level == CodexReasoningLevel::Medium)
+                .copied()
+                .unwrap_or(*levels.last().expect("ladder is never empty"))
+        });
+    let (context_window, max_output_tokens) = match seed.context_window {
+        Some(value) if value > 0 => (value, default_model_limits(&seed.model).1),
+        _ => default_model_limits(&seed.model),
+    };
+    CodexCatalogEntry {
+        id: seed.model.clone(),
+        context_window,
+        max_output_tokens,
+        function_tools: capabilities.function_tools,
+        custom_tools: capabilities.custom_tools,
+        tool_search: capabilities.tool_search,
+        reasoning: capabilities.reasoning,
+        default_reasoning_level: default_level,
+        supported_reasoning_levels: levels,
+        images: seed.images.unwrap_or(false),
+        compact: capabilities.compact,
+    }
 }
 
 struct SourceSettings {
@@ -334,9 +459,7 @@ fn selected_route(document: &DocumentMut) -> Result<(SourceRoute, Vec<String>), 
             .and_then(Item::as_str)
             .map(str::to_string)
             .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| {
-                "未找到第三方 Codex 地址；官方登录不是可导入的 Codex 供应商".to_string()
-            })?;
+            .ok_or_else(|| "缺少 openai_base_url".to_string())?;
         return Ok((
             SourceRoute {
                 base_url,

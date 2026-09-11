@@ -31,7 +31,7 @@ const ccScan: CcSwitchScan = {
 type Props = Parameters<typeof ProviderImportPage>[0];
 function renderPage(overrides: Partial<Props> = {}) {
   const props: Props = { appFilter: "claude", discovery, ccScan: null, ccSelected: {}, ccResult: null, busy: false,
-    onBack() {}, onScanLocal() {}, onScanCc() {}, onSelectCc() {}, onSeedCc() {},
+    onBack() {}, onScanLocal() {}, onScanCc() {}, onSelectCc() {},
     onImportLocal: async () => false, onImportCc: async () => false, ...overrides };
   const view = render(<ProviderImportPage {...props} />);
   return { ...view, rerenderPage: (next: Partial<Props>) => view.rerender(<ProviderImportPage {...props} {...next} />) };
@@ -77,21 +77,23 @@ describe("ProviderImportPage CC Switch source", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("radio", { name: "CC Switch" }));
     expect(screen.getByRole("checkbox", { name: "导入 Claude" })).toBeChecked();
-    expect(screen.queryByRole("checkbox", { name: "导入 Codex" })).not.toBeInTheDocument();
+    // Every importable row renders a checkbox; selection stays per row.
+    expect(screen.getByRole("checkbox", { name: "导入 Codex" })).not.toBeChecked();
     await user.click(screen.getByRole("button", { name: "导入所选 1 项" }));
     expect(onImportCc).toHaveBeenCalledOnce();
     expect(onBack).toHaveBeenCalledOnce();
   });
 
-  it("offers only CC Switch import from the Codex workspace and seeds codex rows into the editor", async () => {
-    const onSeedCc = vi.fn();
-    renderPage({ appFilter: "codex", ccScan, onSeedCc });
+  it("offers only CC Switch import from the Codex workspace and selects Codex rows for one-click import", async () => {
+    const onImportCc = vi.fn(async () => true);
+    const user = userEvent.setup();
+    renderPage({ appFilter: "codex", ccScan, ccSelected: { "codex:a": true }, onImportCc });
     expect(screen.queryByRole("radiogroup", { name: "导入来源" })).not.toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: "本机配置" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "导入 Codex" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "导入 Codex" })).toBeChecked();
     expect(screen.getByText("Codex · gpt-5 · https://provider.example/v1")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "补全导入" }));
-    expect(onSeedCc).toHaveBeenCalledWith("codex:a");
+    await user.click(screen.getByRole("button", { name: "导入所选 1 项" }));
+    expect(onImportCc).toHaveBeenCalledOnce();
   });
 
   it("keeps partial import diagnostics available when the operation is not completed", async () => {

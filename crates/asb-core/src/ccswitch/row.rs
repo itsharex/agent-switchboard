@@ -32,18 +32,21 @@ pub struct CcSwitchProposal {
     pub warnings: Vec<String>,
 }
 
-/// A source proposal keeps the two current destination contracts distinct.
-/// Codex cannot be represented by the retired generic provider schema.
+/// A source proposal keeps the destination contracts distinct. Third-party
+/// Codex completes into the strict profile store; a Codex official-login row
+/// lands in the generic store like any official record; Codex can never be
+/// represented by the retired generic provider schema.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CcSwitchProviderDraft {
     Codex(CodexImportSeed),
+    CodexOfficial(ProviderDraft),
     Claude(ProviderDraft),
 }
 
 impl CcSwitchProviderDraft {
     pub const fn app(&self) -> AppKind {
         match self {
-            Self::Codex(_) => AppKind::Codex,
+            Self::Codex(_) | Self::CodexOfficial(_) => AppKind::Codex,
             Self::Claude(_) => AppKind::Claude,
         }
     }
@@ -51,16 +54,15 @@ impl CcSwitchProviderDraft {
     pub fn name(&self) -> &str {
         match self {
             Self::Codex(seed) => &seed.name,
-            Self::Claude(draft) => &draft.name,
+            Self::CodexOfficial(draft) | Self::Claude(draft) => &draft.name,
         }
     }
 }
 
-/// Source-owned Codex import facts for one imported row. The model catalog
-/// and capability statements the strict profile contract requires are
-/// completed and confirmed in the editor; a seed never persists directly.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+/// Source-owned Codex import facts for one imported row. The one-click batch
+/// import completes them into a strict `CodexProviderDraft` inside the
+/// backend; a seed never crosses the IPC boundary and never persists as-is.
+#[derive(Clone, PartialEq)]
 pub struct CodexImportSeed {
     pub name: String,
     pub endpoint: CodexEndpoint,
@@ -94,9 +96,8 @@ impl std::fmt::Debug for CodexImportSeed {
 }
 
 /// One real model fact from the source catalog. Absent facts stay absent;
-/// the editor supplies editable defaults and the user confirms them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+/// the completion owner materializes them with the declared defaults.
+#[derive(Debug, Clone, PartialEq)]
 pub struct CodexCatalogSeed {
     pub model: String,
     pub context_window: Option<u64>,

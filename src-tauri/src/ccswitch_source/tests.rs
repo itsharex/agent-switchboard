@@ -100,7 +100,7 @@ fn fixture_db(dir: &Path) -> PathBuf {
 /// A Codex row in the shape the source itself writes: credential in `auth`,
 /// an optional real-shaped model catalog, and metadata keys this app does
 /// not consume.
-fn insert_real_codex(connection: &Connection, id: &str) {
+fn insert_real_codex_with_meta(connection: &Connection, id: &str, meta: String) {
     let config = r#"model_provider = "custom"
 model = "gpt-5-codex"
 
@@ -125,71 +125,41 @@ requires_openai_auth = true
             ]
         }
     });
-    let meta = serde_json::json!({
-        "apiFormat": "openai_responses",
-        "costMultiplier": 0.9
-    });
     connection
         .execute(
             "INSERT INTO providers (id, app_type, name, settings_config, meta) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![id, "codex", "Codex 中继", settings.to_string(), meta.to_string()],
+            params![id, "codex", "Codex 中继", settings.to_string(), meta],
         )
         .unwrap();
 }
 
-/// One editor-confirmed draft derived from a seed, for route-duplicate
-/// marking only.
-fn completed_codex_draft(
-    seed: &asb_core::ccswitch::CodexImportSeed,
-) -> asb_core::contracts::CodexProviderDraft {
-    use asb_core::contracts::{
-        CodexCapabilities, CodexCatalogEntry, CodexChatReasoning, CodexProviderDraft,
-        CodexReasoningLevel,
-    };
-    CodexProviderDraft {
-        name: seed.name.clone(),
-        endpoint: seed.endpoint.clone(),
-        api_key: seed.api_key.clone(),
-        upstream: seed.upstream,
-        request_mode: seed.request_mode,
-        default_model: seed.default_model.clone(),
-        catalog: vec![CodexCatalogEntry {
-            id: "gpt-5-codex".to_string(),
-            context_window: 272_000,
-            max_output_tokens: 16_384,
-            function_tools: true,
-            custom_tools: false,
-            tool_search: false,
-            reasoning: true,
-            default_reasoning_level: CodexReasoningLevel::Medium,
-            supported_reasoning_levels: vec![
-                CodexReasoningLevel::None,
-                CodexReasoningLevel::Medium,
-                CodexReasoningLevel::High,
-            ],
-            images: false,
-            compact: true,
-        }],
-        model_routes: vec![],
-        capabilities: CodexCapabilities {
-            responses: true,
-            compact: true,
-            models: true,
-            chat_completions: false,
-            alpha_search: false,
-            image_generation: false,
-            image_edit: false,
-            function_tools: true,
-            custom_tools: false,
-            tool_search: false,
-            reasoning: true,
-            chat_reasoning: CodexChatReasoning::Unsupported,
-        },
-        parameters: seed.parameters.clone(),
-        notes: None,
-        website_url: None,
-        usage_query: None,
-    }
+fn insert_real_codex(connection: &Connection, id: &str) {
+    insert_real_codex_with_meta(
+        connection,
+        id,
+        serde_json::json!({
+            "apiFormat": "openai_responses",
+            "costMultiplier": 0.9
+        })
+        .to_string(),
+    );
+}
+
+/// Same route as [`insert_real_codex`] plus an enabled usage script in meta.
+fn insert_real_codex_with_usage_script(connection: &Connection, id: &str) {
+    insert_real_codex_with_meta(
+        connection,
+        id,
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": SOURCE_USAGE_SCRIPT,
+                "timeout": 8
+            }
+        })
+        .to_string(),
+    );
 }
 
 #[test]
@@ -200,13 +170,21 @@ fn scan_marks_duplicates_and_filters_out_of_scope_clients() {
 
     let first = scan_at(&path, &state).unwrap();
     assert_eq!(first.db_path, path.to_string_lossy());
-    assert_eq!(first.providers.len(), 1);
-    assert_eq!(first.skipped.len(), 2);
-    assert!(first.skipped.iter().any(|s| s.reason.contains("gemini")));
-    assert!(first
-        .skipped
+    // The response carries only actionable rows: the Claude relay and the
+    // Codex official record. The gemini row is invisible, and no skip wall
+    // exists for the official row anymore.
+    assert_eq!(first.providers.len(), 2);
+    assert!(first.skipped.is_empty());
+    let official = first
+        .providers
         .iter()
-        .any(|s| s.key == "codex:id-2" && s.reason.contains("官方登录")));
+        .find(|item| item.key == "codex:id-2")
+        .expect("official Codex row");
+    assert_eq!(official.app, AppKind::Codex);
+    assert_eq!(official.route_mode, asb_core::RouteMode::Official);
+    assert_eq!(official.name, "Codex 官方登录");
+    assert!(official.base_url.is_none());
+    assert!(!official.existing);
     assert!(first.providers.iter().all(|item| !item.existing));
     let serialized = serde_json::to_string(&first).unwrap();
     assert!(!serialized.contains(SOURCE_TOKEN));
@@ -282,7 +260,7 @@ fn import_reuses_dedup_and_reports_skips() {
 }
 
 #[test]
-fn codex_rows_scan_as_completion_seeds_and_reject_batch_import() {
+fn codex_rows_import_in_one_click_with_backend_completion() {
     let dir = tempfile::tempdir().unwrap();
     let path = fixture_db(dir.path());
     let connection = Connection::open(&path).unwrap();
@@ -294,7 +272,7 @@ fn codex_rows_scan_as_completion_seeds_and_reject_batch_import() {
         .providers
         .iter()
         .find(|item| item.key == "codex:id-codex")
-        .expect("Codex seed row");
+        .expect("Codex row");
     assert_eq!(codex.app, AppKind::Codex);
     assert_eq!(codex.model.as_deref(), Some("gpt-5-codex"));
     assert_eq!(
@@ -315,54 +293,77 @@ fn codex_rows_scan_as_completion_seeds_and_reject_batch_import() {
     assert!(!serialized.contains("\"apiKey\""));
     assert!(!serialized.contains("\"draft\""));
 
-    // The batch import rejects Codex keys up front, before any write.
-    let error = import_at(&path, &state, &["codex:id-codex".into()]).unwrap_err();
-    assert!(error.to_string().contains("补全导入"));
-    assert!(state
-        .configuration()
-        .list_codex_providers()
-        .unwrap()
-        .is_empty());
-
-    // A mixed batch also fails without importing the Claude half.
-    let mixed = import_at(
+    // One mixed click imports both stores at once: Claude into the generic
+    // store and the completed Codex row into the strict store.
+    let outcome = import_at(
         &path,
         &state,
         &["claude:id-1".into(), "codex:id-codex".into()],
     )
-    .unwrap_err();
-    assert!(mixed.to_string().contains("补全导入"));
-    assert!(profiles(&state).is_empty());
+    .unwrap();
+    assert_eq!(outcome.imported_count, 2);
+    assert_eq!(outcome.usage_script_imported_count, 1);
+    assert!(!serde_json::to_string(&outcome)
+        .unwrap()
+        .contains(SOURCE_CODEX_TOKEN));
 
-    // The single-row seed command is the only credential boundary.
-    let seed = prepare_codex_seed_at(&path, "codex:id-codex").unwrap();
-    assert_eq!(seed.api_key, SOURCE_CODEX_TOKEN);
-    assert_eq!(seed.catalog.len(), 2);
-    assert_eq!(seed.catalog[0].model, "gpt-5-codex");
-    assert_eq!(seed.catalog[0].context_window, Some(272_000));
-    assert!(prepare_codex_seed_at(&path, "claude:id-1")
-        .unwrap_err()
-        .contains("不是 Codex"));
-    assert!(prepare_codex_seed_at(&path, "codex:missing")
-        .unwrap_err()
-        .contains("重新扫描"));
+    let codex_records = state.configuration().list_codex_providers().unwrap();
+    assert_eq!(codex_records.len(), 1);
+    assert_eq!(codex_records[0].profile.name, "Codex 中继");
+    assert_eq!(codex_records[0].profile.api_key, SOURCE_CODEX_TOKEN);
+    assert_eq!(
+        codex_records[0].profile.endpoint.0,
+        "https://relay.codex.example/v1"
+    );
+    assert_eq!(codex_records[0].profile.catalog.len(), 2);
+    assert_eq!(codex_records[0].profile.catalog[0].context_window, 272_000);
 
-    // Claude keys still batch-import on their own.
-    let claude_only = import_at(&path, &state, &["claude:id-1".into()]).unwrap();
-    assert_eq!(claude_only.imported_count, 1);
+    // The same route never imports twice.
+    let again = import_at(&path, &state, &["codex:id-codex".into()]).unwrap();
+    assert_eq!(again.imported_count, 0);
+    assert_eq!(again.skipped_existing, vec!["Codex 中继".to_string()]);
 
-    // A stored provider with the same route marks the seed row as existing.
-    state
-        .configuration()
-        .create_codex_provider(completed_codex_draft(&seed))
-        .unwrap();
     let second = scan_at(&path, &state).unwrap();
     assert!(
         second
             .providers
             .iter()
             .find(|item| item.key == "codex:id-codex")
-            .expect("same Codex seed row")
+            .expect("same Codex row")
+            .existing
+    );
+}
+
+#[test]
+fn codex_official_row_imports_into_the_generic_store() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture_db(dir.path());
+    let state = LocalState::from_root(dir.path().join("state"));
+
+    let outcome = import_at(&path, &state, &["codex:id-2".into()]).unwrap();
+    assert_eq!(outcome.imported_count, 1);
+    let official = state
+        .configuration()
+        .list_providers()
+        .unwrap()
+        .into_iter()
+        .find(|record| record.profile.app == AppKind::Codex)
+        .expect("official Codex record");
+    assert_eq!(official.profile.route_mode, asb_core::RouteMode::Official);
+    assert_eq!(official.profile.name, "Codex 官方登录");
+    assert!(official.profile.api_key.is_empty());
+
+    // The single official record never duplicates.
+    let again = import_at(&path, &state, &["codex:id-2".into()]).unwrap();
+    assert_eq!(again.imported_count, 0);
+    assert_eq!(again.skipped_existing, vec!["Codex 官方登录".to_string()]);
+    let second = scan_at(&path, &state).unwrap();
+    assert!(
+        second
+            .providers
+            .iter()
+            .find(|item| item.key == "codex:id-2")
+            .expect("official row")
             .existing
     );
 }
@@ -509,4 +510,154 @@ fn real_database_scan_is_read_only_and_secret_free() {
     );
     assert!(!serialized.contains("\"apiKey\""));
     assert!(!serialized.contains("\"draft\""));
+}
+
+/// The strict store mirrors the generic import boundary's enrichment: a
+/// route-identical Codex row delivers its usage query to the stored profile
+/// instead of skipping, and only a true duplicate skips.
+#[test]
+fn codex_route_import_enriches_a_missing_usage_query() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture_db(dir.path());
+    let connection = Connection::open(&path).unwrap();
+    insert_real_codex(&connection, "id-plain");
+    insert_real_codex_with_usage_script(&connection, "id-scripted");
+    let state = LocalState::from_root(dir.path().join("state"));
+
+    // After the plain row creates the profile, the scripted same-route row
+    // is an enrichment candidate, not a duplicate.
+    let created = import_at(&path, &state, &["codex:id-plain".into()]).unwrap();
+    assert_eq!(created.imported_count, 1);
+    assert_eq!(created.usage_script_imported_count, 0);
+
+    let scan = scan_at(&path, &state).unwrap();
+    let scripted = scan
+        .providers
+        .iter()
+        .find(|item| item.key == "codex:id-scripted")
+        .expect("scripted row");
+    assert!(scripted.usage_script_updates_existing);
+    assert!(!scripted.existing);
+
+    let enriched = import_at(&path, &state, &["codex:id-scripted".into()]).unwrap();
+    assert_eq!(enriched.imported_count, 1);
+    assert_eq!(enriched.usage_script_imported_count, 1);
+    assert!(enriched.skipped_existing.is_empty());
+    let records = state.configuration().list_codex_providers().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(matches!(
+        records[0].usage_query,
+        Some(asb_core::contracts::UsageQuery::Script { .. })
+    ));
+
+    // The delivered query makes the row a true duplicate from now on.
+    let again = scan_at(&path, &state).unwrap();
+    let scripted = again
+        .providers
+        .iter()
+        .find(|item| item.key == "codex:id-scripted")
+        .expect("scripted row");
+    assert!(scripted.existing);
+    assert!(!scripted.usage_script_updates_existing);
+    let repeated = import_at(&path, &state, &["codex:id-scripted".into()]).unwrap();
+    assert_eq!(repeated.imported_count, 0);
+    assert_eq!(repeated.skipped_existing, vec!["Codex 中继".to_string()]);
+}
+
+/// The one-click create path persists the source usage script together with
+/// the completed strict profile.
+#[test]
+fn codex_one_click_create_persists_the_source_usage_script() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture_db(dir.path());
+    let connection = Connection::open(&path).unwrap();
+    insert_real_codex_with_usage_script(&connection, "id-scripted");
+    let state = LocalState::from_root(dir.path().join("state"));
+
+    let outcome = import_at(&path, &state, &["codex:id-scripted".into()]).unwrap();
+    assert_eq!(outcome.imported_count, 1);
+    assert_eq!(outcome.usage_script_imported_count, 1);
+    let records = state.configuration().list_codex_providers().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(matches!(
+        records[0].usage_query,
+        Some(asb_core::contracts::UsageQuery::Script { .. })
+    ));
+}
+
+/// A Claude row whose usage script is the built-in balance template (empty
+/// code) imports with the synthesized native query; the store's persisted
+/// validation accepting it is the proof that the generated program is a
+/// valid native script.
+#[test]
+fn claude_balance_template_row_imports_with_a_native_usage_query() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture_db(dir.path());
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute(
+            "INSERT INTO providers (id, app_type, name, settings_config, meta) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                "id-deepseek",
+                "claude",
+                "DeepSeek",
+                format!(
+                    r#"{{"env":{{"ANTHROPIC_BASE_URL":"https://api.deepseek.com","ANTHROPIC_AUTH_TOKEN":"{SOURCE_TOKEN}","ANTHROPIC_MODEL":"deepseek-chat"}}}}"#
+                ),
+                serde_json::json!({
+                    "usage_script": {
+                        "enabled": true,
+                        "language": "javascript",
+                        "code": "",
+                        "templateType": "balance",
+                        "autoQueryInterval": 30
+                    }
+                })
+                .to_string(),
+            ],
+        )
+        .unwrap();
+    let state = LocalState::from_root(dir.path().join("state"));
+
+    let outcome = import_at(&path, &state, &["claude:id-deepseek".into()]).unwrap();
+    assert_eq!(outcome.imported_count, 1);
+    assert_eq!(outcome.usage_script_imported_count, 1);
+    let profile = profiles(&state).remove(0);
+    assert!(matches!(
+        profile.usage_query,
+        Some(asb_core::contracts::UsageQuery::Script { .. })
+    ));
+}
+
+/// A Codex row with the Zhipu coding-plan template completes and persists the
+/// synthesized native query through the strict store's own validation.
+#[test]
+fn codex_zhipu_token_plan_row_imports_with_a_native_usage_query() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fixture_db(dir.path());
+    let connection = Connection::open(&path).unwrap();
+    insert_real_codex_with_meta(
+        &connection,
+        "id-zhipu",
+        serde_json::json!({
+            "usage_script": {
+                "enabled": true,
+                "language": "javascript",
+                "code": "",
+                "templateType": "token_plan",
+                "codingPlanProvider": "zhipu"
+            }
+        })
+        .to_string(),
+    );
+    let state = LocalState::from_root(dir.path().join("state"));
+
+    let outcome = import_at(&path, &state, &["codex:id-zhipu".into()]).unwrap();
+    assert_eq!(outcome.imported_count, 1);
+    assert_eq!(outcome.usage_script_imported_count, 1);
+    let records = state.configuration().list_codex_providers().unwrap();
+    assert!(matches!(
+        records[0].usage_query,
+        Some(asb_core::contracts::UsageQuery::Script { .. })
+    ));
 }

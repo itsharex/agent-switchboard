@@ -9,7 +9,7 @@ use crate::config_store::{
 };
 use asb_core::contracts::{
     CodexEndpoint, CodexProviderDraft, CodexProviderFile, CodexProviderRecord, CodexUpstream,
-    CODEX_PROVIDER_SCHEMA_VERSION,
+    UsageQuery, CODEX_PROVIDER_SCHEMA_VERSION,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -61,6 +61,53 @@ impl ConfigStore {
                 })
             })
             .unwrap_or(false)
+    }
+
+    /// Whether the stored provider routing through this endpoint and
+    /// upstream already carries a usage query (scan-side input for the
+    /// import hint).
+    pub fn codex_route_has_usage_query(
+        &self,
+        endpoint: &CodexEndpoint,
+        upstream: CodexUpstream,
+    ) -> bool {
+        load(self)
+            .map(|loaded| {
+                loaded.iter().any(|existing| {
+                    existing.file.profile.endpoint == *endpoint
+                        && existing.file.profile.upstream == upstream
+                        && existing.file.usage_query.is_some()
+                })
+            })
+            .unwrap_or(false)
+    }
+
+    /// Delivers one source usage query to the stored provider routing
+    /// through this endpoint and upstream when it has none yet — the strict
+    /// store's mirror of the generic import boundary's enrichment. Returns
+    /// whether a profile changed; a missing route or an existing query
+    /// leaves everything untouched.
+    pub fn enrich_codex_route_usage_query(
+        &self,
+        endpoint: &CodexEndpoint,
+        upstream: CodexUpstream,
+        query: UsageQuery,
+    ) -> Result<bool, StoreOperationError> {
+        let Some(mut file) = load(self)?
+            .into_iter()
+            .find(|loaded| {
+                loaded.file.profile.endpoint == *endpoint
+                    && loaded.file.profile.upstream == upstream
+            })
+            .map(|loaded| loaded.file)
+        else {
+            return Ok(false);
+        };
+        if file.usage_query.is_some() {
+            return Ok(false);
+        }
+        file.usage_query = Some(query);
+        write(self, &file).map(|_| true)
     }
 
     pub fn update_codex_provider(

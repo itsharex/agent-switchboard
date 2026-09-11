@@ -484,30 +484,20 @@ export const ccScan = {
       warnings: ["未导入: meta.costMultiplier"],
       existing: false,
     },
+    {
+      key: "codex:id-2",
+      app: "codex",
+      routeMode: "official",
+      name: "Codex 官方登录",
+      model: null,
+      baseUrl: null,
+      usageScriptImportable: false,
+      usageScriptUpdatesExisting: false,
+      warnings: [],
+      existing: false,
+    },
   ],
-  skipped: [
-    { key: "codex:id-2", appType: "codex", name: "Codex 官方登录", reason: "未找到第三方 Codex 地址；官方登录不是可导入的 Codex 供应商" },
-    { key: "gemini:id-3", appType: "gemini", name: "双子", reason: "客户端 gemini 超出本应用支持范围" },
-  ],
-};
-
-/** A completion seed as returned by `prepare_ccswitch_codex_seed` for the
- * fixture row above. */
-export const codexSeed = {
-  name: "Codex 中继",
-  endpoint: "https://relay.codex.example/v1",
-  apiKey: "opaque-codex-credential",
-  upstream: "responses",
-  requestMode: "standard",
-  defaultModel: "gpt-5-codex",
-  catalog: [
-    { model: "gpt-5-codex", contextWindow: 272000, images: true, defaultReasoningLevel: "high", reasoningLevels: ["low", "medium", "high"] },
-  ],
-  parameters: providerParameters("codex"),
-  notes: "从 CC Switch 导入",
-  websiteUrl: null,
-  usageQuery: null,
-  warnings: ["未导入: meta.costMultiplier"],
+  skipped: [],
 };
 
 export function primeUsageCollapseBackend(settings: typeof defaultSettings) {

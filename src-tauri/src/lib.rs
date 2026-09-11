@@ -306,7 +306,6 @@ pub fn run() {
             commands::resume_session,
             commands::scan_ccswitch,
             commands::import_ccswitch_claude_profiles,
-            commands::prepare_ccswitch_codex_seed,
             commands::window::window_minimize,
             commands::window::window_toggle_maximize,
             commands::window::window_is_maximized,

@@ -1,6 +1,9 @@
 use super::*;
 
-use crate::contracts::{CodexReasoningLevel, CodexUpstream, ConfigValue, SettingValue};
+use crate::contracts::{
+    AppKind, CodexReasoningLevel, CodexUpstream, ConfigValue, RouteMode, SettingValue,
+    CODEX_REASONING_LADDER,
+};
 use serde_json::{json, Value};
 
 const API_KEY: &str = "test-codex-key";
@@ -8,7 +11,9 @@ const API_KEY: &str = "test-codex-key";
 fn codex_seed(outcome: &CcSwitchProposal) -> &CodexImportSeed {
     match &outcome.draft {
         CcSwitchProviderDraft::Codex(seed) => seed,
-        CcSwitchProviderDraft::Claude(_) => panic!("expected a Codex import seed"),
+        CcSwitchProviderDraft::Claude(_) | CcSwitchProviderDraft::CodexOfficial(_) => {
+            panic!("expected a Codex import seed")
+        }
     }
 }
 
@@ -316,16 +321,29 @@ fn codex_missing_credential_seeds_an_empty_key_with_a_warning() {
 }
 
 #[test]
-fn codex_official_row_still_skips() {
+fn codex_official_row_maps_to_the_official_record() {
     let source = source_row(
         "",
-        json!({ "tokens": { "access_token": "oauth" } }),
+        json!({ "tokens": { "access_token": "oauth-source-token" } }),
         None,
         None,
     );
 
-    let skipped = map_row(&source).expect_err("official rows are not importable");
-    assert!(skipped.reason.contains("官方登录"));
+    let outcome = map_row(&source).expect("official rows map to the official record");
+    match &outcome.draft {
+        CcSwitchProviderDraft::CodexOfficial(draft) => {
+            assert_eq!(draft.app, AppKind::Codex);
+            assert_eq!(draft.route_mode, RouteMode::Official);
+            assert_eq!(draft.name, "Codex 官方登录");
+            assert!(draft.api_key.is_empty());
+            assert!(draft.base_url.is_none());
+            assert!(draft.usage_query.is_none());
+        }
+        _ => panic!("expected the official Codex record"),
+    }
+    // OAuth residue stays client-owned: it neither warns nor leaks.
+    assert!(outcome.warnings.is_empty());
+    assert!(!format!("{outcome:?}").contains("oauth-source-token"));
 }
 
 #[test]
@@ -471,4 +489,87 @@ fn codex_seed_debug_never_exposes_the_credential() {
     let outcome = map_row(&source).expect("row should map");
     let debug = format!("{outcome:?}");
     assert!(!debug.contains(API_KEY));
+}
+
+/// One-click import's completion owner: source facts win, then official
+/// published limits, then the generic defaults; the resulting draft passes
+/// the same strict validation an editor save goes through.
+#[test]
+fn completion_draft_materializes_limits_and_reasoning() {
+    let source = source_row(
+        &third_party_config("https://relay.example", "responses"),
+        json!({ "OPENAI_API_KEY": "key" }),
+        Some(json!({
+            "models": [
+                {
+                    "model": "gpt-5-codex",
+                    "contextWindow": 272000,
+                    "reasoningLevels": ["none", "high"],
+                    "defaultReasoningLevel": "high"
+                },
+                { "model": "gpt-5.6-sol" },
+                { "model": "vendor-x" }
+            ]
+        })),
+        None,
+    );
+    let binding = map_row(&source).unwrap();
+    let seed = codex_seed(&binding).clone();
+    let draft = seed.completion_draft().unwrap();
+    assert_eq!(draft.api_key, "key");
+    assert!(draft.model_routes.is_empty());
+    assert_eq!(
+        draft.capabilities,
+        crate::contracts::DEFAULT_CODEX_CAPABILITIES
+    );
+
+    let by_id = |id: &str| {
+        draft
+            .catalog
+            .iter()
+            .find(|entry| entry.id == id)
+            .unwrap_or_else(|| panic!("catalog row {id}"))
+    };
+    let facts = by_id("gpt-5-codex");
+    assert_eq!(facts.context_window, 272_000);
+    assert_eq!(
+        facts.supported_reasoning_levels,
+        vec![CodexReasoningLevel::None, CodexReasoningLevel::High]
+    );
+    assert_eq!(facts.default_reasoning_level, CodexReasoningLevel::High);
+    let official = by_id("gpt-5.6-sol");
+    assert_eq!(
+        (official.context_window, official.max_output_tokens),
+        (1_050_000, 128_000)
+    );
+    assert_eq!(
+        official.supported_reasoning_levels,
+        CODEX_REASONING_LADDER.to_vec()
+    );
+    assert_eq!(
+        official.default_reasoning_level,
+        CodexReasoningLevel::Medium
+    );
+    let generic = by_id("vendor-x");
+    assert_eq!(
+        (generic.context_window, generic.max_output_tokens),
+        (128_000, 8_192)
+    );
+    let file = draft.into_file("00000000-0000-0000-0000-000000000001".to_string(), 100);
+    assert!(file.validate().is_ok(), "{file:?}");
+}
+
+/// A source row without a usable credential cannot complete: one-click
+/// import reports it instead of persisting an unusable profile.
+#[test]
+fn completion_draft_rejects_an_empty_credential() {
+    let source = source_row(
+        &third_party_config("https://relay.example", "responses"),
+        json!({}),
+        None,
+        None,
+    );
+    let binding = map_row(&source).unwrap();
+    let error = codex_seed(&binding).completion_draft().unwrap_err();
+    assert!(error.contains("API 密钥"));
 }

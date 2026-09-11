@@ -1,35 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { CodexCcSwitchSeed, CodexProviderRecord, ProviderModel } from "../../api/client";
-import { providerParameters } from "../../test/provider-parameters";
+import type { CodexProviderRecord, ProviderModel } from "../../api/client";
 import {
   DEFAULT_CODEX_CAPABILITIES,
   catalogEntryFromModel,
   codexDraftFrom,
-  codexDraftFromSeed,
   mergeFetchedCatalog,
   prepareCodexDraft,
   reconcileCodexCapabilities,
   reconcileCodexUpstream,
   validateCodexDraft,
 } from "./draft";
-
-function seed(overrides: Partial<CodexCcSwitchSeed> = {}): CodexCcSwitchSeed {
-  return {
-    name: "Codex 中继",
-    endpoint: "https://relay.codex.example/v1",
-    apiKey: "sk-relay",
-    upstream: "responses",
-    requestMode: "standard",
-    defaultModel: "gpt-5-codex",
-    catalog: [],
-    parameters: providerParameters("codex"),
-    notes: null,
-    websiteUrl: null,
-    usageQuery: null,
-    warnings: ["未导入: meta.costMultiplier"],
-    ...overrides,
-  };
-}
 
 function validDraft() {
   const draft = codexDraftFrom(null);
@@ -288,89 +268,3 @@ describe("prepareCodexDraft", () => {
   });
 });
 
-describe("codexDraftFromSeed", () => {
-  it("copies source-owned facts and keeps editable defaults for the rest", () => {
-    const draft = codexDraftFromSeed(seed({
-      catalog: [{
-        model: "gpt-5-codex",
-        contextWindow: 272_000,
-        images: true,
-        defaultReasoningLevel: "high",
-        reasoningLevels: ["low", "medium", "high"],
-      }],
-      notes: "从 CC Switch 导入",
-    }));
-    expect(draft.name).toBe("Codex 中继");
-    expect(draft.endpoint).toBe("https://relay.codex.example/v1");
-    expect(draft.apiKey).toBe("sk-relay");
-    expect(draft.upstream).toBe("responses");
-    expect(draft.defaultModel).toBe("gpt-5-codex");
-    expect(draft.notes).toBe("从 CC Switch 导入");
-    expect(draft.capabilities).toEqual(DEFAULT_CODEX_CAPABILITIES);
-    expect(draft.modelRoutes).toEqual([]);
-    expect(draft.parameters).not.toBeNull();
-    expect(draft.catalog[0]).toMatchObject({
-      id: "gpt-5-codex",
-      contextWindow: 272_000,
-      maxOutputTokens: null,
-      images: true,
-      defaultReasoningLevel: "high",
-      supportedReasoningLevels: ["low", "medium", "high"],
-    });
-  });
-
-  it("maps a default-only seed row with editor defaults", () => {
-    const draft = codexDraftFromSeed(seed({
-      catalog: [{ model: "gpt-5-codex", contextWindow: null, images: null, defaultReasoningLevel: null, reasoningLevels: null }],
-    }));
-    expect(draft.catalog).toHaveLength(1);
-    expect(draft.catalog[0]).toMatchObject({
-      id: "gpt-5-codex",
-      contextWindow: null,
-      maxOutputTokens: null,
-      images: false,
-      defaultReasoningLevel: "medium",
-    });
-    expect(validateCodexDraft(draft)).toEqual([]);
-  });
-
-  it("seeds official published limits for an official model without source facts", () => {
-    const draft = codexDraftFromSeed(seed({
-      defaultModel: "gpt-6-astra",
-      catalog: [{ model: "gpt-6-astra", contextWindow: null, images: null, defaultReasoningLevel: null, reasoningLevels: null }],
-    }));
-    expect(draft.catalog[0]).toMatchObject({
-      id: "gpt-6-astra",
-      contextWindow: 1_050_000,
-      maxOutputTokens: 128_000,
-    });
-    expect(validateCodexDraft(draft)).toEqual([]);
-  });
-
-  it("still blocks an empty seed catalog from saving", () => {
-    const draft = codexDraftFromSeed(seed());
-    expect(draft.catalog).toEqual([]);
-    expect(validateCodexDraft(draft)).toContain("模型目录不能为空；请获取模型或手动添加");
-  });
-
-  it("falls back to a valid default when source levels omit the source default", () => {
-    const draft = codexDraftFromSeed(seed({
-      catalog: [{
-        model: "gpt-5-codex",
-        contextWindow: null,
-        images: null,
-        defaultReasoningLevel: "xhigh",
-        reasoningLevels: ["low", "medium"],
-      }],
-    }));
-    expect(draft.catalog[0].defaultReasoningLevel).toBe("medium");
-    expect(draft.catalog[0].supportedReasoningLevels).toEqual(["low", "medium"]);
-    expect(validateCodexDraft(draft)).toEqual([]);
-  });
-
-  it("blocks saving an empty credential while keeping everything else prefilled", () => {
-    const draft = codexDraftFromSeed(seed({ apiKey: "" }));
-    expect(draft.apiKey).toBe("");
-    expect(validateCodexDraft(draft)).toContain("API 密钥不能为空");
-  });
-});
