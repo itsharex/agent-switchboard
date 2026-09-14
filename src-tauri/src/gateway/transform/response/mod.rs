@@ -58,6 +58,7 @@ pub(super) fn parse_response(
         UpstreamProtocol::Responses => parse_responses(value, reasoning_transport),
         UpstreamProtocol::ChatCompletions => parse_chat(value, reasoning_transport),
         UpstreamProtocol::AnthropicMessages => parse_anthropic(value, reasoning_transport),
+        UpstreamProtocol::GeminiGenerateContent => super::claude_gemini::response(value, reasoning_transport),
     }
 }
 
@@ -69,6 +70,7 @@ pub(super) fn render_response(
         UpstreamProtocol::Responses => render_responses(response),
         UpstreamProtocol::ChatCompletions => render_chat(response),
         UpstreamProtocol::AnthropicMessages => render_anthropic(response),
+        UpstreamProtocol::GeminiGenerateContent => error("Gemini Native 不是客户端协议"),
     }
 }
 
@@ -86,6 +88,7 @@ pub(crate) fn convert_error(to: UpstreamProtocol, status: u16, message: &str) ->
             "status": status,
             "error": { "type": "gateway_error", "message": message },
         }),
+        UpstreamProtocol::GeminiGenerateContent => json!({"error":{"code":status,"message":message,"status":"INTERNAL"}}),
         UpstreamProtocol::ChatCompletions => json!({
             "error": { "message": message, "type": "gateway_error", "code": status.to_string() },
         }),
@@ -94,9 +97,14 @@ pub(crate) fn convert_error(to: UpstreamProtocol, status: u16, message: &str) ->
 }
 
 mod custom;
+pub(super) mod lifecycle;
 mod parse;
 mod render;
 
+#[cfg(test)]
+mod lifecycle_tests;
+#[cfg(test)]
+mod native_reasoning_tests;
 #[cfg(test)]
 mod tests;
 

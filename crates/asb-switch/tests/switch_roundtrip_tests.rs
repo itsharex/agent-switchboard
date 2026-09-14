@@ -105,6 +105,12 @@ fn claude_one_m_switch_writes_the_wire_suffix_from_semantic_profile_state() {
     let io = FsIo;
     let mut plan = claude_plan("Relay 1M", "https://relay-c.internal", "claude-opus-4-7");
     plan.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: true,
         haiku_model: Some("claude-haiku-4".into()),
         sonnet_model: Some("claude-sonnet-4-6".into()),
@@ -150,6 +156,12 @@ fn switching_to_claude_profile_without_mappings_clears_the_previous_profile_mapp
     let io = FsIo;
     let mut plan_a = claude_plan("Aihub", "https://aihub.internal", "claude-opus-4-7");
     plan_a.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: true,
         haiku_model: Some("claude-haiku-4".into()),
         sonnet_model: Some("claude-sonnet-4-6".into()),

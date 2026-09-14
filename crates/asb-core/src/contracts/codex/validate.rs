@@ -2,8 +2,9 @@ use std::collections::HashSet;
 
 use super::{
     required, CodexCapabilities, CodexCatalogEntry, CodexChatReasoning, CodexProviderProfile,
-    CodexReasoningLevel, CodexUpstream,
+    CodexReasoningLevel, CodexRouteMode, CodexUpstream,
 };
+use crate::contracts::ProviderConnectionOptions;
 
 pub(super) fn profile(profile: &CodexProviderProfile) -> Result<(), String> {
     validate_identity(profile)?;
@@ -13,22 +14,98 @@ pub(super) fn profile(profile: &CodexProviderProfile) -> Result<(), String> {
 }
 
 fn validate_identity(profile: &CodexProviderProfile) -> Result<(), String> {
+    crate::validate::validate_codex_connection(&profile.connection, profile.upstream.protocol(), profile.authentication)
+        .map_err(|error| error.to_string())?;
     required(&profile.id, "供应商标识")?;
     required(&profile.name, "供应商名称")?;
     required(&profile.api_key, "API 密钥")?;
-    crate::endpoint::validate_base_url(&profile.endpoint.0, profile.upstream.protocol())?;
-    if matches!(
+    let expected_route = CodexRouteMode::for_connection(
         profile.upstream,
-        CodexUpstream::Responses | CodexUpstream::ChatCompletions
-    ) && url::Url::parse(&profile.endpoint.0)
-        .map_err(|_| "Codex 服务地址无效".to_string())?
-        .path()
-        .trim_matches('/')
-        .is_empty()
-    {
-        return Err("OpenAI 兼容 Codex 服务地址必须包含显式 API 根路径".to_string());
+        &profile.connection,
+        profile.authentication,
+    );
+    if profile.route_mode != expected_route {
+        return Err("Codex 路由模式与上游协议、认证或连接覆盖不一致".to_string());
+    }
+    validate_endpoint(
+        &profile.endpoint.0,
+        profile.upstream,
+        profile.connection.is_full_url,
+    )?;
+    validate_connection(&profile.connection, profile.upstream)?;
+    Ok(())
+}
+
+fn validate_endpoint(
+    endpoint: &str,
+    upstream: CodexUpstream,
+    is_full_url: bool,
+) -> Result<(), String> {
+    if is_full_url {
+        return crate::endpoint::validate_full_url(endpoint);
+    }
+    crate::endpoint::validate_base_url(endpoint, upstream.protocol())
+}
+
+fn validate_connection(
+    connection: &ProviderConnectionOptions,
+    upstream: CodexUpstream,
+) -> Result<(), String> {
+    if connection.claude_native.is_some() || connection.claude_billing.is_some() || connection.claude_prompt_cache_key.is_some() || connection.claude_models_url.is_some() {
+        return Err("Claude 专用连接设置不能进入 Codex 档案".into());
+    }
+    if let Some(options) = &connection.codex { options.validate(upstream)?; }
+    if let Some(agent) = connection.custom_user_agent.as_deref() {
+        if agent.trim().is_empty() || agent.chars().any(char::is_control) {
+            return Err("Codex 自定义 User-Agent 无效".to_string());
+        }
+    }
+    if let Some(overrides) = connection.local_proxy_request_overrides.as_ref() {
+        for (name, value) in &overrides.headers {
+            if name.trim().is_empty() || name.chars().any(char::is_control) {
+                return Err("Codex 自定义请求头名称无效".to_string());
+            }
+            if value.chars().any(char::is_control) {
+                return Err(format!("Codex 自定义请求头值无效：{name}"));
+            }
+            if protected_header(name) {
+                return Err(format!("Codex 自定义请求头不能覆盖受保护字段：{name}"));
+            }
+        }
+        if !overrides.body.is_null() && !overrides.body.is_object() {
+            return Err("Codex request body override 必须是 JSON 对象".to_string());
+        }
+    }
+    for (key, endpoint) in &connection.custom_endpoints {
+        if key.trim() != key || key != &endpoint.url {
+            return Err("Codex 自定义端点索引与 URL 不一致".to_string());
+        }
+        if connection.is_full_url {
+            crate::endpoint::validate_full_url(&endpoint.url)?;
+        } else {
+            validate_endpoint(&endpoint.url, upstream, false)?;
+        }
     }
     Ok(())
+}
+
+fn protected_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "host"
+            | "content-length"
+            | "content-type"
+            | "transfer-encoding"
+            | "connection"
+            | "accept-encoding"
+            | "authorization"
+            | "x-api-key"
+            | "proxy-authorization"
+            | "proxy-authenticate"
+            | "te"
+            | "trailer"
+            | "upgrade"
+    )
 }
 
 fn validate_capabilities(

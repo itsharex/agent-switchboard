@@ -31,7 +31,7 @@ pub(crate) fn execute(
     )
     .map_err(invalid)?;
     let transport = transform::ReasoningTransport::from_continuation_key(route.continuation_key);
-    let request = transform::convert_request(
+    let mut request = transform::convert_request(
         UpstreamProtocol::Responses,
         route.upstream_protocol,
         &request,
@@ -44,6 +44,10 @@ pub(crate) fn execute(
     )
     .and_then(|request| transform::minimal::apply(request, route.responses_options))
     .map_err(invalid)?;
+    let beta = crate::gateway::codex::request::prepare(route, body, &mut request.body, incoming)
+        .map_err(|error| invalid(TransformError(error)))?;
+    let upstream_model =
+        crate::gateway::usage_metadata::model_from_bytes(route.upstream_protocol, &request.body);
     if request.body.len() as u64 > server::MAX_REQUEST_BYTES {
         return Err(invalid(TransformError("压缩历史超过网关请求预算".into())));
     }
@@ -55,7 +59,7 @@ pub(crate) fn execute(
         request.body,
         incoming,
         None,
-        None,
+        beta.as_deref(),
     )?;
     if !upstream.status().is_success() {
         return Err(server::read_upstream_diagnostic(
@@ -63,7 +67,9 @@ pub(crate) fn execute(
             &[&route.api_key, &route.client_token],
         ));
     }
-    complete_upstream(upstream, route, &url, &transport)
+    let mut result = complete_upstream(upstream, route, &url, &transport)?;
+    result.upstream_model = upstream_model;
+    Ok(result)
 }
 
 fn complete_upstream(
@@ -129,6 +135,7 @@ fn validate_completion(body: &[u8], protocol: UpstreamProtocol) -> Result<(), Tr
             .as_array()
             .is_some_and(|choices| choices.len() == 1 && choices[0]["finish_reason"] == "stop"),
         UpstreamProtocol::AnthropicMessages => value["stop_reason"] == "end_turn",
+        UpstreamProtocol::GeminiGenerateContent => return Err(TransformError("Codex 压缩不能使用 Claude 专用 Gemini 上游".into())),
     };
     if !complete || value.get("error").is_some_and(|v| !v.is_null()) {
         return Err(TransformError(

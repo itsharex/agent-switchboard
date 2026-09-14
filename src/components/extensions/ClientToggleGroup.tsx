@@ -1,7 +1,6 @@
 import type { AppKind, ExtensionListItem } from "../../api/client";
 import {
   clientBindingState,
-  EXTENSION_CLIENTS,
   itemSupportsClient,
 } from "../../app/extensions/deployment-state";
 import { clientName } from "../../lib/client-name";
@@ -9,21 +8,22 @@ import { ClientLogo } from "../ClientLogo";
 import { Button } from "../Button";
 import { Tooltip } from "../Tooltip";
 import { clientSummary } from "./labels";
+import { MANAGEMENT_CLIENTS } from "./client-presentation";
 
 interface Props {
   item: ExtensionListItem;
   busy: boolean;
-  /** One click states one deployment-intent change for that client; the
-   * write itself still goes through the plan preview. */
+  pendingClients?: readonly AppKind[];
+  /** The typed write pipeline applies intent and handles sensitive confirmation. */
   onToggle: (client: AppKind) => void;
 }
 
 /** Mixed means some existing scopes are disabled. The accessible name also
  * carries the file state, independently of the enable/disable intent. */
-export function ClientToggleGroup({ item, busy, onToggle }: Props) {
+export function ClientToggleGroup({ item, busy, pendingClients = [], onToggle }: Props) {
   return (
     <div className="asb-ext-clienttoggles" role="group" aria-label="客户端部署开关">
-      {EXTENSION_CLIENTS.map((client) => {
+      {MANAGEMENT_CLIENTS.map((client) => {
         const supported = itemSupportsClient(item, client);
         const state = clientBindingState(item, client);
         const label = supported
@@ -37,6 +37,7 @@ export function ClientToggleGroup({ item, busy, onToggle }: Props) {
               className="asb-ext-clienttoggle"
               data-state={state.all ? "all" : state.partial ? "partial" : "none"}
               aria-pressed={state.partial ? "mixed" : state.all}
+              aria-busy={pendingClients.includes(client)}
               aria-label={label}
               disabled={busy || !supported}
               onClick={(event) => {

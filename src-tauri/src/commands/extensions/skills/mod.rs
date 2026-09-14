@@ -145,8 +145,9 @@ fn check_one_skill_update(
             changed_files: Vec::new(),
         });
     }
-    let candidate = sources::fetch_github_subtree(identity, &commit, &source.subpath, &fetch)
+    let mut candidate = sources::fetch_github_subtree(identity, &commit, &source.subpath, &fetch)
         .map_err(source_error)?;
+    candidate.ref_name = source.ref_name.clone();
     let up_to_date = candidate.content_digest == skill.content_digest;
     let changed_files = if up_to_date {
         Vec::new()
@@ -156,7 +157,7 @@ fn check_one_skill_update(
             .map_err(store_error)?;
         skill_file_changes(&current, &candidate.entries)
     };
-    cache_candidates(vec![candidate.clone()]);
+    cache_candidates(vec![candidate.clone()])?;
     Ok(SkillUpdateOutcome {
         up_to_date,
         current_commit: source.resolved_commit.clone(),
@@ -283,6 +284,17 @@ pub async fn update_skill_definition(
         let ExtensionPayload::Skill(skill) = &mut definition.payload else {
             return Err(CommandError::new("extension-invalid", "更新只适用于 Skill"));
         };
+        if let (Some(source), Some(candidate)) = (&skill.source, &candidate) {
+            if source.source_id != candidate.source_identity
+                || source.subpath != candidate.subpath
+                || source.ref_name != candidate.ref_name
+            {
+                return Err(CommandError::new(
+                    "candidate-source-conflict",
+                    "候选内容来自不同来源；未更新当前 Skill 的来源绑定",
+                ));
+            }
+        }
         store
             .save_skill_version(&definition.id, &new_digest, &entries)
             .map_err(store_error)?;
@@ -365,6 +377,7 @@ pub async fn create_local_skill(
         let compatibility = asb_core::extensions::skill::claude_compatibility_notes(&manifest);
         let definition = ExtensionDefinition {
             schema_version: EXTENSIONS_SCHEMA_VERSION,
+            mcp_metadata: None,
             id: new_id("ext"),
             name,
             revision: 1,
@@ -424,6 +437,7 @@ pub async fn fork_local_skill(
             asb_core::extensions::skill::claude_compatibility_notes(&skill.manifest);
         let definition = ExtensionDefinition {
             schema_version: EXTENSIONS_SCHEMA_VERSION,
+            mcp_metadata: None,
             id: new_id("ext"),
             name: source.name.clone(),
             revision: 1,

@@ -10,8 +10,29 @@ pub fn validate_base_url(base_url: &str, protocol: UpstreamProtocol) -> Result<(
     parse_base(base_url, protocol).map(|_| ())
 }
 
+pub fn validate_full_url(endpoint: &str) -> Result<(), String> {
+    parse_full_url(endpoint).map(|_| ())
+}
+
 pub fn upstream_endpoint(base_url: &str, protocol: UpstreamProtocol) -> Result<String, String> {
+    if protocol == UpstreamProtocol::GeminiGenerateContent {
+        return Err("Gemini 原生请求需要模型和流式模式，请使用 Claude 模型端点解析".into());
+    }
     append(base_url, protocol, request_path(protocol))
+}
+
+/// Resolves a provider request target while honoring CC Switch's full-URL
+/// flag. Full URLs are used verbatim after validation; no protocol path is
+/// appended a second time.
+pub fn upstream_endpoint_with_options(
+    base_url: &str,
+    protocol: UpstreamProtocol,
+    is_full_url: bool,
+) -> Result<String, String> {
+    if is_full_url {
+        return parse_full_url(base_url);
+    }
+    upstream_endpoint(base_url, protocol)
 }
 
 /// The native Codex compact endpoint. It is deliberately separate from a
@@ -37,8 +58,39 @@ pub fn models_endpoint(base_url: &str, protocol: UpstreamProtocol) -> Result<Str
     let suffix = match protocol {
         UpstreamProtocol::Responses | UpstreamProtocol::ChatCompletions => "/models",
         UpstreamProtocol::AnthropicMessages => "/v1/models",
+        UpstreamProtocol::GeminiGenerateContent => {
+            return crate::claude_gemini::models_endpoint(base_url, false)
+        }
     };
     append(base_url, protocol, suffix)
+}
+
+/// Resolves the model-list target using the same full-URL semantics as the
+/// request endpoint. A full URL is intentionally not guessed or rewritten.
+pub fn models_endpoint_for_connection(
+    base_url: &str,
+    protocol: UpstreamProtocol,
+    connection: &crate::contracts::ProviderConnectionOptions,
+) -> Result<String, String> {
+    if let Some(url) = &connection.claude_models_url {
+        validate_full_url(url)?;
+        return Ok(url.clone());
+    }
+    if protocol == UpstreamProtocol::GeminiGenerateContent {
+        return crate::claude_gemini::models_endpoint(base_url, connection.is_full_url);
+    }
+    models_endpoint_with_options(base_url, protocol, connection.is_full_url)
+}
+
+pub fn models_endpoint_with_options(
+    base_url: &str,
+    protocol: UpstreamProtocol,
+    is_full_url: bool,
+) -> Result<String, String> {
+    if is_full_url {
+        return parse_full_url(base_url);
+    }
+    models_endpoint(base_url, protocol)
 }
 
 fn request_path(protocol: UpstreamProtocol) -> &'static str {
@@ -46,6 +98,7 @@ fn request_path(protocol: UpstreamProtocol) -> &'static str {
         UpstreamProtocol::Responses => "/responses",
         UpstreamProtocol::ChatCompletions => "/chat/completions",
         UpstreamProtocol::AnthropicMessages => "/v1/messages",
+        UpstreamProtocol::GeminiGenerateContent => ":generateContent",
     }
 }
 
@@ -85,6 +138,26 @@ fn parse_base(base_url: &str, protocol: UpstreamProtocol) -> Result<Url, String>
         ));
     }
     Ok(url)
+}
+
+fn parse_full_url(endpoint: &str) -> Result<String, String> {
+    let invalid = || "完整服务地址必须是无凭据、片段或控制字符的 HTTP(S) 地址".to_string();
+    if endpoint.trim() != endpoint
+        || endpoint.chars().any(char::is_control)
+        || endpoint.contains('\\')
+    {
+        return Err(invalid());
+    }
+    let url = Url::parse(endpoint).map_err(|_| invalid())?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(invalid());
+    }
+    Ok(url.to_string())
 }
 
 fn append(base_url: &str, protocol: UpstreamProtocol, suffix: &str) -> Result<String, String> {
@@ -189,6 +262,50 @@ mod tests {
             "https://example.test/\nsecret",
         ] {
             let error = validate_base_url(base, UpstreamProtocol::Responses).unwrap_err();
+            assert!(!error.contains("secret"));
+        }
+    }
+
+    #[test]
+    fn full_urls_are_not_extended_with_protocol_paths() {
+        assert_eq!(
+            upstream_endpoint_with_options(
+                "https://example.test/custom/messages",
+                UpstreamProtocol::AnthropicMessages,
+                true,
+            )
+            .unwrap(),
+            "https://example.test/custom/messages"
+        );
+        assert_eq!(
+            models_endpoint_with_options(
+                "https://example.test/custom/messages",
+                UpstreamProtocol::AnthropicMessages,
+                true,
+            )
+            .unwrap(),
+            "https://example.test/custom/messages"
+        );
+    }
+
+    #[test]
+    fn full_urls_preserve_safe_query_and_reject_credentials_or_fragments() {
+        assert_eq!(
+            upstream_endpoint_with_options(
+                "https://example.test/messages?tenant=one%20two",
+                UpstreamProtocol::AnthropicMessages,
+                true,
+            )
+            .unwrap(),
+            "https://example.test/messages?tenant=one%20two"
+        );
+        for endpoint in [
+            "https://user:secret@example.test/messages",
+            "https://example.test/messages#secret",
+        ] {
+            let error =
+                upstream_endpoint_with_options(endpoint, UpstreamProtocol::AnthropicMessages, true)
+                    .unwrap_err();
             assert!(!error.contains("secret"));
         }
     }

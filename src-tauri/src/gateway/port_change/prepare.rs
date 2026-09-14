@@ -10,6 +10,9 @@ pub(crate) fn prepare(
     new_port: u16,
 ) -> Result<GatewayPortChangePlan, String> {
     validate_custom_port(new_port)?;
+    if crate::gateway::codex::policy::pending_path(local.root()).exists() {
+        return Err("Codex 网关策略事务尚未完成，请先恢复再修改端口".into());
+    }
     if !controller.state_available() {
         return Err("本机协议网关状态不可用，请先恢复状态文件后再修改端口".to_string());
     }
@@ -158,7 +161,8 @@ fn route_candidates(
             .into_iter()
             .filter_map(|record| {
                 let profile = record.profile;
-                (profile.route_mode == RouteMode::Custom && !is_direct(&profile)).then_some(profile)
+                (profile.app == AppKind::Claude && profile.route_mode == RouteMode::Custom)
+                    .then_some(profile)
             })
             .map(|profile| {
                 let profile_name = profile.name.clone();

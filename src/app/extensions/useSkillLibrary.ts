@@ -5,7 +5,6 @@ import {
   forkLocalSkill,
   getSkillEditor,
   listSkillVersions,
-  prepareExtensionPlan,
   updateSkillDefinition,
   updateSkillDependencies,
   updateSkillFiles,
@@ -20,19 +19,20 @@ import {
 import { toast } from "../../components/use-toast";
 import type {
   ExclusiveRunner,
+  ExtensionReader,
   SkillBatchAdvance,
   SkillUpdatePreparation,
   WorkspaceRefresher,
 } from "./extension-ops";
+import { definitionUpdatePreparation, refreshLibraryWrite } from "./extension-ops";
 
 interface SkillLibraryDeps {
   refresh: WorkspaceRefresher;
   runExclusive: ExclusiveRunner;
+  runRead: ExtensionReader;
 }
 
-/** Skill-content operations: creation, forking, file versions, and
- * dependency links; every enabled-binding write keeps the plan preview. */
-export function useSkillLibrary({ refresh, runExclusive }: SkillLibraryDeps) {
+function useSkillSourceUpdates({ refresh, runExclusive }: SkillLibraryDeps) {
   const checkUpdates = useCallback(
     (definitionIds: string[]) =>
       runExclusive((): Promise<SkillUpdateReport[]> => checkSkillUpdates(definitionIds)),
@@ -41,8 +41,8 @@ export function useSkillLibrary({ refresh, runExclusive }: SkillLibraryDeps) {
 
   /** Advances many skill definitions to their freshly checked versions in
    * one exclusive run. Per-item failures are reported, not thrown, so one
-   * expired candidate never blocks the rest of the batch; the combined
-   * deployment preview is the caller's next step. */
+   * expired candidate never blocks the rest of the batch; the caller deploys
+   * the advanced ids through the shared apply pipeline. */
   const advanceSkillUpdates = useCallback(
     (entries: Array<{ definitionId: string; newDigest: string }>) =>
       runExclusive(async (): Promise<SkillBatchAdvance> => {
@@ -59,8 +59,13 @@ export function useSkillLibrary({ refresh, runExclusive }: SkillLibraryDeps) {
             });
           }
         }
-        await refresh();
-        return { advanced, failed };
+        const workspace = await refresh();
+        if (workspace === null) toast({
+          kind: "warning",
+          title: "更新结果尚未验证",
+          description: "扩展状态刷新失败；请刷新后确认内容版本和客户端部署。",
+        });
+        return { advanced, failed, workspace };
       }),
     [refresh, runExclusive],
   );
@@ -69,38 +74,19 @@ export function useSkillLibrary({ refresh, runExclusive }: SkillLibraryDeps) {
     (definitionId: string, newDigest: string) =>
       runExclusive(async (): Promise<SkillUpdatePreparation> => {
         const definition = await updateSkillDefinition(definitionId, newDigest);
-        const workspace = await refresh();
-        if (workspace === null) {
-          toast({
-            kind: "warning",
-            title: "内容版本已入库，但无法读取部署状态",
-            description: "刷新扩展列表后，使用“预览部署当前版本”确认客户端更新。",
-          });
-          return { definition, plan: null };
-        }
-        const shouldDeploy = workspace?.items
-          .find((item) => item.id === definition.id)
-          ?.bindings.some((binding) => binding.desired === "enabled") ?? false;
-        const plan = shouldDeploy
-          ? await prepareExtensionPlan({ operations: [{ operation: "update", definitionId: definition.id }] })
-          : null;
-        toast(
-          plan
-            ? { kind: "success", title: "内容版本已入库；请确认部署预览" }
-            : { kind: "success", title: "内容版本已入库；没有启用的绑定需要部署" },
-        );
-        return { definition, plan };
+        return definitionUpdatePreparation(definition, await refresh());
       }),
     [refresh, runExclusive],
   );
+  return { checkUpdates, advanceSkillUpdates, applySkillUpdate, restoreSkillVersion: applySkillUpdate };
+}
 
+function useLocalSkills({ refresh, runExclusive }: SkillLibraryDeps) {
   const createSkill = useCallback(
     (draft: LocalSkillDraft) =>
       runExclusive(async (): Promise<ExtensionMutation> => {
         const definition = await createLocalSkill(draft);
-        await refresh();
-        toast({
-          kind: "success",
+        await refreshLibraryWrite(refresh, {
           title: "已创建本地 Skill",
           description: "模板内容已作为首个不可变版本入库，可继续编辑。",
         });
@@ -113,9 +99,7 @@ export function useSkillLibrary({ refresh, runExclusive }: SkillLibraryDeps) {
     (definitionId: string) =>
       runExclusive(async (): Promise<ExtensionMutation> => {
         const definition = await forkLocalSkill(definitionId);
-        await refresh();
-        toast({
-          kind: "success",
+        await refreshLibraryWrite(refresh, {
           title: "已创建本地副本",
           description: "副本不再跟随来源更新，可在编辑器中修改。",
         });
@@ -123,64 +107,41 @@ export function useSkillLibrary({ refresh, runExclusive }: SkillLibraryDeps) {
       }),
     [refresh, runExclusive],
   );
+  return { createSkill, forkSkill };
+}
 
+function useSkillContent({ refresh, runExclusive, runRead }: SkillLibraryDeps) {
   const loadSkillEditor = useCallback(
     (definitionId: string) =>
-      runExclusive((): Promise<SkillEditorView> => getSkillEditor(definitionId)),
-    [runExclusive],
+      runRead((): Promise<SkillEditorView> => getSkillEditor(definitionId)),
+    [runRead],
   );
 
   /** Publishes one edited content version. Whenever enabled bindings exist,
-   * the client update goes through the same plan preview as every other
-   * extension write. */
+   * the caller immediately deploys the update through the shared apply
+   * pipeline. */
   const saveSkillFiles = useCallback(
     (definitionId: string, update: SkillFilesUpdate): Promise<SkillUpdatePreparation | null> =>
       runExclusive(async () => {
         const definition = await updateSkillFiles(definitionId, update);
-        const workspace = await refresh();
-        if (workspace === null) {
-          toast({
-            kind: "warning",
-            title: "内容版本已入库，但无法读取部署状态",
-            description: "刷新扩展列表后，使用“预览部署当前版本”确认客户端更新。",
-          });
-          return { definition, plan: null };
-        }
-        const shouldDeploy = workspace?.items
-          .find((item) => item.id === definition.id)
-          ?.bindings.some((binding) => binding.desired === "enabled") ?? false;
-        const plan = shouldDeploy
-          ? await prepareExtensionPlan({ operations: [{ operation: "update", definitionId: definition.id }] })
-          : null;
-        toast(
-          plan
-            ? { kind: "success", title: "新内容版本已入库；请确认部署预览" }
-            : { kind: "success", title: "新内容版本已入库；没有启用的绑定需要部署" },
-        );
-        return { definition, plan };
+        return definitionUpdatePreparation(definition, await refresh());
       }),
     [refresh, runExclusive],
   );
 
   const loadSkillVersions = useCallback(
     (definitionId: string) =>
-      runExclusive((): Promise<SkillVersion[]> => listSkillVersions(definitionId)),
-    [runExclusive],
+      runRead((): Promise<SkillVersion[]> => listSkillVersions(definitionId)),
+    [runRead],
   );
-
-  /** Rolls the definition back to a stored content version; deploy previews
-   * behave exactly like a fresh source update. */
-  const restoreSkillVersion = applySkillUpdate;
 
   const saveSkillDependencies = useCallback(
     (definitionId: string, update: SkillDependenciesUpdate) =>
       runExclusive(async (): Promise<ExtensionMutation> => {
         const definition = await updateSkillDependencies(definitionId, update);
-        await refresh();
-        toast({
-          kind: "success",
+        await refreshLibraryWrite(refresh, {
           title: "已更新依赖关联",
-          description: "部署时可在同一预览中选择是否一并部署依赖的 MCP。",
+          description: "下次部署时会一并部署依赖的 MCP。",
         });
         return definition;
       }),
@@ -188,15 +149,16 @@ export function useSkillLibrary({ refresh, runExclusive }: SkillLibraryDeps) {
   );
 
   return {
-    checkUpdates,
-    advanceSkillUpdates,
-    applySkillUpdate,
-    createSkill,
-    forkSkill,
     loadSkillEditor,
     saveSkillFiles,
     loadSkillVersions,
-    restoreSkillVersion,
     saveSkillDependencies,
   };
+}
+
+export function useSkillLibrary(deps: SkillLibraryDeps) {
+  const sources = useSkillSourceUpdates(deps);
+  const local = useLocalSkills(deps);
+  const content = useSkillContent(deps);
+  return { ...sources, ...local, ...content };
 }

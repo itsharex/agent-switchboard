@@ -16,7 +16,7 @@ import {
   renderPage,
 } from "../../test/extensions-page";
 
-it("updates a Skill into the library and then requires deployment confirmation", async () => {
+it("updates a Skill into the library and deploys the enabled bindings immediately", async () => {
   checkSkillUpdatesMock.mockResolvedValue([
     {
       definitionId: "ext-skill-1",
@@ -71,11 +71,11 @@ it("updates a Skill into the library and then requires deployment confirmation",
   expect(prepareExtensionPlanMock).toHaveBeenCalledWith({
     operations: [{ operation: "update", definitionId: "ext-skill-1" }],
   });
-  expect(applyExtensionPlanMock).not.toHaveBeenCalled();
-  expect(await screen.findByRole("dialog", { name: "更新预览" })).toBeInTheDocument();
+  await waitFor(() => expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-skill-update", true));
+  expect(screen.queryByRole("dialog", { name: /预览/ })).not.toBeInTheDocument();
 });
 
-it("updates the whole library and previews only the Skills with active deployments", async () => {
+it("updates the whole library and deploys only the Skills with active deployments", async () => {
   const secondSkill: ExtensionListItem = {
     ...skillItem,
     id: "ext-skill-2",
@@ -117,12 +117,12 @@ it("updates the whole library and previews only the Skills with active deploymen
   const user = userEvent.setup();
   renderPage();
 
-  await user.click(screen.getByRole("button", { name: "更多扩展操作" }));
-  await user.click(await screen.findByRole("menuitem", { name: "检查更新" }));
+  await user.click(screen.getByRole("button", { name: "检查更新" }));
 
   expect(checkSkillUpdatesMock).toHaveBeenCalledWith(["ext-skill-1", "ext-skill-2"]);
   expect(await screen.findAllByText("可更新")).toHaveLength(2);
 
+  // Update-all lives on the count bar, next to the deploy count chips.
   await user.click(screen.getByRole("button", { name: "全部更新（2）" }));
 
   await waitFor(() => expect(updateSkillDefinitionMock).toHaveBeenCalledWith("ext-skill-1", "b".repeat(64)));
@@ -130,13 +130,12 @@ it("updates the whole library and previews only the Skills with active deploymen
   expect(prepareExtensionPlanMock).toHaveBeenCalledWith({
     operations: [{ operation: "update", definitionId: "ext-skill-1" }],
   });
-  expect(applyExtensionPlanMock).not.toHaveBeenCalled();
-  expect(await screen.findByRole("dialog", { name: "更新预览" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "取消" }));
+  await waitFor(() => expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-batch", true));
+  expect(screen.queryByRole("dialog", { name: /预览/ })).not.toBeInTheDocument();
   expect(screen.queryByText("可更新")).not.toBeInTheDocument();
 });
 
-it("updates one Skill from its row action and previews its deployment", async () => {
+it("updates one Skill from its row action and deploys it immediately", async () => {
   const secondSkill: ExtensionListItem = {
     ...skillItem,
     id: "ext-skill-2",
@@ -178,10 +177,8 @@ it("updates one Skill from its row action and previews its deployment", async ()
   const user = userEvent.setup();
   renderPage();
 
-  await user.click(screen.getByRole("button", { name: "更多扩展操作" }));
-  await user.click(await screen.findByRole("menuitem", { name: "检查更新" }));
-  // Only the outdated row carries the badge and the row update action;
-  // the single updatable item also offers the bulk update button.
+  await user.click(screen.getByRole("button", { name: "检查更新" }));
+  // Only the outdated row carries the badge; the count bar carries update-all.
   expect(await screen.findByText("可更新")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "全部更新（1）" })).toBeEnabled();
 
@@ -192,7 +189,8 @@ it("updates one Skill from its row action and previews its deployment", async ()
   expect(prepareExtensionPlanMock).toHaveBeenCalledWith({
     operations: [{ operation: "update", definitionId: "ext-skill-1" }],
   });
-  expect(await screen.findByRole("dialog", { name: "更新预览" })).toBeInTheDocument();
+  await waitFor(() => expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-row-update", true));
+  expect(screen.queryByRole("dialog", { name: /预览/ })).not.toBeInTheDocument();
 });
 
 it("pins and unpins a Skill binding's version from the detail view", async () => {

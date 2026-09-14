@@ -18,6 +18,7 @@ pub(super) type SharedTask = Arc<AsyncMutex<Option<JoinHandle<TaskResult>>>>;
 pub(super) struct PreparedProvider {
     pub source: PreparedSource,
     pub created_at: Instant,
+    pub claude_account: Option<crate::claude_auth::ResolvedAccount>,
 }
 
 #[derive(Clone)]
@@ -65,6 +66,7 @@ impl ProviderRequests {
             Entry::Prepared(PreparedProvider {
                 source,
                 created_at: Instant::now(),
+                claude_account: connection.claude_account.clone(),
             }),
         );
         Ok(ProviderRequestPreparation {

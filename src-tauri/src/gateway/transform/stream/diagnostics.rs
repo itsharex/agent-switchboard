@@ -14,6 +14,26 @@ impl<R: Read> SseTranscoder<R> {
         self
     }
 
+    /// Validate initial output without consuming it from the response writer.
+    pub(crate) fn prime(&mut self) -> Result<(), ProviderDiagnostic> {
+        let mut first = [0u8; 1];
+        let count = self.read(&mut first).unwrap_or_else(|error| {
+            self.fail_io(&error);
+            0
+        });
+        if self.failed || count == 0 {
+            return Err(self.diagnostic.clone().unwrap_or_else(|| {
+                ProviderDiagnostic::new(
+                    ProviderFailureKind::StreamParse,
+                    "",
+                    "上游没有有效的 SSE 首帧",
+                )
+            }));
+        }
+        self.pending_offset = self.pending_offset.saturating_sub(count);
+        Ok(())
+    }
+
     pub(crate) fn failed(&self) -> bool {
         self.failed
     }
@@ -52,6 +72,7 @@ impl<R: Read> SseTranscoder<R> {
                 self.target,
                 &diagnostic,
             ));
+            self.diagnostic = Some(diagnostic);
             self.failed = true;
             self.terminal = true;
         }
@@ -65,6 +86,17 @@ impl<R: Read> SseTranscoder<R> {
             .get("type")
             .and_then(Value::as_str)
             .or(frame.event.as_deref());
+        if kind == Some("response.incomplete")
+            && matches!(
+                &self.mode,
+                StreamMode::Converting(StreamTransformer::ResponsesToAnthropic(_))
+            )
+        {
+            // Token-limit incomplete responses are a valid terminal state for
+            // Responses -> Anthropic conversion; the transformer validates
+            // the reason and complete response payload below.
+            return false;
+        }
         if !matches!(
             kind,
             Some("error" | "response.failed" | "response.incomplete")
@@ -92,5 +124,24 @@ impl<R: Read> SseTranscoder<R> {
         diagnostic.message = "Provider 上游 SSE 返回错误".to_string();
         self.fail_with(diagnostic);
         true
+    }
+
+    pub(super) fn is_token_limit_incomplete(&self, frame: &Frame) -> bool {
+        if frame.event.as_deref() != Some("response.incomplete") {
+            return false;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(&frame.data) else {
+            return false;
+        };
+        let response = value.get("response").unwrap_or(&value);
+        response.get("error").is_none_or(Value::is_null)
+            && response.get("status").and_then(Value::as_str) == Some("incomplete")
+            && matches!(
+                response
+                    .get("incomplete_details")
+                    .and_then(|details| details.get("reason"))
+                    .and_then(Value::as_str),
+                Some("max_output_tokens" | "max_tokens")
+            )
     }
 }

@@ -6,14 +6,12 @@
 use std::fs;
 
 use crate::extensions::store::LibraryCommit;
-use asb_core::contracts::AppKind;
 use asb_core::extensions::contracts::{
     DesiredState, ExtensionBinding, ExtensionDefinition, ExtensionKind, ExtensionPayload,
     ManagedBaseline, ManagedBaselineFile, ManagedFileEntry, PlanOperation,
     EXTENSIONS_SCHEMA_VERSION,
 };
 use asb_core::extensions::validate::{validate_binding, validate_definition};
-use serde::Serialize;
 use tauri::AppHandle;
 
 use super::planner::Planner;
@@ -26,109 +24,7 @@ use crate::extensions::store::ExtensionStore;
 // ---------------------------------------------------------------- sources
 
 // ---------------------------------------------------------------- takeover
-use self::resolve::{resolve_mcp_takeover, resolve_skill_takeover, takeover_scope_label};
-
-/// The redacted takeover preview: what the user confirms before the library
-/// starts owning a native entry or directory. No path, document, or raw
-/// parameter ever appears here.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TakeoverPreviewDto {
-    kind: ExtensionKind,
-    name: String,
-    client: AppKind,
-    scope_label: String,
-    /// MCP only: the native entry is present and fully expressible.
-    native_entry_present: Option<bool>,
-    /// Skill only: file count of the verified content.
-    file_count: Option<usize>,
-    /// Skill only: verified content digest (short form for display).
-    content_digest: Option<String>,
-    /// An exactly equal definition already exists in the library.
-    definition_exists: bool,
-    warnings: Vec<String>,
-}
-
-#[cfg_attr(test, allow(dead_code))]
-#[tauri::command]
-pub async fn preview_discovered_takeover(
-    app: AppHandle,
-    observation_id: String,
-) -> Result<TakeoverPreviewDto, CommandError> {
-    blocking(move || {
-        let state = state(&app)?;
-        let store = extension_store(&state);
-        let paths = DiscoveredPaths::from_env()
-            .map_err(|error| CommandError::new("app-state-unavailable", error))?;
-        let cached = discovered_observations()
-            .lock()
-            .expect("observations")
-            .get(&observation_id)
-            .cloned()
-            .ok_or_else(|| {
-                CommandError::new("observation-expired", "发现结果已过期；请重新扫描本机扩展")
-            })?;
-        match cached.observed.kind {
-            ExtensionKind::Mcp => {
-                let (payload, material) = resolve_mcp_takeover(&store, &cached, &paths)?;
-                let definition_exists = store
-                    .list_definitions()
-                    .map_err(store_error)?
-                    .into_iter()
-                    .any(|definition| {
-                        definition.name == material.observed.name
-                            && definition.payload == ExtensionPayload::Mcp(payload.clone())
-                    });
-                Ok(TakeoverPreviewDto {
-                    kind: ExtensionKind::Mcp,
-                    name: material.observed.name.clone(),
-                    client: material.observed.client,
-                    scope_label: takeover_scope_label(&material.target),
-                    native_entry_present: Some(true),
-                    file_count: None,
-                    content_digest: None,
-                    definition_exists,
-                    warnings: vec![
-                        "接管不改写客户端文件；本机现有配置保持原样".to_string(),
-                        "移除该绑定时，将恢复接管时的原生条目".to_string(),
-                    ],
-                })
-            }
-            ExtensionKind::Skill => {
-                let (candidate, material) = resolve_skill_takeover(&store, &cached)?;
-                // Equivalence is content-based: the same immutable digest is
-                // the same library content, whatever it was named.
-                let definition_exists = store
-                    .list_definitions()
-                    .map_err(store_error)?
-                    .into_iter()
-                    .any(|definition| {
-                        matches!(
-                            &definition.payload,
-                            ExtensionPayload::Skill(skill)
-                                if skill.content_digest == candidate.content_digest
-                        )
-                    });
-                Ok(TakeoverPreviewDto {
-                    kind: ExtensionKind::Skill,
-                    name: material.observed.name.clone(),
-                    client: material.observed.client,
-                    scope_label: takeover_scope_label(&material.target),
-                    native_entry_present: None,
-                    file_count: Some(candidate.entries.len()),
-                    content_digest: Some(candidate.content_digest[..12].to_string()),
-                    definition_exists,
-                    warnings: vec![
-                        "接管不改写客户端目录；本机现有文件保持原样".to_string(),
-                        "移除该绑定时，将恢复接管时的原始文件".to_string(),
-                    ],
-                })
-            }
-        }
-    })
-    .await
-}
-
+use self::resolve::{resolve_mcp_takeover, resolve_skill_takeover};
 /// Takes over one discovered native item: the library starts owning the
 /// existing entry or directory as-is. No client file is written by the
 /// takeover itself; the recorded baseline is what a later removal restores.
@@ -180,6 +76,7 @@ pub(super) fn takeover_observed_mcp(
         None => {
             let definition = ExtensionDefinition {
                 schema_version: EXTENSIONS_SCHEMA_VERSION,
+                mcp_metadata: None,
                 id: new_id("ext"),
                 name: observed.name.clone(),
                 revision: 1,

@@ -3,55 +3,6 @@
 use super::*;
 
 impl GatewayController {
-    /// Projects a current-format Codex profile through the local capability
-    /// gateway. Official Codex has no profile and therefore never enters this
-    /// path.
-    pub(crate) fn project_codex(
-        &self,
-        file: &asb_core::contracts::CodexProviderFile,
-        client_settings: asb_core::contracts::SettingsValues,
-    ) -> Result<GatewayProjection, String> {
-        file.validate()?;
-        if self.blocked_recovery().is_some() {
-            return Err("存在未完成的端口修改恢复，无法切换 Codex 供应商".to_string());
-        }
-        let base_url = self
-            .listening_base_url()
-            .ok_or_else(|| "本机协议网关当前未在监听，无法写入 Codex 第三方配置".to_string())?;
-        let route = self.route_for_codex_file(file)?;
-        let profile = file.client_projection().into_profile(AppKind::Codex);
-        let catalog = CodexCatalogProjection {
-            file_name: format!(
-                "agent-switchboard-codex-{}-{}.json",
-                file.profile.id,
-                &route.fingerprint[..16]
-            ),
-            content: file.model_catalog_json()?,
-        };
-        let plan = SwitchPlan::through_gateway(
-            profile,
-            client_settings,
-            route.client_endpoint(&base_url),
-            route.client_token.clone(),
-        )
-        .with_codex_model_catalog(catalog.file_name.clone());
-        asb_core::validate_plan(&plan.profile, &plan.client_settings)
-            .map_err(|error| error.to_string())?;
-        let warning = if file.profile.request_mode
-            == asb_core::contracts::ResponsesRequestMode::Minimal
-        {
-            "Codex 第三方模型请求将经过本机协议网关；最小模式省略 reasoning、service_tier、store、include、metadata 与客户端缓存扩展字段，非空 previous_response_id 必须改为完整 input".to_string()
-        } else {
-            "Codex 第三方模型请求将经过本机协议网关".to_string()
-        };
-        Ok(GatewayProjection {
-            plan,
-            activation: GatewayActivation::Routed(route),
-            warning: Some(warning),
-            codex_catalog: Some(catalog),
-        })
-    }
-
     /// Read-only snapshot of the configured port, the live listener, active
     /// routes, and request telemetry for the status page. Never exposes
     /// tokens or upstream keys.
@@ -72,6 +23,11 @@ impl GatewayController {
                 )),
             }
         };
+        let codex_policy_problem = if codex::policy::pending_path(local.root()).exists() {
+            Some("Codex 网关策略事务尚未完成，请恢复或保留当前客户端文件后放弃事务".to_string())
+        } else {
+            codex::policy::load(local.root()).err()
+        };
         let blocked = self.blocked_recovery();
         let status = if blocked.is_some() {
             GatewayStatusKind::RecoveryBlocked
@@ -80,7 +36,7 @@ impl GatewayController {
             .is_some_and(|listener| listener.port() != configured_port)
         {
             GatewayStatusKind::NeedsRepair
-        } else if self.has_unreconciled_gateway_files(local) {
+        } else if codex_policy_problem.is_some() || self.has_unreconciled_gateway_files(local) {
             GatewayStatusKind::NeedsRepair
         } else if listening.is_none() {
             match failure.as_ref().map(|report| report.kind) {
@@ -93,30 +49,18 @@ impl GatewayController {
         } else {
             GatewayStatusKind::Standby
         };
-        let routes = self
-            .inner
-            .routes
-            .read()
-            .map(|routes| {
-                routes
-                    .values()
-                    .map(|route| RouteObservation {
-                        app: route.app,
-                        profile_id: route.profile_id.clone(),
-                        upstream_protocol: route.upstream_protocol,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let repair_reason = (status == GatewayStatusKind::NeedsRepair)
-            .then(|| {
-                self.inner
-                    .repair_reason
-                    .lock()
-                    .ok()
-                    .and_then(|reason| reason.clone())
-            })
-            .flatten();
+        let routes = self.route_observations();
+        let repair_reason = codex_policy_problem.or_else(|| {
+            (status == GatewayStatusKind::NeedsRepair)
+                .then(|| {
+                    self.inner
+                        .repair_reason
+                        .lock()
+                        .ok()
+                        .and_then(|reason| reason.clone())
+                })
+                .flatten()
+        });
         let listening_port = listening.as_ref().map(BoundListener::port);
         GatewayObservation {
             configured_port,
@@ -131,10 +75,31 @@ impl GatewayController {
         }
     }
 
+    fn route_observations(&self) -> Vec<RouteObservation> {
+        self.inner
+            .routes
+            .read()
+            .map(|routes| {
+                routes
+                    .values()
+                    .map(|route| RouteObservation {
+                        app: route.app,
+                        profile_id: route.profile_id.clone(),
+                        upstream_protocol: route.upstream_protocol,
+                        health: self.inner.health_for(route).state(),
+                        consecutive_failures: self.inner.health_for(route).consecutive_failures(),
+                        candidate_count: self.inner.candidates_for(route.app, route).len(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Produces the client projection without mutating the gateway state.
     /// Codex projections use one installation-scoped capability while their
-    /// active route revision validates the selected provider. Claude retains
-    /// its existing per-route Bearer capability.
+    /// active route revision validates the selected provider. Claude uses one
+    /// installation-scoped Bearer capability while the route revision selects
+    /// the active provider and model mapping.
     ///
     /// Routed projections are rejected while the listener is down or a
     /// port-change recovery is blocked: a gateway-dependent client write must
@@ -147,6 +112,7 @@ impl GatewayController {
                 activation: GatewayActivation::Direct { app: plan.app() },
                 warning: None,
                 codex_catalog: None,
+                candidate_routes: Vec::new(),
             });
         }
         if self.blocked_recovery().is_some() {
@@ -165,13 +131,15 @@ impl GatewayController {
             plan.client_settings.clone(),
             route.client_endpoint(&base_url),
             route.client_token.clone(),
-        );
+        )
+        .with_claude_route_revision(route.claude_revision());
         let warning = projection_warning(plan, &projected);
         Ok(GatewayProjection {
             plan: projected,
             activation: GatewayActivation::Routed(route),
             warning: Some(warning),
             codex_catalog: None,
+            candidate_routes: Vec::new(),
         })
     }
 
@@ -196,50 +164,14 @@ impl GatewayController {
         {
             return Ok(None);
         }
-        Ok(Some(SwitchPlan::through_gateway(
-            plan.profile.clone(),
-            plan.client_settings.clone(),
-            route.client_endpoint(&self.configured_base_url()),
-            route.client_token.clone(),
-        )))
-    }
-
-    /// Recreates the exact current Codex client projection from a specialized
-    /// provider file only when that file still owns the active route revision.
-    /// Status code uses this to include the catalog pointer and every managed
-    /// Codex setting in its match test.
-    pub(crate) fn active_codex_projection(
-        &self,
-        file: &asb_core::contracts::CodexProviderFile,
-        client_settings: asb_core::contracts::SettingsValues,
-    ) -> Result<Option<SwitchPlan>, String> {
-        let route = self
-            .inner
-            .routes
-            .read()
-            .map_err(|_| "本机协议网关路由锁不可用".to_string())?
-            .get(&AppKind::Codex)
-            .cloned();
-        let Some(route) = route else {
-            return Ok(None);
-        };
-        let revision = codex_route_fingerprint(file)?;
-        if route.profile_id != file.profile.id || route.fingerprint != revision {
-            return Ok(None);
-        }
-        let profile = file.client_projection().into_profile(AppKind::Codex);
         Ok(Some(
             SwitchPlan::through_gateway(
-                profile,
-                client_settings,
+                plan.profile.clone(),
+                plan.client_settings.clone(),
                 route.client_endpoint(&self.configured_base_url()),
-                route.client_token,
+                route.client_token.clone(),
             )
-            .with_codex_model_catalog(format!(
-                "agent-switchboard-codex-{}-{}.json",
-                file.profile.id,
-                &revision[..16]
-            )),
+            .with_claude_route_revision(route.claude_revision()),
         ))
     }
 
@@ -249,7 +181,11 @@ impl GatewayController {
     where
         F: FnOnce() -> Result<(), String>,
     {
-        self.commit_activation(&projection.activation, persist)
+        self.commit_activation(
+            &projection.activation,
+            &projection.candidate_routes,
+            persist,
+        )
     }
 
     /// Applies the gateway state that corresponds to a just-restored client
@@ -274,7 +210,7 @@ impl GatewayController {
                 // valid. With no client file there cannot be a live loopback
                 // route, so remove any in-memory and persisted activation in
                 // the same executor callback that records this restore.
-                return self.commit_activation(&GatewayActivation::Direct { app }, persist);
+                return self.commit_activation(&GatewayActivation::Direct { app }, &[], persist);
             }
             Err(_) => return Err("恢复后无法读取客户端配置，已拒绝更新本机协议网关".to_string()),
         };
@@ -303,7 +239,7 @@ impl GatewayController {
                 .into_iter()
                 .filter_map(|record| {
                     let profile = record.profile;
-                    (profile.route_mode == RouteMode::Custom && !is_direct(&profile))
+                    (profile.app == AppKind::Claude && profile.route_mode == RouteMode::Custom)
                         .then_some(profile)
                 })
                 .map(|profile| self.route_for_profile(&profile))
@@ -315,6 +251,13 @@ impl GatewayController {
                 routes.push(route);
             }
         }
+        let candidate_routes = match routes.as_slice() {
+            [route] if app == AppKind::Claude => self
+                .claude_candidate_routes(local, &route.profile_id)
+                .unwrap_or_else(|_| vec![route.clone()]),
+            [route] => self.rehydrate_codex_candidates(&route.profile_id)?,
+            _ => Vec::new(),
+        };
         let activation = match routes.as_slice() {
             [route] => GatewayActivation::Routed(route.clone()),
             [] if routing::config_points_at_gateway(app, &text) => {
@@ -325,7 +268,7 @@ impl GatewayController {
             [] => GatewayActivation::Direct { app },
             _ => return Err("恢复的配置匹配多个本机协议网关供应商，已拒绝恢复".to_string()),
         };
-        self.commit_activation(&activation, persist)
+        self.commit_activation(&activation, &candidate_routes, persist)
     }
 
     /// Returns the active routed profile only when the current client files
@@ -376,26 +319,6 @@ impl GatewayController {
             .unwrap_or(true)
     }
 
-    /// Whether any client still depends on this gateway: an in-memory or
-    /// persisted route, or a live client configuration pointing at the
-    /// loopback endpoint. Exit decisions must consult the persisted facts and
-    /// real client files, not only successfully restored in-memory routes.
-    pub(crate) fn has_gateway_dependency(&self, local: &LocalState) -> bool {
-        if self.has_active_routes() {
-            return true;
-        }
-        if self
-            .inner
-            .state
-            .lock()
-            .map(|state| state.has_routes())
-            .unwrap_or(true)
-        {
-            return true;
-        }
-        points_at_gateway_files(local)
-    }
-
     /// Blocks new requests and waits for in-flight ones to finish. Returns
     /// `false` when long requests outlast the drain budget; the caller must
     /// then resume serving without changing anything.
@@ -416,13 +339,13 @@ impl GatewayController {
     }
 }
 
-fn projection_warning(plan: &SwitchPlan, _projected: &SwitchPlan) -> String {
+pub(super) fn projection_warning(plan: &SwitchPlan, _projected: &SwitchPlan) -> String {
     let protocol = plan
         .profile
         .upstream_protocol
         .expect("validated custom protocol");
     let reason = if protocol == UpstreamProtocol::native_for(plan.profile.app) {
-        "Codex 第三方请求统一经过本机网关并保留官方登录".to_string()
+        "Claude 请求通过本机网关执行端点与路由策略".to_string()
     } else {
         format!(
             "该供应商的上游协议是 {}，与 {} 原生协议（{}）不同",

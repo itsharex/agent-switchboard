@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    AppKind, ExplicitMaxOutputTokens, ModelOptions, ResponsesOptions, ResponsesRequestMode,
-    RouteMode, SettingsValues, UpstreamProtocol, UsageQuery,
+    AppKind, AuthenticationScheme, ExplicitMaxOutputTokens, ModelOptions,
+    ProviderConnectionOptions, ResponsesOptions, ResponsesRequestMode, RouteMode, SettingsValues,
+    UpstreamProtocol, UsageQuery,
 };
 
 /// A provider profile. It is a small overlay, never a full copy of a user's
@@ -18,7 +19,12 @@ pub struct ProviderProfile {
     pub name: String,
     pub model: Option<String>,
     pub base_url: Option<String>,
+    #[serde(default)]
+    pub connection: ProviderConnectionOptions,
     pub api_key: String,
+    /// Explicit credential delivery; absent uses the protocol default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authentication: Option<AuthenticationScheme>,
     /// Required for custom routes and absent for official routes. It tells the
     /// activation service whether the client connects directly or through the
     /// local protocol gateway.
@@ -60,7 +66,11 @@ pub struct ProviderDraft {
     pub route_mode: RouteMode,
     pub name: String,
     pub base_url: Option<String>,
+    #[serde(default)]
+    pub connection: ProviderConnectionOptions,
     pub api_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authentication: Option<AuthenticationScheme>,
     pub upstream_protocol: Option<UpstreamProtocol>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub responses_options: Option<ResponsesOptions>,
@@ -89,6 +99,7 @@ impl std::fmt::Debug for ProviderProfile {
             .field("model", &self.model)
             .field("base_url", &self.base_url)
             .field("api_key", &crate::redact::REDACTED)
+            .field("authentication", &self.authentication)
             .field("upstream_protocol", &self.upstream_protocol)
             .field("responses_options", &self.responses_options)
             .field("max_output_tokens", &self.max_output_tokens)
@@ -114,6 +125,7 @@ impl std::fmt::Debug for ProviderDraft {
             .field("name", &self.name)
             .field("base_url", &self.base_url)
             .field("api_key", &crate::redact::REDACTED)
+            .field("authentication", &self.authentication)
             .field("upstream_protocol", &self.upstream_protocol)
             .field("responses_options", &self.responses_options)
             .field("max_output_tokens", &self.max_output_tokens)
@@ -140,7 +152,9 @@ impl ProviderProfile {
             name: draft.name,
             model: draft.model,
             base_url: draft.base_url,
+            connection: draft.connection,
             api_key: draft.api_key,
+            authentication: draft.authentication,
             upstream_protocol: draft.upstream_protocol,
             responses_options: draft.responses_options,
             max_output_tokens: draft.max_output_tokens,
@@ -155,17 +169,30 @@ impl ProviderProfile {
 
     /// Whether the selected protocol or request shape needs the local gateway.
     pub fn requires_gateway(&self) -> bool {
+        if self.connection.claude_native.is_some() {
+            return false;
+        }
         self.route_mode == RouteMode::Custom
-            && (self.app == AppKind::Codex
+            && ((self.app == AppKind::Codex
+                && self.upstream_protocol != Some(UpstreamProtocol::Responses))
                 || self.requires_protocol_translation()
                 || self
                     .responses_options
-                    .is_some_and(|options| options.request_mode == ResponsesRequestMode::Minimal))
+                    .is_some_and(|options| options.request_mode == ResponsesRequestMode::Minimal)
+                || self.connection.requires_gateway())
     }
 
     pub fn requires_protocol_translation(&self) -> bool {
         self.route_mode == RouteMode::Custom
             && self.upstream_protocol != Some(UpstreamProtocol::native_for(self.app))
+    }
+
+    pub fn upstream_authentication(&self) -> Option<AuthenticationScheme> {
+        if self.route_mode == RouteMode::Official {
+            return None;
+        }
+        self.upstream_protocol
+            .map(|protocol| protocol.resolve_authentication(self.authentication))
     }
 
     /// Whether persisting `draft` over this profile would change any field the
@@ -177,7 +204,9 @@ impl ProviderProfile {
         self.route_mode != draft.route_mode
             || self.model != draft.model
             || self.base_url != draft.base_url
+            || self.connection != draft.connection
             || self.api_key != draft.api_key
+            || self.authentication != draft.authentication
             || self.upstream_protocol != draft.upstream_protocol
             || self.responses_options != draft.responses_options
             || self.max_output_tokens != draft.max_output_tokens
@@ -242,11 +271,15 @@ pub struct ProviderFile {
     pub position: u64,
     pub route_mode: RouteMode,
     pub api_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authentication: Option<AuthenticationScheme>,
     pub upstream_protocol: Option<UpstreamProtocol>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub responses_options: Option<ResponsesOptions>,
     pub max_output_tokens: ExplicitMaxOutputTokens,
     pub base_url: Option<String>,
+    #[serde(default)]
+    pub connection: ProviderConnectionOptions,
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
@@ -260,6 +293,32 @@ pub struct ProviderFile {
     pub official_quota_refresh_interval_minutes: Option<u32>,
 }
 
+/// The canonical Codex official-login draft: routing identity only — no
+/// endpoint, credential, or catalog. The single owner behind the cc-switch
+/// official-row import and the post-login record creation; both only supply
+/// provider parameters.
+pub fn codex_official_draft(parameters: SettingsValues) -> ProviderDraft {
+    ProviderDraft {
+        app: AppKind::Codex,
+        route_mode: RouteMode::Official,
+        name: "Codex 官方登录".to_string(),
+        base_url: None,
+        connection: ProviderConnectionOptions::default(),
+        api_key: String::new(),
+        authentication: None,
+        upstream_protocol: None,
+        responses_options: None,
+        max_output_tokens: None.into(),
+        model: None,
+        model_options: None,
+        parameters,
+        notes: None,
+        website_url: None,
+        usage_query: None,
+        official_quota_refresh_interval_minutes: None,
+    }
+}
+
 impl ProviderFile {
     /// Attaches the client association owned by the storage directory.
     pub fn into_profile(self, app: AppKind) -> ProviderProfile {
@@ -270,7 +329,9 @@ impl ProviderFile {
             name: self.name,
             model: self.model,
             base_url: self.base_url,
+            connection: self.connection,
             api_key: self.api_key,
+            authentication: self.authentication,
             upstream_protocol: self.upstream_protocol,
             responses_options: self.responses_options,
             max_output_tokens: self.max_output_tokens,
@@ -291,7 +352,9 @@ impl ProviderFile {
             position,
             route_mode: profile.route_mode,
             api_key: profile.api_key.clone(),
+            authentication: profile.authentication,
             base_url: profile.base_url.clone(),
+            connection: profile.connection.clone(),
             model: profile.model.clone(),
             upstream_protocol: profile.upstream_protocol,
             responses_options: profile.responses_options,

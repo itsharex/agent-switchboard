@@ -1,14 +1,14 @@
+mod response;
 use super::super::ActiveRoute;
 use crate::gateway::http::Request;
 use asb_core::contracts::UpstreamProtocol;
-use bytes::Bytes;
 use reqwest::header::{
     HeaderMap, HeaderName, HeaderValue, ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, CONTENT_TYPE,
 };
-use std::io::{self, Read};
+pub(super) use response::StreamError;
+pub(crate) use response::UpstreamResponse;
 use std::time::Duration;
 use tiny_http::{Header, Method};
-use tokio::sync::{mpsc as tokio_mpsc, watch};
 
 const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -26,113 +26,6 @@ impl UpstreamClient {
                 .build()?,
             runtime,
         })
-    }
-}
-
-pub(crate) struct UpstreamResponse {
-    status: reqwest::StatusCode,
-    headers: HeaderMap,
-    url: reqwest::Url,
-    body: UpstreamBody,
-}
-
-impl UpstreamResponse {
-    pub(super) fn new(
-        status: reqwest::StatusCode,
-        headers: HeaderMap,
-        url: reqwest::Url,
-        receiver: tokio_mpsc::Receiver<Result<Bytes, StreamError>>,
-        cancellation: watch::Sender<bool>,
-    ) -> Self {
-        Self {
-            status,
-            headers,
-            url,
-            body: UpstreamBody {
-                receiver,
-                cancellation,
-                pending: Bytes::new(),
-                offset: 0,
-            },
-        }
-    }
-    pub(crate) fn status(&self) -> reqwest::StatusCode {
-        self.status
-    }
-    pub(crate) fn headers(&self) -> &HeaderMap {
-        &self.headers
-    }
-    pub(crate) fn url(&self) -> &reqwest::Url {
-        &self.url
-    }
-}
-
-impl Read for UpstreamResponse {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        self.body.read(buffer)
-    }
-}
-
-pub(super) struct UpstreamBody {
-    receiver: tokio_mpsc::Receiver<Result<Bytes, StreamError>>,
-    cancellation: watch::Sender<bool>,
-    pending: Bytes,
-    offset: usize,
-}
-
-impl Read for UpstreamBody {
-    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
-        if output.is_empty() {
-            return Ok(0);
-        }
-        loop {
-            if self.offset < self.pending.len() {
-                let count = output.len().min(self.pending.len() - self.offset);
-                output[..count].copy_from_slice(&self.pending[self.offset..self.offset + count]);
-                self.offset += count;
-                return Ok(count);
-            }
-            match self.receiver.blocking_recv() {
-                Some(Ok(bytes)) => {
-                    self.pending = bytes;
-                    self.offset = 0;
-                }
-                Some(Err(error)) => return Err(error.into_io()),
-                None => return Ok(0),
-            }
-        }
-    }
-}
-
-impl Drop for UpstreamBody {
-    fn drop(&mut self) {
-        let _ = self.cancellation.send(true);
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct StreamError {
-    kind: io::ErrorKind,
-    message: String,
-}
-
-impl StreamError {
-    pub(super) fn timeout(message: &str) -> Self {
-        Self {
-            kind: io::ErrorKind::TimedOut,
-            message: message.to_string(),
-        }
-    }
-
-    pub(super) fn network(error: reqwest::Error) -> Self {
-        Self {
-            kind: io::ErrorKind::ConnectionAborted,
-            message: error.to_string(),
-        }
-    }
-
-    fn into_io(self) -> io::Error {
-        io::Error::new(self.kind, self.message)
     }
 }
 
@@ -206,10 +99,15 @@ pub(super) fn upstream_headers(
     // identity avoids an avoidable decoder in compliant upstreams; the shared
     // response decoder still handles providers that send compression anyway.
     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
-    match route.upstream_protocol.authentication_scheme() {
+    match route.authentication {
         asb_core::AuthenticationScheme::Bearer => {
             if let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", route.api_key)) {
                 headers.insert(AUTHORIZATION, value);
+            }
+        }
+        asb_core::AuthenticationScheme::XGoogApiKey => {
+            if let Ok(value) = HeaderValue::from_str(&route.api_key) {
+                headers.insert(HeaderName::from_static("x-goog-api-key"), value);
             }
         }
         asb_core::AuthenticationScheme::XApiKey => {
@@ -295,8 +193,11 @@ pub(crate) fn upstream_url(
     gateway_base: &str,
     request_url: &str,
 ) -> Result<String, String> {
-    let url =
-        asb_core::endpoint::upstream_endpoint(&route.upstream_base_url, route.upstream_protocol)?;
+    let url = asb_core::endpoint::upstream_endpoint_with_options(
+        &route.upstream_base_url,
+        route.upstream_protocol,
+        route.connection.is_full_url,
+    )?;
     with_request_query(url, gateway_base, request_url)
 }
 
@@ -308,7 +209,7 @@ pub(crate) fn upstream_compact_url(
     if route.upstream_protocol != UpstreamProtocol::Responses {
         return Err("当前第三方上游不支持原生 Responses compact".to_string());
     }
-    let url = asb_core::endpoint::compact_endpoint(&route.upstream_base_url)?;
+    let url = codex_operation_endpoint(route, CodexOperation::Compact)?;
     with_request_query(url, gateway_base, request_url)
 }
 
@@ -321,12 +222,69 @@ pub(crate) fn upstream_codex_operation_url(
     if route.upstream_protocol == UpstreamProtocol::AnthropicMessages {
         return Err("所选第三方档案不支持此 Codex 操作".to_string());
     }
-    let url = reqwest::Url::parse(&asb_core::endpoint::codex_endpoint(
-        &route.upstream_base_url,
-        operation.upstream_path(),
-    )?)
-    .map_err(|_| "供应商上游请求地址无效".to_string())?;
-    with_request_query(url.to_string(), gateway_base, request_url)
+    let url = codex_operation_endpoint(route, operation)?;
+    with_request_query(url, gateway_base, request_url)
+}
+
+fn codex_operation_endpoint(
+    route: &ActiveRoute,
+    operation: CodexOperation,
+) -> Result<String, String> {
+    if route.connection.is_full_url {
+        return rewrite_codex_full_url(&route.upstream_base_url, operation.upstream_path());
+    }
+    asb_core::endpoint::codex_endpoint(&route.upstream_base_url, operation.upstream_path())
+}
+
+/// Derives a typed Codex sibling endpoint from a full URL configuration.
+///
+/// Full-URL mode is exact for the primary request, but standalone operations
+/// still need their own paths. Only known API shapes are rewritten; opaque
+/// full URLs fail closed instead of sending a payload to an unrelated route.
+fn rewrite_codex_full_url(base_url: &str, target_path: &str) -> Result<String, String> {
+    asb_core::endpoint::validate_full_url(base_url)
+        .map_err(|_| "供应商上游请求地址无效".to_string())?;
+    let parsed = reqwest::Url::parse(base_url).map_err(|_| "供应商上游请求地址无效".to_string())?;
+    let source_path = parsed.path().trim_end_matches('/').to_ascii_lowercase();
+    let suffix = codex_full_url_suffixes(target_path)
+        .iter()
+        .find(|suffix| source_path.ends_with(**suffix))
+        .copied()
+        .ok_or_else(|| {
+            format!("无法从完整 Codex 地址推导 {target_path}，请填写 API 根地址或已知操作地址")
+        })?;
+    let without_query = base_url.split_once('?').map_or(base_url, |(url, _)| url);
+    let without_query = without_query.trim_end_matches('/');
+    let prefix_len = without_query
+        .len()
+        .checked_sub(suffix.len())
+        .ok_or_else(|| "供应商上游请求地址无效".to_string())?;
+    let query = base_url
+        .split_once('?')
+        .map(|(_, query)| query)
+        .filter(|query| !query.is_empty())
+        .map(|query| format!("?{query}"))
+        .unwrap_or_default();
+    Ok(format!(
+        "{}{target_path}{query}",
+        &without_query[..prefix_len]
+    ))
+}
+
+fn codex_full_url_suffixes(target_path: &str) -> &'static [&'static str] {
+    match target_path {
+        "/responses/compact" => &["/responses/compact", "/responses"],
+        "/alpha/search" => &["/responses/compact", "/responses"],
+        "/images/generations" | "/images/edits" => &[
+            "/images/generations",
+            "/images/edits",
+            "/chat/completions",
+            "/responses/compact",
+            "/responses",
+        ],
+        "/chat/completions" => &["/chat/completions", "/responses/compact", "/responses"],
+        _ => &[],
+    }
 }
 
 fn validate_upstream_url(url: &str, gateway_base: &str) -> Result<String, String> {
@@ -343,7 +301,7 @@ fn validate_upstream_url(url: &str, gateway_base: &str) -> Result<String, String
 /// upstream endpoint. The path and authority always come from the route's
 /// validated endpoint; an empty component, fragment, or control character is
 /// rejected instead of being interpreted as a second forwarding target.
-fn with_request_query(
+pub(super) fn with_request_query(
     url: String,
     gateway_base: &str,
     request_url: &str,
@@ -361,7 +319,11 @@ fn with_request_query(
     {
         return Err("Codex 操作查询参数无效".to_string());
     }
-    parsed.set_query(Some(query));
+    let merged = parsed
+        .query()
+        .map(|existing| format!("{existing}&{query}"))
+        .unwrap_or_else(|| query.to_string());
+    parsed.set_query(Some(&merged));
     validate_upstream_url(parsed.as_str(), gateway_base)
 }
 
@@ -450,102 +412,4 @@ pub(super) fn json_content_type(request: &Request) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const CAPABILITY: &str =
-        "asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-
-    #[test]
-    fn codex_paths_are_a_closed_typed_operation_set() {
-        let cases = [
-            ("responses", CodexOperation::Responses, Method::Post),
-            ("responses/compact", CodexOperation::Compact, Method::Post),
-            ("models", CodexOperation::Models, Method::Get),
-            (
-                "chat/completions",
-                CodexOperation::ChatCompletions,
-                Method::Post,
-            ),
-            ("alpha/search", CodexOperation::AlphaSearch, Method::Post),
-            (
-                "images/generations",
-                CodexOperation::ImageGeneration,
-                Method::Post,
-            ),
-            ("images/edits", CodexOperation::ImageEdit, Method::Post),
-        ];
-        for (path, expected, method) in cases {
-            let url = format!("/codex/{CAPABILITY}/v1/{path}?trace=fixture");
-            let request = codex_request(&url).expect("known Codex operation");
-            assert_eq!(request.capability, CAPABILITY);
-            assert_eq!(request.operation, expected);
-            assert_eq!(request.operation.method(), method);
-        }
-        assert!(codex_request(&format!("/codex/{CAPABILITY}/v1/files")).is_none());
-        assert!(codex_request(&format!("/codex/{CAPABILITY}/v1/v1/responses")).is_none());
-        assert!(codex_request("/codex/asb_local_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1/responses").is_none());
-    }
-
-    #[test]
-    fn native_responses_headers_keep_protocol_facts_and_drop_credentials() {
-        let incoming = [
-            Header::from_bytes("openai-beta", "responses=v1").unwrap(),
-            Header::from_bytes("user-agent", "codex/1.0").unwrap(),
-            Header::from_bytes("session_id", "session-fixture").unwrap(),
-            Header::from_bytes("x-stainless-lang", "rust").unwrap(),
-            Header::from_bytes("Authorization", "Bearer official-token").unwrap(),
-            Header::from_bytes("chatgpt-account-id", "official-account").unwrap(),
-            Header::from_bytes("Cookie", "official_cookie=1").unwrap(),
-            Header::from_bytes("x-request-id", "client-trace").unwrap(),
-            Header::from_bytes("Content-Encoding", "zstd").unwrap(),
-        ];
-        let mut forwarded = HeaderMap::new();
-        append_native_responses_headers(&mut forwarded, &incoming);
-        assert_eq!(forwarded["openai-beta"], "responses=v1");
-        assert_eq!(forwarded["user-agent"], "codex/1.0");
-        assert_eq!(forwarded["session_id"], "session-fixture");
-        assert_eq!(forwarded["x-stainless-lang"], "rust");
-        for name in [
-            "authorization",
-            "chatgpt-account-id",
-            "cookie",
-            "x-request-id",
-            "content-encoding",
-        ] {
-            assert!(
-                !forwarded.contains_key(name),
-                "{name} must not reach third-party upstreams"
-            );
-        }
-    }
-
-    #[test]
-    fn request_query_cannot_replace_the_fixed_upstream_target() {
-        let upstream = "https://vendor.example/api/v1/responses".to_string();
-        let gateway = "http://127.0.0.1:47821";
-        let forwarded = with_request_query(
-            upstream.clone(),
-            gateway,
-            "/codex/asb_codex_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/v1/responses?trace=a%20b&mode=test",
-        )
-        .expect("valid query");
-        assert_eq!(
-            forwarded,
-            "https://vendor.example/api/v1/responses?trace=a%20b&mode=test"
-        );
-
-        for request_url in [
-            "/codex/token/v1/responses?",
-            "/codex/token/v1/responses?trace=1#other",
-            "/codex/token/v1/responses?=value",
-            "/codex/token/v1/responses?trace=1&",
-            "/codex/token/v1/responses?trace=\nvalue",
-        ] {
-            assert!(
-                with_request_query(upstream.clone(), gateway, request_url).is_err(),
-                "unexpectedly accepted {request_url:?}"
-            );
-        }
-    }
-}
+mod tests;

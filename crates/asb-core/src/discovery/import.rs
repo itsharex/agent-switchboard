@@ -1,56 +1,9 @@
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, ModelOptions, ProviderDraft, RouteMode, RouteState,
-    SettingsValues, UpstreamProtocol,
+    AppKind, AuthenticationScheme, ProviderDraft, RouteMode, RouteState, SettingsValues,
+    UpstreamProtocol,
 };
 
 use crate::discovery::report::{ClaudeImportProposal, DiscoveredFile, DiscoveredState};
-
-/// Converts only the externally valid Claude wire spelling into the profile
-/// contract. The resulting profile never carries a `[1m]` suffix in a model
-/// string; enabled context lives in the explicit boolean fields.
-pub(super) fn claude_import_model_fields(
-    route: &RouteState,
-) -> Result<(Option<String>, Option<ModelOptions>), String> {
-    let (model, primary_one_m) =
-        crate::claude_model::parse_optional_model(route.model.as_deref(), "主模型", true)?;
-    let (haiku_model, _) =
-        crate::claude_model::parse_optional_model(route.haiku_model.as_deref(), "Haiku 档", false)?;
-    let (sonnet_model, sonnet_one_m) = crate::claude_model::parse_optional_model(
-        route.sonnet_model.as_deref(),
-        "Sonnet 档",
-        true,
-    )?;
-    let (opus_model, opus_one_m) =
-        crate::claude_model::parse_optional_model(route.opus_model.as_deref(), "Opus 档", true)?;
-    let available_models = match route.available_models.as_ref() {
-        Some(models) => {
-            for model in models {
-                crate::claude_model::parse_model(model, "可选模型列表", false)?;
-            }
-            Some(models.clone())
-        }
-        None => None,
-    };
-    let has_settings = primary_one_m
-        || haiku_model.is_some()
-        || sonnet_model.is_some()
-        || sonnet_one_m
-        || opus_model.is_some()
-        || opus_one_m
-        || available_models.is_some();
-    let model_options = has_settings.then(|| {
-        ModelOptions::Claude(ClaudeModelSettings {
-            primary_one_m,
-            haiku_model,
-            sonnet_model,
-            sonnet_one_m,
-            opus_model,
-            opus_one_m,
-            available_models,
-        })
-    });
-    Ok((model, model_options))
-}
 
 /// Builds a Claude import proposal from its discovered locally-read raw
 /// configuration. Codex has its own complete profile contract and is never
@@ -86,11 +39,13 @@ fn official_proposal(parameters: SettingsValues) -> ClaudeImportProposal {
     let name = "Claude 官方登录";
     ClaudeImportProposal {
         draft: ProviderDraft {
+            authentication: None,
             app: AppKind::Claude,
             route_mode: RouteMode::Official,
             name: name.to_string(),
             model: None,
             base_url: None,
+            connection: Default::default(),
             api_key: String::new(),
             upstream_protocol: None,
             responses_options: None,
@@ -112,19 +67,37 @@ fn claude_proposal(
     text: &str,
 ) -> Option<ClaudeImportProposal> {
     let root: serde_json::Value = serde_json::from_str(text).ok()?;
-    let key = root
-        .pointer("/env/ANTHROPIC_AUTH_TOKEN")
-        .or_else(|| root.pointer("/env/ANTHROPIC_API_KEY"))
-        .and_then(serde_json::Value::as_str)
-        .filter(|value| !value.trim().is_empty())?;
-    let (model, model_options) = claude_import_model_fields(route).ok()?;
+    if let Some((native, base_url)) = crate::claude_native::from_config(&root).ok()? {
+        let (model, model_options) = crate::claude_model::import_models(&root, crate::claude_model::ModelSource::Client).ok()?;
+        let mut proposal = official_proposal(parameters);
+        proposal.draft.route_mode = RouteMode::Custom; proposal.draft.name = "当前 Claude 原生云配置".into();
+        proposal.draft.upstream_protocol = Some(UpstreamProtocol::AnthropicMessages);
+        proposal.draft.connection.claude_native = Some(native); proposal.draft.base_url = base_url;
+        proposal.draft.model = model; proposal.draft.model_options = model_options;
+        proposal.basis = "由当前 Claude 原生云 SDK 配置生成，不读取云凭据缓存".into();
+        return Some(proposal);
+    }
+    let credential = |path| {
+        root.pointer(path)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+    };
+    let (authentication, key) = credential("/env/ANTHROPIC_AUTH_TOKEN")
+        .map(|key| (AuthenticationScheme::Bearer, key))
+        .or_else(|| {
+            credential("/env/ANTHROPIC_API_KEY").map(|key| (AuthenticationScheme::XApiKey, key))
+        })?;
+    let (model, model_options) =
+        crate::claude_model::import_models(&root, crate::claude_model::ModelSource::Client).ok()?;
     Some(ClaudeImportProposal {
         draft: ProviderDraft {
+            authentication: Some(authentication),
             app: AppKind::Claude,
             route_mode: RouteMode::Custom,
             name: "当前 Claude 配置".to_string(),
             model,
             base_url: route.base_url.clone(),
+            connection: Default::default(),
             api_key: key.to_string(),
             upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
             responses_options: None,

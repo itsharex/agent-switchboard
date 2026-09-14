@@ -13,11 +13,13 @@ use std::{fs, panic::AssertUnwindSafe};
 const BEFORE: &str = "model_provider = 'openai'\nmodel = 'before-model'\n";
 const AUTH: &str = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"at","refresh_token":"rt","id_token":"id"}}"#;
 
-fn draft(revision: &str) -> CodexProviderDraft {
+pub(super) fn draft(revision: &str) -> CodexProviderDraft {
     CodexProviderDraft {
         name: format!("Codex fixture {revision}"),
         endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
         api_key: "fixture-key".to_string(),
+        authentication: None,
+        connection: Default::default(),
         upstream: CodexUpstream::Responses,
         request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
         default_model: revision.to_string(),
@@ -36,6 +38,10 @@ fn draft(revision: &str) -> CodexProviderDraft {
             ],
             images: true,
             compact: true,
+            display_name: None,
+            description: None,
+            base_instructions: None,
+            supports_parallel_tool_calls: None,
         }],
         model_routes: vec![CodexModelRoute {
             client_model: revision.to_string(),

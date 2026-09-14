@@ -37,7 +37,7 @@ fn targets_reject_old_shapes_and_unknown_fields() {
         json!({"profileId":"old-input"}),
         json!({"kind":"saved", "profileId":"id", "apiKey":"injected"}),
         json!({"kind":"draft", "connection": {
-            "baseUrl":"https://example.com", "apiKey":"isolated-key",
+            "app":"claude", "baseUrl":"https://example.com", "apiKey":"isolated-key",
             "upstreamProtocol":"responses", "responsesOptions":{"requestMode":"standard"},
             "defaultModel":null, "payload":{"injected":true}
         }}),

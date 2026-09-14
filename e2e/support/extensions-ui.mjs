@@ -36,7 +36,7 @@ export async function closeExtensionDialog(title) {
 export async function openDiscovery() {
   await clickButton('从本机发现');
   const dialog = await extensionDialog('从本机发现');
-  await (await dialog.$('table[aria-label="本机发现的扩展"]')).waitForDisplayed();
+  await (await dialog.$('ul[aria-label="本机发现的扩展"]')).waitForDisplayed();
   return dialog;
 }
 
@@ -49,40 +49,76 @@ export async function scanExtensions() {
 
 export async function discoveryRow(name, client = 'Codex') {
   const dialog = await extensionDialog('从本机发现');
-  return visibleElement(`.//table[@aria-label='本机发现的扩展']//tbody/tr[td//*[normalize-space(.)=${xpathText(name)}] and td[normalize-space(.)=${xpathText(client)}]]`, dialog);
+  const label = `选择 ${name} 的 ${client} 安装`;
+  return visibleElement(`.//ul[@aria-label='本机发现的扩展']/li[.//input[@aria-label=${xpathText(label)}]]`, dialog);
+}
+
+export async function waitForToast(pattern, timeout = 20000) {
+  await browser.waitUntil(async () => {
+    for (const toast of await $$('.asb-toast-body')) {
+      if (await toast.isDisplayed() && pattern.test(await toast.getText())) return true;
+    }
+    return false;
+  }, { timeout, timeoutMsg: `Expected toast ${pattern} did not appear` });
 }
 
 export async function libraryRow(name) {
   return visibleElement(`.//ul[@aria-label='扩展列表']/li[.//button[@aria-label=${xpathText(`管理 ${name}`)}]]`);
 }
 
-export async function toggleDeployment(name, client) {
+async function rowToggle(name, client) {
   const row = await libraryRow(name);
-  const toggle = await row.$(`button[data-client=${JSON.stringify(client)}]`);
-  await toggle.waitForEnabled();
-  await toggle.scrollIntoView({ block: 'center' });
-  await toggle.click();
-  return visibleElement('[role="dialog"][aria-label$="预览"]');
+  return row.$(`button[data-client=${JSON.stringify(client)}]`);
 }
 
-export async function finishPlan(confirm) {
-  const dialog = await visibleElement('[role="dialog"][aria-label$="预览"]');
-  await clickButton(confirm ? '确认应用' : '取消', dialog);
-  await dialog.waitForDisplayed({ reverse: true });
+/** One click deploys or undeploys immediately. The only write that stops
+ * for an explicit answer is a sensitive connection write; when one is
+ * pending its confirmation sheet is returned, otherwise the toggle's
+ * settled state means the transaction already committed. */
+export async function toggleDeployment(name, client) {
+  const toggle = await rowToggle(name, client);
+  await toggle.waitForEnabled();
+  await toggle.scrollIntoView({ block: 'center' });
+  const before = await toggle.getAttribute('aria-pressed');
+  await toggle.click();
+  await browser.waitUntil(async () => {
+    if (await (await $('[role="dialog"][aria-label$="（写入敏感数据）"]')).isExisting()) return true;
+    return (await (await rowToggle(name, client)).getAttribute('aria-pressed')) !== before;
+  }, { timeout: 20000, timeoutMsg: `Toggle for ${name}/${client} did not settle` });
+  const sheet = await $('[role="dialog"][aria-label$="（写入敏感数据）"]');
+  if (await sheet.isExisting()) return sheet;
+  await waitForToast(/已应用扩展变更/);
+  return null;
+}
+
+export async function confirmSensitiveWrite(sheet, confirm) {
+  await clickButton(confirm ? '确认写入' : '取消', sheet);
+  await sheet.waitForDisplayed({ reverse: true });
+  if (confirm) await waitForToast(/已应用扩展变更|变更未能应用|应用失败/);
 }
 
 export async function openHistory() {
-  await clickButton('更多扩展操作');
-  const item = await visibleElement('.//*[@role="menuitem" and normalize-space(.)="操作历史"]');
-  await item.click();
+  await clickButton('操作历史');
   return extensionDialog('操作历史');
 }
 
-export async function restoreLatest(name, confirm) {
+export async function importNativeSelection(name, client = 'Codex') {
+  const dialog = await extensionDialog('从本机发现');
+  const selectAll = await dialog.$('input[aria-label="全选"]');
+  if (await selectAll.isSelected()) await (await selectAll.$('..')).click();
+  const row = await discoveryRow(name, client);
+  const checkbox = await row.$('input[type="checkbox"]');
+  if (!(await checkbox.isSelected())) await (await checkbox.$('..')).click();
+  await clickButton('导入所选（1）', dialog);
+  await waitForToast(/已导入本机扩展/);
+  await closeExtensionDialog('从本机发现');
+}
+
+export async function restoreLatest(name) {
   const dialog = await openHistory();
   const row = await visibleElement(`.//li[contains(@class,'asb-ext-history-item')][.//span[normalize-space(.)=${xpathText(name)}]]`, dialog);
   await clickButton('恢复', row);
-  await finishPlan(confirm);
+  await waitForToast(/已应用扩展变更|变更未能应用|应用失败/);
   await closeExtensionDialog('操作历史');
 }
 

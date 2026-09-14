@@ -5,6 +5,7 @@
 //! which are never created here.
 
 mod caches;
+pub(crate) mod codex_paths;
 mod paths;
 mod settings;
 
@@ -167,6 +168,11 @@ impl LocalState {
     /// upstream API key or a client configuration document.
     pub(crate) fn gateway_state_path(&self) -> PathBuf {
         self.root.join("gateway.json")
+    }
+
+    /// Durable, credential-free request history for Claude gateway traffic.
+    pub(crate) fn claude_request_ledger_path(&self) -> PathBuf {
+        self.root.join("claude-request-ledger.json")
     }
 
     /// Prompt-document backups stay in their own collection so configuration

@@ -16,8 +16,8 @@ impl CodexLoginState {
     pub(crate) fn require(self) -> Result<(), String> {
         match self {
             Self::Configured => Ok(()),
-            Self::Missing => Err("使用 Codex 第三方前，请先完成官方登录".into()),
-            Self::ApiKey => Err("Codex 当前处于 API-key 登录模式，请重新完成官方登录；切换不会改写登录缓存".into()),
+            Self::Missing => Err("Codex 尚无可用的官方登录，请先登录或选择托管账号".into()),
+            Self::ApiKey => Err("Codex 当前处于 API-key 模式；使用官方服务需要已有 ChatGPT 登录或托管账号".into()),
             Self::Invalid => Err("Codex 官方登录存储无效或不完整，请重新完成官方登录".into()),
             Self::Unreadable => Err("无法读取 Codex 配置或官方登录存储".into()),
             Self::UnsupportedStorage => Err("当前仅支持 Codex 文件官方登录；keyring、auto 和 ephemeral 存储尚不受支持，请显式使用 file 存储后重新登录".into()),
@@ -29,12 +29,11 @@ pub(crate) fn parse_codex_login(auth: &str) -> CodexLoginState {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(auth) else {
         return CodexLoginState::Invalid;
     };
-    if value.get("auth_mode").and_then(|v| v.as_str()) == Some("apikey")
-        || value.get("OPENAI_API_KEY").is_some_and(|v| !v.is_null())
-    {
+    let auth_mode = value.get("auth_mode").and_then(|v| v.as_str());
+    if auth_mode == Some("apikey") {
         return CodexLoginState::ApiKey;
     }
-    if value.get("auth_mode").and_then(|v| v.as_str()) != Some("chatgpt") {
+    if auth_mode != Some("chatgpt") {
         return CodexLoginState::Invalid;
     }
     let Some(tokens) = value.get("tokens").and_then(|v| v.as_object()) else {
@@ -135,5 +134,11 @@ mod tests {
             parse_codex_login(r#"{"auth_mode":"chatgpt","tokens":{"access_token":"old"}}"#),
             CodexLoginState::Invalid
         );
+    }
+
+    #[test]
+    fn a_direct_api_key_overlay_does_not_hide_a_valid_chatgpt_login() {
+        let auth = r#"{"OPENAI_API_KEY":"third-party-key","auth_mode":"chatgpt","tokens":{"access_token":"access","refresh_token":"refresh","id_token":"id"}}"#;
+        assert_eq!(parse_codex_login(auth), CodexLoginState::Configured);
     }
 }

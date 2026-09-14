@@ -7,6 +7,11 @@ mod binding;
 mod content;
 mod definition;
 mod error;
+#[cfg(test)]
+mod mcp_tests;
+mod metadata;
+#[cfg(test)]
+mod metadata_tests;
 mod naming;
 #[cfg(test)]
 mod tests;
@@ -18,5 +23,6 @@ pub use content::{
 };
 pub use definition::{validate_definition, validate_definition_draft};
 pub use error::ExtensionValidationError;
+pub use metadata::validate_mcp_metadata;
 pub(crate) use naming::validate_mcp_definition;
 pub use naming::{validate_env_name, validate_server_key, validate_skill_name};

@@ -4,12 +4,14 @@ use crate::ownership::default_client_settings;
 
 fn profile(app: AppKind, mode: RouteMode) -> ProviderProfile {
     ProviderProfile {
+        authentication: None,
         id: "identity-test".into(),
         app,
         route_mode: mode,
         name: "Identity test".into(),
         model: Some("profile-model".into()),
         base_url: (mode == RouteMode::Custom).then(|| "https://example.test/v1".into()),
+        connection: Default::default(),
         api_key: if mode == RouteMode::Custom {
             "fixture-key".into()
         } else {

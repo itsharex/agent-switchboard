@@ -9,11 +9,13 @@ use asb_core::ownership::{default_client_settings, default_provider_parameters};
 
 fn draft(protocol: UpstreamProtocol) -> ProviderDraft {
     ProviderDraft {
+        authentication: None,
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "parameter owner".into(),
         parameters: default_provider_parameters(AppKind::Claude),
         base_url: Some("https://relay.example/v1".into()),
+        connection: Default::default(),
         api_key: "isolated-fixture".into(),
         upstream_protocol: Some(protocol),
         responses_options: (Some(protocol)
@@ -149,11 +151,13 @@ fn codex_official_route_attributes_the_active_state_to_the_stored_record() {
 
 fn official_draft() -> ProviderDraft {
     ProviderDraft {
+        authentication: None,
         app: AppKind::Codex,
         route_mode: RouteMode::Official,
         name: "Codex 官方登录".into(),
         parameters: default_provider_parameters(AppKind::Codex),
         base_url: None,
+        connection: Default::default(),
         api_key: String::new(),
         upstream_protocol: None,
         responses_options: None,

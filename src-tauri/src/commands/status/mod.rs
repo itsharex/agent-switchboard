@@ -1,6 +1,7 @@
 //! Read-only configuration status: per-client file health, route facts,
 //! match classification against the profile store, and lock observation.
 
+mod codex;
 mod overview;
 mod report;
 

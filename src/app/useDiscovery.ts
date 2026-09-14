@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   discoverCached,
   discoverLocal,
+  importDiscoveredCodexProfile,
   importDiscoveredClaudeProfile,
   type AppKind,
   type CommandError,
@@ -11,6 +12,7 @@ import { toast } from "../components/use-toast";
 import type { ProviderInventory } from "./useConfigSnapshot";
 
 interface DiscoveryDeps {
+  app: AppKind;
   busy: boolean;
   onError: (error: CommandError) => void;
   clearError: () => void;
@@ -28,6 +30,7 @@ interface DiscoveryDeps {
  * discovery result after each write so the import view never goes stale.
  */
 export function useDiscovery({
+  app,
   busy,
   onError,
   clearError,
@@ -92,14 +95,16 @@ export function useDiscovery({
       setBusy(true);
       clearError();
       try {
-        const record = await importDiscoveredClaudeProfile();
+        const result = app === "codex"
+          ? await importDiscoveredCodexProfile()
+          : await importDiscoveredClaudeProfile();
         setDiscovery(null);
-        toast({ kind: "success", title: `已导入供应商「${record.profile.name}」` });
+        toast({ kind: "success", title: `已导入供应商「${"profile" in result ? result.profile.name : result.name}」` });
         const refreshed = await refresh();
         if (!refreshed) return false;
-        setAppFilter(record.profile.app);
+        setAppFilter(app);
         setPage("供应商");
-        await selectProfile(record.profile.id);
+        await selectProfile("profile" in result ? result.profile.id : result.id);
         return true;
       } catch (caught) {
         onError(caught as CommandError);
@@ -109,6 +114,7 @@ export function useDiscovery({
       }
     },
     [
+      app,
       busy,
       clearError,
       invalidateCandidates,

@@ -1,0 +1,2575 @@
+{
+  "source": "farion1231/cc-switch",
+  "revision": "d695a2d77fd9081eafd3e9eedcbf2a97b3410928",
+  "presets": [
+    {
+      "id": "codex-preset-01",
+      "name": "OpenAI Official",
+      "websiteUrl": "https://chatgpt.com/codex",
+      "auth": {},
+      "config": "",
+      "isOfficial": true,
+      "providerType": "codex_oauth",
+      "category": "official"
+    },
+    {
+      "id": "codex-preset-02",
+      "name": "Kimi",
+      "websiteUrl": "https://platform.kimi.com?aff=cc-switch",
+      "apiKeyUrl": "https://platform.kimi.com/console/api-keys?aff=cc-switch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"kimi-k3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"kimi\"\nbase_url = \"https://api.moonshot.cn/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.moonshot.cn/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "kimi-k3",
+          "displayName": "Kimi K3",
+          "contextWindow": 1048576,
+          "supportsParallelToolCalls": true,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "model": "kimi-k2.7-code",
+          "displayName": "Kimi K2.7 Code",
+          "contextWindow": 262144,
+          "supportsParallelToolCalls": true,
+          "reasoningLevels": [
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-03",
+      "name": "Kimi For Coding",
+      "websiteUrl": "https://www.kimi.com/code/?aff=cc-switch",
+      "apiKeyUrl": "https://www.kimi.com/code/?aff=cc-switch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"kimi-for-coding\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"kimi_coding\"\nbase_url = \"https://api.kimi.com/coding/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.kimi.com/coding/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "kimi-for-coding",
+          "displayName": "Kimi For Coding",
+          "contextWindow": 262144,
+          "supportsParallelToolCalls": true,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-for-coding-highspeed",
+          "displayName": "Kimi For Coding HighSpeed",
+          "contextWindow": 262144,
+          "supportsParallelToolCalls": true,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "k3",
+          "displayName": "Kimi K3",
+          "contextWindow": 1048576,
+          "supportsParallelToolCalls": true,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        },
+        {
+          "model": "k3-256k",
+          "displayName": "Kimi K3 256K",
+          "contextWindow": 262144,
+          "supportsParallelToolCalls": true,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-04",
+      "name": "PackyCode",
+      "websiteUrl": "https://www.packyapi.ai",
+      "apiKeyUrl": "https://www.packyapi.ai/register?aff=cc-switch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"packycode\"\nbase_url = \"https://www.packyapi.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://www.packyapi.ai/v1",
+        "https://cf.api.fan/v1",
+        "https://slb-v1.api.fan/v1",
+        "https://www.packyapi.com/v1"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-05",
+      "name": "ZetaAPI",
+      "websiteUrl": "https://zetaapi.ai",
+      "apiKeyUrl": "https://zetaapi.ai/go/u117",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"zetaapi\"\nbase_url = \"https://api.zetaapi.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.zetaapi.ai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-06",
+      "name": "APINebula",
+      "websiteUrl": "https://apinebula.ai",
+      "apiKeyUrl": "https://apinebula.ai/VjM74M",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nreview_model = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"APINebula\"\nbase_url = \"https://apinebula.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://apinebula.ai/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-07",
+      "name": "AICodeMirror",
+      "websiteUrl": "https://www.aicodemirror.ai",
+      "apiKeyUrl": "https://www.aicodemirror.ai/register?invitecode=9915W3",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"aicodemirror\"\nbase_url = \"https://api.aicodemirror.ai/api/codex/backend-api/codex\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.aicodemirror.ai/api/codex/backend-api/codex"
+      ]
+    },
+    {
+      "id": "codex-preset-08",
+      "name": "PatewayAI",
+      "websiteUrl": "https://pateway.ai",
+      "apiKeyUrl": "https://pateway.ai/?ch=etzpm8&aff=WB6M6F67#/",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"patewayai\"\nbase_url = \"https://api.pateway.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.pateway.ai/v1"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-09",
+      "name": "FennoAI",
+      "websiteUrl": "https://api.fenno.ai",
+      "apiKeyUrl": "https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=P9MR3D3PLCNL",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"fenno\"\nbase_url = \"https://api.fenno.ai\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.fenno.ai"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-10",
+      "name": "RunAPI",
+      "websiteUrl": "https://runapi.host",
+      "apiKeyUrl": "https://runapi.host/register?aff=iOKB",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"runapi\"\nbase_url = \"https://runapi.host/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://runapi.host/v1",
+        "https://runapi.co/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-11",
+      "name": "Shengsuanyun",
+      "websiteUrl": "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+      "apiKeyUrl": "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"openai/gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"shengsuanyun\"\nbase_url = \"https://router.shengsuanyun.com/api/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-12",
+      "name": "AIGoCode",
+      "websiteUrl": "https://aigocode.app",
+      "apiKeyUrl": "https://aigocode.app/invite/CC-SWITCH",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"aigocode\"\nbase_url = \"https://api.aigocode.app\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.aigocode.app"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-13",
+      "name": "Qiniu",
+      "websiteUrl": "https://s.qiniu.com/nMvAvy",
+      "apiKeyUrl": "https://s.qiniu.com/nMvAvy",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qiniu\"\nbase_url = \"https://api.qnaigc.com/bypass/openai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.qnaigc.com/bypass/openai/v1",
+        "https://api.modelink.ai/bypass/openai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-14",
+      "name": "AICoding",
+      "websiteUrl": "https://aicoding.inc",
+      "apiKeyUrl": "https://aicoding.inc/i/CCSWITCH",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"aicoding\"\nbase_url = \"https://api.aicoding.inc\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.aicoding.inc"
+      ]
+    },
+    {
+      "id": "codex-preset-15",
+      "name": "SubRouter",
+      "websiteUrl": "https://subrouter.ai",
+      "apiKeyUrl": "https://subrouter.ai/register?aff=l3ri",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"subrouter\"\nbase_url = \"https://subrouter.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://subrouter.ai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-16",
+      "name": "APIKEY.FUN",
+      "websiteUrl": "https://apikey.fun",
+      "apiKeyUrl": "https://apikey.fun/register?aff=CCSwitch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nreview_model = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"APIKEY.FUN\"\nbase_url = \"https://api.apikey.fun/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.apikey.fun/v1",
+        "https://slb.apikey.fun/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-17",
+      "name": "9527CODE",
+      "websiteUrl": "https://9527.codes",
+      "apiKeyUrl": "https://9527.codes/register?aff=e5zI",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"9527code\"\nbase_url = \"https://9527.codes/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://9527.codes/v1",
+        "https://api.9527.codes/v1",
+        "https://cdn.9527.codes/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-18",
+      "name": "Code0",
+      "websiteUrl": "https://code0.ai",
+      "apiKeyUrl": "https://code0.ai/agent/register/B2XHxGjGmRvqgznY",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"code0\"\nbase_url = \"https://code0.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://code0.ai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-19",
+      "name": "TeamoRouter",
+      "websiteUrl": "https://teamorouter.cn",
+      "apiKeyUrl": "https://teamorouter.cn/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"teamorouter\"\nbase_url = \"https://api.teamorouter.cn/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.teamorouter.cn/v1",
+        "https://api.teamorouter.com/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-20",
+      "name": "PPIO",
+      "websiteUrl": "https://ppio.com",
+      "apiKeyUrl": "https://ppio.com/activity/ccswitch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"deepseek/deepseek-v4-flash-0731\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"ppio\"\nbase_url = \"https://api.ppio.com/openai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.ppio.com/openai/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "deepseek/deepseek-v4-flash-0731",
+          "displayName": "Deepseek V4 Flash 0731",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": false,
+        "thinkingParam": "thinking",
+        "effortParam": "none",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-21",
+      "name": "ClaudeCN",
+      "websiteUrl": "https://claudecn.top",
+      "apiKeyUrl": "https://claudecn.ai/register?aff=HEL9",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"claudecn\"\nbase_url = \"https://claudecn.top/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-22",
+      "name": "火山 Agent Plan",
+      "websiteUrl": "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+      "apiKeyUrl": "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"ark-code-latest\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"ark_agentplan\"\nbase_url = \"https://ark.cn-beijing.volces.com/api/plan/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://ark.cn-beijing.volces.com/api/plan/v3"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "ark-code-latest",
+          "displayName": "Ark Code Latest",
+          "contextWindow": 256000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-23",
+      "name": "火山 Coding Plan",
+      "websiteUrl": "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "apiKeyUrl": "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"ark-code-latest\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"ark_codingplan\"\nbase_url = \"https://ark.cn-beijing.volces.com/api/coding/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://ark.cn-beijing.volces.com/api/coding/v3"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "ark-code-latest",
+          "displayName": "Ark Code Latest",
+          "contextWindow": 256000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-24",
+      "name": "BytePlus",
+      "websiteUrl": "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "apiKeyUrl": "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"ark-code-latest\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"byteplus\"\nbase_url = \"https://ark.ap-southeast.bytepluses.com/api/coding/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://ark.ap-southeast.bytepluses.com/api/coding/v3"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "ark-code-latest",
+          "displayName": "Ark Code Latest",
+          "contextWindow": 256000,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-25",
+      "name": "Volcengine Doubao",
+      "websiteUrl": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "apiKeyUrl": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"doubao-seed-2-1-pro-260628\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"doubaoseed\"\nbase_url = \"https://ark.cn-beijing.volces.com/api/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://ark.cn-beijing.volces.com/api/v3"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "doubao-seed-2-1-pro-260628",
+          "displayName": "Doubao Seed 2.1 Pro",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-26",
+      "name": "SiliconFlow",
+      "websiteUrl": "https://siliconflow.cn",
+      "apiKeyUrl": "https://cloud.siliconflow.cn/i/YflgU2Ve",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"deepseek-ai/DeepSeek-V4-Flash\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"siliconflow\"\nbase_url = \"https://api.siliconflow.cn/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.siliconflow.cn/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "deepseek-ai/DeepSeek-V4-Flash",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "enable_thinking",
+        "effortParam": "reasoning_effort",
+        "effortValueMode": "deepseek",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-27",
+      "name": "SiliconFlow en",
+      "websiteUrl": "https://siliconflow.com",
+      "apiKeyUrl": "https://cloud.siliconflow.cn/i/YflgU2Ve",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"MiniMaxAI/MiniMax-M3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"siliconflow_en\"\nbase_url = \"https://api.siliconflow.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.siliconflow.com/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "MiniMaxAI/MiniMax-M3",
+          "displayName": "MiniMax M3",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-28",
+      "name": "A6API",
+      "websiteUrl": "https://www.a6api.com",
+      "apiKeyUrl": "https://a6api.com/register?aff=AqNr",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"a6api\"\nbase_url = \"https://api.a6api.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.a6api.com/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-29",
+      "name": "Compshare",
+      "websiteUrl": "https://www.compshare.cn",
+      "apiKeyUrl": "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"compshare\"\nbase_url = \"https://api.modelverse.cn/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.modelverse.cn/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-30",
+      "name": "Compshare Coding Plan",
+      "websiteUrl": "https://www.compshare.cn",
+      "apiKeyUrl": "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"compshare_coding\"\nbase_url = \"https://cp.compshare.cn/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://cp.compshare.cn/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-31",
+      "name": "CCSub",
+      "websiteUrl": "https://www.ccsub.net",
+      "apiKeyUrl": "https://www.ccsub.net/register?ref=Y6Z8DXEA",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"ccsub\"\nbase_url = \"https://www.ccsub.net/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://www.ccsub.net/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-32",
+      "name": "SSSAiCode",
+      "websiteUrl": "https://sssaicodeapi.com",
+      "apiKeyUrl": "https://sssaicodeapi.com/register?ref=DCP0SM",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"sssaicode\"\nbase_url = \"https://node-hk.sssaicodeapi.com/api/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://node-hk.sssaicodeapi.com/api/v1",
+        "https://node-hk.sssaiapi.com/api/v1",
+        "https://node-cf.sssaicodeapi.com/api/v1"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-33",
+      "name": "SoleAPI",
+      "websiteUrl": "https://soleapi.com",
+      "apiKeyUrl": "https://soleapi.com/r/ccswitch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"soleapi\"\nbase_url = \"https://soleapi.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://soleapi.com/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-34",
+      "name": "Micu",
+      "websiteUrl": "https://www.micuapi.ai",
+      "apiKeyUrl": "https://www.micuapi.ai/register?aff=aOYQ",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"micu\"\nbase_url = \"https://www.micuapi.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://www.micuapi.ai/v1"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-35",
+      "name": "RightCode",
+      "websiteUrl": "https://www.rightapi.ai",
+      "apiKeyUrl": "https://www.rightapi.ai/register?aff=CCSWITCH",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"rightcode\"\nbase_url = \"https://www.rightapi.ai/codex/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-36",
+      "name": "ETok.ai",
+      "websiteUrl": "https://etok.ai",
+      "apiKeyUrl": "https://etok.ai",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"etok\"\nbase_url = \"https://api.etok.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.etok.ai/v1"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-37",
+      "name": "Cubence",
+      "websiteUrl": "https://cubence.com",
+      "apiKeyUrl": "https://cubence.com/signup?code=CCSWITCH&source=ccs",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"cubence\"\nbase_url = \"https://api.cubence.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.cubence.com/v1",
+        "https://api-cf.cubence.com/v1",
+        "https://api-dmit.cubence.com/v1",
+        "https://api-bwg.cubence.com/v1"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-38",
+      "name": "CrazyRouter",
+      "websiteUrl": "https://www.crazyrouter.com",
+      "apiKeyUrl": "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"crazyrouter\"\nbase_url = \"https://cn.crazyrouter.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://cn.crazyrouter.com/v1"
+      ]
+    },
+    {
+      "id": "codex-preset-39",
+      "name": "DMXAPI",
+      "websiteUrl": "https://www.dmxapi.cn",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"dmxapi\"\nbase_url = \"https://www.dmxapi.cn/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://www.dmxapi.cn/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-40",
+      "name": "SudoCode.chat",
+      "websiteUrl": "https://sudocode.chat",
+      "apiKeyUrl": "https://sudocode.chat/sign-up?aff=CC-SWITCH&utm_source=cc-switch&utm_medium=sponsor&utm_campaign=ccswitch",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nreview_model = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"SudoCode\"\nbase_url = \"https://api.sudocode.chat/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.sudocode.chat/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-41",
+      "name": "SudoCode.us",
+      "websiteUrl": "https://sudocode.us",
+      "apiKeyUrl": "https://sudocode.us",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nreview_model = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\nmodel_verbosity = \"high\"\n\n[model_providers.custom]\nname = \"sudocode\"\nbase_url = \"https://sudocode.us/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://sudocode.us/v1",
+        "https://sudocode.run/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-42",
+      "name": "XycAi",
+      "websiteUrl": "https://xycai.us",
+      "apiKeyUrl": "https://xycai.us/register?aff=Uhu9",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"xycai\"\nbase_url = \"https://apicdn.xycai.us/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://apicdn.xycai.us/v1",
+        "https://apicdn.xyc.ai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-43",
+      "name": "Amux",
+      "websiteUrl": "https://amux.ai",
+      "apiKeyUrl": "https://amux.ai",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"amux\"\nbase_url = \"https://api.amux.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.amux.ai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-44",
+      "name": "AtlasCloud",
+      "websiteUrl": "https://www.atlascloud.ai/console/coding-plan",
+      "apiKeyUrl": "https://www.atlascloud.ai/console/coding-plan",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"zai-org/glm-5.2\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"AtlasCloud\"\nbase_url = \"https://api.atlascloud.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.atlascloud.ai/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "zai-org/glm-5.2",
+          "displayName": "GLM 5.2",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": false,
+        "supportsEffort": false,
+        "thinkingParam": "none",
+        "effortParam": "none",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-45",
+      "name": "Azure OpenAI",
+      "websiteUrl": "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/codex",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"Azure OpenAI\"\nbase_url = \"https://YOUR_RESOURCE_NAME.openai.azure.com/openai\"\nenv_key = \"OPENAI_API_KEY\"\nquery_params = { \"api-version\" = \"2025-04-01-preview\" }\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "isOfficial": true,
+      "endpointCandidates": [
+        "https://YOUR_RESOURCE_NAME.openai.azure.com/openai"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-46",
+      "name": "DeepSeek",
+      "websiteUrl": "https://platform.deepseek.com",
+      "apiKeyUrl": "https://platform.deepseek.com/api_keys",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-flash\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"deepseek\"\nbase_url = \"https://api.deepseek.com\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.deepseek.com"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "deepseek-v4-flash",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro",
+          "displayName": "DeepSeek V4 Pro",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-47",
+      "name": "Zhipu GLM",
+      "websiteUrl": "https://open.bigmodel.cn",
+      "apiKeyUrl": "https://www.bigmodel.cn/claude-code?ic=RRVJPB5SII",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"glm-5.3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"zhipu_glm\"\nbase_url = \"https://open.bigmodel.cn/api/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://open.bigmodel.cn/api/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "glm-5.3",
+          "displayName": "GLM-5.3",
+          "contextWindow": 1048576,
+          "supportsParallelToolCalls": true,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "max"
+        },
+        {
+          "model": "glm-5-turbo",
+          "displayName": "GLM-5-Turbo",
+          "contextWindow": 204800,
+          "supportsParallelToolCalls": true,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "max"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-48",
+      "name": "Zhipu GLM en",
+      "websiteUrl": "https://z.ai",
+      "apiKeyUrl": "https://z.ai/subscribe?ic=8JVLJQFSKB",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"glm-5.3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"zhipu_glm_en\"\nbase_url = \"https://api.z.ai/api/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.z.ai/api/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "glm-5.3",
+          "displayName": "GLM-5.3",
+          "contextWindow": 1048576,
+          "supportsParallelToolCalls": true,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "max"
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-49",
+      "name": "Baidu Qianfan Coding Plan",
+      "websiteUrl": "https://cloud.baidu.com/product/qianfan_modelbuilder",
+      "apiKeyUrl": "https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"qianfan-code-latest\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qianfan_coding\"\nbase_url = \"https://qianfan.baidubce.com/v2/coding\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://qianfan.baidubce.com/v2/coding"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "qianfan-code-latest",
+          "displayName": "Qianfan Code Latest",
+          "contextWindow": 131072,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": false,
+        "thinkingParam": "thinking",
+        "effortParam": "none",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-50",
+      "name": "Baidu Qianfan Token Plan",
+      "websiteUrl": "https://cloud.baidu.com/product/codingplan.html",
+      "apiKeyUrl": "https://console.bce.baidu.com/qianfan/resource/token-plan",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-pro\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qianfan_tokenplan\"\nbase_url = \"https://qianfan.baidubce.com/v2/tokenplan/personal\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://qianfan.baidubce.com/v2/tokenplan/personal"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "deepseek-v4-pro",
+          "displayName": "DeepSeek V4 Pro",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash-0731",
+          "displayName": "DeepSeek V4 Flash 0731",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ]
+        },
+        {
+          "model": "glm-5.2",
+          "displayName": "GLM-5.2",
+          "contextWindow": 1048576
+        },
+        {
+          "model": "glm-5.1",
+          "displayName": "GLM-5.1",
+          "contextWindow": 198000,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-k2.6",
+          "displayName": "Kimi K2.6",
+          "contextWindow": 262144
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "thinking",
+        "effortParam": "reasoning_effort",
+        "effortValueMode": "deepseek",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-51",
+      "name": "千问AI平台",
+      "websiteUrl": "https://platform.qianwenai.com/?utm_content=g_20000002971",
+      "apiKeyUrl": "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002972",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"qwen3.8-max\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qianwenai\"\nbase_url = \"https://dashscope.aliyuncs.com/compatible-mode/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "qwen3.8-max",
+          "displayName": "Qwen3.8 Max",
+          "contextWindow": 983616,
+          "supportsParallelToolCalls": false,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "xhigh"
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-52",
+      "name": "千问AI平台 Token Plan",
+      "websiteUrl": "https://platform.qianwenai.com/pricing/token-plan?utm_content=g_20000002977",
+      "apiKeyUrl": "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002978",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"qwen3.8-max\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qianwenai_token_plan\"\nbase_url = \"https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "qwen3.8-max",
+          "displayName": "Qwen3.8 Max",
+          "contextWindow": 983616,
+          "supportsParallelToolCalls": false,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "xhigh"
+        },
+        {
+          "model": "qwen3.8-flash",
+          "displayName": "Qwen3.8 Flash",
+          "contextWindow": 983616,
+          "supportsParallelToolCalls": false,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "xhigh"
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-53",
+      "name": "QwenCloud",
+      "websiteUrl": "https://home.qwencloud.com/?utm_content=g_20000002974",
+      "apiKeyUrl": "https://home.qwencloud.com/api-keys?utm_content=g_20000002975",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"qwen3.8-max\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qwencloud\"\nbase_url = \"https://dashscope-intl.aliyuncs.com/compatible-mode/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "qwen3.8-max",
+          "displayName": "Qwen3.8 Max",
+          "contextWindow": 983616,
+          "supportsParallelToolCalls": false,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "xhigh"
+        },
+        {
+          "model": "qwen3.8-flash",
+          "displayName": "Qwen3.8 Flash",
+          "contextWindow": 983616,
+          "supportsParallelToolCalls": false,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "xhigh"
+        },
+        {
+          "model": "qwen3.7-max",
+          "displayName": "Qwen3.7 Max",
+          "contextWindow": 1000000,
+          "inputModalities": [
+            "text"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-54",
+      "name": "QwenCloud For Coding",
+      "websiteUrl": "https://www.qwencloud.com",
+      "apiKeyUrl": "https://home.qwencloud.com/api-keys",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"qwen3.7-plus\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qwencloud_coding\"\nbase_url = \"https://coding-intl.dashscope.aliyuncs.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://coding-intl.dashscope.aliyuncs.com/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "qwen3.7-plus",
+          "displayName": "Qwen3.7 Plus",
+          "contextWindow": 1000000
+        },
+        {
+          "model": "qwen3.6-plus",
+          "displayName": "Qwen3.6 Plus",
+          "contextWindow": 1000000
+        },
+        {
+          "model": "qwen3-coder-plus",
+          "displayName": "Qwen3 Coder Plus",
+          "contextWindow": 131072,
+          "inputModalities": [
+            "text"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-55",
+      "name": "QwenCloud Token Plan",
+      "websiteUrl": "https://www.qwencloud.com/pricing/token-plan?utm_content=g_20000002980",
+      "apiKeyUrl": "https://home.qwencloud.com/api-keys?utm_content=g_20000002981",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"qwen3.8-max\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"qwencloud_token_plan\"\nbase_url = \"https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "qwen3.8-max",
+          "displayName": "Qwen3.8 Max",
+          "contextWindow": 983616,
+          "supportsParallelToolCalls": false,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "xhigh"
+        },
+        {
+          "model": "qwen3.8-flash",
+          "displayName": "Qwen3.8 Flash",
+          "contextWindow": 983616,
+          "supportsParallelToolCalls": false,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "xhigh"
+          ],
+          "defaultReasoningLevel": "xhigh"
+        },
+        {
+          "model": "qwen3.7-max",
+          "displayName": "Qwen3.7 Max",
+          "contextWindow": 1000000,
+          "inputModalities": [
+            "text"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-56",
+      "name": "Tencent Hunyuan",
+      "websiteUrl": "https://cloud.tencent.com/product/tokenhub",
+      "apiKeyUrl": "https://console.cloud.tencent.com/tokenhub/apikey",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"hy3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"hy3_tokenhub\"\nbase_url = \"https://tokenhub.tencentmaas.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://tokenhub.tencentmaas.com/v1",
+        "https://tokenhub.tencentmaas.cn/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "hy3",
+          "displayName": "Hy3",
+          "contextWindow": 256000,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "model": "hy3-preview",
+          "displayName": "Hy3 Preview",
+          "contextWindow": 256000,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "low",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-57",
+      "name": "Tencent Token Plan",
+      "websiteUrl": "https://cloud.tencent.com/product/tokenhub",
+      "apiKeyUrl": "https://console.cloud.tencent.com/tokenhub/tokenplan",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"tc-code-latest\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"tencent_token_plan\"\nbase_url = \"https://api.lkeap.cloud.tencent.com/plan/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.lkeap.cloud.tencent.com/plan/v3"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "tc-code-latest",
+          "displayName": "Auto",
+          "contextWindow": 196608,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash-202605",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro-202606",
+          "displayName": "DeepSeek V4 Pro",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "minimax-m2.7",
+          "displayName": "MiniMax M2.7",
+          "contextWindow": 200000,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5",
+          "displayName": "GLM-5",
+          "contextWindow": 200000,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5.1",
+          "displayName": "GLM-5.1",
+          "contextWindow": 200000,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5.2",
+          "displayName": "GLM-5.2",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "hy3",
+          "displayName": "Hy3",
+          "contextWindow": 256000,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "hy3-preview",
+          "displayName": "Hy3 Preview",
+          "contextWindow": 256000,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "thinking",
+        "effortParam": "reasoning_effort",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-58",
+      "name": "Tencent Token Plan (Intl)",
+      "websiteUrl": "https://www.tencentcloud.com/products/tokenhub",
+      "apiKeyUrl": "https://console.tencentcloud.com/tokenhub/tokenplan",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"auto\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"tencent_token_plan_intl\"\nbase_url = \"https://tokenhub-intl.tencentcloudmaas.com/plan/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://tokenhub-intl.tencentcloudmaas.com/plan/v3"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "auto",
+          "displayName": "Auto",
+          "contextWindow": 196608,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5.2",
+          "displayName": "GLM-5.2",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-k2.6",
+          "displayName": "Kimi K2.6",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro-202606",
+          "displayName": "DeepSeek V4 Pro",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash-202605",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "minimax-m3",
+          "displayName": "MiniMax M3",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "thinking",
+        "effortParam": "reasoning_effort",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-59",
+      "name": "Tencent Token Plan Enterprise Pro",
+      "websiteUrl": "https://cloud.tencent.com/product/tokenhub",
+      "apiKeyUrl": "https://console.cloud.tencent.com/tokenhub/tokenplan-e",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"auto\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"tencent_token_plan_enterprise_pro\"\nbase_url = \"https://tokenhub.tencentmaas.com/plan/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://tokenhub.tencentmaas.com/plan/v3",
+        "https://tokenhub-intl.tencentmaas.com/plan/v3"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "auto",
+          "displayName": "Auto",
+          "contextWindow": 196608,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5.3",
+          "displayName": "GLM-5.3",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        },
+        {
+          "model": "glm-5.2",
+          "displayName": "GLM-5.2",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5",
+          "displayName": "GLM-5",
+          "contextWindow": 200000,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5.1",
+          "displayName": "GLM-5.1",
+          "contextWindow": 200000,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5-turbo",
+          "displayName": "GLM-5 Turbo",
+          "contextWindow": 200000,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-k2.7-code",
+          "displayName": "Kimi K2.7 Code",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-k2.7-code-highspeed",
+          "displayName": "Kimi K2.7 Code HighSpeed",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-k2.6",
+          "displayName": "Kimi K2.6",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "minimax-m2.7",
+          "displayName": "MiniMax M2.7",
+          "contextWindow": 200000,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "minimax-m3",
+          "displayName": "MiniMax M3",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro",
+          "displayName": "DeepSeek V4 Pro",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash-0731",
+          "displayName": "DeepSeek V4 Flash 0731 GA",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro-0813",
+          "displayName": "DeepSeek V4 Pro 0813 GA",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash-202605",
+          "displayName": "DeepSeek V4 Flash Official",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro-202606",
+          "displayName": "DeepSeek V4 Pro Official",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "thinking",
+        "effortParam": "reasoning_effort",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-60",
+      "name": "Tencent Token Plan Enterprise Pro (Intl)",
+      "websiteUrl": "https://www.tencentcloud.com/products/tokenhub",
+      "apiKeyUrl": "https://console.tencentcloud.com/tokenhub/tokenplan-e",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"auto\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"tencent_token_plan_enterprise_pro_intl\"\nbase_url = \"https://tokenhub-intl.tencentcloudmaas.com/plan/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://tokenhub-intl.tencentcloudmaas.com/plan/v3",
+        "https://tokenhub.tencentcloudmaas.com/plan/v3"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "auto",
+          "displayName": "Auto",
+          "contextWindow": 196608,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "glm-5.3",
+          "displayName": "GLM-5.3",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        },
+        {
+          "model": "glm-5.2",
+          "displayName": "GLM-5.2",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "minimax-m3",
+          "displayName": "MiniMax M3",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-k2.7-code",
+          "displayName": "Kimi K2.7 Code",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "kimi-k2.7-code-highspeed",
+          "displayName": "Kimi K2.7 Code HighSpeed",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro",
+          "displayName": "DeepSeek V4 Pro",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash-0731",
+          "displayName": "DeepSeek V4 Flash 0731 GA",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro-0813",
+          "displayName": "DeepSeek V4 Pro 0813 GA",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash-202605",
+          "displayName": "DeepSeek V4 Flash Official",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro-202606",
+          "displayName": "DeepSeek V4 Pro Official",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "thinking",
+        "effortParam": "reasoning_effort",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-61",
+      "name": "Tencent Token Plan Enterprise Lite",
+      "websiteUrl": "https://cloud.tencent.com/product/tokenhub",
+      "apiKeyUrl": "https://console.cloud.tencent.com/tokenhub/tokenplan-e",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"auto\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"tencent_token_plan_enterprise_lite\"\nbase_url = \"https://tokenhub.tencentmaas.com/plan/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://tokenhub.tencentmaas.com/plan/v3",
+        "https://tokenhub-intl.tencentmaas.com/plan/v3"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "auto",
+          "displayName": "Auto",
+          "contextWindow": 196608,
+          "reasoningLevels": [
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "thinking",
+        "effortParam": "reasoning_effort",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-62",
+      "name": "Tencent Token Plan Enterprise Lite (Intl)",
+      "websiteUrl": "https://www.tencentcloud.com/products/tokenhub",
+      "apiKeyUrl": "https://console.tencentcloud.com/tokenhub/tokenplan-e",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"auto\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"tencent_token_plan_enterprise_lite_intl\"\nbase_url = \"https://tokenhub-intl.tencentcloudmaas.com/plan/v3\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://tokenhub-intl.tencentcloudmaas.com/plan/v3",
+        "https://tokenhub.tencentcloudmaas.com/plan/v3"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "auto",
+          "displayName": "Auto",
+          "contextWindow": 196608,
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "thinking",
+        "effortParam": "reasoning_effort",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-63",
+      "name": "StepFun",
+      "websiteUrl": "https://platform.stepfun.com/step-plan",
+      "apiKeyUrl": "https://platform.stepfun.com/interface-key",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"step-3.7-flash\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"stepfun\"\nbase_url = \"https://api.stepfun.com/step_plan/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.stepfun.com/step_plan/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "step-3.7-flash",
+          "displayName": "Step 3.7 Flash",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "model": "step-3.5-flash-2603",
+          "displayName": "Step 3.5 Flash 2603",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "model": "step-3.5-flash",
+          "displayName": "Step 3.5 Flash",
+          "contextWindow": 262144
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-64",
+      "name": "StepFun en",
+      "websiteUrl": "https://platform.stepfun.ai/step-plan",
+      "apiKeyUrl": "https://platform.stepfun.ai/interface-key",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"step-3.7-flash\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"stepfun_en\"\nbase_url = \"https://api.stepfun.ai/step_plan/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.stepfun.ai/step_plan/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "step-3.7-flash",
+          "displayName": "Step 3.7 Flash",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "model": "step-3.5-flash-2603",
+          "displayName": "Step 3.5 Flash 2603",
+          "contextWindow": 262144,
+          "reasoningLevels": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "model": "step-3.5-flash",
+          "displayName": "Step 3.5 Flash",
+          "contextWindow": 262144
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-65",
+      "name": "ModelScope",
+      "websiteUrl": "https://modelscope.cn",
+      "apiKeyUrl": "https://modelscope.cn/my/myaccesstoken",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"ZhipuAI/GLM-5.2\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"modelscope\"\nbase_url = \"https://api-inference.modelscope.cn/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api-inference.modelscope.cn/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "ZhipuAI/GLM-5.2",
+          "displayName": "ZhipuAI / GLM-5.2",
+          "contextWindow": 200000
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": false,
+        "thinkingParam": "enable_thinking",
+        "effortParam": "none",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-66",
+      "name": "Longcat",
+      "websiteUrl": "https://longcat.chat/platform",
+      "apiKeyUrl": "https://longcat.chat/platform/api_keys",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"LongCat-2.0\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"longcat\"\nbase_url = \"https://api.longcat.chat/openai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.longcat.chat/openai/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "LongCat-2.0",
+          "displayName": "LongCat 2.0",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-67",
+      "name": "MiniMax",
+      "websiteUrl": "https://platform.minimaxi.com",
+      "apiKeyUrl": "https://platform.minimaxi.com/subscribe/coding-plan",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"MiniMax-M3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"minimax\"\nbase_url = \"https://api.minimaxi.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.minimaxi.com/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "MiniMax-M3",
+          "displayName": "MiniMax-M3",
+          "contextWindow": 1000000,
+          "supportsParallelToolCalls": true,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "baseInstructions": "You are Codex, a coding agent based on MiniMax-M3. You and the user share the same workspace and collaborate to achieve the user's goals.",
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-68",
+      "name": "MiniMax en",
+      "websiteUrl": "https://platform.minimax.io",
+      "apiKeyUrl": "https://platform.minimax.io/subscribe/coding-plan",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"MiniMax-M3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"minimax_en\"\nbase_url = \"https://api.minimax.io/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.minimax.io/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "MiniMax-M3",
+          "displayName": "MiniMax-M3",
+          "contextWindow": 1000000,
+          "supportsParallelToolCalls": true,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "baseInstructions": "You are Codex, a coding agent based on MiniMax-M3. You and the user share the same workspace and collaborate to achieve the user's goals.",
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-69",
+      "name": "BaiLing",
+      "websiteUrl": "https://alipaytbox.yuque.com/sxs0ba/ling/get_started",
+      "apiKeyUrl": "https://ling.tbox.cn/open",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"Ling-2.6-1T\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"bailing\"\nbase_url = \"https://api.tbox.cn/api/llm/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.tbox.cn/api/llm/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "Ling-2.6-1T",
+          "displayName": "Ling-2.6-1T",
+          "contextWindow": 262144
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-70",
+      "name": "Xiaomi MiMo",
+      "websiteUrl": "https://platform.xiaomimimo.com",
+      "apiKeyUrl": "https://platform.xiaomimimo.com/#/console/api-keys",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"mimo-v2.5-pro\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"xiaomi_mimo\"\nbase_url = \"https://api.xiaomimimo.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.xiaomimimo.com/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "mimo-v2.5-pro",
+          "displayName": "MiMo V2.5 Pro",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "baseInstructions": "You are MiMo, an AI assistant developed by Xiaomi. Today's date: {date} {week}. Your knowledge cutoff date is December 2024.",
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "mimo-v2.5",
+          "displayName": "MiMo V2.5",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "baseInstructions": "You are MiMo, an AI assistant developed by Xiaomi. Today's date: {date} {week}. Your knowledge cutoff date is December 2024.",
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-71",
+      "name": "Xiaomi MiMo Token Plan (China)",
+      "websiteUrl": "https://platform.xiaomimimo.com/#/token-plan",
+      "apiKeyUrl": "https://platform.xiaomimimo.com/#/console/plan-manage",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"mimo-v2.5-pro\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"xiaomi_mimo_token_plan\"\nbase_url = \"https://token-plan-cn.xiaomimimo.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://token-plan-cn.xiaomimimo.com/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "mimo-v2.5-pro",
+          "displayName": "MiMo V2.5 Pro",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "baseInstructions": "You are MiMo, an AI assistant developed by Xiaomi. Today's date: {date} {week}. Your knowledge cutoff date is December 2024.",
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        },
+        {
+          "model": "mimo-v2.5",
+          "displayName": "MiMo V2.5",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "baseInstructions": "You are MiMo, an AI assistant developed by Xiaomi. Today's date: {date} {week}. Your knowledge cutoff date is December 2024.",
+          "reasoningLevels": [
+            "none",
+            "high"
+          ]
+        }
+      ],
+      "category": "cn_official"
+    },
+    {
+      "id": "codex-preset-72",
+      "name": "Novita AI",
+      "websiteUrl": "https://novita.ai",
+      "apiKeyUrl": "https://novita.ai",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"zai-org/glm-5.3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"novita\"\nbase_url = \"https://api.novita.ai/openai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.novita.ai/openai/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "zai-org/glm-5.3",
+          "displayName": "GLM-5.3",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "high"
+          ]
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": false,
+        "supportsEffort": false,
+        "thinkingParam": "none",
+        "effortParam": "none",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-73",
+      "name": "xAI (Grok)",
+      "websiteUrl": "https://x.ai/api",
+      "apiKeyUrl": "https://console.x.ai",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"grok-4.5\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"xai\"\nbase_url = \"https://api.x.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.x.ai/v1"
+      ],
+      "apiFormat": "openai_responses",
+      "modelCatalog": [
+        {
+          "model": "grok-4.5",
+          "displayName": "Grok 4.5",
+          "contextWindow": 500000,
+          "supportsParallelToolCalls": true,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        }
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-74",
+      "name": "xAI (Grok) OAuth",
+      "websiteUrl": "https://x.ai/grok",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"grok-4.5\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"xai\"\nbase_url = \"https://api.x.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = false",
+      "apiFormat": "openai_responses",
+      "providerType": "xai_oauth",
+      "requiresOAuth": true,
+      "modelCatalog": [
+        {
+          "model": "grok-4.5",
+          "displayName": "Grok 4.5",
+          "contextWindow": 500000,
+          "supportsParallelToolCalls": true,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        }
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-75",
+      "name": "Nvidia",
+      "websiteUrl": "https://build.nvidia.com",
+      "apiKeyUrl": "https://build.nvidia.com/settings/api-keys",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"moonshotai/kimi-k3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"nvidia\"\nbase_url = \"https://integrate.api.nvidia.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://integrate.api.nvidia.com/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "moonshotai/kimi-k3",
+          "displayName": "Kimi K3",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": false,
+        "supportsEffort": true,
+        "thinkingParam": "none",
+        "effortParam": "reasoning_effort",
+        "effortValueMode": "passthrough",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-76",
+      "name": "OpenCode Go",
+      "websiteUrl": "https://opencode.ai/go",
+      "apiKeyUrl": "https://opencode.ai/go?ref=2YTRG2NGTX",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"glm-5.3\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"opencode_go\"\nbase_url = \"https://opencode.ai/zen/go/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://opencode.ai/zen/go/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "glm-5.3",
+          "displayName": "GLM 5.3",
+          "contextWindow": 1000000,
+          "inputModalities": [
+            "text"
+          ],
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        },
+        {
+          "model": "glm-5.3-flash",
+          "displayName": "GLM 5.3 Flash",
+          "contextWindow": 1000000,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultReasoningLevel": "high"
+        },
+        {
+          "model": "kimi-k3",
+          "displayName": "Kimi K3",
+          "contextWindow": 1048576,
+          "inputModalities": [
+            "text",
+            "image"
+          ],
+          "reasoningLevels": [
+            "max"
+          ]
+        },
+        {
+          "model": "deepseek-v4-pro",
+          "displayName": "DeepSeek V4 Pro",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "high",
+            "max"
+          ]
+        },
+        {
+          "model": "deepseek-v4-flash",
+          "displayName": "DeepSeek V4 Flash",
+          "contextWindow": 1048576,
+          "reasoningLevels": [
+            "low",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "model": "mimo-v2.5-pro",
+          "displayName": "MiMo V2.5 Pro",
+          "contextWindow": 1048576
+        }
+      ],
+      "codexChatReasoning": {
+        "supportsThinking": true,
+        "supportsEffort": true,
+        "thinkingParam": "none",
+        "effortParam": "reasoning_effort",
+        "effortValueMode": "zen",
+        "outputFormat": "reasoning_content"
+      },
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-77",
+      "name": "AiHubMix",
+      "websiteUrl": "https://aihubmix.com",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"aihubmix\"\nbase_url = \"https://aihubmix.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://aihubmix.com/v1",
+        "https://api.aihubmix.com/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-78",
+      "name": "CherryIN",
+      "websiteUrl": "https://open.cherryin.ai",
+      "apiKeyUrl": "https://open.cherryin.ai/console/token",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"openai/gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"cherryin\"\nbase_url = \"https://open.cherryin.net/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://open.cherryin.net/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-79",
+      "name": "RelaxyCode",
+      "websiteUrl": "https://www.relaxycode.com",
+      "apiKeyUrl": "https://www.relaxycode.com/register",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"relaxycode\"\nbase_url = \"https://www.relaxycode.com/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-80",
+      "name": "E-FlowCode",
+      "websiteUrl": "https://e-flowcode.cc",
+      "apiKeyUrl": "https://e-flowcode.cc",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\npersonality = \"pragmatic\"\n\n[model_providers.custom]\nname = \"E-FlowCode\"\nbase_url = \"https://e-flowcode.cc/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 9000000",
+      "endpointCandidates": [
+        "https://e-flowcode.cc/v1"
+      ],
+      "category": "third_party"
+    },
+    {
+      "id": "codex-preset-81",
+      "name": "PIPELLM",
+      "websiteUrl": "https://code.pipellm.ai",
+      "apiKeyUrl": "https://code.pipellm.ai/login?ref=uvw650za",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"medium\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"PIPELLM\"\nwire_api = \"responses\"\nrequires_openai_auth = true\nbase_url = \"https://cc-api.pipellm.ai/v1\"",
+      "endpointCandidates": [
+        "https://cc-api.pipellm.ai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-82",
+      "name": "OpenRouter",
+      "websiteUrl": "https://openrouter.ai",
+      "apiKeyUrl": "https://openrouter.ai/keys",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"openrouter\"\nbase_url = \"https://openrouter.ai/api/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-83",
+      "name": "TheRouter",
+      "websiteUrl": "https://therouter.ai",
+      "apiKeyUrl": "https://dashboard.therouter.ai",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"openai/gpt-5.3-codex\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"therouter\"\nbase_url = \"https://api.therouter.ai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.therouter.ai/v1"
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-84",
+      "name": "JieKou AI",
+      "websiteUrl": "https://jiekou.ai/#model-library",
+      "apiKeyUrl": "https://jiekou.ai/settings/key-management",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"claude-fable-5\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"jiekou\"\nbase_url = \"https://api.jiekou.ai/openai/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.jiekou.ai/openai/v1"
+      ],
+      "apiFormat": "openai_chat",
+      "modelCatalog": [
+        {
+          "model": "claude-fable-5",
+          "displayName": "Claude Fable 5",
+          "contextWindow": 1000000,
+          "inputModalities": [
+            "text",
+            "image"
+          ]
+        }
+      ],
+      "category": "aggregator"
+    },
+    {
+      "id": "codex-preset-85",
+      "name": "AICodeWith",
+      "websiteUrl": "https://aicodewith.ai",
+      "apiKeyUrl": "https://aicodewith.ai/login?tab=register",
+      "auth": {
+        "OPENAI_API_KEY": ""
+      },
+      "config": "model_provider = \"custom\"\nmodel = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\ndisable_response_storage = true\n\n[model_providers.custom]\nname = \"aicodewith\"\nbase_url = \"https://api.aicodewith.ai/chatgpt/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true",
+      "endpointCandidates": [
+        "https://api.aicodewith.ai/chatgpt/v1"
+      ],
+      "category": "aggregator"
+    }
+  ]
+}

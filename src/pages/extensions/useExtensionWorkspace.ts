@@ -1,16 +1,68 @@
-import type { AppKind, ExtensionListItem } from "../../api/client";
+import type { AppKind, ExtensionDraft, ExtensionListItem } from "../../api/client";
 import type { ExtensionsDeps } from "../../app/extensions/extension-ops";
 import {
   clientBindingState,
   clientDeploymentOperations,
   clientDeployState,
+  EXTENSION_CLIENTS,
 } from "../../app/extensions/deployment-state";
 import { useDiscoverScan } from "../../app/extensions/useDiscoverScan";
 import { useExtensions } from "../../app/useExtensions";
-import { matchesClient, searchNeedle } from "./list-filters";
-import { useExtensionPlans } from "./useExtensionPlans";
+import { toast } from "../../components/use-toast";
+import { searchNeedle } from "./list-filters";
+import { useExtensionApplies } from "./useExtensionApplies";
 import { useExtensionView, type ExtensionNavigation } from "./useExtensionView";
 import { useSkillUpdates } from "./useSkillUpdates";
+
+function definitionActions(
+  ext: ReturnType<typeof useExtensions>,
+  applies: ReturnType<typeof useExtensionApplies>,
+  nav: ReturnType<typeof useExtensionView>,
+) {
+  const install = (definitionId: string, clients: AppKind[]) => applies.run({
+    operations: [{ operation: "install", definitionId,
+      targets: clients.map((client) => ({ scope: "app" as const, client })) }],
+  });
+  const edit = async (item: ExtensionListItem) => {
+    if (item.kind === "skill") nav.showDefinition(item.id, "skill", true);
+    else {
+      const envelope = await ext.loadMcpEdit(item.id);
+      if (envelope) nav.setDialog({ type: "mcpEditor", envelope });
+    }
+  };
+  const deleteDefinition = async (item: ExtensionListItem): Promise<boolean> => {
+    if (item.bindings.length > 0) {
+      const result = await applies.run({
+        operations: item.bindings.map((binding) => ({ operation: "remove", bindingId: binding.id })),
+      });
+      if (result.status !== "applied") return false;
+    }
+    const removed = await ext.removeDefinition(item.id);
+    if (removed) nav.closeDialog();
+    return removed === true;
+  };
+  const importCandidate = async (digest: string, name: string, hostScoped: AppKind | null) => {
+    const definition = await ext.importCandidate(digest, name, hostScoped);
+    if (!definition) return null;
+    const result = await install(definition.id, hostScoped ? [hostScoped] : EXTENSION_CLIENTS);
+    if (result.status !== "applied") toast({
+      kind: "warning", title: "Skill 已入库，客户端部署未完成",
+      description: "可从扩展详情重新部署当前版本。",
+    });
+    return definition;
+  };
+  const createMcp = async (draft: ExtensionDraft, clients: AppKind[]): Promise<boolean> => {
+    const definition = await ext.saveDefinition(draft);
+    if (!definition) return false;
+    if (clients.length > 0 && (await install(definition.id, clients)).status !== "applied") {
+      nav.showDefinition(definition.id, "mcp");
+      return false;
+    }
+    nav.closeDialog();
+    return true;
+  };
+  return { edit, deleteDefinition, importCandidate, createMcp };
+}
 
 export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation) {
   const ext = useExtensions(deps);
@@ -20,13 +72,12 @@ export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation
     onError: deps.onError,
   });
   const nav = useExtensionView(deps);
-  const plans = useExtensionPlans(ext, discovery);
-  const updates = useSkillUpdates(ext, plans);
+  const applies = useExtensionApplies(ext, discovery);
+  const updates = useSkillUpdates(ext, applies);
   const items = ext.workspace?.items ?? [];
   const kindItems = items.filter((item) => item.kind === nav.kind);
   const visible = kindItems.filter(
     (item) =>
-      (nav.client === "all" || matchesClient(item, nav.client)) &&
       searchNeedle(item).toLowerCase().includes(nav.search.trim().toLowerCase()),
   );
   const projectNames = new Map(ext.workspace?.projects.map((project) => [project.id, project.displayName]));
@@ -39,27 +90,21 @@ export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation
       ),
     ),
   );
-  const writeBlocked = deps.busy || !ext.workspace || ext.workspace.recoveryRequired.length > 0;
+  const busy = ext.busy || applies.phase !== null;
+  const writeBlocked = busy || !ext.workspace || ext.workspace.recoveryRequired.length > 0;
   const toggleClient = (item: ExtensionListItem, client: AppKind) =>
-    plans.prepare({
+    applies.run({
       operations: clientDeploymentOperations([item], client, !clientBindingState(item, client).all),
     });
   const toggleAll = (client: AppKind) =>
-    plans.prepare({
+    applies.run({
       operations: clientDeploymentOperations(kindItems, client, !clientDeployState(kindItems, client).all),
     });
-  const edit = async (item: ExtensionListItem) => {
-    if (item.kind === "skill") nav.showDefinition(item.id, "skill", true);
-    else {
-      const envelope = await ext.loadMcpEdit(item.id);
-      if (envelope) nav.setDialog({ type: "mcpEditor", envelope });
-    }
-  };
   return {
     ext,
-    discovery,
+    discovery: { ...discovery, repairPreparing: applies.pendingKind === "repair" && applies.phase === "preparing" },
     nav,
-    plans,
+    applies,
     updates,
     items,
     kindItems,
@@ -67,11 +112,11 @@ export function useExtensionWorkspace(deps: ExtensionsDeps & ExtensionNavigation
     projectNames,
     resourceNames,
     bindingInfo,
-    busy: deps.busy,
+    busy,
     writeBlocked,
     toggleClient,
     toggleAll,
-    edit,
+    ...definitionActions(ext, applies, nav),
   };
 }
 

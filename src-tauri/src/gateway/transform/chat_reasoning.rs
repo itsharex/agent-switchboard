@@ -75,17 +75,27 @@ pub(super) fn render(
     else {
         return error("Chat 上游未声明 Codex reasoning.effort 方言");
     };
+    if thinking_parameter == CodexChatThinkingParameter::None
+        && effort_parameter == CodexChatEffortParameter::None
+    {
+        // Fixed-reasoning presets expose no toggle. Never acknowledge an off
+        // request while the upstream would keep thinking.
+        if !directive.enabled {
+            return error("所选 Chat 上游的固定推理模式不能关闭");
+        }
+        if map_effort(&directive.effort, CodexChatEffortMode::Passthrough).is_none() {
+            return error("Codex 推理档位不受支持");
+        }
+        return Ok(());
+    }
     let root = value
         .as_object_mut()
         .ok_or_else(|| TransformError("转换后的 Chat 请求必须是对象".to_string()))?;
     render_thinking(root, thinking_parameter, directive.enabled);
-    render_effort(
-        root,
-        effort_parameter,
-        effort_mode,
-        &directive.effort,
-        directive.enabled,
-    )
+    if !directive.enabled {
+        return render_disabled_effort(root, thinking_parameter, effort_parameter, effort_mode);
+    }
+    render_effort(root, effort_parameter, effort_mode, &directive.effort)
 }
 
 fn render_thinking(
@@ -110,19 +120,39 @@ fn render_thinking(
     }
 }
 
+fn render_disabled_effort(
+    root: &mut Map<String, Value>,
+    thinking: CodexChatThinkingParameter,
+    parameter: CodexChatEffortParameter,
+    mode: CodexChatEffortMode,
+) -> Result<(), TransformError> {
+    match parameter {
+        CodexChatEffortParameter::ReasoningObject => {
+            root.insert("reasoning".to_string(), json!({"effort":"none"}));
+        }
+        CodexChatEffortParameter::ReasoningEffort
+            if thinking == CodexChatThinkingParameter::None =>
+        {
+            // Restricted effort enums require a declared toggle to express off.
+            if !matches!(
+                mode,
+                CodexChatEffortMode::Passthrough | CodexChatEffortMode::Catalog
+            ) {
+                return error("所选 Chat effort 方言无法表达关闭推理；请配置明确的思考开关");
+            }
+            root.insert("reasoning_effort".to_string(), json!("none"));
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 fn render_effort(
     root: &mut Map<String, Value>,
     parameter: CodexChatEffortParameter,
     mode: CodexChatEffortMode,
     effort: &str,
-    enabled: bool,
 ) -> Result<(), TransformError> {
-    if !enabled {
-        if parameter == CodexChatEffortParameter::ReasoningObject {
-            root.insert("reasoning".to_string(), json!({"effort":"none"}));
-        }
-        return Ok(());
-    }
     let Some(effort) = map_effort(effort, mode) else {
         return error(format!("reasoning.effort={effort} 不受所选 Chat 上游支持"));
     };
@@ -140,7 +170,7 @@ fn render_effort(
 
 fn map_effort(effort: &str, mode: CodexChatEffortMode) -> Option<String> {
     let mapped = match mode {
-        CodexChatEffortMode::Passthrough => match effort {
+        CodexChatEffortMode::Passthrough | CodexChatEffortMode::Catalog => match effort {
             "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra" => effort,
             _ => return None,
         },

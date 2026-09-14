@@ -46,3 +46,8 @@ export function getSessionMessages(app: AppKind, sessionId: string): Promise<Ses
 export function resumeSession(app: AppKind, sessionId: string): Promise<SessionResume> {
   return invoke<SessionResume>("resume_session", { app, sessionId });
 }
+
+/** Permanently removes the local session record the backend resolves itself. */
+export function deleteSession(app: AppKind, sessionId: string): Promise<void> {
+  return invoke<void>("delete_session", { app, sessionId });
+}

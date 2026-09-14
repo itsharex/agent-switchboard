@@ -4,15 +4,66 @@
 //! inside a single poll call between the vendor exchange and the native
 //! credential write, and are never part of a response, log entry, or error.
 
-use super::error::{blocking, CommandError};
+use super::error::{blocking, operation_error, state, CommandError};
+use super::switching;
 use crate::local_state::LocalState;
 use crate::official_login::{
     self, claude, codex, credentials, LoginSession, OfficialLoginPhase, OfficialLoginStart,
     OfficialLoginStatus,
 };
 use crate::runtime_log::RuntimeLogAction;
-use asb_core::contracts::AppKind;
+use asb_core::contracts::{AppKind, ProviderRecord};
 use std::time::Instant;
+
+/// Read-only native official-login availability. Third-party Codex routes
+/// do not depend on this status; managed bindings are resolved per profile.
+#[tauri::command]
+pub async fn codex_login_blocker(app: tauri::AppHandle) -> Result<Option<String>, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let target = state
+            .target(AppKind::Codex)
+            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+        Ok(
+            crate::official_login::observation::observe_codex_login(&target)
+                .require()
+                .err(),
+        )
+    })
+    .await
+}
+
+/// Completes the login → record continuity: a finished official login must
+/// leave the Codex official-login row enableable. Creates the canonical
+/// record when absent; an existing record is returned untouched.
+#[tauri::command]
+pub async fn ensure_codex_official_record(
+    app: tauri::AppHandle,
+) -> Result<ProviderRecord, CommandError> {
+    let refresh_app = app.clone();
+    let result = blocking(move || {
+        let state = state(&app)?;
+        switching::ensure_profile_save_recovered(&app)?;
+        state
+            .configuration()
+            .ensure_codex_official_record()
+            .map_err(|error| operation_error("codex-official-record-ensure-failed", error))
+    })
+    .await;
+    // Only an actual creation is a profile write worth logging; the
+    // idempotent no-op stays out of the runtime history.
+    match &result {
+        Ok((_, true)) => {
+            crate::runtime_log::record_success(RuntimeLogAction::ProfileCreated);
+            crate::tray::refresh(&refresh_app);
+        }
+        Ok((_, false)) => {}
+        Err(error) => {
+            crate::runtime_log::record_failure(RuntimeLogAction::ProfileCreated, error.code)
+        }
+    }
+    result.map(|(record, _)| record)
+}
 
 /// Starts one official login per client. A live login for the same client is
 /// rejected; a leftover past its expiry window — whose listener already ended
@@ -175,8 +226,9 @@ fn poll_claude(
                 &listener.redirect_uri,
             )
             .and_then(|tokens| {
-                LocalState::claude_credentials_path()
-                    .and_then(|path| credentials::write_claude_credentials(&path, &tokens))
+                LocalState::claude_credentials_path().and_then(|path| {
+                    official_login::claude_credentials::write_claude_credentials(&path, &tokens)
+                })
             });
             // The worker ended its listener when it stored the callback, so
             // dropping the session is all the teardown needed.

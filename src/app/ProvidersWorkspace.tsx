@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { CodexProvidersPage } from "../pages/CodexProvidersPage";
 import { ProviderImportPage } from "../pages/ProviderImportPage";
 import { ProvidersPage } from "../pages/ProvidersPage";
@@ -5,12 +6,15 @@ import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
   const importing = model.providerView.kind === "import";
-  const { snapshot, appFilter, activeProfileId, providers, switchPreview, operations, appSettingsState, busy } = model;
+  const { snapshot, appFilter, activeProfileId, providers, switchPreview, appSettingsState, busy } = model;
   const { discoveryState, ccImport } = model;
   const editorApp = providers.editorSession?.app ?? appFilter;
   const userConfigRoute = snapshot.statuses?.find((status) => status.app === editorApp)?.route ?? null;
   const codexEditorSession = providers.editorSession?.app === "codex" ? providers.editorSession : null;
   const claudeEditorSession = providers.editorSession?.app === "claude" ? providers.editorSession : null;
+  useEffect(() => {
+    if (!active || importing || appFilter !== "claude" || claudeEditorSession) switchPreview.retractPreview();
+  }, [active, importing, appFilter, claudeEditorSession, switchPreview.retractPreview]);
   return (
     <>
       {importing && <div hidden={!active}>
@@ -39,6 +43,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onSwitchAccessMode={providers.switchCodexAccessMode}
         onSwitchClient={providers.newEditorFor}
         onSaveOfficialQuotaInterval={providers.saveOfficialQuotaInterval}
+        loginBlocker={snapshot.loginBlocker}
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks}
         userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []} />
     <ProvidersPage active={active && !importing && appFilter === "claude"} view={model.providerView} onViewChange={model.setProviderView}
@@ -62,10 +67,9 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       }} onSaveQuotaInterval={providers.saveOfficialQuotaInterval}
       onSelect={switchPreview.selectProfile} onReorder={providers.dragReorderProfiles}
       onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
-      onActivate={switchPreview.previewProfile} onTogglePreview={switchPreview.togglePreviewProfile}
+      onActivate={switchPreview.activateProfile} onTogglePreview={switchPreview.togglePreviewProfile}
       onEdit={providers.openEditor}
-      onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })}
-      onRequestSwitch={() => operations.setConfirmingSwitch(true)} onCancelPreview={switchPreview.retractPreview} />
+      onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })} />
     </>
   );
 }

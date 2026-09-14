@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 fn skill_definition() -> ExtensionDefinition {
     ExtensionDefinition {
         schema_version: EXTENSIONS_SCHEMA_VERSION,
+        mcp_metadata: None,
         id: "skill-1".to_string(),
         name: "接口规范".to_string(),
         revision: 1,

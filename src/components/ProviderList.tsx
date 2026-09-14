@@ -5,8 +5,8 @@ import {
   ConnectivityIcon,
   EditIcon,
   EyeOffIcon,
-  PlayIcon,
   PreviewIcon,
+  TrashIcon,
   UsageIcon,
 } from "./icons";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
@@ -17,7 +17,6 @@ import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
 import { formatUsageSummary } from "../lib/usage-format";
 import { Tooltip } from "./Tooltip";
-import { ProviderMoreActions } from "./ProviderMoreActions";
 import { ProviderTestPanel } from "./ProviderTestPanel";
 
 interface Props {
@@ -39,8 +38,7 @@ interface Props {
   onToggleUsage?: (profile: ProviderProfile) => void;
   /** Persists the official Codex quota panel's auto-refresh interval. */
   onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
-  /** Opens the preview panel for the profile; the write itself still needs
-   * the explicit confirm step (user decision 2026-08-28). */
+  /** Requests a fresh candidate and the explicit write confirmation. */
   onActivate?: (profile: ProviderProfile) => void;
   onPreview?: (profile: ProviderProfile) => void;
   onEdit?: (profile: ProviderProfile) => void;
@@ -187,18 +185,16 @@ function ProviderRow({
       selected={selected}
       previewOpen={previewOpen}
       sortable={sortable}
-      onSelect={() => onSelect(profile.id)}
       meta={meta}
       metaWithUsage={Boolean(usage && !usageOpen)}
-      primaryAction={onActivate && !active ? (
+      primaryAction={onActivate ? (
         <Tooltip label={`启用 ${profile.name}`}>
           <Button
             variant="primary"
             className="asb-row-activate"
             aria-label={`启用 ${profile.name}`}
-            onClick={() => onActivate(profile)}
+            onClick={() => { onSelect(profile.id); onActivate(profile); }}
           >
-            <PlayIcon size={15} />
             启用
           </Button>
         </Tooltip>
@@ -210,7 +206,7 @@ function ProviderRow({
             className={`asb-row-activate${reloginOpen ? " is-active" : ""}`}
             aria-label={reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`}
             aria-expanded={reloginOpen}
-            onClick={() => setReloginOpen((open) => !open)}
+            onClick={() => { onSelect(profile.id); setReloginOpen((open) => !open); }}
           >
             {reloginOpen ? "收起登录" : "重新登录"}
           </Button>
@@ -223,7 +219,7 @@ function ProviderRow({
               <Button
                 variant="icon"
                 aria-label={`编辑 ${profile.name}`}
-                onClick={() => onEdit(profile)}
+                onClick={() => { onSelect(profile.id); onEdit(profile); }}
               >
                 <EditIcon />
               </Button>
@@ -236,7 +232,7 @@ function ProviderRow({
                 className={previewOpen ? "is-active" : undefined}
                 aria-label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}
                 aria-expanded={previewOpen}
-                onClick={() => onPreview(profile)}
+                onClick={() => { onSelect(profile.id); onPreview(profile); }}
               >
                 {previewOpen ? <EyeOffIcon /> : <PreviewIcon />}
               </Button>
@@ -251,7 +247,7 @@ function ProviderRow({
                 aria-label={testLabel}
                 aria-controls={testId}
                 aria-expanded={testOpen}
-                onClick={() => setTestOpen((open) => !open)}
+                onClick={() => { onSelect(profile.id); setTestOpen((open) => !open); }}
               >
                 <ConnectivityIcon />
               </Button>
@@ -265,7 +261,7 @@ function ProviderRow({
                 aria-label={quotaLabel}
                 aria-controls={`codex-official-quota-${profile.id}`}
                 aria-expanded={quotaOpen}
-                onClick={() => onToggleUsage(profile)}
+                onClick={() => { onSelect(profile.id); onToggleUsage(profile); }}
               >
                 <UsageIcon />
               </Button>
@@ -280,6 +276,7 @@ function ProviderRow({
                 aria-controls={hasUsageQuery ? `provider-usage-${profile.id}` : undefined}
                 aria-expanded={hasUsageQuery ? usageOpen : undefined}
                 onClick={() => {
+                  onSelect(profile.id);
                   if (hasUsageQuery) onToggleUsage(profile);
                   else onConfigureUsage?.(profile);
                 }}
@@ -288,7 +285,17 @@ function ProviderRow({
               </Button>
             </Tooltip>
           )}
-          {onDelete && <ProviderMoreActions name={profile.name} onDelete={() => onDelete(profile)} />}
+          {onDelete && (
+            <Tooltip label={`删除 ${profile.name}`}>
+              <Button
+                variant="icon"
+                aria-label={`删除 ${profile.name}`}
+                onClick={() => { onSelect(profile.id); onDelete(profile); }}
+              >
+                <TrashIcon />
+              </Button>
+            </Tooltip>
+          )}
         </>
       ) : undefined}
     >

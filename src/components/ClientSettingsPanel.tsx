@@ -3,7 +3,7 @@ import type { AppKind, SettingValue, ConfigFileStatus } from "../api/client";
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
 import { Button } from "./Button";
 import { ClientPicker } from "./ClientPicker";
-import { CodePreview } from "./CodePreview";
+import { EditableCodePreview } from "./EditableCodePreview";
 import { OfficialSettingsDirectory } from "./OfficialSettingsDirectory";
 import { SettingsFields } from "./SettingsFields";
 
@@ -22,6 +22,7 @@ interface ClientSettingsPanelProps {
   onOpenProviders: () => void;
   onRetryLoad: (app: AppKind) => void;
   onPreview: (app: AppKind) => void;
+  onPreviewContentChange: (app: AppKind, content: string) => void;
   /** Codex's directly-applied subagent resource sits after model behavior,
    * outside the application-owned client-preference store. */
   subagentSettings?: ReactNode;
@@ -47,6 +48,12 @@ function clientConfigStatus(
 }
 
 function actionStatus(props: ClientSettingsPanelProps) {
+  if (props.editorState.parseError) {
+    return { message: "客户端配置片段有错误，修正后才能保存", error: true };
+  }
+  if (props.editorState.parsing) {
+    return { message: "正在同步客户端配置", error: false };
+  }
   if (
     props.editorState.phase === "dirty" ||
     props.editorState.phase === "saveError"
@@ -80,17 +87,18 @@ function ClientSettingsPreview({
   busy,
   app,
   onPreview,
+  onPreviewContentChange,
 }: ClientSettingsPanelProps) {
   const [open, setOpen] = useState(false);
   const previewId = useId();
   const visible = open && state.preview !== undefined;
   const label = state.previewing
-    ? "正在生成预览"
+    ? "正在生成配置编辑器"
     : visible
-      ? "收起客户端配置预览"
+      ? "收起客户端配置编辑器"
       : state.preview
-        ? "展开客户端配置预览"
-        : "查看客户端配置预览";
+        ? "展开客户端配置编辑器"
+        : "编辑客户端配置片段";
   return (
     <div className="asb-settings-preview">
       <div className="asb-form-actions">
@@ -109,16 +117,23 @@ function ClientSettingsPreview({
         </Button>
       </div>
       {visible && state.preview && (
-        <div id={previewId} role="region" aria-label="客户端配置预览">
-          <CodePreview
+        <div id={previewId} role="region" aria-label="客户端配置编辑器">
+          <EditableCodePreview
             target={state.preview.target}
             content={state.preview.content}
+            disabled={busy || state.phase === "saving"}
+            onChange={(content) => onPreviewContentChange(app, content)}
           />
         </div>
       )}
       {state.previewError && (
         <p className="asb-field-error" role="alert">
           无法生成客户端配置预览：{state.previewError.message}
+        </p>
+      )}
+      {state.parseError && (
+        <p className="asb-field-error" role="alert">
+          客户端配置片段有错误：{state.parseError.message}
         </p>
       )}
     </div>
@@ -128,7 +143,8 @@ function ClientSettingsPreview({
 function ClientPreferenceActions(props: ClientSettingsPanelProps) {
   const { editorState: state, app, busy, hasActiveProvider } = props;
   const status = actionStatus(props);
-  const canSave = state.phase === "dirty" || state.phase === "saveError";
+  const canSave = !state.parsing && !state.parseError &&
+    (state.phase === "dirty" || state.phase === "saveError");
   const providerHelpId = useId();
   const previewHelp = !hasActiveProvider
     ? "当前客户端没有已启用的供应商；请前往供应商页选择并启用。"
@@ -162,7 +178,7 @@ function ClientPreferenceActions(props: ClientSettingsPanelProps) {
             </Button>
             <Button
               variant="primary"
-              disabled={busy || previewHelp !== null}
+              disabled={busy || state.parsing || Boolean(state.parseError) || previewHelp !== null}
               aria-describedby={previewHelp ? providerHelpId : undefined}
               onClick={() => props.onSaveAndPreview(app)}
             >
@@ -225,6 +241,7 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
           specs={state.editor.specs}
           groups={modelBehaviorGroups}
           values={state.draft}
+          baselineValues={state.editor.settings.settings}
           busy={working}
           onChange={(key, value) => props.onValueChange(app, key, value)}
           onResetGroup={(group) => props.onResetGroup(app, group)}
@@ -236,6 +253,7 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
           specs={state.editor.specs}
           groups={remainingGroups}
           values={state.draft}
+          baselineValues={state.editor.settings.settings}
           busy={working}
           onChange={(key, value) => props.onValueChange(app, key, value)}
           onResetGroup={(group) => props.onResetGroup(app, group)}

@@ -1,14 +1,16 @@
 use super::*;
+mod parity;
+mod gemini;
+mod native;
+mod runner;
 
 #[test]
-#[ignore = "requires an installed Claude Code CLI and an isolated loopback sandbox"]
+#[ignore = "requires the pinned Claude Code CLI; configuration, credentials and upstreams are isolated"]
 fn actual_claude_code_completes_through_the_isolated_gateway() {
-    Command::new("claude.cmd")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .expect("the explicit black-box test requires the Claude Code CLI");
+    assert!(
+        runner::binary().is_file(),
+        "the pinned isolated Claude CLI must be installed"
+    );
 
     let upstream = Server::http(("127.0.0.1", 0)).expect("upstream listener");
     let upstream_url = endpoint(&upstream);
@@ -18,14 +20,7 @@ fn actual_claude_code_completes_through_the_isolated_gateway() {
 
     let directory = tempfile::tempdir().expect("temporary sandbox root");
     let state = LocalState::from_root(directory.path().join("state"));
-    let profile = sandbox_profile(
-        &state,
-        AppKind::Claude,
-        "Claude Code CLI black-box sandbox",
-        upstream_url,
-        upstream_key.clone(),
-        UpstreamProtocol::ChatCompletions,
-    );
+    let profile = known_reasoning_profile(&state, &upstream_url, &upstream_key);
     let gateway = GatewayController::start(&state);
     let projection = gateway
         .project(&SwitchPlan::direct(
@@ -37,7 +32,16 @@ fn actual_claude_code_completes_through_the_isolated_gateway() {
     let (claude_config, workdir, home) =
         prepare_client(directory.path(), &projection, &gateway, &upstream_key);
 
-    let output = run_isolated_cli(&claude_config, workdir, &home);
+    // A known client role exercises --effort; the gateway still selects the fixture upstream model.
+    let output = runner::run_with_model(
+        &claude_config,
+        &workdir,
+        &home,
+        "Return exactly: sandbox answer",
+        "Read",
+        &upstream_url,
+        Some("claude-opus-4-6"),
+    );
     assert_cli_output(&output, &upstream_key, &projection_token(&projection));
 
     let (path, authorization, body) = observed_receiver
@@ -48,7 +52,8 @@ fn actual_claude_code_completes_through_the_isolated_gateway() {
     assert!(!body.contains(&projection_token(&projection)));
     assert!(body.contains("Return exactly: sandbox answer"));
     let upstream_body: Value = serde_json::from_str(&body).expect("Chat upstream JSON");
-    assert_eq!(upstream_body["reasoning_effort"], "max");
+    assert_eq!(upstream_body["model"], "gpt-5.4");
+    assert_eq!(upstream_body["reasoning_effort"], "xhigh");
     upstream_worker.join().expect("upstream worker");
     gateway.shutdown();
 }
@@ -159,53 +164,6 @@ fn prepare_client(
     (claude_config, workdir, home)
 }
 
-fn run_isolated_cli(
-    claude_config: &std::path::Path,
-    workdir: std::path::PathBuf,
-    home: &std::path::Path,
-) -> std::process::Output {
-    let mut child = Command::new("claude.cmd")
-        .args([
-            "-p",
-            "--no-session-persistence",
-            "--effort",
-            "max",
-            "--setting-sources",
-            "user",
-            "Return exactly: sandbox answer",
-        ])
-        .current_dir(workdir)
-        .env("CLAUDE_CONFIG_DIR", &claude_config)
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("APPDATA", home.join("AppData"))
-        .env("LOCALAPPDATA", home.join("LocalAppData"))
-        .env_remove("ANTHROPIC_API_KEY")
-        .env_remove("ANTHROPIC_AUTH_TOKEN")
-        .env_remove("ANTHROPIC_BASE_URL")
-        .env("NO_PROXY", "127.0.0.1,localhost")
-        .env("no_proxy", "127.0.0.1,localhost")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("start isolated Claude Code");
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        if child.try_wait().expect("poll Claude Code").is_some() {
-            break;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("isolated Claude Code did not finish within 60 seconds");
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-    child
-        .wait_with_output()
-        .expect("collect Claude Code output")
-}
-
 fn assert_cli_output(output: &std::process::Output, upstream_key: &str, loopback_token: &str) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -223,4 +181,31 @@ fn assert_cli_output(output: &std::process::Output, upstream_key: &str, loopback
     assert!(!stdout.contains("private sandbox reasoning"));
     assert!(!stdout.contains(upstream_key));
     assert!(!stderr.contains(upstream_key));
+}
+
+fn known_reasoning_profile(state: &LocalState, base: &str, key: &str) -> asb_core::ProviderProfile {
+    let profile = sandbox_profile(
+        state,
+        AppKind::Claude,
+        "Claude CLI reasoning",
+        base.into(),
+        key.into(),
+        UpstreamProtocol::ChatCompletions,
+    );
+    let record = state
+        .configuration()
+        .find_provider_record(&profile.id)
+        .unwrap();
+    let mut value = serde_json::to_value(&profile).unwrap();
+    value.as_object_mut().unwrap().remove("id");
+    value["model"] = json!("gpt-5.4");
+    state
+        .configuration()
+        .update_provider(
+            &profile.id,
+            serde_json::from_value(value).unwrap(),
+            &record.file_hash,
+        )
+        .unwrap()
+        .profile
 }

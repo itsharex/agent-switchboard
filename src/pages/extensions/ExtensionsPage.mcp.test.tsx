@@ -47,7 +47,7 @@ it("shows the bounded check stages and polls until the result lands", async () =
   expect(getMcpCheckMock).toHaveBeenCalledWith("check-1");
 });
 
-it("edits an existing MCP through the redacted view and requires the deployment preview", async () => {
+it("edits an existing MCP through the redacted view and redeploys immediately", async () => {
   const deployedMcp: ExtensionListItem = {
     ...mcpItem,
     bindings: [
@@ -98,16 +98,22 @@ it("edits an existing MCP through the redacted view and requires the deployment 
 
   await user.click(within(detail).getByRole("button", { name: "编辑定义" }));
 
-  const form = await screen.findByRole("form", { name: "编辑 MCP 服务" });
+  let form = await screen.findByRole("form", { name: "编辑 MCP 服务" });
   expect(getMcpEditViewMock).toHaveBeenCalledWith("ext-mcp-1");
-  // The editor prefills editable material and marks the stored credential.
-  expect(within(form).getByLabelText("启动命令")).toHaveValue("npx");
-  expect(within(form).getByText("已设置凭据（保持不变）")).toBeInTheDocument();
   expect(within(form).queryByRole("region", { name: "扩展详情 docs" })).not.toBeInTheDocument();
 
-  const command = within(form).getByLabelText("启动命令");
+  // The editor keeps JSON as the primary view; the structured wizard is an
+  // explicit entry point, matching the upstream MCP workflow.
+  await user.click(within(form).getByRole("button", { name: "配置向导" }));
+  const wizard = await screen.findByRole("form", { name: "MCP 配置向导" });
+  expect(within(wizard).getByLabelText("启动命令")).toHaveValue("npx");
+  expect(within(wizard).getByText("已设置凭据（保持不变）")).toBeInTheDocument();
+
+  const command = within(wizard).getByLabelText("启动命令");
   await user.clear(command);
   await user.type(command, "docker");
+  await user.click(within(wizard).getByRole("button", { name: "应用配置" }));
+  form = await screen.findByRole("form", { name: "编辑 MCP 服务" });
   await user.click(within(form).getByRole("button", { name: "保存修改" }));
 
   await waitFor(() =>
@@ -121,13 +127,13 @@ it("edits an existing MCP through the redacted view and requires the deployment 
   expect(prepareExtensionPlanMock).toHaveBeenCalledWith({
     operations: [{ operation: "update", definitionId: "ext-mcp-1" }],
   });
-  expect(applyExtensionPlanMock).not.toHaveBeenCalled();
-  expect(await screen.findByRole("dialog", { name: "更新预览" })).toBeInTheDocument();
+  await waitFor(() => expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-edit", true));
+  expect(screen.queryByRole("dialog", { name: /预览/ })).not.toBeInTheDocument();
   // The form closed back to the refreshed detail after the save.
   await waitFor(() => expect(screen.queryByRole("form", { name: "编辑 MCP 服务" })).not.toBeInTheDocument());
 });
 
-it("edits an existing MCP without bindings and skips the deployment preview", async () => {
+it("edits an existing MCP without bindings and skips the redeploy", async () => {
   const editView: McpEditViewEnvelope = {
     id: "ext-mcp-1",
     revision: 1,
@@ -148,13 +154,17 @@ it("edits an existing MCP without bindings and skips the deployment preview", as
   const detail = await openMcpDetail(user);
 
   await user.click(within(detail).getByRole("button", { name: "编辑定义" }));
-  const form = await screen.findByRole("form", { name: "编辑 MCP 服务" });
+  let form = await screen.findByRole("form", { name: "编辑 MCP 服务" });
 
   // After a Radix Select-free interaction the implicit submit works; use
   // the button directly for the http form.
-  const url = within(form).getByLabelText("服务地址");
+  await user.click(within(form).getByRole("button", { name: "配置向导" }));
+  const wizard = await screen.findByRole("form", { name: "MCP 配置向导" });
+  const url = within(wizard).getByLabelText("服务地址");
   await user.clear(url);
   await user.type(url, "https://mcp.example.test/v2");
+  await user.click(within(wizard).getByRole("button", { name: "应用配置" }));
+  form = await screen.findByRole("form", { name: "编辑 MCP 服务" });
   fireEvent.submit(form);
 
   await waitFor(() =>
@@ -167,7 +177,7 @@ it("edits an existing MCP without bindings and skips the deployment preview", as
   await waitFor(() => expect(screen.queryByRole("form", { name: "编辑 MCP 服务" })).not.toBeInTheDocument());
 });
 
-it("renames the server key and previews deployment even when every binding is disabled", async () => {
+it("renames the server key and redeploys even when every binding is disabled", async () => {
   const disabledMcp: ExtensionListItem = {
     ...mcpItem,
     bindings: [
@@ -230,11 +240,11 @@ it("renames the server key and previews deployment even when every binding is di
       fields: {},
     }),
   );
-  // A disabled binding still moves its native key inside the same plan,
-  // so the deployment preview is mandatory here too.
+  // A disabled binding still moves its native key inside the same plan, so
+  // the redeploy happens here too.
   expect(prepareExtensionPlanMock).toHaveBeenCalledWith({
     operations: [{ operation: "update", definitionId: "ext-mcp-1" }],
   });
-  expect(applyExtensionPlanMock).not.toHaveBeenCalled();
-  expect(await screen.findByRole("dialog", { name: "更新预览" })).toBeInTheDocument();
+  await waitFor(() => expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-rename", true));
+  expect(screen.queryByRole("dialog", { name: /预览/ })).not.toBeInTheDocument();
 });

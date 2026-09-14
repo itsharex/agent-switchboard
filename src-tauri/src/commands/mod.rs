@@ -22,7 +22,18 @@
 //! free while a provider responds.
 
 mod app_settings;
+pub(crate) mod claude_accounts;
+pub(crate) mod claude_management;
+pub(crate) mod claude_prompts;
+pub(crate) mod claude_ledger;
+pub(crate) mod claude_pricing;
+pub(crate) mod codex_management;
+pub(crate) mod codex_accounts;
+pub(crate) mod codex_prompts;
+pub(crate) mod codex_common;
+pub(crate) mod codex_metering;
 mod discovery;
+pub(crate) mod failover;
 mod profiles;
 mod query;
 mod quota;
@@ -38,6 +49,7 @@ pub(crate) mod gateway;
 pub(crate) mod model_usage;
 pub(crate) mod official_login;
 pub(crate) mod prompt_management;
+pub(crate) mod provider_endpoints;
 pub(crate) mod provider_request;
 pub(crate) mod runtime_log;
 pub(crate) mod status;
@@ -61,6 +73,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 pub(crate) struct ConfigWriteGate(Arc<Mutex<()>>);
 
 impl ConfigWriteGate {
+    pub(crate) fn shared(&self) -> Arc<Mutex<()>> {
+        Arc::clone(&self.0)
+    }
+
     pub(crate) fn lock(&self) -> Result<MutexGuard<'_, ()>, String> {
         self.0
             .lock()

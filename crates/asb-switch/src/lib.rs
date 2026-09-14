@@ -6,6 +6,7 @@
 //! indeterminate), backups carry hashes, and every failure reports whether
 //! and how the live file was restored.
 
+mod codex_auth;
 mod config_journal;
 mod display;
 pub mod executor;
@@ -18,9 +19,9 @@ mod restore;
 mod subagent_settings;
 
 pub use executor::{
-    execute, execute_rendered, read_preview, restore, restore_projected, sha256_digest, sha256_hex,
-    FilePreview, RecoveryOutcome, RenderedWriteOutcome, RenderedWriteRequest, RestoreOutcome,
-    SwitchError, SwitchOutcome, SwitchRequest,
+    execute, execute_codex, execute_rendered, read_preview, restore, restore_projected,
+    sha256_digest, sha256_hex, FilePreview, RecoveryOutcome, RenderedWriteOutcome,
+    RenderedWriteRequest, RestoreOutcome, SwitchError, SwitchOutcome, SwitchRequest,
 };
 pub use extensions::{
     apply_extension_plan, journal_lock_targets, recover_pending, ExtensionApplyRequest,
@@ -32,7 +33,7 @@ pub use lockfile::{
     RecoveryEntry,
 };
 pub use prompt_documents::{
-    read_global_prompt_document, write_global_prompt_document, GlobalPromptDocumentOutcome,
+    read_global_prompt_document, write_global_prompt_document, write_global_prompt_document_with_commit, GlobalPromptDocumentOutcome,
     GlobalPromptDocumentRequest,
 };
 pub use restore::list_backups;
@@ -43,5 +44,7 @@ pub use subagent_settings::{
 
 pub use config_journal::{
     config_journal_path, finish_config_recovery, pending_config_write, rollback_pending_config,
-    PendingConfigWrite,
+    PendingAuthWrite, PendingConfigWrite,
 };
+
+pub use codex_auth::{synchronize_codex_auth, CodexAuthSyncOutcome};

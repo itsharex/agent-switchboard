@@ -11,7 +11,15 @@ pub const CODEX_MODEL_CATALOG_KEY: &str = "model_catalog_json";
 /// value from the selected route at render time.
 pub const CODEX_WEB_SEARCH_KEY: &str = "web_search";
 
+/// Restore identity for Claude gateway backups; stripped on direct/official switches.
+pub const CLAUDE_GATEWAY_REVISION_KEY: &str = "env.ASB_CLAUDE_ROUTE_REVISION";
+
 pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: CLAUDE_GATEWAY_REVISION_KEY,
+        value_type: SettingValueType::String,
+    },
     ProviderSettingSpec {
         app: AppKind::Codex,
         key: "model",
@@ -89,6 +97,36 @@ pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     ProviderSettingSpec {
         app: AppKind::Claude,
         key: "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_FABLE_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.CLAUDE_CODE_SUBAGENT_MODEL",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME",
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Claude,
+        key: "env.ANTHROPIC_DEFAULT_FABLE_MODEL_NAME",
         value_type: SettingValueType::String,
     },
     // Deprecated by Claude, but still actively removed by a provider

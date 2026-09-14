@@ -15,11 +15,13 @@ use uuid::Uuid;
 
 fn claude_draft(model: &str) -> ProviderDraft {
     ProviderDraft {
+        authentication: None,
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "测试中转".to_string(),
         base_url: Some("http://127.0.0.1:18080".to_string()),
+        connection: Default::default(),
         api_key: "test-upstream-key".to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
         responses_options: None,
@@ -39,6 +41,8 @@ fn codex_draft(model: &str) -> CodexProviderDraft {
         name: "测试中转".to_string(),
         endpoint: CodexEndpoint("http://127.0.0.1:18080/v1".to_string()),
         api_key: "test-upstream-key".to_string(),
+        authentication: None,
+        connection: Default::default(),
         upstream: CodexUpstream::ChatCompletions,
         request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
         default_model: model.to_string(),
@@ -57,6 +61,10 @@ fn codex_draft(model: &str) -> CodexProviderDraft {
             ],
             images: false,
             compact: true,
+            display_name: None,
+            description: None,
+            base_instructions: None,
+            supports_parallel_tool_calls: None,
         }],
         model_routes: vec![CodexModelRoute {
             client_model: model.to_string(),
@@ -205,7 +213,7 @@ fn endpoint_change_preserves_the_user_selected_model() {
     let user_model = "user-selected-model";
     let current = fs::read_to_string(&target)
         .unwrap()
-        .replace("model-a", user_model);
+        .replace("asb-claude-primary", user_model);
     fs::write(&target, current).unwrap();
     let preparations = PortChangePreparations::default();
     let plan = prepared_plan(&controller, &local, &preparations);

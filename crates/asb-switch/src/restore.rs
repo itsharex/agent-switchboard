@@ -5,6 +5,13 @@
 //! `executor`; this module only supplies its locked restore body and recovery
 //! primitives.
 
+mod codex_auth;
+mod transaction;
+use codex_auth::{
+    linked_auth_backup, read_optional_file, read_verified_auth_source, write_auth_restore_candidate,
+};
+pub(crate) use transaction::restore_locked;
+
 use crate::executor::{
     metadata_path, read_current_or_empty, sha256_hex, timestamp_name, verify_live_snapshot,
     write_backup_metadata, RecoveryOutcome, SwitchError,
@@ -39,39 +46,25 @@ pub(crate) fn restore_backup_content<Io: SwitchIo>(
     if !backup.target_existed {
         return restore_absent_target(io, target, backup);
     }
-    let file_name = target
-        .file_name()
-        .expect("target has a file name")
-        .to_string_lossy()
-        .to_string();
-    let temp = target.with_file_name(format!("{file_name}.{}.asb-restore", std::process::id()));
-    if let Err(e) = io.write_new_file(&temp, &content) {
-        return RecoveryOutcome::RestoreFailed {
-            reason: format!("恢复临时文件写入失败: {e}"),
-            backup_path: backup.backup_path.clone(),
-        };
-    }
-    match io.read_file(&temp) {
-        Ok(read_back) if read_back == content => {}
-        Ok(_) => {
-            let _ = io.remove(&temp);
+    let temp = match stage_restore_file(io, target, &content) {
+        Ok(temp) => temp,
+        Err(reason) => {
             return RecoveryOutcome::RestoreFailed {
-                reason: "恢复临时文件回读内容不匹配".to_string(),
+                reason,
                 backup_path: backup.backup_path.clone(),
-            };
+            }
         }
-        Err(error) => {
-            let _ = io.remove(&temp);
-            return RecoveryOutcome::RestoreFailed {
-                reason: format!("恢复临时文件回读失败: {error}"),
-                backup_path: backup.backup_path.clone(),
-            };
-        }
-    }
+    };
     if let Err(e) = io.rename_replace(&temp, target) {
         let _ = io.remove(&temp);
         return RecoveryOutcome::RestoreFailed {
             reason: format!("恢复替换失败: {e}"),
+            backup_path: backup.backup_path.clone(),
+        };
+    }
+    if let Err(error) = io.sync_dir(target.parent().expect("restore target parent")) {
+        return RecoveryOutcome::RestoreFailed {
+            reason: format!("恢复文件已替换，但目录同步失败：{error}"),
             backup_path: backup.backup_path.clone(),
         };
     }
@@ -178,12 +171,9 @@ fn validate_restore_contract(backup: &BackupRecord, content: &str) -> Result<(),
         .get("model_providers")
         .and_then(|value| value.get("openai"))
         .is_some();
-    let credential_target = Path::new(&backup.target_path)
-        .file_name()
-        .is_some_and(|name| name == "auth.json");
-    if retired || native_override || credential_target || backup.linked_backup_id.is_some() {
+    if retired || native_override {
         return Err(SwitchError::PlanRejected {
-            message: "备份不符合当前 openai 配置契约；旧认证联动备份只能查看或导出".into(),
+            message: "备份不符合当前 openai 配置契约".into(),
             line: None,
         });
     }
@@ -202,6 +192,17 @@ fn write_pre_restore_backup<Io: SwitchIo>(
             message: error.to_string(),
             recovery: RecoveryOutcome::NotNeeded,
         })?;
+    if Path::new(&record.target_path)
+        .file_name()
+        .is_some_and(|name| name == "auth.json")
+    {
+        io.set_mode(pre_path, 0o600)
+            .map_err(|error| SwitchError::CommitFailed {
+                stage: "auth-backup-permissions",
+                message: error.to_string(),
+                recovery: RecoveryOutcome::NotNeeded,
+            })?;
+    }
     match io.read_file(pre_path) {
         Ok(read_back) if read_back == current => {}
         Ok(_) => {
@@ -283,88 +284,6 @@ fn write_restore_candidate<Io: SwitchIo>(
     })
 }
 
-/// The executor-owned locked body of one restore transaction.
-pub(crate) fn restore_locked<Io: SwitchIo, Commit>(
-    io: &Io,
-    backup: &BackupRecord,
-    target: &Path,
-    projected: Option<&str>,
-    commit: Commit,
-) -> Result<RestoreOutcome, SwitchError>
-where
-    Commit: FnOnce(&RestoreOutcome) -> Result<(), String>,
-{
-    let original = read_verified_restore_source(io, backup)?;
-    let content = projected.unwrap_or(&original).to_string();
-    adapter::validate_syntax(backup.app, &content).map_err(|error| SwitchError::PlanRejected {
-        message: error.message,
-        line: error.line,
-    })?;
-    let restored_hash = sha256_hex(&content);
-    let (current, target_existed) =
-        read_current_or_empty(io, target, backup.app).map_err(|error| {
-            SwitchError::ReadCurrent {
-                message: error.to_string(),
-            }
-        })?;
-    let pre_record = snapshot_before_restore(io, backup, target, &current, target_existed)?;
-    let pending = crate::PendingConfigWrite {
-        version: 1,
-        app: backup.app,
-        profile_id: None,
-        backup: pre_record.clone(),
-        after_hash: restored_hash.clone(),
-        after_existed: backup.target_existed,
-    };
-    crate::config_journal::track(io, pending, || {
-        if backup.target_existed {
-            write_restore_candidate(io, target, backup.app, &content, &current, target_existed)?;
-        } else if target_existed {
-            verify_live_snapshot(io, target, backup.app, &current, target_existed)?;
-            io.remove(target)
-                .map_err(|error| SwitchError::CommitFailed {
-                    stage: "restore-replace",
-                    message: error.to_string(),
-                    recovery: RecoveryOutcome::NotNeeded,
-                })?;
-        }
-
-        let restored = match io.read_file(target) {
-            Ok(text) => {
-                backup.target_existed
-                    && text == content
-                    && sha256_hex(&text) == restored_hash
-                    && adapter::validate_syntax(backup.app, &text).is_ok()
-            }
-            Err(error) if error.kind() == ErrorKind::NotFound => !backup.target_existed,
-            Err(_) => false,
-        };
-        if !restored {
-            let recovery = restore_backup_content(io, target, &pre_record);
-            return Err(SwitchError::CommitFailed {
-                stage: "restore-verify",
-                message: "恢复后校验失败".to_string(),
-                recovery,
-            });
-        }
-
-        let outcome = RestoreOutcome {
-            pre_restore_backup: pre_record,
-            restored_hash,
-            warnings: vec![],
-        };
-        if let Err(message) = commit(&outcome) {
-            let recovery = restore_backup_content(io, target, &outcome.pre_restore_backup);
-            return Err(SwitchError::CommitFailed {
-                stage: "state-save",
-                message,
-                recovery,
-            });
-        }
-        Ok(outcome)
-    })
-}
-
 pub(crate) fn snapshot_before_restore<Io: SwitchIo>(
     io: &Io,
     backup: &BackupRecord,
@@ -421,4 +340,54 @@ pub fn list_backups<Io: SwitchIo>(io: &Io, backup_dir: &Path) -> Vec<BackupRecor
         }
     }
     records
+}
+
+pub(crate) fn restore_backup_if_unchanged<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    before: &BackupRecord,
+    after: &str,
+    after_existed: bool,
+) -> RecoveryOutcome {
+    let current = read_optional_file(io, target);
+    if let Ok((text, existed)) = &current {
+        if *existed == before.target_existed && sha256_hex(text) == before.content_hash {
+            return RecoveryOutcome::NotNeeded;
+        }
+        if *existed == after_existed && text == after {
+            return restore_backup_content(io, target, before);
+        }
+    }
+    RecoveryOutcome::RestoreFailed {
+        reason: "配置或认证已在恢复期间外改，已保留外部内容".into(),
+        backup_path: before.backup_path.clone(),
+    }
+}
+
+fn stage_restore_file<Io: SwitchIo>(
+    io: &Io,
+    target: &Path,
+    content: &str,
+) -> Result<std::path::PathBuf, String> {
+    let name = target
+        .file_name()
+        .ok_or("恢复目标缺少文件名")?
+        .to_string_lossy();
+    let temp = target.with_file_name(format!("{name}.{}.asb-restore", std::process::id()));
+    io.write_new_file(&temp, content)
+        .map_err(|e| format!("恢复临时文件写入失败：{e}"))?;
+    let prepared = (|| {
+        if name == "auth.json" {
+            io.set_mode(&temp, 0o600).map_err(|e| e.to_string())?;
+        }
+        if io.read_file(&temp).map_err(|e| e.to_string())? != content {
+            return Err("恢复临时文件回读内容不匹配".to_string());
+        }
+        io.sync_file(&temp).map_err(|e| e.to_string())
+    })();
+    if let Err(error) = prepared {
+        let _ = io.remove(&temp);
+        return Err(error);
+    }
+    Ok(temp)
 }

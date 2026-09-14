@@ -6,6 +6,8 @@
 
 mod anthropic_reasoning;
 mod chat_reasoning;
+mod claude_model;
+mod claude_gemini;
 pub(crate) mod minimal;
 mod reasoning;
 mod request;
@@ -20,10 +22,12 @@ use serde_json::Value;
 /// The stable Chat function name that bridges Codex's client-side tool search.
 pub(crate) const CODEX_TOOL_SEARCH_NAME: &str = "tool_search";
 
+pub(crate) use claude_model::apply_claude_model_mapping;
 pub(crate) use reasoning::{Reasoning, ReasoningTransport};
 pub(crate) use request::convert_request;
 pub(crate) use response::{convert_error, convert_response};
 pub(crate) use stream::SseTranscoder;
+pub(crate) use usage::parse as parse_usage;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransformError(pub(crate) String);
@@ -60,14 +64,15 @@ pub(crate) struct CanonicalRequest {
     /// The supported cross-protocol user attribution field. It maps between
     /// Anthropic/Responses `metadata.user_id` and Chat Completions `user`.
     pub(crate) user_id: Option<String>,
-    /// Cross-protocol reasoning intensity. Anthropic adaptive thinking maps
-    /// to Kimi's supported maximum effort.
+    /// Cross-protocol reasoning intensity; the target model's dialect owns
+    /// the wire spelling of its maximum supported effort.
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
 }
 
 #[derive(Clone, Copy)]
 pub(crate) enum ReasoningEffort {
     Low,
+    Medium,
     High,
     Max,
 }
@@ -90,6 +95,10 @@ pub(crate) enum Role {
 pub(crate) enum Part {
     Text(String),
     Image(ImageSource),
+    Document(Document),
+    /// A client-side Claude search reference resolved against this request's
+    /// complete tool catalogue. OpenAI receives the definition as tool output.
+    ToolReference(Tool),
     Reasoning(Reasoning),
     ToolCall {
         id: String,
@@ -110,6 +119,21 @@ pub(crate) enum Part {
 pub(crate) enum ImageSource {
     Data { media_type: String, data: String },
     Url(String),
+}
+
+#[derive(Clone)]
+pub(crate) struct Document {
+    pub(crate) source: DocumentSource,
+    pub(crate) title: Option<String>,
+    pub(crate) filename: Option<String>,
+    pub(crate) context: Option<String>,
+}
+
+#[derive(Clone)]
+pub(crate) enum DocumentSource {
+    Pdf(String),
+    Url(String),
+    Text(String),
 }
 
 #[derive(Clone)]
@@ -190,13 +214,18 @@ pub(crate) enum StopReason {
 /// upstream must carry them instead of dropping the metering data.
 #[derive(Clone, Default)]
 pub(crate) struct Usage {
+    /// Total input, including cache reads and cache creation, in every protocol.
     pub(crate) input_tokens: Option<u64>,
     pub(crate) output_tokens: Option<u64>,
     pub(crate) total_tokens: Option<u64>,
     pub(crate) cached_tokens: Option<u64>,
+    pub(crate) cache_creation_tokens: Option<u64>,
     pub(crate) reasoning_tokens: Option<u64>,
 }
 
 pub(crate) fn error<T>(message: impl Into<String>) -> Result<T, TransformError> {
     Err(TransformError(message.into()))
 }
+
+#[cfg(test)]
+mod codex_input_tests;

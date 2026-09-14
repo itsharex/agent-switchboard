@@ -187,7 +187,7 @@ fn prepares_unsaved_draft(api: &Api, upstream: &Server, base_url: &str) {
         "prepare_provider_request",
         json!({"target": {
             "kind":"draft", "connection": {
-                "baseUrl":base_url, "apiKey":"isolated-unsaved-key", "upstreamProtocol":"responses",
+                "app":"claude", "baseUrl":base_url, "apiKey":"isolated-unsaved-key", "upstreamProtocol":"responses",
                 "responsesOptions":{"requestMode":"minimal"}, "defaultModel":"unsaved-model"
             }
         }}),
@@ -321,7 +321,7 @@ fn fetches_models(api: &Api, upstream: &Server, profile_id: &str, base_url: &str
         "prepare_provider_request",
         json!({"target": {
             "kind":"draft", "connection": {
-                "baseUrl":base_url, "apiKey":"isolated-unsaved-key", "upstreamProtocol":"responses",
+                "app":"claude", "baseUrl":base_url, "apiKey":"isolated-unsaved-key", "upstreamProtocol":"responses",
                 "responsesOptions":{"requestMode":"minimal"}, "defaultModel":"unsaved-model"
             }
         }}),

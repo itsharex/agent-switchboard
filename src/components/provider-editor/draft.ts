@@ -19,9 +19,11 @@ export const PROTOCOL_NOTES: Record<UpstreamProtocol, string> = {
   responses: "按供应商要求填写完整 API 根地址（可含 /v1、/v2 或 /openai），不会自动补 /v1。例如 https://example.com/v1 → https://example.com/v1/responses。",
   chatCompletions: "按供应商要求填写完整 API 根地址（可含 /v1、/v2 或 /openai），不会自动补 /v1。例如 https://example.com/v2 → https://example.com/v2/chat/completions。",
   anthropicMessages: "填写供应商的服务根地址，请求在该地址后追加 /v1/messages。",
+  geminiGenerateContent: "填写 Google API 根地址；未指定版本时使用 /v1beta，网关按所选模型生成 generateContent 或流式地址。",
 };
 
 export const PROTOCOL_AUTHENTICATION_NOTES: Record<UpstreamProtocol, string> = {
+  geminiGenerateContent: "Google API 密钥以 x-goog-api-key 发送；ya29 令牌或 Google OAuth JSON 使用 Bearer，JSON 中的刷新凭据不会发送到模型端点。",
   responses:
     "认证方式会自动使用 Bearer Token：以 Authorization: Bearer <API 密钥> 请求头发送密钥；密钥值本身不变。",
   chatCompletions:
@@ -31,11 +33,12 @@ export const PROTOCOL_AUTHENTICATION_NOTES: Record<UpstreamProtocol, string> = {
 };
 
 export function defaultConnection(app: AppKind): Pick<ProviderDraft,
-  "upstreamProtocol" | "maxOutputTokens" | "responsesOptions"> {
+  "upstreamProtocol" | "maxOutputTokens" | "responsesOptions" | "connection"> {
   return {
     upstreamProtocol: NATIVE_PROTOCOL[app],
     maxOutputTokens: null,
     responsesOptions: null,
+    connection: {},
   };
 }
 
@@ -47,11 +50,13 @@ export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind):
       name: profile.name,
       model: profile.model,
       baseUrl: profile.baseUrl,
+      connection: profile.connection ? { ...profile.connection } : {},
       apiKey: profile.apiKey,
+      authentication: profile.authentication ?? null,
       upstreamProtocol: profile.upstreamProtocol,
-      responsesOptions: profile.responsesOptions,
+      responsesOptions: profile.responsesOptions ?? null,
       maxOutputTokens: profile.maxOutputTokens,
-      modelOptions: profile.modelOptions,
+      modelOptions: profile.modelOptions ?? null,
       parameters: { settings: { ...profile.parameters.settings } },
       notes: profile.notes ?? null,
       websiteUrl: profile.websiteUrl,
@@ -124,5 +129,8 @@ export function claudeOptions(
           opusOneM: false,
           availableModels: null,
         };
-  return { kind: "claude", ...base, ...patch };
+  const next: ClaudeModelSettings = { ...base, ...patch };
+  if (base.haikuOneM && "haikuModel" in patch && patch.haikuModel !== base.haikuModel
+    && patch.haikuOneM === undefined) next.haikuOneM = false;
+  return { kind: "claude", ...next };
 }

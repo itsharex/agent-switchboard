@@ -1,6 +1,6 @@
 use super::error::{blocking, operation_error, state, CommandError};
 use crate::probe::ProbeResult;
-use asb_core::contracts::{UsageQuery, UsageSummary};
+use asb_core::contracts::{ProviderConnectionOptions, UsageQuery, UsageSummary};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct ProviderEndpointsRequest {
     base_url: String,
     upstream_protocol: asb_core::contracts::UpstreamProtocol,
+    #[serde(default)]
+    connection: ProviderConnectionOptions,
 }
 
 #[derive(Debug, Serialize)]
@@ -22,16 +24,37 @@ pub(crate) struct ProviderEndpoints {
 pub fn resolve_provider_endpoints(
     request: ProviderEndpointsRequest,
 ) -> Result<ProviderEndpoints, CommandError> {
+    if let Some(native) = &request.connection.claude_native {
+        native
+            .validate((!request.base_url.is_empty()).then_some(request.base_url.as_str()))
+            .map_err(|error| CommandError::new("provider-endpoint-invalid", error))?;
+        return Ok(ProviderEndpoints {
+            request_url: "由 Claude 原生云 SDK 按模型构造".into(),
+            models_url: "使用云服务的模型目录；不发送普通 /models 请求".into(),
+        });
+    }
     let invalid = |error| CommandError::new("provider-endpoint-invalid", error);
     Ok(ProviderEndpoints {
-        request_url: asb_core::endpoint::upstream_endpoint(
-            &request.base_url,
-            request.upstream_protocol,
-        )
+        request_url: if request.upstream_protocol
+            == asb_core::UpstreamProtocol::GeminiGenerateContent
+        {
+            asb_core::claude_gemini::request_preview(
+                &request.base_url,
+                request.connection.is_full_url,
+                None,
+            )
+        } else {
+            asb_core::endpoint::upstream_endpoint_with_options(
+                &request.base_url,
+                request.upstream_protocol,
+                request.connection.is_full_url,
+            )
+        }
         .map_err(invalid)?,
-        models_url: asb_core::endpoint::models_endpoint(
+        models_url: asb_core::endpoint::models_endpoint_for_connection(
             &request.base_url,
             request.upstream_protocol,
+            &request.connection,
         )
         .map_err(invalid)?,
     })
@@ -47,30 +70,74 @@ pub async fn probe_endpoint(url: String) -> Result<ProbeResult, CommandError> {
 
 /// Models (id plus optional vendor) from the provider's configured
 /// API root's model-list endpoint. The current editor draft supplies its API key and
-/// protocol; the backend derives the request header from that protocol. The
+/// protocol and optional authentication override. The
 /// key is never included in errors or persisted by this command.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ProviderModelsRequest {
+    app: asb_core::AppKind,
     url: String,
     api_key: String,
     upstream_protocol: asb_core::contracts::UpstreamProtocol,
+    #[serde(default)]
+    connection: ProviderConnectionOptions,
+    authentication: Option<asb_core::AuthenticationScheme>,
 }
 
 #[tauri::command]
 pub async fn fetch_provider_models(
+    app: tauri::AppHandle,
     request: ProviderModelsRequest,
 ) -> Result<Vec<crate::probe::ProviderModel>, CommandError> {
-    blocking(move || {
-        crate::probe::fetch_models(&request.url, &request.api_key, request.upstream_protocol)
-            // The provider diagnostic already redacts credentials. Generic token
-            // scrubbing would erase legitimate endpoint URLs and request ids.
-            .map_err(|message| CommandError {
-                code: "models-fetch-failed",
-                message,
-            })
+    let local = state(&app)?;
+    blocking(move || fetch_models(&local, request)).await
+}
+
+fn fetch_models(
+    local: &crate::local_state::LocalState,
+    request: ProviderModelsRequest,
+) -> Result<Vec<crate::probe::ProviderModel>, CommandError> {
+    if request.app == asb_core::AppKind::Codex
+        && (request.connection.claude_models_url.is_some()
+            || request.upstream_protocol == asb_core::UpstreamProtocol::GeminiGenerateContent)
+    {
+        return Err(CommandError::new(
+            "provider-endpoint-invalid",
+            "Claude 模型列表覆盖不能用于 Codex",
+        ));
+    }
+    if request.connection.claude_native.is_some() {
+        return Err(CommandError::new(
+            "claude-native-sdk-only",
+            "原生云 SDK 不提供此通用 HTTP 模型接口，请填写云服务已开通的模型 ID",
+        ));
+    }
+    if request.app == asb_core::AppKind::Claude {
+        let account = crate::claude_auth::ClaudeAuth::shared(local.root())
+            .resolve(&request.connection)
+            .map_err(|message| CommandError::new("claude-account-unavailable", message))?;
+        if let Some(account) = account {
+            return crate::claude_auth::models::fetch_for_provider(
+                &account,
+                request.upstream_protocol,
+                &request.connection,
+            )
+            .map_err(|message| CommandError::new("models-fetch-failed", message));
+        }
+    }
+    crate::probe::fetch_models(
+        &request.url,
+        &request.api_key,
+        request.upstream_protocol,
+        request.authentication,
+        &request.connection,
+    )
+    // The provider diagnostic already redacts credentials. Generic token
+    // scrubbing would erase legitimate endpoint URLs and request ids.
+    .map_err(|message| CommandError {
+        code: "models-fetch-failed",
+        message,
     })
-    .await
 }
 
 #[derive(Deserialize)]
@@ -80,16 +147,21 @@ pub(crate) struct UsageQueryRequest {
     api_key: String,
     base_url: Option<String>,
     upstream_protocol: asb_core::contracts::UpstreamProtocol,
+    #[serde(default)]
+    connection: ProviderConnectionOptions,
+    authentication: Option<asb_core::AuthenticationScheme>,
 }
 
 #[tauri::command]
 pub async fn test_usage_query(request: UsageQueryRequest) -> Result<UsageSummary, CommandError> {
     blocking(move || {
-        crate::usage_query::run_usage_query(
+        crate::usage_query::run_usage_query_with_connection(
             &request.query,
             &request.api_key,
             request.base_url.as_deref(),
             request.upstream_protocol,
+            request.authentication,
+            &request.connection,
         )
         .map_err(|error| CommandError::new("usage-query-failed", error))
     })
@@ -144,6 +216,7 @@ mod endpoint_tests {
         let result = resolve_provider_endpoints(ProviderEndpointsRequest {
             base_url: "https://example.test/openai/v2/".into(),
             upstream_protocol: asb_core::contracts::UpstreamProtocol::Responses,
+            connection: Default::default(),
         })
         .unwrap();
         assert_eq!(
@@ -162,6 +235,7 @@ mod endpoint_tests {
             let error = resolve_provider_endpoints(ProviderEndpointsRequest {
                 base_url: base.into(),
                 upstream_protocol: asb_core::contracts::UpstreamProtocol::Responses,
+                connection: Default::default(),
             })
             .unwrap_err();
             assert_eq!(error.code, "provider-endpoint-invalid");
@@ -199,11 +273,19 @@ mod endpoint_tests {
                 .unwrap();
             path
         });
-        let error = tauri::async_runtime::block_on(fetch_provider_models(ProviderModelsRequest {
-            url: base.clone(),
-            api_key: "isolated-model-key".into(),
-            upstream_protocol: asb_core::contracts::UpstreamProtocol::Responses,
-        }))
+        let directory = tempfile::tempdir().unwrap();
+        let local = crate::local_state::LocalState::from_root(directory.path().join("state"));
+        let error = fetch_models(
+            &local,
+            ProviderModelsRequest {
+                app: asb_core::AppKind::Claude,
+                authentication: None,
+                url: base.clone(),
+                api_key: "isolated-model-key".into(),
+                upstream_protocol: asb_core::contracts::UpstreamProtocol::Responses,
+                connection: Default::default(),
+            },
+        )
         .unwrap_err();
         assert_eq!(error.code, "models-fetch-failed");
         assert!(error.message.contains("HTTP 401"));

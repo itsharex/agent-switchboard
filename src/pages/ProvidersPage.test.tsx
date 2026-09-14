@@ -98,8 +98,6 @@ function renderPage(overrides: Partial<PageProps> = {}) {
     onTogglePreview() {},
     onEdit() {},
     onDelete() {},
-    onRequestSwitch() {},
-    onCancelPreview() {},
     onSave: async () => {},
     onSaveUsageQuery: async () => true,
     onSaveQuotaInterval: async () => true,
@@ -151,16 +149,11 @@ describe("ProvidersPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("cancels or confirms the pending switch from the preview header", async () => {
-    const user = userEvent.setup();
-    const onCancelPreview = vi.fn();
-    const onRequestSwitch = vi.fn();
+  it("renders the inline preview as a read-only what-if without action buttons", async () => {
     renderPage({
       preview: { profileId: profile.id, file: previewFile },
       userConfigModel: "gpt-5.3-codex",
       userConfigWarnings: ["使用 --profile 启动时会覆盖这里的用户级设置"],
-      onCancelPreview,
-      onRequestSwitch,
     });
 
     const previewPanel = screen.getByRole("region", { name: "变更预览" });
@@ -173,15 +166,11 @@ describe("ProvidersPage", () => {
         "使用 --profile 启动时会覆盖这里的用户级设置",
       ),
     ).toBeInTheDocument();
-    await user.click(
-      within(previewPanel).getByRole("button", { name: "取消" }),
-    );
-    expect(onCancelPreview).toHaveBeenCalledTimes(1);
-
-    await user.click(
-      within(previewPanel).getByRole("button", { name: "确认切换" }),
-    );
-    expect(onRequestSwitch).toHaveBeenCalledTimes(1);
+    // Read-only: the preview proposes nothing — no 取消, no 确认切换
+    // (2026-09-12 user directive). Closing happens through the eye toggle.
+    expect(
+      within(previewPanel).queryByRole("button"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -223,12 +212,12 @@ describe("ProvidersPage editing", () => {
 });
 
 describe("ProvidersPage navigation", () => {
-  it("keeps both observed connections above the picker when list selection changes", () => {
+  it("keeps the client picker in the header above the observed connections", () => {
     const { rerenderPage, container } = renderPage({ statuses });
     const cards = screen.getByRole("group", { name: "当前启用配置" });
     const picker = screen.getByRole("radiogroup", { name: "供应商客户端" });
     expect(
-      cards.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING,
+      picker.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(within(cards).getByText("gpt-5.3-codex")).toBeInTheDocument();
     expect(within(cards).getByText("claude-sonnet-4")).toBeInTheDocument();

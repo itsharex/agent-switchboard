@@ -2,14 +2,17 @@ import type { FilePreview } from "../api/client";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { DiffView } from "../components/DiffView";
 import { PreviewInspector } from "../components/PreviewInspector";
+import { SwitchConfirmSheet } from "../components/SwitchConfirmSheet";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
 import type { useProviders } from "./useProviders";
 import type { useSwitchOperations } from "./useSwitchOperations";
 
 interface OperationConfirmSheetsProps {
-  /** Switch confirmation needs the preview the user approved. */
-  preview: { profileId: string; file: FilePreview } | null;
+  /** Only an explicit activation supplies a candidate for write confirmation. */
+  switchCandidate: { profileId: string; file: FilePreview } | null;
+  busy: boolean;
+  onCancelSwitch: () => void;
   operations: ReturnType<typeof useSwitchOperations>;
   providers: ReturnType<typeof useProviders>;
 }
@@ -17,29 +20,21 @@ interface OperationConfirmSheetsProps {
 /** Every destructive or writing operation gets one explicit confirmation
  * sheet; nothing writes without it. */
 export function OperationConfirmSheets({
-  preview,
+  switchCandidate,
+  busy,
+  onCancelSwitch,
   operations,
   providers,
 }: OperationConfirmSheetsProps) {
   const { undoPending, recoverLockPending } = operations;
   return (
     <>
-      {operations.confirmingSwitch && preview && (
-        <ConfirmSheet
-          title="确认切换"
-          details={[
-            `将写入 ${preview.file.preview.target}`,
-            `变更 ${preview.file.preview.changes.length} 个键`,
-            ...preview.file.preview.warnings.map((warning) => (
-              <span key={warning} className="asb-warn-text">
-                {warning}
-              </span>
-            )),
-            `备份位置 ${preview.file.preview.backupDir}`,
-          ]}
-          confirmLabel="确认切换"
+      {switchCandidate && (
+        <SwitchConfirmSheet
+          filePreview={switchCandidate.file}
+          busy={busy}
           onConfirm={() => void operations.runSwitch()}
-          onCancel={() => operations.setConfirmingSwitch(false)}
+          onCancel={onCancelSwitch}
         />
       )}
       {providers.pendingSave && (

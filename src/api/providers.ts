@@ -1,8 +1,43 @@
 import { invoke } from "./client";
-import type { AppKind, ModelOptions, ResponsesOptions, UpstreamProtocol } from "./shared";
+import type { AppKind, AuthenticationScheme, ModelOptions, ResponsesOptions, UpstreamProtocol } from "./shared";
 import type { UsageQuery } from "./usage";
 import type { FilePreview } from "./switching";
 import type { SettingsValues } from "./settings";
+import type { ClaudeBilling } from "./claude-gateway";
+
+export interface ProviderEndpoint {
+  url: string;
+  addedAt: number;
+  lastUsed?: number | null;
+}
+
+export interface ProviderEndpointsView {
+  providerId: string;
+  fileHash: string;
+  endpoints: ProviderEndpoint[];
+}
+
+export interface LocalProxyRequestOverrides {
+  headers: Record<string, string>;
+  body: Record<string, unknown> | null;
+}
+
+export interface ClaudeNativeConfiguration { kind: "bedrock" | "vertex" | "foundry"; environment: Record<string, string> }
+export interface ProviderConnectionOptions {
+  claudeNative?: ClaudeNativeConfiguration | null;
+  codex?: import("./codex-request-options").CodexRequestOptions | null;
+  isFullUrl?: boolean;
+  customEndpoints?: Record<string, ProviderEndpoint>;
+  endpointAutoSelect?: boolean | null;
+  customUserAgent?: string | null;
+  localProxyRequestOverrides?: LocalProxyRequestOverrides | null;
+  authBinding?: { source: string; authProvider?: string | null; accountId?: string | null } | null;
+  providerType?: string | null;
+  apiKeyField?: "ANTHROPIC_AUTH_TOKEN" | "ANTHROPIC_API_KEY" | null;
+  claudeBilling?: ClaudeBilling | null;
+  claudePromptCacheKey?: string | null;
+  claudeModelsUrl?: string | null;
+}
 
 export interface ProviderProfile {
   id: string;
@@ -11,7 +46,9 @@ export interface ProviderProfile {
   name: string;
   model: string | null;
   baseUrl: string | null;
+  connection?: ProviderConnectionOptions | null;
   apiKey: string;
+  authentication?: AuthenticationScheme | null;
   upstreamProtocol: UpstreamProtocol | null;
   responsesOptions: ResponsesOptions | null;
   maxOutputTokens: number | null;
@@ -43,7 +80,9 @@ export interface ProviderDraft {
   name: string;
   model: string | null;
   baseUrl: string | null;
+  connection?: ProviderConnectionOptions | null;
   apiKey: string;
+  authentication?: AuthenticationScheme | null;
   upstreamProtocol: UpstreamProtocol | null;
   responsesOptions: ResponsesOptions | null;
   maxOutputTokens: number | null;
@@ -55,6 +94,7 @@ export interface ProviderDraft {
   officialQuotaRefreshIntervalMinutes?: number | null;
 }
 
+export type CodexAuthenticationScheme = "bearer" | "xApiKey";
 export type CodexUpstream = "responses" | "chatCompletions" | "anthropicMessages";
 export type CodexRequestMode = ResponsesOptions["requestMode"];
 
@@ -64,7 +104,7 @@ export type CodexChatReasoning =
     kind: "configured";
     thinkingParameter: "none" | "thinking" | "enableThinking" | "reasoningSplit";
     effortParameter: "none" | "reasoningEffort" | "reasoningObject";
-    effortMode: "passthrough" | "lowHigh" | "deepSeek" | "openRouter";
+    effortMode: "passthrough" | "lowHigh" | "deepSeek" | "openRouter" | "catalog";
   };
 
 export interface CodexCapabilities {
@@ -94,6 +134,10 @@ export interface CodexCatalogEntry {
   supportedReasoningLevels: CodexReasoningLevel[];
   images: boolean;
   compact: boolean;
+  displayName?: string | null;
+  description?: string | null;
+  baseInstructions?: string | null;
+  supportsParallelToolCalls?: boolean | null;
 }
 
 export type CodexReasoningLevel = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
@@ -110,7 +154,10 @@ export interface CodexProviderProfile {
   name: string;
   endpoint: string;
   apiKey: string;
+  authentication?: CodexAuthenticationScheme | null;
+  connection?: ProviderConnectionOptions | null;
   upstream: CodexUpstream;
+  routeMode: "direct" | "gateway";
   requestMode: CodexRequestMode;
   defaultModel: string;
   catalog: CodexCatalogEntry[];
@@ -122,6 +169,8 @@ export interface CodexProviderDraft {
   name: string;
   endpoint: string;
   apiKey: string;
+  authentication?: CodexAuthenticationScheme | null;
+  connection?: ProviderConnectionOptions | null;
   upstream: CodexUpstream;
   requestMode: CodexRequestMode;
   defaultModel: string;
@@ -255,6 +304,38 @@ export function importDiscoveredClaudeProfile(): Promise<ProviderRecord> {
   return invoke<ProviderRecord>("import_discovered_claude_profile");
 }
 
+export function listProviderEndpoints(providerId: string): Promise<ProviderEndpointsView> {
+  return invoke<ProviderEndpointsView>("list_provider_endpoints", { providerId });
+}
+
+export function addProviderEndpoint(
+  providerId: string,
+  url: string,
+  expectedFileHash: string,
+  confirmWrite: boolean,
+): Promise<ProviderEndpointsView> {
+  return invoke<ProviderEndpointsView>("add_provider_endpoint", {
+    providerId,
+    url,
+    expectedFileHash,
+    confirmWrite,
+  });
+}
+
+export function removeProviderEndpoint(
+  providerId: string,
+  url: string,
+  expectedFileHash: string,
+  confirmWrite: boolean,
+): Promise<ProviderEndpointsView> {
+  return invoke<ProviderEndpointsView>("remove_provider_endpoint", {
+    providerId,
+    url,
+    expectedFileHash,
+    confirmWrite,
+  });
+}
+
 export function probeEndpoint(url: string): Promise<ProbeResult> {
   return invoke<ProbeResult>("probe_endpoint", { url });
 }
@@ -268,8 +349,11 @@ export interface ProviderEndpoints {
 export function resolveProviderEndpoints(
   baseUrl: string,
   upstreamProtocol: UpstreamProtocol,
+  connection?: ProviderConnectionOptions | null,
 ): Promise<ProviderEndpoints> {
-  return invoke("resolve_provider_endpoints", { request: { baseUrl, upstreamProtocol } });
+  return invoke("resolve_provider_endpoints", {
+    request: { baseUrl, upstreamProtocol, ...(connection ? { connection } : {}) },
+  });
 }
 
 /** One model from the provider's configured models endpoint; the
@@ -281,15 +365,21 @@ export interface ProviderModel {
 
 /** Models from the provider's configured API root. */
 export function fetchProviderModels(
+  app: AppKind,
   baseUrl: string,
   apiKey: string,
   upstreamProtocol: UpstreamProtocol,
+  authentication?: AuthenticationScheme | null,
+  connection?: ProviderConnectionOptions | null,
 ): Promise<ProviderModel[]> {
   return invoke<ProviderModel[]>("fetch_provider_models", {
     request: {
+      app,
       url: baseUrl,
       apiKey,
       upstreamProtocol,
+      ...(authentication ? { authentication } : {}),
+      ...(connection ? { connection } : {}),
     },
   });
 }

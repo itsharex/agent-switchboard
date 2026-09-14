@@ -4,6 +4,9 @@
 //! this codec turns that semantic state into the Claude Code configuration
 //! spelling or parses it from an external configuration during import.
 
+mod import;
+pub(crate) use import::{import_models, ModelSource};
+
 pub(crate) const ONE_M_CONTEXT_SUFFIX: &str = "[1m]";
 
 pub(crate) fn render_model(model: &str, one_m: bool) -> String {

@@ -1,5 +1,6 @@
-import type { SettingSpec, SettingValue } from "../api/client";
+import type { KeyChange, SettingSpec, SettingValue } from "../api/client";
 import { Button } from "./Button";
+import { DiffView } from "./DiffView";
 import { RadioOption } from "./RadioOption";
 import { Slider } from "./Slider";
 
@@ -7,6 +8,9 @@ interface Props {
   specs: SettingSpec[];
   groups: string[];
   values: Record<string, SettingValue>;
+  /** Optional saved values. Only callers with an explicit draft baseline show
+   * per-control diffs; provider parameter editors remain unchanged. */
+  baselineValues?: Record<string, SettingValue>;
   busy: boolean;
   onChange: (key: string, value: SettingValue) => void;
   onResetGroup: (group: string | null) => void;
@@ -23,9 +27,33 @@ function choiceLabel(spec: SettingSpec, value: SettingValue): string {
   return value.mode === "automatic" ? "自动" : spec.options.find((option) => option.value === value.value)?.label ?? String(value.value);
 }
 
+function sameSettingValue(left: SettingValue, right: SettingValue): boolean {
+  return left.mode === right.mode &&
+    (left.mode === "automatic" || (right.mode === "explicit" && left.value === right.value));
+}
+
+function diffValue(value: SettingValue): string | null {
+  return value.mode === "automatic" ? null : String(value.value);
+}
+
+function settingChange(
+  spec: SettingSpec,
+  baselineValue: SettingValue | undefined,
+  value: SettingValue,
+): KeyChange | null {
+  if (!baselineValue || sameSettingValue(baselineValue, value)) return null;
+  return {
+    key: spec.key,
+    kind: value.mode === "automatic" ? "remove" : "set",
+    before: diffValue(baselineValue),
+    after: diffValue(value),
+  };
+}
+
 interface ControlProps {
   spec: SettingSpec;
   value: SettingValue;
+  baselineValue?: SettingValue;
   busy: boolean;
   onChange: (value: SettingValue) => void;
 }
@@ -59,18 +87,32 @@ function SettingControl({ spec, value, busy, onChange }: ControlProps) {
 
 /** One catalog-driven settings row. Model pickers need the provider connection
  * and are rendered by the provider parameters page instead. */
-export function SettingsRow({ spec, value, busy, onChange }: ControlProps) {
+export function SettingsRow({ spec, value, baselineValue, busy, onChange }: ControlProps) {
   if (spec.control === "model") return null;
+  const change = settingChange(spec, baselineValue, value);
   return (
     <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head"><span className="asb-checkbox-label">{spec.label}</span></div>
       <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
+      {change && (
+        <div className="asb-setting-diff">
+          <DiffView changes={[change]} label={`${spec.label} 未保存差异`} />
+        </div>
+      )}
     </div>
   );
 }
 
 /** Both ownership domains edit catalog values through the same controls. */
-export function SettingsFields({ specs, groups, values, busy, onChange, onResetGroup }: Props) {
+export function SettingsFields({
+  specs,
+  groups,
+  values,
+  baselineValues,
+  busy,
+  onChange,
+  onResetGroup,
+}: Props) {
   return (
     <div className="asb-toggle-list">
       {groups.map((group) => {
@@ -83,7 +125,8 @@ export function SettingsFields({ specs, groups, values, busy, onChange, onResetG
               <Button variant="secondary" disabled={busy} onClick={() => onResetGroup(group)}>恢复默认值</Button>
             </div>
             {groupSpecs.map((spec) => (
-              <SettingsRow key={spec.key} spec={spec} value={values[spec.key]} busy={busy}
+              <SettingsRow key={spec.key} spec={spec} value={values[spec.key]}
+                baselineValue={baselineValues?.[spec.key]} busy={busy}
                 onChange={(next) => onChange(spec.key, next)} />
             ))}
           </section>

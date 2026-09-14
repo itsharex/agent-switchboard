@@ -9,6 +9,7 @@ pub(super) fn send_stream<S: Read + Write, R: Read>(
     context: &mut ConversationContext,
     request: &PendingRequest,
     mut diagnostic: ProviderDiagnostic,
+    span: &mut RequestSpan,
 ) -> ExchangeOutcome {
     let mut decoder = ResponseEventDecoder::default();
     let mut completed = false;
@@ -23,6 +24,12 @@ pub(super) fn send_stream<S: Read + Write, R: Read>(
                 continue;
             }
         };
+        span.note_first_byte();
+        if stream.has_token() {
+            span.note_first_token();
+        }
+        span.note_response_model(stream.model());
+        span.note_usage(stream.usage());
         let events = match decoder.push(&buffer[..count]) {
             Ok(events) => events,
             Err(()) => {

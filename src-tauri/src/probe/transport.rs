@@ -1,3 +1,4 @@
+use asb_core::contracts::ProviderConnectionOptions;
 use serde::Serialize;
 use std::error::Error as _;
 use std::sync::OnceLock;
@@ -311,10 +312,29 @@ pub fn http_request(
     headers: &str,
     body: &[u8],
 ) -> Result<(u16, String), String> {
+    http_request_with_options(
+        method,
+        url,
+        headers,
+        body,
+        &ProviderConnectionOptions::default(),
+    )
+}
+
+/// Variant of [`http_request`] that applies provider-owned request headers
+/// and User-Agent overrides after the query has built its own request.
+pub fn http_request_with_options(
+    method: &str,
+    url: &str,
+    headers: &str,
+    body: &[u8],
+    connection: &ProviderConnectionOptions,
+) -> Result<(u16, String), String> {
     let parsed = parse_url(url).ok_or_else(|| "请求地址必须是 http(s) URL".to_string())?;
     let method =
         reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| "请求方式无效".to_string())?;
-    let headers = header_map(headers)?;
+    let mut headers = header_map(headers)?;
+    crate::upstream_overrides::apply_header_overrides(&mut headers, connection);
 
     let mut request = client()
         .request(method, request_url(&parsed))
@@ -334,16 +354,12 @@ pub fn http_get(url: &str, headers: &str) -> Result<(u16, String), String> {
     http_request("GET", url, headers, &[])
 }
 
-/// One GET returning the raw response bytes, for binary payloads such as
-/// source tarballs. Same shared client, headers, and timeout budget.
-pub fn http_bytes(url: &str) -> Result<(u16, Vec<u8>), String> {
-    let parsed = parse_url(url).ok_or_else(|| "请求地址必须是 http(s) URL".to_string())?;
-    let response = client()
-        .get(request_url(&parsed))
-        .timeout(REQUEST_TIMEOUT)
-        .send()
-        .map_err(|error| classify(&error).message)?;
-    let status = response.status().as_u16();
-    let bytes = response.bytes().map_err(|error| classify(&error).message)?;
-    Ok((status, bytes.to_vec()))
+/// GET variant that applies the provider's request-header and User-Agent
+/// overrides without exposing a host I/O capability to usage scripts.
+pub fn http_get_with_options(
+    url: &str,
+    headers: &str,
+    connection: &ProviderConnectionOptions,
+) -> Result<(u16, String), String> {
+    http_request_with_options("GET", url, headers, &[], connection)
 }

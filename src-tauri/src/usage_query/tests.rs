@@ -81,9 +81,9 @@ fn declarative_summary_fills_configured_fields_only() {
 #[test]
 fn declarative_validation_happens_before_any_request() {
     let empty_url = declarative("  ", Some("a"), None, None);
-    assert!(run_usage_query(&empty_url, "sk", None, UpstreamProtocol::Responses,).is_err());
+    assert!(run_usage_query(&empty_url, "sk", None, UpstreamProtocol::Responses, None).is_err());
     let no_paths = declarative("https://x", None, None, None);
-    assert!(run_usage_query(&no_paths, "sk", None, UpstreamProtocol::Responses,).is_err());
+    assert!(run_usage_query(&no_paths, "sk", None, UpstreamProtocol::Responses, None).is_err());
 }
 
 #[test]

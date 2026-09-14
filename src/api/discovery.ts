@@ -2,6 +2,7 @@ import { invoke } from "./client";
 import type { AppKind } from "./shared";
 import type { RouteState } from "./switching";
 import type { ProviderDraft } from "./providers";
+import type { CodexUpstream } from "./providers";
 
 export type DiscoveredState =
   | { kind: "missing" }
@@ -21,9 +22,28 @@ export interface ClaudeImportProposal {
   basis: string;
 }
 
+export interface CodexImportProposal {
+  name: string;
+  providerName: string;
+  model: string | null;
+  upstream: CodexUpstream | null;
+  catalogModelCount: number;
+  apiKeyAvailable: boolean;
+  official: boolean;
+  basis: string;
+  warnings: string[];
+}
+
+export interface CodexImportResult {
+  id: string;
+  name: string;
+  official: boolean;
+}
+
 export interface DiscoveryReport {
   codex: DiscoveredFile;
   claude: DiscoveredFile;
+  codexImportProposals: CodexImportProposal[];
   claudeImportProposals: ClaudeImportProposal[];
 }
 
@@ -80,4 +100,8 @@ export function discoverLocal(): Promise<DiscoveryReport> {
  * scan ever completed. */
 export function discoverCached(): Promise<DiscoveryReport | null> {
   return invoke<DiscoveryReport | null>("discover_cached");
+}
+
+export function importDiscoveredCodexProfile(): Promise<CodexImportResult> {
+  return invoke<CodexImportResult>("import_discovered_codex_profile");
 }

@@ -28,6 +28,8 @@ pub fn codex_plan(name: &str, base_url: &str, model: &str, cred: &str) -> Switch
     );
     SwitchPlan::through_gateway(
         ProviderProfile {
+            authentication: None,
+            connection: Default::default(),
             id: format!("id-{name}"),
             app: AppKind::Codex,
             route_mode: asb_core::RouteMode::Custom,
@@ -66,6 +68,8 @@ pub fn claude_plan(name: &str, base_url: &str, model: &str) -> SwitchPlan {
     );
     SwitchPlan::direct(
         ProviderProfile {
+            authentication: None,
+            connection: Default::default(),
             id: format!("id-{name}"),
             app: AppKind::Claude,
             route_mode: asb_core::RouteMode::Custom,

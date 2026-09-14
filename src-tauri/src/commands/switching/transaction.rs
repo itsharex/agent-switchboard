@@ -2,6 +2,7 @@
 mod catalog;
 mod journal;
 
+use super::codex_backfill::{AppliedCodexBackfill, PreparedCodexBackfill};
 use crate::commands::error::CommandError;
 use crate::{
     gateway::{GatewayActivationSnapshot, GatewayController},
@@ -9,7 +10,9 @@ use crate::{
 };
 use asb_core::{AppKind, ConfigWriteRecord, WriteOperation};
 use asb_switch::{FsIo, PendingConfigWrite, SwitchIo};
-pub(super) use catalog::{apply_catalog_artifact, CatalogArtifact};
+#[cfg(test)]
+pub(super) use catalog::apply_catalog_artifact;
+pub(super) use catalog::{stage_catalog, CatalogArtifact};
 use catalog::{restore_catalog, validate_catalog_target, verify_catalog_after};
 use journal::{clear, error, load, path, read_target};
 use serde::{Deserialize, Serialize};
@@ -30,6 +33,28 @@ pub(super) struct SwitchIntent {
     previous_route: GatewayActivationSnapshot,
     previous_write: Option<ConfigWriteRecord>,
     catalog: Option<CatalogArtifact>,
+    #[serde(default)]
+    codex_backfill: Option<CodexBackfillIntent>,
+    #[serde(default)]
+    auth: Option<AuthIntent>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct AuthIntent {
+    pub(super) before_hash: String,
+    pub(super) before_existed: bool,
+    pub(super) after_hash: String,
+    pub(super) after_existed: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CodexBackfillIntent {
+    profile_id: String,
+    before_hash: String,
+    after_hash: String,
+    before: asb_core::contracts::CodexProviderFile,
 }
 
 pub(super) fn begin(
@@ -41,11 +66,65 @@ pub(super) fn begin(
     after_existed: bool,
     catalog: Option<CatalogArtifact>,
 ) -> Result<(), CommandError> {
+    begin_with_codex_backfill(
+        state,
+        gateway,
+        app,
+        profile_id,
+        after_hash,
+        after_existed,
+        catalog,
+        None,
+    )
+}
+
+pub(super) fn begin_with_codex_backfill(
+    state: &LocalState,
+    gateway: &GatewayController,
+    app: AppKind,
+    profile_id: Option<&str>,
+    after_hash: &str,
+    after_existed: bool,
+    catalog: Option<CatalogArtifact>,
+    codex_backfill: Option<&PreparedCodexBackfill>,
+) -> Result<(), CommandError> {
+    begin_with_codex_backfill_and_auth(
+        state,
+        gateway,
+        app,
+        profile_id,
+        after_hash,
+        after_existed,
+        catalog,
+        codex_backfill,
+        None,
+    )
+}
+
+pub(super) fn begin_with_codex_backfill_and_auth(
+    state: &LocalState,
+    gateway: &GatewayController,
+    app: AppKind,
+    profile_id: Option<&str>,
+    after_hash: &str,
+    after_existed: bool,
+    catalog: Option<CatalogArtifact>,
+    codex_backfill: Option<&PreparedCodexBackfill>,
+    auth: Option<AuthIntent>,
+) -> Result<(), CommandError> {
     if load(state).map_err(error)?.is_some() {
         return Err(error("存在未完成配置事务，请先恢复"));
     }
     let target = state.target(app).map_err(error)?;
     let (before, before_existed) = read_target(&target, app).map_err(error)?;
+    if let Some(auth) = &auth {
+        if app != AppKind::Codex
+            || !auth_snapshot_matches(&target, &auth.before_hash, auth.before_existed)
+                .map_err(error)?
+        {
+            return Err(error("Codex 认证文件在预览后已发生变化，请重新查看差异"));
+        }
+    }
     validate_catalog_target(&target, catalog.as_ref()).map_err(error)?;
     let profile_hash = profile_id
         .map(|id| profile_revision(state, app, id))
@@ -67,11 +146,32 @@ pub(super) fn begin(
             .latest_config_write(app)
             .map_err(|e| error(e.to_string()))?,
         catalog,
+        codex_backfill: codex_backfill.map(|backfill| CodexBackfillIntent {
+            profile_id: backfill.profile_id.clone(),
+            before_hash: backfill.before_hash.clone(),
+            after_hash: backfill.after_hash.clone(),
+            before: backfill.before.clone(),
+        }),
+        auth,
     };
     let journal = path(state);
     let text = serde_json::to_string(&intent).expect("intent serializes");
     crate::config_store::write_json_atomic(&journal, &text).map_err(error)?;
     Ok(())
+}
+
+fn auth_snapshot_matches(
+    config_target: &Path,
+    expected_hash: &str,
+    expected_existed: bool,
+) -> Result<bool, String> {
+    let target = config_target.with_file_name("auth.json");
+    let (content, existed) = match FsIo.read_file(&target) {
+        Ok(content) => (content, true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (String::new(), false),
+        Err(error) => return Err(format!("无法读取 Codex 认证文件：{error}")),
+    };
+    Ok(existed == expected_existed && asb_switch::sha256_hex(&content) == expected_hash)
 }
 
 pub(super) fn finish<T>(
@@ -90,7 +190,12 @@ pub(super) fn finish<T>(
                     .map_err(|e| error(e.to_string()))?
                     .is_none()
                 {
-                    restore_catalog(&intent).map_err(error)?;
+                    if intent.codex_backfill.is_some() {
+                        restore_application_snapshot(state, gateway, &intent, None)
+                            .map_err(error)?;
+                    } else {
+                        restore_catalog(&intent).map_err(error)?;
+                    }
                     clear(state).map_err(error)?;
                     return Err(CommandError::from(failure));
                 }
@@ -143,6 +248,8 @@ pub(super) fn recover(state: &LocalState, gateway: &GatewayController) -> Result
     }
     let (text, existed) = read_target(&target, intent.app)?;
     let hash = asb_switch::sha256_hex(&text);
+    let auth_before = auth_matches(&intent, false)?;
+    let auth_after = auth_matches(&intent, true)?;
     let unchanged_application = state
         .configuration()
         .latest_config_write(intent.app)
@@ -152,16 +259,26 @@ pub(super) fn recover(state: &LocalState, gateway: &GatewayController) -> Result
         && unchanged_application
         && hash == intent.before_hash
         && existed == intent.before_existed
+        && auth_before
     {
         if !resume_active_save(state, gateway, &intent, None, &text)? {
             rollback_application(state, gateway, &intent, None)?;
         }
-    } else if hash == intent.after_hash && existed == intent.after_existed {
+    } else if hash == intent.after_hash && existed == intent.after_existed && auth_after {
         complete(state, gateway, &intent, pending.as_ref(), &text)?;
-    } else if hash == intent.before_hash && existed == intent.before_existed {
+    } else if hash == intent.before_hash && existed == intent.before_existed && auth_before {
         if !resume_active_save(state, gateway, &intent, pending.as_ref(), &text)? {
             rollback_application(state, gateway, &intent, pending.as_ref())?;
         }
+    } else if pending.is_some()
+        && snapshot_is_expected(
+            hash == intent.before_hash,
+            hash == intent.after_hash,
+            auth_before,
+            auth_after,
+        )
+    {
+        rollback_pending_transaction(state, gateway, &intent, pending.as_ref().unwrap())?;
     } else {
         let backup = pending
             .as_ref()
@@ -172,6 +289,31 @@ pub(super) fn recover(state: &LocalState, gateway: &GatewayController) -> Result
         ));
     }
     clear(state)
+}
+
+fn rollback_pending_transaction(
+    state: &LocalState,
+    gateway: &GatewayController,
+    intent: &SwitchIntent,
+    pending: &PendingConfigWrite,
+) -> Result<(), String> {
+    asb_switch::rollback_pending_config(&FsIo, &state.backup_dir(), pending, || {
+        restore_application_snapshot(state, gateway, intent, Some(pending))
+    })
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn snapshot_is_expected(
+    config_before: bool,
+    config_after: bool,
+    auth_before: bool,
+    auth_after: bool,
+) -> bool {
+    (config_before || config_after)
+        && (auth_before || auth_after)
+        && !(config_before && auth_before)
+        && !(config_after && auth_after)
 }
 
 fn resume_active_save(
@@ -222,6 +364,7 @@ fn complete(
     text: &str,
 ) -> Result<(), String> {
     verify_catalog_after(intent)?;
+    validate_codex_backfill_after(state, intent)?;
     let profile = intent
         .profile_id
         .as_deref()
@@ -311,6 +454,7 @@ fn restore_application_snapshot(
     pending: Option<&PendingConfigWrite>,
 ) -> Result<(), String> {
     restore_catalog(intent)?;
+    restore_codex_backfill(state, intent)?;
     gateway.restore_activation_snapshot(state, &intent.previous_route)?;
     let last = state
         .configuration()
@@ -331,22 +475,48 @@ fn restore_application_snapshot(
     Err("回滚前的应用写入历史已变化，保留事务以人工处理".into())
 }
 
-fn profile_revision(state: &LocalState, app: AppKind, id: &str) -> Result<String, String> {
-    match app {
-        AppKind::Codex => state
-            .configuration()
-            .list_codex_providers()
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .find(|record| record.profile.id == id)
-            .map(|record| record.file_hash)
-            .ok_or_else(|| "Codex 供应商不存在".to_string()),
-        AppKind::Claude => state
-            .configuration()
-            .find_provider_record(id)
-            .map(|record| record.file_hash)
-            .map_err(|error| error.to_string()),
+fn backfill_from_intent(intent: &SwitchIntent) -> Option<AppliedCodexBackfill> {
+    intent
+        .codex_backfill
+        .as_ref()
+        .map(|backfill| AppliedCodexBackfill {
+            profile_id: backfill.profile_id.clone(),
+            before: backfill.before.clone(),
+            before_hash: backfill.before_hash.clone(),
+            after_hash: backfill.after_hash.clone(),
+        })
+}
+
+fn validate_codex_backfill_after(state: &LocalState, intent: &SwitchIntent) -> Result<(), String> {
+    let Some(backfill) = backfill_from_intent(intent) else {
+        return Ok(());
+    };
+    let current = state
+        .configuration()
+        .list_codex_providers()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|record| record.profile.id == backfill.profile_id)
+        .ok_or_else(|| "已确认的 Codex 回填供应商不存在".to_string())?;
+    if current.file_hash != backfill.after_hash {
+        return Err("已确认的 Codex 回填供应商版本已变化，不能重解释未完成事务".into());
     }
+    Ok(())
+}
+
+fn restore_codex_backfill(state: &LocalState, intent: &SwitchIntent) -> Result<(), String> {
+    let Some(backfill) = backfill_from_intent(intent) else {
+        return Ok(());
+    };
+    super::codex_backfill::restore(state, &backfill)
+}
+
+pub(super) fn profile_revision(
+    state: &LocalState,
+    app: AppKind,
+    id: &str,
+) -> Result<String, String> {
+    profile_name_and_revision(state, app, id).map(|(_, revision)| revision)
 }
 
 fn profile_name_and_revision(
@@ -354,21 +524,25 @@ fn profile_name_and_revision(
     app: AppKind,
     id: &str,
 ) -> Result<(String, String), String> {
-    match app {
-        AppKind::Codex => state
+    if app == AppKind::Codex {
+        if let Some(record) = state
             .configuration()
             .list_codex_providers()
             .map_err(|error| error.to_string())?
             .into_iter()
             .find(|record| record.profile.id == id)
-            .map(|record| (record.profile.name, record.file_hash))
-            .ok_or_else(|| "Codex 供应商不存在".to_string()),
-        AppKind::Claude => state
-            .configuration()
-            .find_provider_record(id)
-            .map(|record| (record.profile.name, record.file_hash))
-            .map_err(|error| error.to_string()),
+        {
+            return Ok((record.profile.name, record.file_hash));
+        }
     }
+    let record = state
+        .configuration()
+        .find_provider_record(id)
+        .map_err(|error| error.to_string())?;
+    if record.profile.app != app {
+        return Err("供应商不属于当前配置事务的客户端".into());
+    }
+    Ok((record.profile.name, record.file_hash))
 }
 
 fn finish_pending(
@@ -402,7 +576,37 @@ fn validate_pending(intent: &SwitchIntent, pending: &PendingConfigWrite) -> Resu
     {
         return Err("应用事务与执行器事务不匹配，保留恢复记录".into());
     }
+    match (&intent.auth, &pending.auth) {
+        (None, None) => {}
+        (Some(expected), Some(actual))
+            if actual.backup.target_path
+                == Path::new(&intent.target)
+                    .with_file_name("auth.json")
+                    .to_string_lossy()
+                && actual.backup.content_hash == expected.before_hash
+                && actual.backup.target_existed == expected.before_existed
+                && actual.after_hash == expected.after_hash
+                && actual.after_existed == expected.after_existed => {}
+        _ => return Err("应用认证事务与执行器事务不匹配，保留恢复记录".into()),
+    }
     Ok(())
+}
+
+fn auth_matches(intent: &SwitchIntent, after: bool) -> Result<bool, String> {
+    let Some(auth) = intent.auth.as_ref() else {
+        return Ok(true);
+    };
+    let expected_hash = if after {
+        &auth.after_hash
+    } else {
+        &auth.before_hash
+    };
+    let expected_existed = if after {
+        auth.after_existed
+    } else {
+        auth.before_existed
+    };
+    auth_snapshot_matches(Path::new(&intent.target), expected_hash, expected_existed)
 }
 
 pub(super) fn restore_pending_backup(

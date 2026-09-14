@@ -122,6 +122,85 @@ describe("SessionManager", () => {
     expect(within(detail).getByText("已复制恢复命令")).toBeInTheDocument();
   });
 
+  it("deletes a session only after the shared confirmation sheet and drops it everywhere", async () => {
+    primeBackend();
+    const user = userEvent.setup({ writeToClipboard: false });
+    render(
+      <>
+        <Toaster />
+        <SessionManager active />
+      </>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /修复供应商预览/ }));
+    const detail = await screen.findByRole("region", { name: "会话详情" });
+    await user.click(within(detail).getByRole("button", { name: "删除会话" }));
+
+    const sheet = screen.getByRole("dialog", { name: "删除会话" });
+    expect(within(sheet).getByText(/将永久删除本地会话「修复供应商预览」/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/此操作不可恢复/)).toBeInTheDocument();
+
+    await user.click(within(sheet).getByRole("button", { name: "确认删除" }));
+
+    expect(invokeMock).toHaveBeenCalledWith("delete_session", {
+      app: "codex",
+      sessionId: "codex-1",
+    });
+    expect(await screen.findByText("已删除会话")).toBeInTheDocument();
+    expect(screen.queryByText(/修复供应商预览/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("选择一条会话即可查看内容并复制恢复命令。"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the session when the confirmation sheet is cancelled", async () => {
+    primeBackend();
+    const user = userEvent.setup({ writeToClipboard: false });
+    render(<SessionManager active />);
+
+    await user.click(await screen.findByRole("button", { name: /修复供应商预览/ }));
+    const detail = await screen.findByRole("region", { name: "会话详情" });
+    await user.click(within(detail).getByRole("button", { name: "删除会话" }));
+    await user.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /修复供应商预览/ })).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "delete_session",
+      expect.anything(),
+    );
+  });
+
+  it("keeps the session and reports the failure when deletion is rejected", async () => {
+    primeBackend();
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "delete_session") {
+        return Promise.reject(new Error("无法删除会话记录"));
+      }
+      if (command === "list_sessions") return Promise.resolve(scan);
+      if (command === "get_session_messages") {
+        return Promise.resolve([{ role: "user", content: "修复预览", at: null }]);
+      }
+      return Promise.resolve(undefined);
+    });
+    const user = userEvent.setup({ writeToClipboard: false });
+    render(
+      <>
+        <Toaster />
+        <SessionManager active />
+      </>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /修复供应商预览/ }));
+    const detail = await screen.findByRole("region", { name: "会话详情" });
+    await user.click(within(detail).getByRole("button", { name: "删除会话" }));
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+
+    expect(await screen.findByText("无法删除会话记录")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /修复供应商预览/ })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "会话详情" })).toBeInTheDocument();
+  });
+
   it("does not attach an earlier resume result to a newly selected session", async () => {
     const pendingResume = deferred<{ command: string; usedProjectDir: boolean }>();
     invokeMock.mockImplementation((command: string, args?: unknown) => {

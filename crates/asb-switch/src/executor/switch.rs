@@ -9,6 +9,11 @@ use super::{
     sha256_hex, timestamp_name, write_backup_metadata, RecoveryOutcome, RestoreOutcome,
     SwitchError, SwitchOutcome, SwitchRequest, PROCESS_NAME,
 };
+#[path = "config_file.rs"]
+mod config_file;
+pub(crate) use config_file::{back_up_current, commit_rendered};
+
+use crate::codex_auth::{commit_auth, restore_pair};
 use crate::io::SwitchIo;
 use crate::lockfile::{self, AcquireOutcome};
 use crate::restore::{restore_backup_content, restore_locked};
@@ -21,6 +26,45 @@ use crate::restore::{restore_backup_content, restore_locked};
 pub fn execute<Io: SwitchIo, Commit>(
     io: &Io,
     req: &SwitchRequest,
+    commit: Commit,
+) -> Result<SwitchOutcome, SwitchError>
+where
+    Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
+{
+    execute_with_auth(io, req, false, None, None, None, commit)
+}
+
+/// Executes a Codex projection and optionally commits its paired auth.json
+/// API-key patch. The extra hashes are private execution inputs from preview.
+pub fn execute_codex<Io: SwitchIo, Commit>(
+    io: &Io,
+    req: &SwitchRequest,
+    expected_auth_hash: Option<&str>,
+    expected_auth_existed: Option<bool>,
+    expected_auth_rendered_hash: Option<&str>,
+    commit: Commit,
+) -> Result<SwitchOutcome, SwitchError>
+where
+    Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
+{
+    execute_with_auth(
+        io,
+        req,
+        true,
+        expected_auth_hash,
+        expected_auth_existed,
+        expected_auth_rendered_hash,
+        commit,
+    )
+}
+
+fn execute_with_auth<Io: SwitchIo, Commit>(
+    io: &Io,
+    req: &SwitchRequest,
+    auth_transaction: bool,
+    expected_auth_hash: Option<&str>,
+    expected_auth_existed: Option<bool>,
+    expected_auth_rendered_hash: Option<&str>,
     commit: Commit,
 ) -> Result<SwitchOutcome, SwitchError>
 where
@@ -41,11 +85,11 @@ where
     }
     execute_locked(
         io,
-        req.target,
-        req.backup_dir,
-        req.expected_hash,
-        req.expected_rendered_hash,
-        req.plan,
+        req,
+        auth_transaction,
+        expected_auth_hash,
+        expected_auth_existed,
+        expected_auth_rendered_hash,
         commit,
     )
 }
@@ -178,204 +222,192 @@ fn plan_candidate(
 
 /// Snapshots the current content as the pre-write backup, sidecar metadata
 /// included.
-pub(crate) fn back_up_current<Io: SwitchIo>(
-    io: &Io,
-    target: &Path,
-    backup_dir: &Path,
-    current: &str,
-    found_hash: &str,
-    target_existed: bool,
-    app: AppKind,
-    reason: &str,
-) -> Result<BackupRecord, SwitchError> {
-    verify_live_snapshot(io, target, app, current, target_existed)?;
-    io.ensure_dir(backup_dir)
-        .map_err(|e| SwitchError::CommitFailed {
-            stage: "backup-dir",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        })?;
-    let ts = timestamp_name(io);
-    let file_name = target
-        .file_name()
-        .expect("target has a file name")
-        .to_string_lossy()
-        .to_string();
-    let backup_path = backup_dir.join(format!("{file_name}.{ts}.bak"));
-    let created_at = io.now_rfc3339();
-    io.write_new_file(&backup_path, current)
-        .map_err(|e| SwitchError::CommitFailed {
-            stage: "backup",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        })?;
-    let backup_text = io
-        .read_file(&backup_path)
-        .map_err(|error| SwitchError::CommitFailed {
-            stage: "backup-verify",
-            message: error.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        })?;
-    if backup_text != current || adapter::validate_syntax(app, &backup_text).is_err() {
-        return Err(SwitchError::CommitFailed {
-            stage: "backup-verify",
-            message: "备份回读内容或语法不匹配".to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        });
-    }
-    let backup = BackupRecord {
-        id: format!("{}-{ts}", &found_hash[..12.min(found_hash.len())]),
-        app,
-        target_path: target.to_string_lossy().to_string(),
-        backup_path: backup_path.to_string_lossy().to_string(),
-        created_at,
-        content_hash: found_hash.to_string(),
-        target_existed,
-        linked_backup_id: None,
-        reason: reason.to_string(),
-    };
-    write_backup_metadata(io, &backup, "backup-meta")?;
-    Ok(backup)
-}
-
-/// Writes the rendered candidate: temporary file → syntax validation →
-/// atomic replacement → post-write verification. A failed stage after the
-/// replacement restores the just-created backup.
-pub(crate) fn commit_rendered<Io: SwitchIo>(
-    io: &Io,
-    target: &Path,
-    app: AppKind,
-    rendered: &str,
-    backup: &BackupRecord,
-    expected_current: &str,
-) -> Result<(), SwitchError> {
-    let file_name = target
-        .file_name()
-        .expect("target has a file name")
-        .to_string_lossy()
-        .to_string();
-    let temp_path = target.with_file_name(format!("{}.{}.asb-tmp", file_name, std::process::id()));
-    io.write_new_file(&temp_path, rendered)
-        .map_err(|e| SwitchError::CommitFailed {
-            stage: "temp-write",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        })?;
-
-    let temp_text = match io.read_file(&temp_path) {
-        Ok(text) if text == rendered => text,
-        Ok(_) => {
-            let _ = io.remove(&temp_path);
-            return Err(SwitchError::CommitFailed {
-                stage: "temp-verify",
-                message: "临时文件回读内容不匹配".to_string(),
-                recovery: RecoveryOutcome::NotNeeded,
-            });
-        }
-        Err(error) => {
-            let _ = io.remove(&temp_path);
-            return Err(SwitchError::CommitFailed {
-                stage: "temp-verify",
-                message: error.to_string(),
-                recovery: RecoveryOutcome::NotNeeded,
-            });
-        }
-    };
-    if let Err(e) = adapter::validate_syntax(app, &temp_text) {
-        let _ = io.remove(&temp_path);
-        return Err(SwitchError::CommitFailed {
-            stage: "temp-validate",
-            message: format!("临时文件校验失败: {e}"),
-            recovery: RecoveryOutcome::NotNeeded,
-        });
-    }
-    // Recheck after preparing the candidate so concurrent host edits are preserved.
-    if let Err(error) =
-        verify_live_snapshot(io, target, app, expected_current, backup.target_existed)
-    {
-        let _ = io.remove(&temp_path);
-        return Err(error);
-    }
-
-    if let Err(e) = io.rename_replace(&temp_path, target) {
-        let _ = io.remove(&temp_path);
-        return Err(SwitchError::CommitFailed {
-            stage: "atomic-replace",
-            message: e.to_string(),
-            recovery: RecoveryOutcome::NotNeeded,
-        });
-    }
-    // Verify the actual replacement before committing application state.
-    let verified = match io.read_file(target) {
-        Ok(text) => text == rendered && adapter::validate_syntax(app, &text).is_ok(),
-        Err(_) => false,
-    };
-    if !verified {
-        let recovery = restore_backup_content(io, target, backup);
-        return Err(SwitchError::CommitFailed {
-            stage: "post-verify",
-            message: "替换后校验失败".to_string(),
-            recovery,
-        });
-    }
-    Ok(())
-}
-
 /// The locked body of one transaction: verify → plan → re-verify → backup →
 /// commit. Every exit path releases the lock through `finish`.
+struct PreparedSwitch {
+    current: String,
+    preview: SwitchPreview,
+    rendered: String,
+    backup: BackupRecord,
+    auth: Option<crate::codex_auth::AuthChange>,
+    auth_backup: Option<BackupRecord>,
+}
 fn execute_locked<Io: SwitchIo, Commit>(
     io: &Io,
-    target: &Path,
-    backup_dir: &Path,
-    expected_hash: &str,
-    expected_rendered_hash: &str,
-    plan: &SwitchPlan,
+    request: &SwitchRequest,
+    auth_transaction: bool,
+    expected_auth_hash: Option<&str>,
+    expected_auth_existed: Option<bool>,
+    expected_auth_rendered_hash: Option<&str>,
     commit: Commit,
 ) -> Result<SwitchOutcome, SwitchError>
 where
     Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
 {
-    let backup_dir_label = backup_dir.to_string_lossy().to_string();
-    let (current, target_existed, found_hash) =
-        match read_unchanged_current(io, target, plan.app(), expected_hash) {
-            Ok(verified) => verified,
-            Err(error) => return finish_execution(io, target, Err(error)),
-        };
-    let (preview, rendered) =
-        match plan_candidate(plan, &current, &backup_dir_label, expected_rendered_hash) {
-            Ok(candidate) => candidate,
-            Err(error) => return finish_execution(io, target, Err(error)),
-        };
-    let backup = match back_up_current(
+    let result = prepare_switch(
         io,
-        target,
-        backup_dir,
+        request,
+        auth_transaction,
+        expected_auth_hash,
+        expected_auth_existed,
+        expected_auth_rendered_hash,
+    )
+    .and_then(|prepared| commit_switch(io, request, prepared, commit));
+    finish_execution(io, request.target, result)
+}
+fn prepare_switch<Io: SwitchIo>(
+    io: &Io,
+    request: &SwitchRequest,
+    auth_transaction: bool,
+    expected_auth_hash: Option<&str>,
+    expected_auth_existed: Option<bool>,
+    expected_auth_rendered_hash: Option<&str>,
+) -> Result<PreparedSwitch, SwitchError> {
+    let (current, existed, hash) = read_unchanged_current(
+        io,
+        request.target,
+        request.plan.app(),
+        request.expected_hash,
+    )?;
+    let (preview, rendered) = plan_candidate(
+        request.plan,
         &current,
-        &found_hash,
-        target_existed,
-        plan.app(),
-        "provider-projection",
-    ) {
-        Ok(backup) => backup,
-        Err(error) => return finish_execution(io, target, Err(error)),
+        &request.backup_dir.to_string_lossy(),
+        request.expected_rendered_hash,
+    )?;
+    let auth = if auth_transaction {
+        crate::codex_auth::validate_storage(&current, request.plan)?;
+        crate::codex_auth::prepare(
+            io,
+            request.target,
+            crate::codex_auth::expected_action(request.plan),
+        )?
+    } else {
+        None
     };
-    let pending = crate::PendingConfigWrite {
+    validate_auth_preview(
+        auth.as_ref(),
+        expected_auth_hash,
+        expected_auth_existed,
+        expected_auth_rendered_hash,
+    )?;
+    let backup = back_up_current(
+        io,
+        request.target,
+        request.backup_dir,
+        &current,
+        &hash,
+        existed,
+        request.plan.app(),
+        "provider-projection",
+    )?;
+    let auth_backup = auth
+        .as_ref()
+        .map(|change| {
+            crate::codex_auth::backup(io, change, &backup, request.backup_dir, &timestamp_name(io))
+        })
+        .transpose()?;
+    Ok(PreparedSwitch {
+        current,
+        preview,
+        rendered,
+        backup,
+        auth,
+        auth_backup,
+    })
+}
+fn validate_auth_preview(
+    change: Option<&crate::codex_auth::AuthChange>,
+    before: Option<&str>,
+    existed: Option<bool>,
+    after: Option<&str>,
+) -> Result<(), SwitchError> {
+    match (change, before, existed, after) {
+        (None, None, None, None) => Ok(()),
+        (Some(change), Some(before), Some(existed), Some(after)) => {
+            if change.before_hash != before || change.before_existed != existed {
+                return Err(SwitchError::ExternalChange {
+                    expected_hash: before.into(),
+                    found_hash: change.before_hash.clone(),
+                });
+            }
+            if change.after_hash != after {
+                return Err(SwitchError::PlanChanged);
+            }
+            Ok(())
+        }
+        _ => Err(SwitchError::PlanChanged),
+    }
+}
+fn switch_journal(request: &SwitchRequest, prepared: &PreparedSwitch) -> crate::PendingConfigWrite {
+    let PreparedSwitch {
+        backup,
+        rendered,
+        auth,
+        auth_backup,
+        ..
+    } = prepared;
+    crate::PendingConfigWrite {
         version: 1,
-        app: plan.app(),
-        profile_id: Some(plan.profile.id.clone()),
+        app: request.plan.app(),
+        profile_id: Some(request.plan.profile.id.clone()),
         backup: backup.clone(),
         after_hash: sha256_hex(&rendered),
         after_existed: true,
-    };
-    let result = crate::config_journal::track(io, pending, || {
-        if let Err(error) = commit_rendered(io, target, plan.app(), &rendered, &backup, &current) {
-            return Err(error);
-        }
+        auth: auth
+            .as_ref()
+            .zip(auth_backup.as_ref())
+            .map(|(change, backup)| crate::PendingAuthWrite {
+                backup: backup.clone(),
+                after_hash: change.after_hash.clone(),
+                after_existed: true,
+            }),
+    }
+}
 
+fn commit_switch<Io: SwitchIo, Commit>(
+    io: &Io,
+    request: &SwitchRequest,
+    prepared: PreparedSwitch,
+    commit: Commit,
+) -> Result<SwitchOutcome, SwitchError>
+where
+    Commit: FnOnce(&SwitchOutcome) -> Result<(), String>,
+{
+    let pending = switch_journal(request, &prepared);
+    let PreparedSwitch {
+        current,
+        preview,
+        rendered,
+        backup,
+        auth,
+        auth_backup,
+    } = prepared;
+    crate::config_journal::track(io, pending, || {
+        commit_rendered(
+            io,
+            request.target,
+            request.plan.app(),
+            &rendered,
+            &backup,
+            &current,
+        )?;
+        if let (Some(change), Some(auth_backup)) = (&auth, &auth_backup) {
+            if let Err(error) = commit_auth(io, change) {
+                let recovery = restore_pair(
+                    io,
+                    request.target,
+                    &backup,
+                    &rendered,
+                    Some((change, auth_backup)),
+                );
+                return Err(with_recovery("auth-write", error, recovery));
+            }
+        }
         let outcome = SwitchOutcome {
             lock: LockStatus::Free,
             acquired_at: backup.created_at.clone(),
-            changed: vec![target.to_string_lossy().to_string()],
+            changed: changed_paths(request.target, auth.as_ref()),
             warnings: preview.warnings.clone(),
             backup,
             preview,
@@ -383,7 +415,13 @@ where
             final_hash: sha256_hex(&rendered),
         };
         if let Err(message) = commit(&outcome) {
-            let recovery = restore_backup_content(io, target, &outcome.backup);
+            let recovery = restore_pair(
+                io,
+                request.target,
+                &outcome.backup,
+                &rendered,
+                auth.as_ref().zip(auth_backup.as_ref()),
+            );
             return Err(SwitchError::CommitFailed {
                 stage: "state-save",
                 message,
@@ -391,8 +429,27 @@ where
             });
         }
         Ok(outcome)
-    });
-    finish_execution(io, target, result)
+    })
+}
+
+fn changed_paths(target: &Path, auth: Option<&crate::codex_auth::AuthChange>) -> Vec<String> {
+    let mut paths = vec![target.to_string_lossy().into_owned()];
+    if let Some(auth) = auth {
+        paths.push(auth.target.to_string_lossy().into_owned());
+    }
+    paths
+}
+
+fn with_recovery(
+    stage: &'static str,
+    error: SwitchError,
+    recovery: RecoveryOutcome,
+) -> SwitchError {
+    SwitchError::CommitFailed {
+        stage,
+        message: error.to_string(),
+        recovery,
+    }
 }
 
 fn finish_execution<Io: SwitchIo>(

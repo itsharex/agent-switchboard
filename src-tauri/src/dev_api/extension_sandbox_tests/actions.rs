@@ -77,10 +77,6 @@ fn run_discovered_actions(root: &Path) {
     // Manage the existing installation: the row becomes managed and names
     // the definition that manages it.
     api.ok(
-        "preview_discovered_takeover",
-        json!({ "observationId": healthy["observationId"] }),
-    );
-    api.ok(
         "takeover_discovered_extension",
         json!({ "observationId": healthy["observationId"], "confirmWrite": true }),
     );

@@ -15,11 +15,7 @@ export function NewMcpDialog({ workspace: w }: Props) {
       <NewMcpForm
         busy={w.writeBlocked}
         onPutSecret={w.ext.putSecret}
-        onSave={async (draft) => {
-          const definition = await w.ext.saveDefinition(draft);
-          if (definition) w.nav.showDefinition(definition.id, "mcp");
-          return definition !== null;
-        }}
+        onSave={w.createMcp}
       />
     </ExtensionDialog>
   );
@@ -87,7 +83,7 @@ export function HistoryDialog({ workspace: w }: Props) {
         items={w.items}
         busy={w.writeBlocked}
         projectNames={w.projectNames}
-        onRestore={(id) => void w.plans.restore(id)}
+        onRestore={(id) => void w.applies.restore(id)}
       />
     </ExtensionDialog>
   );

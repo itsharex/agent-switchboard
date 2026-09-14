@@ -27,6 +27,7 @@ import { ClientPicker } from "./ClientPicker";
 import { DualRelay } from "./DualRelay";
 import { GripIcon, PlusIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import { cx } from "@/utils/cx";
 import "../styles/base/provider-workspace.css";
 
@@ -46,12 +47,15 @@ interface ProviderWorkspaceShellProps {
   onNew: () => void;
   /** App-specific actions appended between 导入 and 新建供应商. */
   extraActions?: ReactNode;
+  /** Preserve the original provider-page geometry for Codex. */
+  legacyLayout?: boolean;
   children: ReactNode;
 }
 
-/** The one provider-workspace skeleton: heading with the client-preference
- * toolbar, the dual route cards, and the client tabs bar. Both clients render
- * their lists inside this exact structure. */
+/** The one provider-workspace skeleton (2026-09-12 user directive): the
+ * workspace header — row 1 the title alone, row 2 the client switch left and
+ * every page action right — followed by the dual route cards and the lists.
+ * Both clients render their lists inside this exact structure. */
 export function ProviderWorkspaceShell({
   ariaLabel,
   app,
@@ -65,40 +69,75 @@ export function ProviderWorkspaceShell({
   onImport,
   onNew,
   extraActions,
+  legacyLayout = false,
   children,
 }: ProviderWorkspaceShellProps) {
   return (
-    <section className="asb-panel asb-provider-workspace" aria-label={ariaLabel}>
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">供应商</h2>
-        <div className="asb-provider-toolbar">
-          <Button variant="secondary" onClick={onOpenClientSettings}>
-            偏好设置
-          </Button>
-          <Button variant="secondary" onClick={onOpenHistory}>
-            切换历史
-          </Button>
+    <section className={`asb-panel asb-provider-workspace${legacyLayout ? " asb-provider-workspace-legacy" : ""}`} aria-label={ariaLabel}>
+      {legacyLayout ? (
+        <div className="asb-panel-heading">
+          <h2 className="asb-panel-title">供应商</h2>
+          <div className="asb-provider-toolbar">
+            <Button variant="secondary" onClick={onOpenClientSettings}>
+              偏好设置
+            </Button>
+            <Button variant="secondary" onClick={onOpenHistory}>
+              切换历史
+            </Button>
+          </div>
         </div>
-      </div>
-      <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
-      <div className="asb-tabs-bar">
-        <ClientPicker
-          app={app}
-          onChange={onSelectApp}
-          disabled={busy}
-          label="供应商客户端"
+      ) : (
+        <WorkspaceHeader
+          title="供应商"
+          primary={
+            <ClientPicker
+              app={app}
+              onChange={onSelectApp}
+              disabled={busy}
+              label="供应商客户端"
+            />
+          }
+          primaryActions={
+            <>
+              <Button variant="secondary" onClick={onOpenClientSettings}>
+                偏好设置
+              </Button>
+              <Button variant="secondary" onClick={onOpenHistory}>
+                切换历史
+              </Button>
+              <Button variant="secondary" disabled={busy} onClick={onImport}>
+                导入
+              </Button>
+              {extraActions}
+              <Button variant="plus" disabled={busy} onClick={onNew}>
+                <PlusIcon />
+                新建供应商
+              </Button>
+            </>
+          }
         />
-        <div className="asb-provider-toolbar">
-          <Button variant="secondary" disabled={busy} onClick={onImport}>
-            导入
-          </Button>
-          {extraActions}
-          <Button variant="plus" disabled={busy} onClick={onNew}>
-            <PlusIcon />
-            新建供应商
-          </Button>
+      )}
+      <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
+      {legacyLayout ? (
+        <div className="asb-tabs-bar">
+          <ClientPicker
+            app={app}
+            onChange={onSelectApp}
+            disabled={busy}
+            label="供应商客户端"
+          />
+          <div className="asb-provider-toolbar">
+            <Button variant="secondary" disabled={busy} onClick={onImport}>
+              导入
+            </Button>
+            {extraActions}
+            <Button variant="plus" disabled={busy} onClick={onNew}>
+              <PlusIcon />
+              新建供应商
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
       {children}
     </section>
   );
@@ -110,6 +149,7 @@ interface SortableProviderRowsProps {
   onReorder?: (orderedIds: string[]) => void;
   emptyLabel?: string;
   ariaLabel?: string;
+  legacyLayout?: boolean;
   /** A fixed row rendered above the sortable ones (e.g. the Codex
    * official-login entry). It is never a reorder target. */
   leading?: ReactNode;
@@ -123,6 +163,7 @@ export function SortableProviderRows({
   emptyLabel = "尚无供应商",
   ariaLabel = "供应商列表",
   leading,
+  legacyLayout = false,
   children,
 }: SortableProviderRowsProps) {
   const sensors = useSensors(
@@ -148,7 +189,7 @@ export function SortableProviderRows({
     );
   }
   return (
-    <ul className="asb-rows" role="listbox" aria-label={ariaLabel}>
+    <ul className="asb-rows" role={legacyLayout ? "listbox" : "list"} aria-label={ariaLabel}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {leading}
@@ -166,7 +207,6 @@ interface ProviderRowShellProps {
   selected: boolean;
   previewOpen: boolean;
   sortable: boolean;
-  onSelect: () => void;
   /** Detail line inside the row; omitted entirely when null. */
   meta?: ReactNode;
   metaWithUsage?: boolean;
@@ -176,13 +216,18 @@ interface ProviderRowShellProps {
   secondaryAction?: ReactNode;
   /** Icon-cluster actions; the cluster renders only when non-null. */
   actions?: ReactNode;
+  legacyLayout?: boolean;
+  onSelect?: () => void;
   /** Expansion blocks rendered under the row line (panels, inline preview). */
   children?: ReactNode;
 }
 
 /** The one provider row layout: grip, avatar, name, meta line, primary
  * action, status pill, and the icon cluster. Both clients compose their rows
- * on this shell so the list UI stays a single visual language. */
+ * on this shell so the list UI stays a single visual language. The identity
+ * bar (avatar, name, meta) is display-only (2026-09-12 user directive): only
+ * the action buttons are clickable, and the pages select the row from those
+ * buttons so the bar keeps its selected highlight afterwards. */
 export function ProviderRowShell({
   id,
   name,
@@ -190,12 +235,13 @@ export function ProviderRowShell({
   selected,
   previewOpen,
   sortable,
-  onSelect,
   meta,
   metaWithUsage = false,
   primaryAction,
   secondaryAction,
   actions,
+  legacyLayout = false,
+  onSelect,
   children,
 }: ProviderRowShellProps) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
@@ -203,6 +249,21 @@ export function ProviderRowShell({
     disabled: !sortable,
   });
   const initial = name.trim().charAt(0).toUpperCase() || "?";
+  const identity = (
+    <>
+      <span className="asb-avatar" aria-hidden="true">
+        {initial}
+      </span>
+      <span className="asb-row-main">
+        <span className="asb-row-name">{name}</span>
+        {meta && (
+          <span className={cx("asb-row-meta", metaWithUsage && "asb-row-meta-with-usage")}>
+            {meta}
+          </span>
+        )}
+      </span>
+    </>
+  );
   return (
     <li
       ref={setNodeRef}
@@ -223,25 +284,19 @@ export function ProviderRowShell({
             </Button>
           </Tooltip>
         )}
-        <Button
-          variant="unstyled"
-          role="option"
-          aria-selected={selected}
-          className="asb-row"
-          onClick={onSelect}
-        >
-          <span className="asb-avatar" aria-hidden="true">
-            {initial}
-          </span>
-          <span className="asb-row-main">
-            <span className="asb-row-name">{name}</span>
-            {meta && (
-              <span className={cx("asb-row-meta", metaWithUsage && "asb-row-meta-with-usage")}>
-                {meta}
-              </span>
-            )}
-          </span>
-        </Button>
+        {legacyLayout && onSelect ? (
+          <Button
+            variant="unstyled"
+            role="option"
+            aria-selected={selected}
+            className="asb-row"
+            onClick={onSelect}
+          >
+            {identity}
+          </Button>
+        ) : (
+          <div className="asb-row">{identity}</div>
+        )}
         {primaryAction}
         {active && <span className="asb-pill-status">使用中</span>}
         {secondaryAction}

@@ -283,6 +283,8 @@ fn model_fetch_uses_the_declared_api_prefix_and_authentication() {
         &format!("http://{address}/api"),
         "test-credential",
         UpstreamProtocol::Responses,
+        None,
+        &Default::default(),
     )
     .expect("fetch models through shared transport");
 
@@ -308,12 +310,13 @@ fn model_fetch_uses_the_declared_api_prefix_and_authentication() {
 
 #[test]
 fn provider_auth_headers_follow_the_selected_protocol() {
-    let headers = provider_auth_headers("sk-test", UpstreamProtocol::Responses);
+    let headers = provider_auth_headers("sk-test", UpstreamProtocol::Responses, None).unwrap();
     assert!(headers.contains("Authorization: Bearer sk-test"));
     assert!(!headers.contains("x-api-key"));
     assert!(!headers.contains("anthropic-version"));
 
-    let headers = provider_auth_headers("sk-test", UpstreamProtocol::AnthropicMessages);
+    let headers =
+        provider_auth_headers("sk-test", UpstreamProtocol::AnthropicMessages, None).unwrap();
     assert!(!headers.contains("Authorization"));
     assert!(headers.contains("x-api-key: sk-test"));
     assert!(headers.contains("anthropic-version: 2023-06-01"));
@@ -380,6 +383,8 @@ fn invalid_model_list_retains_http_context_without_echoing_credentials() {
         &format!("{base}/custom"),
         "fixture-credential",
         UpstreamProtocol::Responses,
+        None,
+        &Default::default(),
     )
     .unwrap_err();
     assert!(error.contains("HTTP 200"));

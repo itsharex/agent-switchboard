@@ -41,6 +41,12 @@ fn claude_draft() -> ProviderDraft {
     draft.base_url = Some("https://claude-relay.example".into());
     draft.api_key = "fixture-claude-value".into();
     draft.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: true,
         haiku_model: Some("claude-haiku-4".into()),
         sonnet_model: Some("claude-sonnet-4-6".into()),

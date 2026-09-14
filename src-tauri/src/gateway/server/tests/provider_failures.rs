@@ -277,7 +277,7 @@ fn native_responses_forwards_protocol_headers_but_not_official_identity() {
                 .map(|header| header.value.as_str())
         };
         assert_eq!(header("openai-beta"), Some("responses=v1"));
-        assert_eq!(header("user-agent"), Some("codex/fixture"));
+        assert_eq!(header("user-agent"), Some("ASB gateway fixture"));
         assert_eq!(header("session_id"), Some("session-fixture"));
         assert_eq!(header("x-stainless-lang"), Some("rust"));
         assert_eq!(

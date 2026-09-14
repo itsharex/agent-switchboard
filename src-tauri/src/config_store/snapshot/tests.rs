@@ -13,6 +13,8 @@ fn codex_draft() -> CodexProviderDraft {
         name: "Codex relay".to_string(),
         endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
         api_key: "fixture-key".to_string(),
+        authentication: None,
+        connection: Default::default(),
         upstream: CodexUpstream::Responses,
         request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
         default_model: "codex-test".to_string(),
@@ -31,6 +33,10 @@ fn codex_draft() -> CodexProviderDraft {
             ],
             images: false,
             compact: true,
+            display_name: None,
+            description: None,
+            base_instructions: None,
+            supports_parallel_tool_calls: None,
         }],
         model_routes: vec![CodexModelRoute {
             client_model: "codex-test".to_string(),
@@ -78,7 +84,7 @@ fn snapshot_round_trips_the_raw_codex_file() {
     .unwrap();
     assert!(raw.contains("schemaVersion"));
     assert!(raw.contains("catalog"));
-    assert!(!raw.contains("routeMode"));
+    assert!(raw.contains("routeMode"));
 }
 
 #[test]

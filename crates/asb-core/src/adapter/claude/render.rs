@@ -5,7 +5,15 @@ use crate::adapter::claude::document::{parse, remove, set};
 use crate::adapter::claude::overlay::{client_settings_overlay, overlay};
 
 pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, AdapterError> {
-    render_entries(current, overlay(plan))
+    let mut entries = overlay(plan);
+    entries.extend(super::native::entries(current, plan)?);
+    let rendered = render_entries(current, entries)?;
+    crate::claude_common::apply(&rendered, &plan.client_settings.claude_extra).map_err(|message| {
+        AdapterError {
+            message,
+            line: None,
+        }
+    })
 }
 
 pub(crate) fn render_gateway_base_url(
@@ -24,7 +32,13 @@ pub(crate) fn render_gateway_base_url(
 pub(crate) fn render_client_settings(
     client_settings: &SettingsValues,
 ) -> Result<String, AdapterError> {
-    render_entries("{}", client_settings_overlay(client_settings))
+    let rendered = render_entries("{}", client_settings_overlay(client_settings))?;
+    crate::claude_common::fragment(&rendered, &client_settings.claude_extra).map_err(|message| {
+        AdapterError {
+            message,
+            line: None,
+        }
+    })
 }
 
 pub(crate) fn render_entries(

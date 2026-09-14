@@ -52,11 +52,17 @@ pub fn read_preview<Io: SwitchIo>(
             .push("配置文件尚不存在，确认后将创建新的用户级配置".to_string());
     }
     let rendered_hash = sha256_hex(&rendered);
+    crate::codex_auth::validate_storage(&current, plan)?;
+    let auth = crate::codex_auth::prepare(io, target, crate::codex_auth::expected_action(plan))?;
     Ok(FilePreview {
         preview,
         content_hash,
         rendered_hash,
         content: display_content(app, &rendered),
+        auth_hash: auth.as_ref().map(|change| change.before_hash.clone()),
+        auth_rendered_hash: auth.as_ref().map(|change| change.after_hash.clone()),
+        auth_existed: auth.as_ref().map(|change| change.before_existed),
+        auth_rendered_existed: auth.as_ref().map(|_| true),
     })
 }
 

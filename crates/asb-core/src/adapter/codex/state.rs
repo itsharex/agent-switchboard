@@ -19,7 +19,11 @@ pub(crate) fn matches_provider_settings(
         .and_then(item_repr)
         .unwrap_or_else(|| OFFICIAL_PROVIDER.to_string());
     Ok(provider == CODEX_PROVIDER_ID
-        && (plan.profile.route_mode == RouteMode::Official || plan.is_gateway()))
+        && (plan.profile.route_mode == RouteMode::Official
+            || plan.is_gateway()
+            || (plan.profile.upstream_protocol
+                == Some(crate::contracts::UpstreamProtocol::Responses)
+                && plan.client_base_url().is_some())))
 }
 
 /// Collects every owned scalar path and its textual value.
@@ -81,11 +85,27 @@ pub fn route_state(text: &str) -> RouteState {
     let get = |path: &str| item_at(&doc, path).and_then(item_repr);
     let provider_id = get("model_provider").unwrap_or_else(|| OFFICIAL_PROVIDER.to_string());
     let builtin_openai = provider_id == OFFICIAL_PROVIDER;
-    // The current Codex contract has one client provider only. An old custom
-    // provider is classified as unsupported without reading its provider
-    // table, so status and recovery cannot accidentally treat legacy fields as
-    // a live route.
-    let base_url = builtin_openai.then(|| get("openai_base_url")).flatten();
+    let provider_table = (!builtin_openai)
+        .then(|| doc.get("model_providers").and_then(Item::as_table_like))
+        .flatten()
+        .and_then(|providers| providers.get(&provider_id))
+        .and_then(Item::as_table_like);
+    let declared_name = provider_table
+        .and_then(|table| table.get("name"))
+        .and_then(item_repr)
+        .filter(|value| !value.trim().is_empty());
+    let base_url = if builtin_openai {
+        get("openai_base_url")
+    } else {
+        provider_table
+            .and_then(|table| table.get("base_url"))
+            .and_then(item_repr)
+    }
+    .filter(|value| !value.trim().is_empty());
+    let wire_api = provider_table
+        .and_then(|table| table.get("wire_api"))
+        .and_then(item_repr)
+        .filter(|value| !value.trim().is_empty());
     let custom = !builtin_openai || base_url.is_some();
     RouteState {
         app: AppKind::Codex,
@@ -94,10 +114,10 @@ pub fn route_state(text: &str) -> RouteState {
         } else {
             RouteMode::Official
         },
-        provider_name: Some(provider_id),
+        provider_name: declared_name.or(Some(provider_id)),
         model: get("model"),
         base_url,
-        wire_api: None,
+        wire_api,
         codex_model_options: Some(CodexModelSettings {
             context_window: item_at(&doc, "model_context_window")
                 .and_then(|item| item.as_value())

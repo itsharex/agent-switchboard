@@ -113,14 +113,20 @@ fn run_workflow(root: &Path) {
             "profileId": first["id"],
             "expectedHash": first_preview["contentHash"],
             "expectedRenderedHash": first_preview["renderedHash"],
+            "authHash": first_preview["authHash"],
+            "authExisted": first_preview["authExisted"],
+            "authRenderedHash": first_preview["authRenderedHash"],
             "confirmWrite": true,
         }),
     );
     let first_config = fs::read_to_string(&config).unwrap();
     assert!(first_config.contains("model_provider = \"openai\""));
-    assert!(first_config.contains("/codex/asb_codex_"));
+    assert!(first_config.contains("openai_base_url = \"https://first.example/v1\""));
+    assert!(!first_config.contains("/codex/asb_codex_"));
     assert!(!first_config.contains("first-secret"));
-    assert_eq!(fs::read(&auth).unwrap(), auth_bytes);
+    let first_auth: Value = serde_json::from_slice(&fs::read(&auth).unwrap()).unwrap();
+    assert_eq!(first_auth["OPENAI_API_KEY"], "first-secret");
+    assert_eq!(first_auth["tokens"]["access_token"], "fixture-access");
 
     let second = create_profile(&api, "second", "second-secret", "https://second.example/v1");
     let second_preview = api.ok("preview_switch", json!({ "profileId": second["id"] }));
@@ -130,16 +136,20 @@ fn run_workflow(root: &Path) {
             "profileId": second["id"],
             "expectedHash": second_preview["contentHash"],
             "expectedRenderedHash": second_preview["renderedHash"],
+            "authHash": second_preview["authHash"],
+            "authExisted": second_preview["authExisted"],
+            "authRenderedHash": second_preview["authRenderedHash"],
             "confirmWrite": true,
         }),
     );
     let second_config = fs::read_to_string(&config).unwrap();
-    assert_eq!(
-        gateway_base_url(&first_config),
-        gateway_base_url(&second_config)
-    );
+    assert_eq!(codex_base_url(&first_config), "https://first.example/v1");
+    assert_eq!(codex_base_url(&second_config), "https://second.example/v1");
+    assert!(!second_config.contains("/codex/asb_codex_"));
     assert!(!second_config.contains("second-secret"));
-    assert_eq!(fs::read(&auth).unwrap(), auth_bytes);
+    let second_auth: Value = serde_json::from_slice(&fs::read(&auth).unwrap()).unwrap();
+    assert_eq!(second_auth["OPENAI_API_KEY"], "second-secret");
+    assert_eq!(second_auth["tokens"]["access_token"], "fixture-access");
 
     // Official Codex is one more stored profile: create it in the generic
     // store, then switch to it through the same preview-and-confirm command
@@ -185,13 +195,18 @@ fn run_workflow(root: &Path) {
             "profileId": official["profile"]["id"],
             "expectedHash": official_preview["contentHash"],
             "expectedRenderedHash": official_preview["renderedHash"],
+            "authHash": official_preview["authHash"],
+            "authExisted": official_preview["authExisted"],
+            "authRenderedHash": official_preview["authRenderedHash"],
             "confirmWrite": true,
         }),
     );
     assert!(!fs::read_to_string(&config)
         .unwrap()
         .contains("openai_base_url"));
-    assert_eq!(fs::read(&auth).unwrap(), auth_bytes);
+    let official_auth: Value = serde_json::from_slice(&fs::read(&auth).unwrap()).unwrap();
+    assert_eq!(official_auth["OPENAI_API_KEY"], Value::Null);
+    assert_eq!(official_auth["tokens"]["access_token"], "fixture-access");
 }
 
 fn create_profile(api: &Api, name: &str, api_key: &str, endpoint: &str) -> Value {
@@ -231,7 +246,7 @@ fn create_profile(api: &Api, name: &str, api_key: &str, endpoint: &str) -> Value
         .clone()
 }
 
-fn gateway_base_url(config: &str) -> &str {
+fn codex_base_url(config: &str) -> &str {
     config
         .lines()
         .find_map(|line| {

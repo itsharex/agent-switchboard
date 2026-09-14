@@ -12,5 +12,6 @@ pub mod discovery;
 pub mod migrate;
 pub mod paths;
 pub mod secrets;
+pub mod skill_catalog;
 pub mod sources;
 pub mod store;

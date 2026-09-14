@@ -8,23 +8,36 @@ pub(super) fn is_direct(profile: &ProviderProfile) -> bool {
 
 /// Route fingerprint over the exact profile parameters a loopback route
 /// consumes. Application-side metadata (name, notes, website, usage query)
-/// and client-side projection fields (model, model options) must not rotate
-/// the Codex client capability. The fingerprint is a route revision used for
-/// activation, request snapshots, and recovery validation.
+/// does not participate. Claude model fields are included because the gateway
+/// applies their mapping at request time; Codex model fields remain owned by
+/// its separate catalog revision.
 pub(super) fn route_fingerprint(profile: &ProviderProfile) -> Result<String, String> {
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "app": profile.app,
         "baseUrl": profile.base_url,
+        "connection": profile.connection.routing_identity(),
         "apiKey": profile.api_key,
         "upstreamProtocol": profile.upstream_protocol,
         "responsesOptions": profile.responses_options,
         "maxOutputTokens": profile.max_output_tokens.value(),
     });
+    if profile.app == AppKind::Claude {
+        payload["model"] = serde_json::json!(profile.model);
+        payload["modelOptions"] = serde_json::json!(profile.model_options);
+    }
+    if profile.authentication.is_some_and(|selected| {
+        Some(selected)
+            != profile
+                .upstream_protocol
+                .map(UpstreamProtocol::authentication_scheme)
+    }) {
+        payload["authentication"] = serde_json::json!(profile.authentication);
+    }
     let bytes = serde_json::to_vec(&payload).map_err(|_| "无法计算供应商路由指纹".to_string())?;
     Ok(hex_digest(&bytes))
 }
 
-pub(super) fn codex_route_fingerprint(
+pub(crate) fn codex_route_fingerprint(
     file: &asb_core::contracts::CodexProviderFile,
 ) -> Result<String, String> {
     file.validate()?;
@@ -33,6 +46,9 @@ pub(super) fn codex_route_fingerprint(
         "providerId": profile.id,
         "endpoint": profile.endpoint,
         "apiKey": profile.api_key,
+        "authentication": profile.authentication,
+        "connection": profile.connection,
+        "routeMode": profile.route_mode,
         "upstream": profile.upstream,
         "requestMode": profile.request_mode,
         "defaultModel": profile.default_model,
@@ -49,8 +65,8 @@ pub(super) fn codex_route_fingerprint(
 pub(super) fn route_token(
     identity: &str,
     app: AppKind,
-    profile_id: &str,
-    fingerprint: &str,
+    _profile_id: &str,
+    _fingerprint: &str,
 ) -> String {
     match app {
         // Codex keeps one stable local entry. The active route revision, not
@@ -61,7 +77,7 @@ pub(super) fn route_token(
         ),
         AppKind::Claude => format!(
             "asb_local_{}",
-            hex_digest(format!("asb/route/v2:{identity}:{profile_id}:{fingerprint}").as_bytes())
+            hex_digest(format!("asb/claude-capability/v3:{identity}").as_bytes())
         ),
     }
 }
@@ -82,14 +98,16 @@ pub(super) fn constant_time_equal(expected: &[u8], received: &[u8]) -> bool {
     different == 0
 }
 
-pub(super) fn continuation_key(identity: &str, profile: &ProviderProfile) -> [u8; 32] {
+pub(super) fn continuation_key(
+    identity: &str,
+    profile: &ProviderProfile,
+    route_revision: &str,
+) -> [u8; 32] {
     let domain = serde_json::json!([
-        "asb/continuation/v2",
+        "asb/claude-continuation/v3",
         identity,
         profile.id,
-        profile.app,
-        profile.base_url,
-        profile.upstream_protocol
+        route_revision,
     ]);
     Sha256::digest(domain.to_string().as_bytes()).into()
 }
@@ -109,6 +127,25 @@ pub(super) fn codex_continuation_key(
         route_revision,
     ]);
     Sha256::digest(domain.to_string().as_bytes()).into()
+}
+
+pub(crate) fn codex_catalog_file_name(profile_id: &str, revision: &str) -> String {
+    format!(
+        "agent-switchboard-codex-{profile_id}-{}.json",
+        &revision[..16]
+    )
+}
+
+impl CodexCatalogProjection {
+    pub(super) fn from_file(
+        file: &asb_core::contracts::CodexProviderFile,
+        revision: &str,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            file_name: codex_catalog_file_name(&file.profile.id, revision),
+            content: file.model_catalog_json()?,
+        })
+    }
 }
 
 impl ActiveRoute {
@@ -142,10 +179,77 @@ mod tests {
     }
 
     #[test]
-    fn claude_capability_keeps_its_route_scope() {
+    fn claude_capability_is_stable_across_provider_revisions() {
+        let first = route_token("installation", AppKind::Claude, "provider-a", "revision-a");
+        let second = route_token("installation", AppKind::Claude, "provider-b", "revision-b");
+        assert_eq!(first, second);
+        assert!(first.starts_with("asb_local_"));
         assert_ne!(
-            route_token("installation", AppKind::Claude, "provider-a", "revision-a"),
-            route_token("installation", AppKind::Claude, "provider-b", "revision-b")
+            first,
+            route_token(
+                "another-installation",
+                AppKind::Claude,
+                "provider-a",
+                "revision-a"
+            )
+        );
+    }
+
+    #[test]
+    fn claude_continuation_changes_with_the_route_revision() {
+        let profile = ProviderProfile {
+            id: "provider".into(),
+            app: AppKind::Claude,
+            route_mode: RouteMode::Custom,
+            name: "provider".into(),
+            model: None,
+            base_url: Some("https://example.test".into()),
+            connection: Default::default(),
+            api_key: "secret".into(),
+            authentication: None,
+            upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+            responses_options: None,
+            max_output_tokens: None.into(),
+            model_options: None,
+            parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+            notes: None,
+            website_url: None,
+            usage_query: None,
+            official_quota_refresh_interval_minutes: None,
+        };
+        assert_ne!(
+            continuation_key("installation", &profile, "revision-a"),
+            continuation_key("installation", &profile, "revision-b")
+        );
+    }
+
+    #[test]
+    fn claude_model_routing_is_part_of_the_route_revision() {
+        let mut first = ProviderProfile {
+            id: "provider".into(),
+            app: AppKind::Claude,
+            route_mode: RouteMode::Custom,
+            name: "provider".into(),
+            model: Some("default-a".into()),
+            base_url: Some("https://example.test".into()),
+            connection: Default::default(),
+            api_key: "secret".into(),
+            authentication: None,
+            upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+            responses_options: None,
+            max_output_tokens: None.into(),
+            model_options: None,
+            parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+            notes: None,
+            website_url: None,
+            usage_query: None,
+            official_quota_refresh_interval_minutes: None,
+        };
+        let second = first.clone();
+        first.model = Some("default-b".into());
+        assert_ne!(
+            route_fingerprint(&first).unwrap(),
+            route_fingerprint(&second).unwrap()
         );
     }
 

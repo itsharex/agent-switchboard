@@ -64,6 +64,15 @@ fn validate_scope(
     app: AppKind,
     owner: SettingOwner,
 ) -> Result<(), ValidationError> {
+    if !values.claude_extra.is_empty() {
+        if app != AppKind::Claude || owner != SettingOwner::Client {
+            return Err(ValidationError::ClaudeCommonOptions(
+                "Claude 额外通用配置不能进入 Codex 或供应商参数".into(),
+            ));
+        }
+        crate::claude_common::validate(&values.claude_extra)
+            .map_err(ValidationError::ClaudeCommonOptions)?;
+    }
     for (key, value) in &values.settings {
         let spec = setting_spec(app, key)
             .filter(|spec| spec.owner == owner && spec.control != SettingControl::None)

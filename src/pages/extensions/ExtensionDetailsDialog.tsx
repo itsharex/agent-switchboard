@@ -26,7 +26,7 @@ export function ExtensionDetailsDialog({
         updateReport={updateReport}
         projectNames={w.projectNames}
         onInstall={() =>
-          void w.plans.prepare({
+          void w.applies.run({
             operations: [
               {
                 operation: "install",
@@ -37,7 +37,7 @@ export function ExtensionDetailsDialog({
           })
         }
         onChangeBinding={(binding, enable) =>
-          void w.plans.prepare({
+          void w.applies.run({
             operations: [
               {
                 operation: enable ? "enable" : "disable",
@@ -47,7 +47,7 @@ export function ExtensionDetailsDialog({
           })
         }
         onRemoveBinding={(binding) =>
-          void w.plans.prepare({ operations: [{ operation: "remove", bindingId: binding.id }] })
+          void w.applies.run({ operations: [{ operation: "remove", bindingId: binding.id }] })
         }
         onToggleLock={(binding, locked) => void w.ext.toggleBindingLock(binding.id, locked)}
         onDelete={() => w.nav.setDialog({ type: "remove", item })}
@@ -58,7 +58,7 @@ export function ExtensionDetailsDialog({
           if (updateReport) void w.updates.update([updateReport]);
         }}
         onDeployCurrent={() =>
-          void w.plans.prepare({ operations: [{ operation: "update", definitionId: item.id }] })
+          void w.applies.run({ operations: [{ operation: "update", definitionId: item.id }] })
         }
         onExportPortable={
           item.kind === "skill" || item.transport === "stdio"

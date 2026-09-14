@@ -37,134 +37,124 @@ pub(super) fn parse_responses_tools(value: Option<&Value>) -> Result<Vec<Tool>, 
     for value in array(value, "tools")? {
         let item = object(value, "Responses tool")?;
         match string(item.get("type"), "tool.type")?.as_str() {
-            "function" => {
-                allowed(
-                    item,
-                    &["type", "name", "description", "parameters", "strict"],
-                    "Responses function tool",
-                )?;
-                tools.push(Tool {
-                    name: string(item.get("name"), "tool.name")?,
-                    kind: ToolKind::Function,
-                    namespace: None,
-                    description: optional_string(item, "description", "Responses function tool")?,
-                    input_schema: item
-                        .get("parameters")
-                        .cloned()
-                        .unwrap_or_else(|| json!({ "type": "object", "properties": {} })),
-                    strict: optional_bool(item, "strict")?,
-                });
-            }
-            "namespace" => {
-                allowed(
-                    item,
-                    &["type", "name", "description", "tools"],
-                    "Responses namespace tool",
-                )?;
-                let namespace = string(item.get("name"), "namespace.name")?;
-                let namespace_description =
-                    optional_string(item, "description", "Responses namespace tool")?;
-                for nested in array(
-                    item.get("tools").ok_or_else(|| {
-                        TransformError("Responses namespace 工具缺少 tools".to_string())
-                    })?,
-                    "Responses namespace tools",
-                )? {
-                    let nested = object(nested, "Responses namespace function")?;
-                    allowed(
-                        nested,
-                        &["type", "name", "description", "parameters", "strict"],
-                        "Responses namespace function",
-                    )?;
-                    if string(nested.get("type"), "namespace tool.type")? != "function" {
-                        return error("Responses namespace 仅支持 type=function 的子工具");
-                    }
-                    tools.push(Tool {
-                        name: string(nested.get("name"), "namespace tool.name")?,
-                        kind: ToolKind::Function,
-                        namespace: Some(namespace.clone()),
-                        description: merge_namespace_description(
-                            namespace_description.as_deref(),
-                            optional_string(nested, "description", "Responses namespace function")?,
-                        ),
-                        input_schema: nested
-                            .get("parameters")
-                            .cloned()
-                            .unwrap_or_else(|| json!({ "type": "object", "properties": {} })),
-                        strict: optional_bool(nested, "strict")?,
-                    });
-                }
-            }
+            "function" => tools.push(parse_responses_function(item)?),
+            "namespace" => tools.extend(parse_responses_namespace(item)?),
             "web_search" => {
                 return error(
                     "Responses web_search 是服务端工具，无法由 Chat Completions 或 Anthropic Messages 无损承载",
                 );
             }
-            "tool_search" => {
-                allowed(
-                    item,
-                    &["type", "execution", "description", "parameters"],
-                    "Responses tool_search tool",
-                )?;
-                if let Some(execution) = item.get("execution") {
-                    if execution.as_str() != Some("client") {
-                        return error("Responses tool_search.execution 必须是 client");
-                    }
-                }
-                let mut definition = tool_search_definition();
-                if let Some(description) =
-                    optional_string(item, "description", "Responses tool_search tool")?
-                {
-                    definition.description = Some(description);
-                }
-                if let Some(parameters) = item.get("parameters") {
-                    if !parameters.is_object() {
-                        return error("Responses tool_search.parameters 必须是对象");
-                    }
-                    definition.input_schema = parameters.clone();
-                }
-                tools.push(definition);
-            }
-            "custom" => {
-                allowed(
-                    item,
-                    &["type", "name", "description", "format"],
-                    "Responses custom tool",
-                )?;
-                let description = optional_string(item, "description", "Responses custom tool")?;
-                let format = item.get("format").cloned();
-                let description = match (description, format) {
-                    (Some(description), None) => Some(description),
-                    (None, Some(format)) => Some(format!(
-                        "Custom tool definition:\n{}",
-                        serde_json::to_string(&format)
-                            .map_err(|_| TransformError("无法编码 custom 工具格式".to_string()))?
-                    )),
-                    (Some(description), Some(format)) => Some(format!(
-                        "{description}\n\nCustom tool definition:\n{}",
-                        serde_json::to_string(&format)
-                            .map_err(|_| TransformError("无法编码 custom 工具格式".to_string()))?
-                    )),
-                    (None, None) => None,
-                };
-                tools.push(Tool {
-                    name: string(item.get("name"), "custom tool.name")?,
-                    kind: ToolKind::Custom,
-                    namespace: None,
-                    description,
-                    input_schema: json!({
-                        "type": "object",
-                        "properties": { "input": { "type": "string", "description": "Raw custom tool input. Preserve exactly." } },
-                        "required": ["input"],
-                        "additionalProperties": false,
-                    }),
-                    strict: false,
-                });
-            }
+            "tool_search" => tools.push(parse_responses_tool_search(item)?),
+            "custom" => tools.push(parse_responses_custom(item)?),
             other => return error(format!("Responses 工具类型 {other} 不支持跨协议转换")),
         }
     }
     Ok(tools)
+}
+
+fn parse_responses_function(item: &Map<String, Value>) -> Result<Tool, TransformError> {
+    allowed(
+        item,
+        &["type", "name", "description", "parameters", "strict"],
+        "Responses function tool",
+    )?;
+    Ok(Tool {
+        name: string(item.get("name"), "tool.name")?,
+        kind: ToolKind::Function,
+        namespace: None,
+        description: optional_string(item, "description", "Responses function tool")?,
+        input_schema: item
+            .get("parameters")
+            .cloned()
+            .unwrap_or_else(|| json!({ "type": "object", "properties": {} })),
+        strict: optional_bool(item, "strict")?,
+    })
+}
+
+fn parse_responses_namespace(item: &Map<String, Value>) -> Result<Vec<Tool>, TransformError> {
+    allowed(
+        item,
+        &["type", "name", "description", "tools"],
+        "Responses namespace tool",
+    )?;
+    let namespace = string(item.get("name"), "namespace.name")?;
+    let description = optional_string(item, "description", "Responses namespace tool")?;
+    let mut tools = Vec::new();
+    for nested in array(
+        item.get("tools")
+            .ok_or_else(|| TransformError("Responses namespace 工具缺少 tools".to_string()))?,
+        "Responses namespace tools",
+    )? {
+        let nested = object(nested, "Responses namespace function")?;
+        if string(nested.get("type"), "namespace tool.type")? != "function" {
+            return error("Responses namespace 仅支持 type=function 的子工具");
+        }
+        let mut tool = parse_responses_function(nested)?;
+        tool.namespace = Some(namespace.clone());
+        tool.description = merge_namespace_description(description.as_deref(), tool.description);
+        tools.push(tool);
+    }
+    Ok(tools)
+}
+
+fn parse_responses_tool_search(item: &Map<String, Value>) -> Result<Tool, TransformError> {
+    allowed(
+        item,
+        &["type", "execution", "description", "parameters"],
+        "Responses tool_search tool",
+    )?;
+    if let Some(execution) = item.get("execution") {
+        if execution.as_str() != Some("client") {
+            return error("Responses tool_search.execution 必须是 client");
+        }
+    }
+    let mut definition = tool_search_definition();
+    if let Some(description) = optional_string(item, "description", "Responses tool_search tool")? {
+        definition.description = Some(description);
+    }
+    if let Some(parameters) = item.get("parameters") {
+        if !parameters.is_object() {
+            return error("Responses tool_search.parameters 必须是对象");
+        }
+        definition.input_schema = parameters.clone();
+    }
+    Ok(definition)
+}
+
+fn parse_responses_custom(item: &Map<String, Value>) -> Result<Tool, TransformError> {
+    allowed(
+        item,
+        &["type", "name", "description", "format"],
+        "Responses custom tool",
+    )?;
+    let description = optional_string(item, "description", "Responses custom tool")?;
+    let description = match (description, item.get("format")) {
+        (Some(description), None) => Some(description),
+        (None, Some(format)) => Some(format!(
+            "Custom tool definition:\n{}",
+            serde_json::to_string(format)
+                .map_err(|_| TransformError("无法编码 custom 工具格式".to_string()))?
+        )),
+        (Some(description), Some(format)) => Some(format!(
+            "{description}\n\nCustom tool definition:\n{}",
+            serde_json::to_string(format)
+                .map_err(|_| TransformError("无法编码 custom 工具格式".to_string()))?
+        )),
+        (None, None) => None,
+    };
+    Ok(Tool {
+        name: string(item.get("name"), "custom tool.name")?,
+        kind: ToolKind::Custom,
+        namespace: None,
+        description,
+        input_schema: json!({
+            "type": "object",
+            "properties": { "input": { "type": "string", "description": "Raw custom tool input. Preserve exactly." } },
+            "required": ["input"],
+            "additionalProperties": false,
+        }),
+        strict: false,
+    })
 }
 
 pub(super) fn merge_namespace_description(
@@ -225,14 +215,28 @@ pub(super) fn parse_anthropic_tools(value: Option<&Value>) -> Result<Vec<Tool>, 
         let item = object(value, "Anthropic tool")?;
         allowed(
             item,
-            &["name", "description", "input_schema"],
+            &[
+                "name",
+                "type",
+                "description",
+                "input_schema",
+                "cache_control",
+                "defer_loading",
+                "eager_input_streaming",
+                "input_examples",
+                "allowed_callers",
+            ],
             "Anthropic tool",
         )?;
+        if let Some(cache_control) = item.get("cache_control") {
+            validate_anthropic_cache_control(cache_control)?;
+        }
+        super::claude_media::validate_tool_metadata(item)?;
         tools.push(Tool {
             name: string(item.get("name"), "tool.name")?,
             kind: ToolKind::Function,
             namespace: None,
-            description: optional_string(item, "description", "Anthropic tool")?,
+            description: super::claude_media::tool_description(item)?,
             input_schema: item
                 .get("input_schema")
                 .cloned()

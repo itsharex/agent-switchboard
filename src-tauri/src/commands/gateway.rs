@@ -50,6 +50,8 @@ pub async fn gateway_retry_bind(app: AppHandle) -> Result<GatewayObservation, Co
         let _write_guard = gate
             .lock()
             .map_err(|error| CommandError::new("gateway-retry-gate-unavailable", error))?;
+        crate::commands::switching::codex_policy::recover_on_startup(&local, &gateway)
+            .map_err(|error| CommandError::new("codex-policy-recovery-required", error))?;
         Ok(gateway.retry_bind(&local))
     })
     .await

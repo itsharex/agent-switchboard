@@ -19,16 +19,16 @@
   min-height: 0;
 }
 
-/* The heading's action cluster spans the remaining header width so the
-   session search gets real input room; sizing is page-scoped on the shared
-   .asb-panel-actions contract (user directive 2026-09-11 unification). */
-.asb-sessions .asb-panel-heading .asb-panel-actions {
-  flex: 1;
-  min-width: 0;
-  flex-wrap: wrap;
+/* The header's view-controls row owns search, the client filter, and the
+   refresh action; the search input stretches so long queries get real room
+   (user directive 2026-09-12: title row alone, controls on the row below).
+   The surrounding flex column's gap owns the spacing, so the header root's
+   own margin is neutralized here. */
+.asb-sessions > .asb-workspace-header {
+  margin-bottom: 0;
 }
 
-.asb-sessions .asb-panel-actions .asb-input {
+.asb-sessions .asb-header-secondary .asb-input {
   flex: 1 1 200px;
   min-width: 0;
 }
@@ -242,9 +242,11 @@
   white-space: nowrap;
 }
 
-/* Conversation column plus the user-message outline; the outline only
-   renders when the window is wide enough for it to fit beside the
-   transcript (1280px), matching the reference master/detail proportions. */
+/* Conversation column plus the user-message outline; the outline is a
+   resident detail column at one fixed width for the whole window range
+   (2026-09-12 user directive: the directory must never vanish or change
+   behavior with window size — the window spans 940–1180px+, all under the
+   old 1280px show breakpoint). */
 .asb-session-body {
   display: flex;
   flex: 1;
@@ -262,20 +264,14 @@
 }
 
 .asb-session-toc {
-  display: none;
-}
-
-@media (min-width: 1280px) {
-  .asb-session-toc {
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    --asb-session-toc-width: 248px;
-    width: var(--asb-session-toc-width);
-    min-height: 0;
-    border-left: 1px solid var(--asb-hairline);
-    padding-left: var(--asb-space-3);
-  }
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  --asb-session-toc-width: 248px;
+  width: var(--asb-session-toc-width);
+  min-height: 0;
+  border-left: 1px solid var(--asb-hairline);
+  padding-left: var(--asb-space-3);
 }
 
 .asb-session-toc-heading {

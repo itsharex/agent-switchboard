@@ -31,7 +31,7 @@ it("resolves a nonempty API root through the backend without sending credentials
   expect(resolve).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText("服务地址"), { target: { value: " https://typed.example/custom " } });
   expect(await screen.findByText(result.requestUrl)).toBeInTheDocument();
-  expect(resolve).toHaveBeenCalledWith("https://typed.example/custom", "responses");
+  expect(resolve).toHaveBeenCalledWith("https://typed.example/custom", "responses", {});
   expect(JSON.stringify(resolve.mock.calls)).not.toContain("private-test-key");
   expect(screen.getByText("请求地址")).toBeInTheDocument();
 });
@@ -67,7 +67,7 @@ it("uses the selected protocol to resolve the actual upstream address for a gate
   await user.click(screen.getByRole("combobox", { name: "API 格式" }));
   await user.click(screen.getByRole("option", { name: /Chat Completions/ }));
   expect(await screen.findByText("https://upstream.example/chat/completions")).toBeInTheDocument();
-  expect(resolve).toHaveBeenLastCalledWith("https://upstream.example", "chatCompletions");
+  expect(resolve).toHaveBeenLastCalledWith("https://upstream.example", "chatCompletions", {});
 });
 
 it("shows the backend path error beside the URL and clears the previous resolved address", async () => {

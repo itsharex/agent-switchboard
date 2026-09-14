@@ -3,9 +3,50 @@
 use super::*;
 
 impl GatewayController {
+    pub(crate) fn active_profile_id_for(&self, app: AppKind) -> Option<String> {
+        self.inner
+            .routes
+            .read()
+            .ok()
+            .and_then(|routes| routes.get(&app).map(|route| route.profile_id.clone()))
+    }
+
+    /// Rebuilds the active Claude candidate snapshot after a policy write.
+    /// The client-facing route and configuration are left untouched.
+    pub(crate) fn refresh_claude_candidates(&self, local: &LocalState) -> Result<(), String> {
+        let _activation = self
+            .inner
+            .activation_lock
+            .lock()
+            .map_err(|_| "本机协议网关切换锁不可用".to_string())?;
+        let active = self
+            .inner
+            .routes
+            .read()
+            .map_err(|_| "本机协议网关路由锁不可用".to_string())?
+            .get(&AppKind::Claude)
+            .cloned();
+        let Some(active) = active else {
+            self.inner
+                .candidate_routes
+                .write()
+                .map_err(|_| "本机协议网关候选路由锁不可用".to_string())?
+                .remove(&AppKind::Claude);
+            return Ok(());
+        };
+        let candidates = self.claude_candidate_routes(local, &active.profile_id)?;
+        self.inner
+            .candidate_routes
+            .write()
+            .map_err(|_| "本机协议网关候选路由锁不可用".to_string())?
+            .insert(AppKind::Claude, candidates);
+        Ok(())
+    }
+
     pub(super) fn commit_activation<F>(
         &self,
         activation: &GatewayActivation,
+        candidate_routes: &[ActiveRoute],
         persist: F,
     ) -> Result<(), String>
     where
@@ -16,79 +57,54 @@ impl GatewayController {
             .activation_lock
             .lock()
             .map_err(|_| "本机协议网关切换锁不可用".to_string())?;
-        let app = activation.app();
         let mut state = self
             .inner
             .state
             .lock()
             .map_err(|_| "本机协议网关状态锁不可用".to_string())?;
-        let mut next = state.clone();
-        match activation {
-            GatewayActivation::Direct { .. } => {
-                next.set_route(app, None);
-            }
-            GatewayActivation::Routed(route) => {
-                next.set_route(
-                    app,
-                    Some(PersistedRoute {
-                        profile_id: route.profile_id.clone(),
-                        revision: route.fingerprint.clone(),
-                    }),
-                );
-            }
-        }
-        let previous_state = state.clone();
-        let previous_route = self
-            .inner
-            .routes
-            .read()
-            .map_err(|_| "本机协议网关路由锁不可用".to_string())?
-            .get(&app)
-            .cloned();
-        write_state(&self.inner.state_path, &next)?;
-        *state = next;
         let mut routes = self
             .inner
             .routes
             .write()
             .map_err(|_| "本机协议网关路由锁不可用".to_string())?;
+        let mut candidates = self
+            .inner
+            .candidate_routes
+            .write()
+            .map_err(|_| "本机协议网关候选路由锁不可用".to_string())?;
+        let app = activation.app();
+        let mut next = state.clone();
+        next.set_route(
+            app,
+            match activation {
+                GatewayActivation::Direct { .. } => None,
+                GatewayActivation::Routed(route) => Some(persisted_route(route)),
+            },
+        );
+        write_state(&self.inner.state_path, &next)?;
+        // Do not publish a provisional route while its write record can fail.
+        // Accepted requests keep their prior immutable route snapshot.
+        if let Err(error) = persist() {
+            write_state(&self.inner.state_path, &state)
+                .map_err(|rollback| format!("{error}；且无法恢复网关状态：{rollback}"))?;
+            return Err(error);
+        }
+        *state = next;
         match activation {
             GatewayActivation::Direct { .. } => {
                 routes.remove(&app);
+                candidates.remove(&app);
             }
             GatewayActivation::Routed(route) => {
                 routes.insert(app, route.clone());
-            }
-        }
-        drop(routes);
-        if let Err(error) = persist() {
-            self.restore_previous_activation(app, &mut state, previous_state, previous_route)?;
-            return Err(error);
-        }
-        Ok(())
-    }
-
-    fn restore_previous_activation(
-        &self,
-        app: AppKind,
-        state: &mut GatewayStateFile,
-        previous_state: GatewayStateFile,
-        previous_route: Option<ActiveRoute>,
-    ) -> Result<(), String> {
-        write_state(&self.inner.state_path, &previous_state)
-            .map_err(|error| format!("保存切换记录失败，且无法恢复网关状态：{error}"))?;
-        *state = previous_state;
-        let mut routes = self
-            .inner
-            .routes
-            .write()
-            .map_err(|_| "保存切换记录失败，且无法恢复网关路由".to_string())?;
-        match previous_route {
-            Some(route) => {
-                routes.insert(app, route);
-            }
-            None => {
-                routes.remove(&app);
+                candidates.insert(
+                    app,
+                    if candidate_routes.is_empty() {
+                        vec![route.clone()]
+                    } else {
+                        candidate_routes.to_vec()
+                    },
+                );
             }
         }
         Ok(())
@@ -119,6 +135,23 @@ impl GatewayController {
         }
         if let Ok(mut routes) = self.inner.routes.write() {
             *routes = valid;
+            let mut candidates = BTreeMap::new();
+            for (app, route) in routes.iter() {
+                let snapshot = if *app == AppKind::Claude {
+                    self.claude_candidate_routes(local, &route.profile_id)
+                        .unwrap_or_else(|_| vec![route.clone()])
+                } else {
+                    self.rehydrate_codex_candidates(&route.profile_id)
+                        .unwrap_or_else(|error| {
+                            log::warn!("无法恢复 Codex 故障转移队列：{error}");
+                            vec![route.clone()]
+                        })
+                };
+                candidates.insert(*app, snapshot);
+            }
+            if let Ok(mut stored) = self.inner.candidate_routes.write() {
+                *stored = candidates;
+            }
         }
     }
 
@@ -205,14 +238,14 @@ impl GatewayController {
         &self,
         profile: &ProviderProfile,
     ) -> Result<ActiveRoute, String> {
+        if profile.connection.claude_native.is_some() {
+            return Err("Claude 原生云 SDK 不使用本机 HTTP 网关".into());
+        }
         if profile.app == AppKind::Codex {
             return Err("Codex 必须从专用档案创建网关路由".to_string());
         }
         if profile.route_mode != RouteMode::Custom {
             return Err("官方登录不应创建本机协议网关路由".to_string());
-        }
-        if is_direct(profile) {
-            return Err("直连供应商不应创建本机协议网关路由".to_string());
         }
         let upstream_protocol = profile
             .upstream_protocol
@@ -233,13 +266,27 @@ impl GatewayController {
             app: profile.app,
             profile_id: profile.id.clone(),
             client_token: route_token(&identity, profile.app, &profile.id, &fingerprint),
-            continuation_key: continuation_key(&identity, profile),
+            continuation_key: continuation_key(&identity, profile, &fingerprint),
             fingerprint,
             upstream_base_url,
+            connection: profile.connection.clone(),
             upstream_protocol,
             responses_options: profile.responses_options.clone(),
             max_output_tokens: profile.max_output_tokens.value(),
             api_key: profile.api_key.clone(),
+            authentication: profile
+                .upstream_authentication()
+                .expect("custom route authentication"),
+            claude_primary_model: (profile.app == AppKind::Claude)
+                .then(|| profile.model.clone())
+                .flatten(),
+            claude_model_options: match &profile.model_options {
+                Some(ModelOptions::Claude(settings)) if profile.app == AppKind::Claude => {
+                    Some(settings.clone())
+                }
+                _ => None,
+            },
+            claude_account: None,
             codex: None,
         })
     }
@@ -268,6 +315,7 @@ impl GatewayController {
             continuation_key: codex_continuation_key(&identity, &file.profile.id, &fingerprint),
             fingerprint,
             upstream_base_url: file.profile.endpoint.0.clone(),
+            connection: file.profile.connection.clone(),
             upstream_protocol: file.profile.upstream.protocol(),
             responses_options: projection.responses_options,
             max_output_tokens: file
@@ -277,6 +325,14 @@ impl GatewayController {
                 .find(|entry| entry.id == file.profile.default_model)
                 .map(|entry| entry.max_output_tokens),
             api_key: file.profile.api_key.clone(),
+            authentication: file
+                .profile
+                .upstream
+                .protocol()
+                .resolve_authentication(file.profile.authentication),
+            claude_primary_model: None,
+            claude_model_options: None,
+            claude_account: None,
             codex: Some(snapshot),
         })
     }
@@ -286,14 +342,37 @@ impl GatewayController {
         route: &ActiveRoute,
         configuration: &str,
     ) -> Result<bool, String> {
-        adapter::matches_provider_identity(configuration, &self.client_identity_plan(route))
-            .map_err(|_| "无法验证本机协议网关客户端凭据".to_string())
+        let matches =
+            adapter::matches_provider_identity(configuration, &self.client_identity_plan(route))
+                .map_err(|_| "无法验证本机协议网关客户端凭据".to_string())?;
+        if !matches {
+            return Ok(false);
+        }
+        if route.app == AppKind::Claude {
+            let value: serde_json::Value = serde_json::from_str(configuration)
+                .map_err(|_| "无法验证 Claude 路由修订".to_string())?;
+            return Ok(value
+                .pointer("/env/ASB_CLAUDE_ROUTE_REVISION")
+                .and_then(serde_json::Value::as_str)
+                == Some(route.claude_revision().as_str()));
+        }
+        // The capability authorizes the installation, not a provider. The
+        // catalog pointer is the persisted provider/revision binding.
+        let document = configuration
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|_| "无法验证 Codex 路由修订".to_string())?;
+        let expected = codex_catalog_file_name(&route.profile_id, &route.fingerprint);
+        Ok(document
+            .get(asb_core::ownership::CODEX_MODEL_CATALOG_KEY)
+            .and_then(|value| value.as_str())
+            == Some(expected.as_str()))
     }
 
     pub(super) fn client_identity_plan(&self, route: &ActiveRoute) -> SwitchPlan {
         let base_url = self.configured_base_url();
         SwitchPlan::through_gateway(
             ProviderProfile {
+                authentication: (route.app == AppKind::Claude).then_some(route.authentication),
                 id: route.profile_id.clone(),
                 parameters: asb_core::ownership::default_provider_parameters(route.app),
                 app: route.app,
@@ -301,6 +380,7 @@ impl GatewayController {
                 name: "本机协议网关".to_string(),
                 model: None,
                 base_url: Some(route.upstream_base_url.clone()),
+                connection: route.connection.clone(),
                 api_key: route.api_key.clone(),
                 upstream_protocol: Some(route.upstream_protocol),
                 responses_options: route.responses_options,
@@ -315,6 +395,7 @@ impl GatewayController {
             route.client_endpoint(&base_url),
             route.client_token.clone(),
         )
+        .with_claude_route_revision(route.claude_revision())
     }
 }
 

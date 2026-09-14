@@ -1,12 +1,21 @@
 import { useId, useMemo, useRef, useState } from "react";
-import type { ProviderRequestTarget, ResponsesOptions, UpstreamProtocol } from "../../api/client";
+import type {
+  ProviderConnectionOptions,
+  ProviderRequestTarget,
+  ResponsesOptions,
+  UpstreamProtocol,
+} from "../../api/client";
+import { usesClaudeManagedAuth } from "../../api/claude-accounts";
 import { Button } from "../Button";
 import { ConnectivityIcon } from "../icons";
 import { ProviderTestPanel } from "../ProviderTestPanel";
 
 interface Props {
+  app: import("../../api/shared").AppKind;
   baseUrl: string | null;
+  connection?: ProviderConnectionOptions | null;
   apiKey: string;
+  authentication?: import("../../api/shared").AuthenticationScheme | null;
   upstreamProtocol: UpstreamProtocol | null;
   /** Required exactly when the protocol is Responses, matching the backend contract. */
   responsesOptions: ResponsesOptions | null;
@@ -16,7 +25,7 @@ interface Props {
 }
 
 export function ProviderConnectionTest({
-  baseUrl, apiKey, upstreamProtocol, responsesOptions, defaultModel, busy, active,
+  app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, busy, active,
 }: Props) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -25,10 +34,12 @@ export function ProviderConnectionTest({
     ? responsesOptions !== null
     : responsesOptions === null;
   const target = useMemo<ProviderRequestTarget | null>(() =>
-    baseUrl?.trim() && apiKey.trim() && upstreamProtocol && valid ? {
-      kind: "draft", connection: { baseUrl: baseUrl.trim(), apiKey: apiKey.trim(),
+    baseUrl?.trim() && (apiKey.trim() || (app === "claude" && usesClaudeManagedAuth(connection))) && upstreamProtocol && valid ? {
+      kind: "draft", connection: { app, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(),
+        ...(authentication ? { authentication } : {}),
+        connection: connection ?? {},
         upstreamProtocol, responsesOptions, defaultModel: defaultModel?.trim() || null },
-    } : null, [baseUrl, apiKey, upstreamProtocol, responsesOptions, defaultModel, valid]);
+    } : null, [app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, valid]);
   return <section className="asb-provider-section" aria-label="连接测试">
     <h3 className="asb-section-title">连接测试</h3>
     <div className="asb-provider-section-fields">

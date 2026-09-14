@@ -191,6 +191,7 @@ export function GatewayPage({ active, profiles }: Props) {
             {status.repairReason ?? "本机协议网关需要修复。客户端仍指向本网关时，状态损坏会保留诊断副本，身份不匹配会拒绝恢复旧路由。"}
           </p>
           <p className="asb-gateway-alert-copy">
+            {status.listeningPort === null && "先点击重试恢复监听；状态无法读取时会先保存诊断副本，再重建网关状态。"}
             请在供应商页重新应用指向本网关的供应商：重新应用会写入新的服务地址与本机能力令牌，
             预览会先展示这些变化；不再使用网关的客户端可切换到直连或官方登录。
           </p>

@@ -14,6 +14,7 @@ pub(super) fn execute_request<S: Read + Write>(
     request: PendingRequest,
     request_url: &str,
     request_headers: &[Header],
+    span: &mut RequestSpan,
 ) -> ExchangeOutcome {
     if route.upstream_protocol != UpstreamProtocol::Responses
         && crate::gateway::compaction::is_v2(&request.body).unwrap_or(false)
@@ -27,6 +28,7 @@ pub(super) fn execute_request<S: Read + Write>(
             &request,
             request_url,
             request_headers,
+            span,
         );
     }
     let upstream = match request_upstream(
@@ -36,14 +38,15 @@ pub(super) fn execute_request<S: Read + Write>(
         &request,
         request_url,
         request_headers,
+        span,
     ) {
         Ok(response) => response,
         Err(diagnostic) => return reject_diagnostic(socket, &diagnostic),
     };
     if request.stream {
-        relay_stream(socket, upstream, route, context, &request)
+        relay_stream(socket, upstream, route, context, &request, span)
     } else {
-        relay_response(socket, upstream, route, context, &request)
+        relay_response(socket, upstream, route, context, &request, span)
     }
 }
 
@@ -54,6 +57,7 @@ fn request_upstream(
     request: &PendingRequest,
     request_url: &str,
     request_headers: &[Header],
+    span: &mut RequestSpan,
 ) -> Result<super::super::UpstreamResponse, ProviderDiagnostic> {
     let url = upstream_url(route, gateway_base, request_url).map_err(|message| {
         ProviderDiagnostic::new(
@@ -62,32 +66,11 @@ fn request_upstream(
             &message,
         )
     })?;
-    let invalid = |message: &str| {
-        ProviderDiagnostic::new(ProviderFailureKind::RequestParameters, &url, message)
-    };
-    if request.body.len() as u64 > MAX_REQUEST_BYTES {
-        return Err(invalid("请求体超过本机协议网关限制"));
-    }
-    let reasoning_transport = ReasoningTransport::from_continuation_key(route.continuation_key);
-    let converted = convert_request(
-        UpstreamProtocol::Responses,
+    let (converted, beta) = prepare_body(route, request, &url, request_headers)?;
+    span.note_mapped_model(crate::gateway::usage_metadata::model_from_bytes(
         route.upstream_protocol,
-        &request.body,
-        route.max_output_tokens,
-        Some(&reasoning_transport),
-        route
-            .codex
-            .as_ref()
-            .map(|snapshot| &snapshot.capabilities.chat_reasoning),
-    )
-    .and_then(|request| crate::gateway::transform::minimal::apply(request, route.responses_options))
-    .map_err(|error| invalid(&format!("无法转换 Codex WebSocket 请求：{error}")))?;
-    if converted.body.len() as u64 > MAX_REQUEST_BYTES {
-        return Err(invalid("转换后的请求体超过本机协议网关限制"));
-    }
-    if converted.stream != request.stream {
-        return Err(invalid("转换后的请求流状态与 Codex WebSocket 请求不一致"));
-    }
+        &converted.body,
+    ));
     let upstream = super::super::send_upstream_request(
         client,
         route,
@@ -96,8 +79,13 @@ fn request_upstream(
         converted.body,
         Some(request_headers),
         None,
-        None,
-    )?;
+        beta.as_deref(),
+    )
+    .inspect_err(|diagnostic| span.note_codex_attempt(route, diagnostic.status, false))?;
+    span.note_codex_attempt(route, Some(upstream.status().as_u16()), false);
+    if upstream.initial_body_received() {
+        span.note_first_byte();
+    }
     if !upstream.status().is_success() {
         return Err(read_upstream_diagnostic(
             upstream,
@@ -124,12 +112,51 @@ fn request_upstream(
     Ok(upstream)
 }
 
+fn prepare_body(
+    route: &ActiveRoute,
+    request: &PendingRequest,
+    url: &str,
+    incoming: &[Header],
+) -> Result<(ConvertedRequest, Option<String>), ProviderDiagnostic> {
+    let invalid = |message: &str| {
+        ProviderDiagnostic::new(ProviderFailureKind::RequestParameters, url, message)
+    };
+    if request.body.len() as u64 > MAX_REQUEST_BYTES {
+        return Err(invalid("请求体超过本机协议网关限制"));
+    }
+    let reasoning_transport = ReasoningTransport::from_continuation_key(route.continuation_key);
+    let mut converted = convert_request(
+        UpstreamProtocol::Responses,
+        route.upstream_protocol,
+        &request.body,
+        route.max_output_tokens,
+        Some(&reasoning_transport),
+        route
+            .codex
+            .as_ref()
+            .map(|snapshot| &snapshot.capabilities.chat_reasoning),
+    )
+    .and_then(|request| crate::gateway::transform::minimal::apply(request, route.responses_options))
+    .map_err(|error| invalid(&format!("无法转换 Codex WebSocket 请求：{error}")))?;
+    let beta = crate::gateway::codex::request::prepare(route, &request.body, &mut converted.body, Some(incoming))
+        .map_err(|error| invalid(&error))?;
+
+    if converted.body.len() as u64 > MAX_REQUEST_BYTES {
+        return Err(invalid("转换后的请求体超过本机协议网关限制"));
+    }
+    if converted.stream != request.stream {
+        return Err(invalid("转换后的请求流状态与 Codex WebSocket 请求不一致"));
+    }
+    Ok((converted, beta))
+}
+
 fn relay_response<S: Read + Write>(
     socket: &mut WebSocket<S>,
     mut upstream: super::super::UpstreamResponse,
     route: &ActiveRoute,
     context: &mut ConversationContext,
     request: &PendingRequest,
+    span: &mut RequestSpan,
 ) -> ExchangeOutcome {
     let mut diagnostic = response_diagnostic(
         &upstream,
@@ -137,31 +164,17 @@ fn relay_response<S: Read + Write>(
         "无法转换上游响应",
         &[&route.api_key, &route.client_token],
     );
-    let encoded = match read_limited(&mut upstream, MAX_RESPONSE_BYTES) {
+    let (_, body) = match super::super::respond::read_decoded(&mut upstream) {
         Ok(body) => body,
-        Err(error) => {
-            diagnostic.message = match error {
-                ReadLimitError::TooLarge => "上游响应超过本机协议网关限制",
-                ReadLimitError::Io => {
-                    diagnostic.kind = ProviderFailureKind::Network;
-                    "读取上游响应时连接中断"
-                }
-            }
-            .to_string();
+        Err((kind, message)) => {
+            diagnostic.kind = kind;
+            diagnostic.message = message;
             return reject_diagnostic(socket, &diagnostic);
         }
     };
-    let body = match crate::gateway::content_encoding::decode_response_body(
-        upstream.headers(),
-        &encoded,
-        MAX_RESPONSE_BYTES as usize,
-    ) {
-        Ok(body) => body,
-        Err(error) => {
-            diagnostic.message = format!("无法解压上游响应：{error}");
-            return reject_diagnostic(socket, &diagnostic);
-        }
-    };
+    if let Ok(value) = serde_json::from_slice::<Value>(&body) {
+        span.note_response_value(route.upstream_protocol, &value);
+    }
     let native = route.upstream_protocol == UpstreamProtocol::Responses;
     if !native {
         if let Some(error) =
@@ -240,6 +253,7 @@ fn relay_stream<S: Read + Write>(
     route: &ActiveRoute,
     context: &mut ConversationContext,
     request: &PendingRequest,
+    span: &mut RequestSpan,
 ) -> ExchangeOutcome {
     let mut diagnostic = response_diagnostic(
         &upstream,
@@ -275,7 +289,7 @@ fn relay_stream<S: Read + Write>(
             return reject_diagnostic(socket, &diagnostic);
         }
     };
-    super::stream::send_stream(socket, stream, route, context, request, diagnostic)
+    super::stream::send_stream(socket, stream, route, context, request, diagnostic, span)
 }
 
 fn compact<S: Read + Write>(
@@ -287,6 +301,7 @@ fn compact<S: Read + Write>(
     request: &PendingRequest,
     request_url: &str,
     request_headers: &[Header],
+    span: &mut RequestSpan,
 ) -> ExchangeOutcome {
     let result = match crate::gateway::compaction::execute(
         client,
@@ -297,8 +312,14 @@ fn compact<S: Read + Write>(
         Some(request_headers),
     ) {
         Ok(result) => result,
-        Err(diagnostic) => return reject_diagnostic(socket, &diagnostic),
+        Err(diagnostic) => {
+            span.note_codex_attempt(route, diagnostic.status, false);
+            return reject_diagnostic(socket, &diagnostic);
+        }
     };
+    span.note_codex_attempt(route, Some(200), false);
+    span.note_mapped_model(result.upstream_model.clone());
+    span.note_response_value(UpstreamProtocol::Responses, &result.response);
     if let Err(error) = context.record_completed(request, &result.response) {
         return if send_failed(socket, error.code, &error.message) {
             ExchangeOutcome::Rejected

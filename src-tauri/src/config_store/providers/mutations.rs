@@ -4,7 +4,8 @@ use super::load::{
 };
 use crate::config_store::{ConfigStore, ProfileStoreError, StoreOperationError};
 use asb_core::contracts::{
-    AppKind, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord, RouteMode,
+    AppKind, ProviderDraft, ProviderEndpoint, ProviderFile, ProviderProfile, ProviderRecord,
+    RouteMode,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -96,6 +97,27 @@ impl ConfigStore {
         })
     }
 
+    /// The Codex official-login record, creating the canonical one when
+    /// absent. Completing an official login must leave official routing
+    /// enableable, so every login path can call this idempotently; an
+    /// existing record — including a user-customized one — is returned
+    /// untouched. The bool says whether this call created the record.
+    pub fn ensure_codex_official_record(
+        &self,
+    ) -> Result<(ProviderRecord, bool), StoreOperationError> {
+        let (codex, _) = load_all(self)?;
+        if let Some(loaded) = codex
+            .iter()
+            .find(|loaded| loaded.file.route_mode == RouteMode::Official)
+        {
+            return Ok((record_of(AppKind::Codex, loaded), false));
+        }
+        self.create_provider(asb_core::codex_official_draft(
+            asb_core::ownership::default_provider_parameters(AppKind::Codex),
+        ))
+        .map(|record| (record, true))
+    }
+
     /// Rewrites exactly one provider file after the optimistic revision
     /// check; the id and sort position are preserved.
     pub fn update_provider(
@@ -147,6 +169,129 @@ impl ConfigStore {
         }
         fs::remove_file(provider_path(self, app, &loaded.file.id))
             .map_err(|_| StoreOperationError::Invalid("无法删除供应商文件".to_string()))
+    }
+
+    /// Adds one Claude custom upstream target while preserving all unrelated
+    /// provider fields and guarding the file with its current revision.
+    pub fn add_provider_endpoint(
+        &self,
+        id: &str,
+        url: &str,
+        expected_file_hash: &str,
+    ) -> Result<ProviderRecord, StoreOperationError> {
+        let (app, loaded) = self.endpoint_target(id, expected_file_hash)?;
+        let normalized =
+            asb_core::contracts::ProviderConnectionOptions::normalize_endpoint_url(url);
+        if normalized.is_empty() {
+            return Err("供应商服务端点不能为空".into());
+        }
+        if loaded
+            .file
+            .connection
+            .custom_endpoints
+            .keys()
+            .any(|candidate| {
+                asb_core::contracts::ProviderConnectionOptions::normalize_endpoint_url(candidate)
+                    == normalized
+            })
+        {
+            return Err("供应商服务端点已存在".into());
+        }
+        let mut file = loaded.file;
+        file.connection.custom_endpoints.insert(
+            normalized.clone(),
+            ProviderEndpoint {
+                url: normalized,
+                added_at: chrono::Utc::now().timestamp_millis(),
+                last_used: None,
+            },
+        );
+        let hash = write_provider_file(self, app, &file)?;
+        Ok(ProviderRecord {
+            profile: file.into_profile(app),
+            file_hash: hash,
+        })
+    }
+
+    /// Removes one Claude custom upstream target. A trailing slash is treated
+    /// as equivalent to the canonical endpoint spelling used on save.
+    pub fn remove_provider_endpoint(
+        &self,
+        id: &str,
+        url: &str,
+        expected_file_hash: &str,
+    ) -> Result<ProviderRecord, StoreOperationError> {
+        let (app, loaded) = self.endpoint_target(id, expected_file_hash)?;
+        let normalized =
+            asb_core::contracts::ProviderConnectionOptions::normalize_endpoint_url(url);
+        let key = loaded
+            .file
+            .connection
+            .custom_endpoints
+            .keys()
+            .find(|candidate| {
+                asb_core::contracts::ProviderConnectionOptions::normalize_endpoint_url(candidate)
+                    == normalized
+            })
+            .cloned()
+            .ok_or_else(|| StoreOperationError::Invalid("供应商服务端点不存在".to_string()))?;
+        let mut file = loaded.file;
+        file.connection.custom_endpoints.remove(&key);
+        let hash = write_provider_file(self, app, &file)?;
+        Ok(ProviderRecord {
+            profile: file.into_profile(app),
+            file_hash: hash,
+        })
+    }
+
+    /// Records successful use of a custom endpoint without changing the
+    /// provider's routing identity. `false` means the URL is the primary
+    /// endpoint or is not a configured custom target.
+    pub fn mark_provider_endpoint_used(
+        &self,
+        id: &str,
+        url: &str,
+    ) -> Result<bool, StoreOperationError> {
+        let (app, loaded) = self.locate(id)?;
+        if app != AppKind::Claude || loaded.file.route_mode != RouteMode::Custom {
+            return Ok(false);
+        }
+        let normalized =
+            asb_core::contracts::ProviderConnectionOptions::normalize_endpoint_url(url);
+        let Some(key) = loaded
+            .file
+            .connection
+            .custom_endpoints
+            .keys()
+            .find(|candidate| {
+                asb_core::contracts::ProviderConnectionOptions::normalize_endpoint_url(candidate)
+                    == normalized
+            })
+            .cloned()
+        else {
+            return Ok(false);
+        };
+        let mut file = loaded.file;
+        if let Some(endpoint) = file.connection.custom_endpoints.get_mut(&key) {
+            endpoint.last_used = Some(chrono::Utc::now().timestamp_millis());
+        }
+        write_provider_file(self, app, &file)?;
+        Ok(true)
+    }
+
+    fn endpoint_target(
+        &self,
+        id: &str,
+        expected_file_hash: &str,
+    ) -> Result<(AppKind, LoadedProvider), StoreOperationError> {
+        let (app, loaded) = self.locate(id)?;
+        if app != AppKind::Claude || loaded.file.route_mode != RouteMode::Custom {
+            return Err("只有 Claude 自定义供应商支持服务端点".into());
+        }
+        if loaded.hash != expected_file_hash {
+            return Err("供应商文件已被外部修改，请重新读取后再保存".into());
+        }
+        Ok((app, loaded))
     }
 
     /// Persists a drag reorder as new `position` values in the affected

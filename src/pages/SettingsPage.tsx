@@ -5,6 +5,7 @@ import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
+import { ModuleHeader } from "../components/WorkspaceHeader";
 import { UpdateSection } from "../components/UpdateSection";
 
 interface SettingsPageProps {
@@ -98,7 +99,7 @@ function SettingsPanel({ section, selected, children }: {
   const title = SETTINGS_SECTIONS.find((item) => item.value === section)!.label;
   return (
     <section className="asb-panel" hidden={selected !== section} aria-label={title}>
-      <div className="asb-panel-heading"><h3 className="asb-section-title">{title}</h3></div>
+      <ModuleHeader title={title} />
       {children}
     </section>
   );

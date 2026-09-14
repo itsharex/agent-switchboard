@@ -1,11 +1,14 @@
 import { invoke } from "./client";
-import type { ProviderModel } from "./providers";
+import type { ProviderConnectionOptions, ProviderModel } from "./providers";
 import type { ResponsesOptions, UpstreamProtocol } from "./shared";
 
 /** The connection under test, independent of saved provider metadata. */
 export interface ProviderRequestConnection {
+  app: import("./shared").AppKind;
   baseUrl: string;
   apiKey: string;
+  connection: ProviderConnectionOptions;
+  authentication?: import("./shared").AuthenticationScheme | null;
   upstreamProtocol: UpstreamProtocol;
   responsesOptions: ResponsesOptions | null;
   defaultModel: string | null;

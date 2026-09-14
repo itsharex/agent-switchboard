@@ -51,8 +51,9 @@ function CodexProviderForm({ editor, ...props }: Props & { editor: CodexEditorSt
           onChange={(next) => setDraft((current) => ({ ...current, requestMode: next.requestMode }))} />
       )}
       <CodexCapabilitiesSection editor={editor} busy={busy} />
-      <ProviderConnectionTest busy={busy} active={props.active && !editor.parametersOpen}
+      <ProviderConnectionTest app="codex" busy={busy} active={props.active && !editor.parametersOpen}
         baseUrl={draft.endpoint} apiKey={draft.apiKey} upstreamProtocol={draft.upstream}
+        connection={draft.connection} authentication={draft.authentication}
         responsesOptions={draft.upstream === "responses" ? { requestMode: draft.requestMode } : null}
         defaultModel={draft.defaultModel} />
       <ProviderNotesField busy={busy} value={draft.notes}

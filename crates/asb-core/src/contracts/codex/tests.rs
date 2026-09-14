@@ -4,8 +4,11 @@ fn profile() -> CodexProviderProfile {
     CodexProviderProfile {
         id: "provider-1".to_string(),
         name: "Relay".to_string(),
+        route_mode: CodexRouteMode::for_upstream(CodexUpstream::ChatCompletions),
         endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
         api_key: "secret".to_string(),
+        authentication: None,
+        connection: Default::default(),
         upstream: CodexUpstream::ChatCompletions,
         request_mode: ResponsesRequestMode::Standard,
         default_model: "codex".to_string(),
@@ -21,6 +24,10 @@ fn profile() -> CodexProviderProfile {
             supported_reasoning_levels: vec![CodexReasoningLevel::None, CodexReasoningLevel::High],
             images: true,
             compact: true,
+            display_name: None,
+            description: None,
+            base_instructions: None,
+            supports_parallel_tool_calls: None,
         }],
         model_routes: vec![CodexModelRoute {
             client_model: "codex".to_string(),
@@ -53,6 +60,8 @@ fn draft() -> CodexProviderDraft {
         name: profile.name,
         endpoint: profile.endpoint,
         api_key: profile.api_key,
+        authentication: profile.authentication,
+        connection: profile.connection,
         upstream: profile.upstream,
         request_mode: profile.request_mode,
         default_model: profile.default_model,
@@ -75,12 +84,33 @@ fn profile_requires_a_complete_catalog_and_unique_client_routes() {
 }
 
 #[test]
-fn model_resolution_keeps_native_responses_and_defaults_bridges() {
-    let mut value = profile();
-    assert_eq!(value.resolve_model("codex").unwrap(), "vendor-codex");
-    assert_eq!(value.resolve_model("other").unwrap(), "codex");
-    value.upstream = CodexUpstream::Responses;
-    assert_eq!(value.resolve_model("other").unwrap(), "other");
+fn model_resolution_keeps_selected_catalog_models_across_protocols() {
+    for protocol in [
+        CodexUpstream::ChatCompletions,
+        CodexUpstream::AnthropicMessages,
+        CodexUpstream::Responses,
+    ] {
+        let mut value = profile();
+        value.upstream = protocol;
+        value.route_mode =
+            CodexRouteMode::for_connection(protocol, &value.connection, value.authentication);
+        if protocol != CodexUpstream::ChatCompletions {
+            value.capabilities.chat_reasoning = CodexChatReasoning::Unsupported;
+        }
+        let mut second = value.catalog[0].clone();
+        second.id = "second-model".into();
+        value.catalog.push(second);
+        let snapshot = CodexRouteSnapshot::from_profile(&value, "revision".into()).unwrap();
+        assert_eq!(value.resolve_model("codex").unwrap(), "vendor-codex");
+        assert_eq!(snapshot.resolve_model("codex").unwrap(), "vendor-codex");
+        assert_eq!(value.resolve_model("second-model").unwrap(), "second-model");
+        assert_eq!(
+            snapshot.resolve_model("second-model").unwrap(),
+            "second-model"
+        );
+        assert!(value.resolve_model("not-in-catalog").is_err());
+        assert!(snapshot.resolve_model("not-in-catalog").is_err());
+    }
 }
 
 #[test]
@@ -109,10 +139,14 @@ fn snapshots_reject_models_outside_the_accepted_catalog() {
 }
 
 #[test]
-fn openai_compatible_endpoints_require_an_explicit_api_root() {
+fn openai_compatible_endpoints_preserve_a_vendor_root_without_inventing_v1() {
     let mut value = profile();
     value.endpoint = CodexEndpoint("https://relay.example".to_string());
-    assert!(value.validate().unwrap_err().contains("显式 API 根路径"));
+    value.validate().unwrap();
+    assert_eq!(
+        crate::endpoint::upstream_endpoint(&value.endpoint.0, value.upstream.protocol()).unwrap(),
+        "https://relay.example/chat/completions"
+    );
 }
 
 #[test]
@@ -201,6 +235,11 @@ fn persisted_files_reject_incoherent_capability_declarations() {
 
     let mut non_chat_reasoning = draft().into_file(id, 100);
     non_chat_reasoning.profile.upstream = CodexUpstream::Responses;
+    non_chat_reasoning.profile.route_mode = CodexRouteMode::for_connection(
+        CodexUpstream::Responses,
+        &non_chat_reasoning.profile.connection,
+        non_chat_reasoning.profile.authentication,
+    );
     assert!(non_chat_reasoning
         .validate()
         .unwrap_err()

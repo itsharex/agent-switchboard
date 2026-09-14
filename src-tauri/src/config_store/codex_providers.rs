@@ -128,6 +128,29 @@ impl ConfigStore {
         Ok(file.record(hash))
     }
 
+    /// Rewrites one already materialized Codex file after an optimistic
+    /// revision check. Switching uses this for live backfill because the
+    /// candidate must preserve every specialized field that was not present
+    /// in `config.toml`.
+    pub(crate) fn update_codex_provider_file(
+        &self,
+        file: CodexProviderFile,
+        expected_file_hash: &str,
+    ) -> Result<CodexProviderRecord, StoreOperationError> {
+        let existing = load(self)?
+            .into_iter()
+            .find(|loaded| loaded.file.profile.id == file.profile.id)
+            .ok_or_else(|| StoreOperationError::Invalid("Codex 供应商不存在".to_string()))?;
+        if existing.hash != expected_file_hash {
+            return Err("Codex 供应商文件已被外部修改，请重新读取后再保存".into());
+        }
+        if existing.file.position != file.position {
+            return Err("Codex 供应商排序位置已变化，拒绝覆盖".into());
+        }
+        let hash = write(self, &file)?;
+        Ok(file.record(hash))
+    }
+
     /// Restores a previously validated Codex provider preimage. This is
     /// deliberately crate-visible: only the active-save recovery transaction
     /// may overwrite a specialized provider file.
@@ -209,6 +232,26 @@ pub(crate) fn load_codex_provider_files(
 /// Finds one current Codex file without converting it into the retired
 /// generic provider shape.
 impl ConfigStore {
+    pub(crate) fn codex_provider_snapshots(
+        &self,
+    ) -> Result<Vec<(CodexProviderFile, String)>, ProfileStoreError> {
+        Ok(load(self)?
+            .into_iter()
+            .map(|loaded| (loaded.file, loaded.hash))
+            .collect())
+    }
+
+    pub(crate) fn find_codex_provider_with_revision(
+        &self,
+        id: &str,
+    ) -> Result<(CodexProviderFile, String), ProfileStoreError> {
+        load(self)?
+            .into_iter()
+            .find(|loaded| loaded.file.profile.id == id)
+            .map(|loaded| (loaded.file, loaded.hash))
+            .ok_or(ProfileStoreError::Unsupported)
+    }
+
     pub(crate) fn find_codex_provider_file(
         &self,
         id: &str,
@@ -297,6 +340,8 @@ mod tests {
             name: "Relay".to_string(),
             endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
             api_key: "secret".to_string(),
+            authentication: None,
+            connection: Default::default(),
             upstream: CodexUpstream::Responses,
             request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
             default_model: "codex".to_string(),
@@ -315,6 +360,10 @@ mod tests {
                 ],
                 images: false,
                 compact: true,
+                display_name: None,
+                description: None,
+                base_instructions: None,
+                supports_parallel_tool_calls: None,
             }],
             model_routes: vec![CodexModelRoute {
                 client_model: "codex".to_string(),

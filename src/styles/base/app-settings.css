@@ -141,6 +141,13 @@
   gap: var(--asb-space-3);
 }
 
+/* Client preferences provide their saved values as a baseline. A changed
+   control owns its compact diff directly below the control surface. */
+.asb-setting-diff {
+  grid-column: 1 / -1;
+  margin-top: var(--asb-space-1);
+}
+
 .asb-choice-value {
   font: var(--asb-text-label);
   font-weight: 700;

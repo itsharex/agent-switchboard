@@ -1,6 +1,9 @@
 use super::db::open_read_only;
 use super::*;
-use asb_core::contracts::{ProviderDraft, ProviderProfile, UpstreamProtocol};
+use asb_core::contracts::{
+    AuthenticationScheme, ClaudeModelSettings, ModelOptions, ProviderDraft, ProviderProfile,
+    UpstreamProtocol,
+};
 use rusqlite::{params, Connection};
 use std::path::PathBuf;
 
@@ -284,7 +287,7 @@ fn codex_rows_import_in_one_click_with_backend_completion() {
         .warnings
         .iter()
         .any(|warning| warning.contains("costMultiplier")));
-    assert!(codex
+    assert!(!codex
         .warnings
         .iter()
         .any(|warning| warning.contains("displayName")));
@@ -317,6 +320,10 @@ fn codex_rows_import_in_one_click_with_backend_completion() {
     );
     assert_eq!(codex_records[0].profile.catalog.len(), 2);
     assert_eq!(codex_records[0].profile.catalog[0].context_window, 272_000);
+    assert_eq!(
+        codex_records[0].profile.catalog[0].display_name.as_deref(),
+        Some("GPT-5 Codex")
+    );
 
     // The same route never imports twice.
     let again = import_at(&path, &state, &["codex:id-codex".into()]).unwrap();
@@ -376,17 +383,23 @@ fn import_enriches_a_matching_profile_with_the_source_usage_script() {
     let existing = state
         .configuration()
         .import_provider(ProviderDraft {
+            authentication: Some(AuthenticationScheme::Bearer),
             parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
             app: AppKind::Claude,
             route_mode: asb_core::RouteMode::Custom,
             name: "中继 A".to_string(),
             model: Some("claude-x".to_string()),
             base_url: Some("https://relay.internal".to_string()),
+            connection: Default::default(),
             api_key: SOURCE_TOKEN.to_string(),
             upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
             responses_options: None,
             max_output_tokens: None.into(),
-            model_options: None,
+            model_options: Some(ModelOptions::Claude(ClaudeModelSettings {
+                haiku_one_m: false,
+                subagent_model: Some("sub-x".to_string()),
+                ..ClaudeModelSettings::default()
+            })),
             notes: Some("主力中继".to_string()),
             website_url: Some("https://relay.internal".to_string()),
             usage_query: None,

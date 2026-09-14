@@ -56,6 +56,10 @@ export interface FilePreview {
   renderedHash: string;
   /** Redacted candidate file text for the pretty-printed file view. */
   content: string;
+  authHash?: string;
+  authRenderedHash?: string;
+  authExisted?: boolean;
+  authRenderedExisted?: boolean;
 }
 
 export interface BackupRecord {
@@ -107,13 +111,22 @@ export function executeSwitch(
   expectedHash: string,
   expectedRenderedHash: string,
   confirmWrite: boolean,
+  auth?: Pick<FilePreview, "authHash" | "authRenderedHash" | "authExisted">,
 ): Promise<SwitchOutcome> {
-  return invoke<SwitchOutcome>("execute_switch", {
+  const request = {
     profileId,
     expectedHash,
     expectedRenderedHash,
     confirmWrite,
-  });
+    ...(auth?.authHash && auth.authRenderedHash
+      ? {
+          authHash: auth.authHash,
+          authExisted: auth.authExisted ?? false,
+          authRenderedHash: auth.authRenderedHash,
+        }
+      : {}),
+  };
+  return invoke<SwitchOutcome>("execute_switch", request);
 }
 
 export function listBackups(): Promise<BackupRecord[]> {

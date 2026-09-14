@@ -89,12 +89,24 @@ impl ChatSource {
         merge_identity(&mut self.id, update.id.as_deref(), "Chat SSE id")?;
         merge_identity(&mut self.model, update.model.as_deref(), "Chat SSE model")?;
         if let Some(usage) = &update.usage {
-            self.usage = usage.clone();
+            self.usage.merge_from(usage);
         }
         if let Some(stop) = update.finish {
+            if self.stop.is_some_and(|current| {
+                std::mem::discriminant(&current) != std::mem::discriminant(&stop)
+            }) {
+                return Err(TransformError(
+                    "Chat SSE finish_reason 在流中变化".to_string(),
+                ));
+            }
             self.stop = Some(stop);
         }
         if update.done {
+            if self.stop.is_none() {
+                return Err(TransformError(
+                    "Chat SSE 在缺少 finish_reason 时收到 [DONE]".to_string(),
+                ));
+            }
             self.done = true;
         }
         Ok(())
@@ -112,7 +124,7 @@ impl ChatSource {
     }
 
     fn stop(&self) -> StopReason {
-        self.stop.unwrap_or(StopReason::EndTurn)
+        self.stop.expect("validated before [DONE]")
     }
 }
 
@@ -152,8 +164,8 @@ fn parse_chat_frame(frame: &Frame) -> Result<ChatUpdate, TransformError> {
         Some(value) => Some(parse_usage(value)?),
     };
     let mut update = ChatUpdate {
-        id: optional_string(map, "id")?,
-        model: optional_string(map, "model")?,
+        id: optional_identity(map, "id")?,
+        model: optional_identity(map, "model")?,
         usage,
         ..ChatUpdate::default()
     };
@@ -167,14 +179,18 @@ fn parse_chat_frame(frame: &Frame) -> Result<ChatUpdate, TransformError> {
                 })?;
         }
     }
-    let Some(choices) = map.get("choices") else {
-        return Ok(update);
-    };
+    if let Some(choices) = map.get("choices") {
+        parse_chat_choices(choices, &mut update)?;
+    }
+    Ok(update)
+}
+
+fn parse_chat_choices(choices: &Value, update: &mut ChatUpdate) -> Result<(), TransformError> {
     let choices = choices
         .as_array()
         .ok_or_else(|| TransformError("Chat SSE choices 必须是数组".to_string()))?;
     if choices.is_empty() {
-        return Ok(update);
+        return Ok(());
     }
     if choices.len() != 1 {
         return Err(TransformError("Chat SSE 仅支持单个 choice".to_string()));
@@ -193,113 +209,114 @@ fn parse_chat_frame(frame: &Frame) -> Result<ChatUpdate, TransformError> {
     if choice.get("logprobs").is_some_and(|value| !value.is_null()) {
         return Err(TransformError("Chat SSE logprobs 无法安全转换".to_string()));
     }
-    if let Some(delta) = choice.get("delta") {
-        let delta = object(delta, "Chat SSE delta")?;
-        allowed(
-            delta,
-            &[
-                "role",
-                "content",
-                "tool_calls",
-                "refusal",
-                "reasoning_content",
-            ],
-            "Chat SSE delta",
-        )?;
-        if let Some(role) = delta.get("role").and_then(Value::as_str) {
-            if role != "assistant" {
-                return Err(TransformError(
-                    "Chat SSE delta.role 不是 assistant".to_string(),
-                ));
-            }
+    if let Some(delta) = choice.get("delta").filter(|value| !value.is_null()) {
+        parse_chat_delta(delta, update)?;
+    }
+    update.finish = choice
+        .get("finish_reason")
+        .filter(|value| !value.is_null())
+        .map(parse_finish_reason)
+        .transpose()?;
+    Ok(())
+}
+
+fn parse_chat_delta(value: &Value, update: &mut ChatUpdate) -> Result<(), TransformError> {
+    let delta = object(value, "Chat SSE delta")?;
+    allowed(
+        delta,
+        &[
+            "role",
+            "content",
+            "tool_calls",
+            "refusal",
+            "reasoning_content",
+        ],
+        "Chat SSE delta",
+    )?;
+    if optional_identity(delta, "role")?.is_some_and(|role| role != "assistant") {
+        return Err(TransformError(
+            "Chat SSE delta.role 不是 assistant".to_string(),
+        ));
+    }
+    for field in ["content", "refusal"] {
+        if let Some(text) = optional_string(delta, field)?.filter(|value| !value.is_empty()) {
+            update.text.push(text);
         }
-        for field in ["content", "refusal"] {
-            if let Some(text) = delta.get(field) {
-                match text {
-                    Value::Null => {}
-                    Value::String(text) => update.text.push(text.clone()),
-                    _ => {
-                        return Err(TransformError(format!(
-                            "Chat SSE {field} 必须是字符串或 null"
-                        )))
-                    }
-                }
-            }
-        }
-        if let Some(reasoning) = delta.get("reasoning_content") {
-            match reasoning {
-                Value::Null => {}
-                Value::String(content) if content.is_empty() => {}
-                Value::String(content) => update.reasoning.push(content.clone()),
-                _ => {
-                    return Err(TransformError(
-                        "Chat SSE reasoning_content 必须是字符串或 null".to_string(),
-                    ))
-                }
-            }
-        }
-        if let Some(calls) = delta.get("tool_calls") {
-            for call in calls
-                .as_array()
-                .ok_or_else(|| TransformError("Chat SSE tool_calls 必须是数组".to_string()))?
+    }
+    if let Some(reasoning) =
+        optional_string(delta, "reasoning_content")?.filter(|value| !value.is_empty())
+    {
+        update.reasoning.push(reasoning);
+    }
+    if let Some(calls) = delta.get("tool_calls").filter(|value| !value.is_null()) {
+        for call in calls
+            .as_array()
+            .ok_or_else(|| TransformError("Chat SSE tool_calls 必须是数组或 null".to_string()))?
+        {
+            let call = parse_call_delta(call)?;
+            if call.id.is_some()
+                || call.name.is_some()
+                || call
+                    .arguments
+                    .as_ref()
+                    .is_some_and(|value| !value.is_empty())
             {
-                let call = object(call, "Chat SSE tool_call")?;
-                allowed(
-                    call,
-                    &["index", "id", "type", "function"],
-                    "Chat SSE tool_call",
-                )?;
-                if let Some(kind) = call.get("type").and_then(Value::as_str) {
-                    if kind != "function" {
-                        return Err(TransformError(
-                            "Chat SSE 仅支持 function 工具调用".to_string(),
-                        ));
-                    }
-                }
-                let function = call
-                    .get("function")
-                    .map(|value| object(value, "Chat SSE function"))
-                    .transpose()?;
-                if let Some(function) = function {
-                    allowed(function, &["name", "arguments"], "Chat SSE function")?;
-                }
-                update.calls.push(CallDelta {
-                    index: call.get("index").and_then(Value::as_u64).ok_or_else(|| {
-                        TransformError("Chat SSE tool_call 缺少 index".to_string())
-                    })?,
-                    id: optional_string(call, "id")?,
-                    name: function
-                        .map(|function| optional_string(function, "name"))
-                        .transpose()?
-                        .flatten(),
-                    arguments: function
-                        .map(|function| optional_string(function, "arguments"))
-                        .transpose()?
-                        .flatten(),
-                });
+                update.calls.push(call);
             }
         }
     }
-    if let Some(reason) = choice.get("finish_reason") {
-        if !reason.is_null() {
-            update.finish = Some(match reason.as_str() {
-                Some("tool_calls") => StopReason::ToolUse,
-                Some("length") => StopReason::MaxTokens,
-                Some("stop") => StopReason::EndTurn,
-                Some(other) => {
-                    return Err(TransformError(format!(
-                        "Chat SSE finish_reason {other} 不支持转换"
-                    )))
-                }
-                None => {
-                    return Err(TransformError(
-                        "Chat SSE finish_reason 必须是字符串或 null".to_string(),
-                    ))
-                }
-            });
-        }
+    Ok(())
+}
+
+fn parse_call_delta(value: &Value) -> Result<CallDelta, TransformError> {
+    let call = object(value, "Chat SSE tool_call")?;
+    allowed(
+        call,
+        &["index", "id", "type", "function"],
+        "Chat SSE tool_call",
+    )?;
+    if optional_identity(call, "type")?.is_some_and(|kind| kind != "function") {
+        return Err(TransformError(
+            "Chat SSE 仅支持 function 工具调用".to_string(),
+        ));
     }
-    Ok(update)
+    let function = call
+        .get("function")
+        .filter(|value| !value.is_null())
+        .map(|value| object(value, "Chat SSE function"))
+        .transpose()?;
+    if let Some(function) = function {
+        allowed(function, &["name", "arguments"], "Chat SSE function")?;
+    }
+    Ok(CallDelta {
+        index: call
+            .get("index")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| TransformError("Chat SSE tool_call 缺少 index".to_string()))?,
+        id: optional_identity(call, "id")?,
+        name: function
+            .map(|function| optional_identity(function, "name"))
+            .transpose()?
+            .flatten(),
+        arguments: function
+            .map(|function| optional_string(function, "arguments"))
+            .transpose()?
+            .flatten(),
+    })
+}
+
+fn parse_finish_reason(reason: &Value) -> Result<StopReason, TransformError> {
+    match reason.as_str() {
+        Some("tool_calls") => Ok(StopReason::ToolUse),
+        Some("length") => Ok(StopReason::MaxTokens),
+        Some("stop") => Ok(StopReason::EndTurn),
+        Some(other) => Err(TransformError(format!(
+            "Chat SSE finish_reason {other} 不支持转换"
+        ))),
+        None => Err(TransformError(
+            "Chat SSE finish_reason 必须是字符串或 null".to_string(),
+        )),
+    }
 }
 
 fn merge_identity(
@@ -346,17 +363,26 @@ fn optional_string(
     map: &Map<String, Value>,
     field: &str,
 ) -> Result<Option<String>, TransformError> {
-    map.get(field)
-        .map(|value| {
-            value
-                .as_str()
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-                .ok_or_else(|| TransformError(format!("{field} 必须是非空字符串")))
-        })
-        .transpose()
+    match map.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.clone())),
+        Some(_) => Err(TransformError(format!(
+            "Chat SSE {field} 必须是字符串或 null"
+        ))),
+    }
+}
+
+fn optional_identity(
+    map: &Map<String, Value>,
+    field: &str,
+) -> Result<Option<String>, TransformError> {
+    Ok(optional_string(map, field)?.filter(|value| !value.is_empty()))
 }
 
 fn parse_usage(value: &Value) -> Result<Usage, TransformError> {
     usage::parse(UpstreamProtocol::ChatCompletions, Some(value))
 }
+
+#[cfg(test)]
+#[path = "chat/tests/mod.rs"]
+mod tests;

@@ -4,6 +4,8 @@
 //! implementation of configuration behavior: every request dispatches to the
 //! same typed Tauri command used by the desktop shell.
 
+mod codex_dispatch;
+mod claude_dispatch;
 mod dispatch;
 mod http;
 

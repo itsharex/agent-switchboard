@@ -75,7 +75,10 @@ pub(super) fn match_status_for(
         .map_err(|error| CommandError::new("provider-identity-unavailable", error))?
         .flatten();
     if kind == AppKind::Codex {
-        let matching = codex_matching_profile(state, gateway, text, client_settings)?;
+        let matching = match super::codex::matching_profile(state, gateway, text)? {
+            Some(profile) => Some(profile),
+            None => super::codex::matching_official(state, &profiles, text)?,
+        };
         return Ok(classify_match_status(
             last.as_ref(),
             &hash,
@@ -112,36 +115,8 @@ pub(super) fn match_status_for(
     ))
 }
 
-fn codex_matching_profile(
-    state: &crate::local_state::LocalState,
-    gateway: Option<&crate::gateway::GatewayController>,
-    text: &str,
-    client_settings: asb_core::contracts::SettingsValues,
-) -> Result<Option<ProviderProfile>, CommandError> {
-    let Some(gateway) = gateway else {
-        return Ok(None);
-    };
-    let Some(profile_id) = gateway
-        .active_profile_id(AppKind::Codex, text)
-        .map_err(|error| CommandError::new("provider-identity-unavailable", error))?
-    else {
-        return Ok(None);
-    };
-    let file = state
-        .configuration()
-        .find_codex_provider_file(&profile_id)
-        .map_err(store_error)?;
-    let Some(plan) = gateway
-        .active_codex_projection(&file, client_settings)
-        .map_err(|error| CommandError::new("provider-identity-unavailable", error))?
-    else {
-        return Ok(None);
-    };
-    Ok(projection_matches(text, &plan)
-        .then(|| file.client_projection().into_profile(AppKind::Codex)))
-}
 
-fn projection_matches(text: &str, plan: &SwitchPlan) -> bool {
+pub(super) fn projection_matches(text: &str, plan: &SwitchPlan) -> bool {
     asb_core::validate_plan(&plan.profile, &plan.client_settings).is_ok()
         && matches!(adapter::preview(text, plan, ""), Ok(preview) if preview.changes.is_empty())
 }
@@ -199,6 +174,12 @@ pub(crate) fn config_status_report(
         .into_iter()
         .map(|record| record.profile)
         .collect::<Vec<_>>();
+    let mut applicable = Vec::new();
+    for profile in profiles {
+        if profile.app != AppKind::Codex || profile.route_mode != asb_core::RouteMode::Official
+            || super::codex::account_matches(state, &profile.id)? { applicable.push(profile); }
+    }
+    let profiles = applicable;
     [AppKind::Codex, AppKind::Claude]
         .into_iter()
         .map(|kind| observe_client_file(state, gateway, &profiles, kind))
@@ -253,13 +234,11 @@ fn observe_client_file(
     status.route = Some(route);
     status.match_status = match_status_for(state, Some(gateway), kind, &text)?;
     status.active_profile_id = if kind == AppKind::Codex {
-        let settings = state
-            .configuration()
-            .get_client_settings(AppKind::Codex)
-            .map_err(store_error)?
-            .settings;
-        match codex_matching_profile(state, Some(gateway), &text, settings)? {
-            Some(profile) => Some(profile.id),
+        let routed = gateway.active_profile_id(AppKind::Codex, &text)
+            .map_err(|e| CommandError::new("codex-state-unavailable", e))?;
+        let identity = match routed { Some(id) => Some(id), None => super::codex::active_direct(state, &text)? };
+        match identity {
+            Some(id) => Some(id),
             // A third-party route never reaches here; official routing falls
             // back to the stored official-login record so the row can show
             // its live state like Claude official profiles do.

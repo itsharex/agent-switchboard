@@ -265,34 +265,7 @@ impl ChatToAnthropic {
             );
         }
         for source_index in self.calls.keys().copied().collect::<Vec<_>>() {
-            self.start_call(output, source_index)?;
-            let (content_index, arguments) = {
-                let call = self.calls.get_mut(&source_index).expect("entry exists");
-                let content_index = call
-                    .content_index
-                    .ok_or_else(|| TransformError("Chat SSE 工具调用缺少 id 或名称".to_string()))?;
-                if call.sent_arguments < call.arguments.len() {
-                    let delta = call.arguments[call.sent_arguments..].to_string();
-                    call.sent_arguments = call.arguments.len();
-                    append_event(
-                        output,
-                        "content_block_delta",
-                        json!({
-                            "type": "content_block_delta",
-                            "index": content_index,
-                            "delta": { "type": "input_json_delta", "partial_json": delta },
-                        }),
-                    );
-                }
-                (content_index, call.arguments.clone())
-            };
-            serde_json::from_str::<Value>(&arguments)
-                .map_err(|_| TransformError("Chat SSE 工具参数不是完整 JSON".to_string()))?;
-            append_event(
-                output,
-                "content_block_stop",
-                json!({ "type": "content_block_stop", "index": content_index }),
-            );
+            self.complete_call(output, source_index)?;
         }
         append_event(
             output,
@@ -305,6 +278,39 @@ impl ChatToAnthropic {
         );
         append_event(output, "message_stop", json!({ "type": "message_stop" }));
         self.completed = true;
+        Ok(())
+    }
+
+    fn complete_call(
+        &mut self,
+        output: &mut Vec<u8>,
+        source_index: u64,
+    ) -> Result<(), TransformError> {
+        self.start_call(output, source_index)?;
+        let call = self.calls.get_mut(&source_index).expect("entry exists");
+        let content_index = call
+            .content_index
+            .ok_or_else(|| TransformError("Chat SSE 工具调用缺少 id 或名称".to_string()))?;
+        if call.sent_arguments < call.arguments.len() {
+            let delta = &call.arguments[call.sent_arguments..];
+            call.sent_arguments = call.arguments.len();
+            append_event(
+                output,
+                "content_block_delta",
+                json!({
+                    "type": "content_block_delta",
+                    "index": content_index,
+                    "delta": { "type": "input_json_delta", "partial_json": delta },
+                }),
+            );
+        }
+        serde_json::from_str::<Value>(&call.arguments)
+            .map_err(|_| TransformError("Chat SSE 工具参数不是完整 JSON".to_string()))?;
+        append_event(
+            output,
+            "content_block_stop",
+            json!({ "type": "content_block_stop", "index": content_index }),
+        );
         Ok(())
     }
 }

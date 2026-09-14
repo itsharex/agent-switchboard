@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchProviderModels, getGatewayStatus, resolveProviderEndpoints,
   type AppKind, type ProviderEndpoints, type ProviderModel,
-  type ResponsesOptions, type UpstreamProtocol } from "../../api/client";
+  type ProviderConnectionOptions, type ResponsesOptions, type UpstreamProtocol } from "../../api/client";
 import { clientName } from "../../lib/client-name";
 import { NATIVE_PROTOCOL, PROTOCOL_LABELS, requiresGateway } from "../../lib/protocol";
 
@@ -10,7 +10,9 @@ export interface ProviderConnectionInput {
   app: AppKind;
   routeMode: "official" | "custom";
   baseUrl: string | null;
+  connection?: ProviderConnectionOptions | null;
   apiKey: string;
+  authentication?: import("../../api/shared").AuthenticationScheme | null;
   upstreamProtocol: UpstreamProtocol | null;
   responsesOptions: ResponsesOptions | null;
 }
@@ -43,7 +45,11 @@ function useGatewayWarning(input: ProviderConnectionInput) {
       : `${lead}此路径需要本机协议网关处理，正在读取实际监听地址。`;
 }
 
-function useResolvedEndpoints(baseUrl: string, upstreamProtocol: UpstreamProtocol | null) {
+function useResolvedEndpoints(
+  baseUrl: string,
+  upstreamProtocol: UpstreamProtocol | null,
+  connection: ProviderConnectionOptions | null | undefined,
+) {
   const [resolution, setResolution] = useState<{
     baseUrl: string;
     upstreamProtocol: UpstreamProtocol;
@@ -54,7 +60,7 @@ function useResolvedEndpoints(baseUrl: string, upstreamProtocol: UpstreamProtoco
     let active = true;
     setResolution(null);
     if (baseUrl && upstreamProtocol) {
-      void resolveProviderEndpoints(baseUrl, upstreamProtocol).then((endpoints) => {
+      void resolveProviderEndpoints(baseUrl, upstreamProtocol, connection).then((endpoints) => {
         if (active) setResolution({ baseUrl, upstreamProtocol, endpoints, error: null });
       }).catch((caught: unknown) => {
         const error = typeof caught === "object" && caught !== null && "message" in caught
@@ -63,7 +69,7 @@ function useResolvedEndpoints(baseUrl: string, upstreamProtocol: UpstreamProtoco
       });
     }
     return () => { active = false; };
-  }, [baseUrl, upstreamProtocol]);
+  }, [baseUrl, upstreamProtocol, connection]);
   const current = resolution?.baseUrl === baseUrl && resolution.upstreamProtocol === upstreamProtocol
     ? resolution : null;
   return { endpoints: current?.endpoints ?? null, endpointError: current?.error ?? null,
@@ -76,14 +82,17 @@ export function useProviderConnection(input: ProviderConnectionInput) {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const modelsVersion = useRef(0);
   const baseUrl = input.baseUrl?.trim() ?? "";
-  const endpoints = useResolvedEndpoints(baseUrl, input.upstreamProtocol);
+  const endpoints = useResolvedEndpoints(baseUrl, input.upstreamProtocol, input.connection);
   const gatewayRouteWarning = useGatewayWarning(input);
+  const modelAuthentication = input.authentication ?? undefined;
+  const modelConnection = input.connection && Object.keys(input.connection).length > 0
+    ? input.connection : undefined;
   useEffect(() => {
     modelsVersion.current += 1;
     setModels(null);
     setModelsError(null);
     setModelsBusy(false);
-  }, [baseUrl, input.upstreamProtocol]);
+  }, [baseUrl, input.app, input.upstreamProtocol, input.apiKey, input.authentication, input.connection]);
 
   /** Fetches the upstream model list; resolves with the fetched models, or
    * null when the request was skipped or superseded. */
@@ -93,7 +102,14 @@ export function useProviderConnection(input: ProviderConnectionInput) {
     setModelsBusy(true);
     setModelsError(null);
     try {
-      const fetched = await fetchProviderModels(baseUrl, input.apiKey, input.upstreamProtocol);
+      const fetched = await fetchProviderModels(
+        input.app,
+        baseUrl,
+        input.apiKey,
+        input.upstreamProtocol,
+        modelAuthentication,
+        modelConnection,
+      );
       if (modelsVersion.current === version) setModels(fetched);
       return modelsVersion.current === version ? fetched : null;
     } catch (caught) {

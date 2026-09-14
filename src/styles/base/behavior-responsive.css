@@ -70,20 +70,15 @@
 }
 
 @media (max-width: 600px) {
-  .asb-runtime-logs .asb-panel-heading {
+  /* The log header's view-controls row stacks by control group. */
+  .asb-runtime-logs .asb-header-secondary {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .asb-runtime-logs .asb-panel-actions {
-    align-items: stretch;
-    flex-direction: column;
-    width: 100%;
-  }
-
   .asb-runtime-log-level-control,
-  .asb-runtime-logs .asb-panel-actions .asb-segments,
-  .asb-runtime-logs .asb-panel-actions .asb-btn-secondary {
+  .asb-runtime-logs .asb-header-secondary .asb-segments,
+  .asb-runtime-logs .asb-header-secondary .asb-btn-secondary {
     width: 100%;
   }
 
@@ -103,8 +98,8 @@
     grid-column: auto;
   }
 
-  .asb-codex-reset .asb-panel-heading,
-  .asb-codex-reset .asb-panel-actions {
+  .asb-codex-reset .asb-header-primary,
+  .asb-codex-reset .asb-header-primary .asb-panel-actions {
     align-items: stretch;
     flex-direction: column;
   }
@@ -120,16 +115,6 @@
   .asb-codex-reset-fact + .asb-codex-reset-fact {
     border-top: 1px solid var(--asb-hairline);
     border-left: 0;
-  }
-
-  .asb-sessions .asb-panel-heading .asb-panel-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .asb-sessions .asb-panel-actions .asb-input {
-    flex-basis: auto;
-    width: 100%;
   }
 
   .asb-session-detail-head,

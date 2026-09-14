@@ -85,6 +85,12 @@ function ProviderList({
   );
 }
 
+/** Rows are no longer clickable options (2026-09-12 user directive), so the
+ * card is located through its visible name. */
+function rowCard(name: string | RegExp) {
+  return screen.getByText(name).closest("li")!;
+}
+
 describe("ProviderList", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -95,7 +101,7 @@ describe("ProviderList", () => {
     render(
       <ProviderList profiles={profiles} activeProfileId={null} selectedId="codex-relay-a" onSelect={() => {}} />,
     );
-    expect(screen.getByRole("option", { name: /官方 OpenAI/ })).toBeInTheDocument();
+    expect(rowCard(/官方 OpenAI/)).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "relay-a.example" });
     expect(link).toHaveAttribute("href", "https://relay-a.example");
     expect(link.classList.contains("asb-row-host")).toBe(true);
@@ -148,21 +154,34 @@ describe("ProviderList", () => {
       />,
     );
 
-    const activeRow = screen.getByRole("option", { name: /中继 A/ });
+    const activeRow = rowCard(/中继 A/);
     expect(activeRow.querySelector(".asb-row-meta")).toHaveTextContent(
       "当前用户级配置模型：gpt-5.4",
     );
     expect(activeRow.querySelector(".asb-row-meta")).not.toHaveTextContent("gpt-5.1");
   });
 
-  it("selects a row on click", async () => {
+  it("keeps the identity bar inert and selects only from action buttons", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
+    const onEdit = vi.fn();
     render(
-      <ProviderList profiles={profiles} activeProfileId={null} selectedId={null} onSelect={onSelect} />,
+      <ProviderList
+        profiles={profiles}
+        activeProfileId={null}
+        selectedId={null}
+        onSelect={onSelect}
+        onEdit={onEdit}
+      />,
     );
-    await user.click(screen.getByRole("option", { name: /官方 OpenAI/ }));
+    // The bar itself is plain display content: clicking it selects nothing.
+    await user.click(screen.getByText(/官方 OpenAI/));
+    expect(onSelect).not.toHaveBeenCalled();
+
+    // Every action button selects the row so the highlight follows the work.
+    await user.click(screen.getByRole("button", { name: "编辑 官方 OpenAI" }));
     expect(onSelect).toHaveBeenCalledWith("codex-official");
+    expect(onEdit).toHaveBeenCalledWith(profiles[1]);
   });
 
   it("offers re-login and edit on official rows", async () => {
@@ -218,9 +237,7 @@ describe("ProviderList", () => {
       />,
     );
 
-    const selectedRow = screen.getByRole("option", { name: /官方 OpenAI/ });
-    expect(selectedRow).toHaveAttribute("aria-selected", "true");
-    const selectedCard = selectedRow.closest("li");
+    const selectedCard = rowCard(/官方 OpenAI/);
     expect(selectedCard).toHaveClass("is-selected");
   });
 
@@ -273,9 +290,9 @@ describe("ProviderList", () => {
         )}
       />,
     );
-    const row = screen.getByRole("option", { name: /中继 A/ }).closest("li");
+    const row = rowCard(/中继 A/);
     expect(row).toHaveClass("is-previewing");
-    expect(screen.getByRole("option", { name: /官方 OpenAI/ }).closest("li")).not.toHaveClass(
+    expect(rowCard(/官方 OpenAI/)).not.toHaveClass(
       "is-previewing",
     );
     expect(row?.querySelector(".asb-row-line + .asb-preview-inline")).toHaveTextContent(
@@ -320,7 +337,7 @@ describe("ProviderList", () => {
     expect(invokeMock).toHaveBeenCalledWith("query_profile_usage", {
       profileId: "codex-relay-a",
     });
-    const row = screen.getByRole("option", { name: /中继 A/ }).closest("li");
+    const row = rowCard(/中继 A/);
     expect(row?.querySelector(".asb-row-line + .asb-provider-usage")).toBeTruthy();
 
     // Collapsing reports the flip to the persisted settings owner.
@@ -542,10 +559,10 @@ describe("ProviderList", () => {
     expect(screen.queryByRole("region", { name: "中继 A 用量" })).not.toBeInTheDocument();
     await user.click(usageButton);
     expect(onConfigureUsage).toHaveBeenCalledWith(profiles[0]);
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith("codex-relay-a");
   });
 
-  it("fires row actions directly without selecting the row", async () => {
+  it("selects the row from every action button while firing the action", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     const onPreview = vi.fn();
@@ -564,16 +581,16 @@ describe("ProviderList", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "预览 中继 A 变更" }));
+    expect(onSelect).toHaveBeenCalledWith("codex-relay-a");
     expect(onPreview).toHaveBeenCalledWith(profiles[0]);
     await user.click(screen.getByRole("button", { name: "编辑 中继 A" }));
     expect(onEdit).toHaveBeenCalledWith(profiles[0]);
-    await user.click(screen.getByRole("button", { name: "更多 官方 OpenAI 操作" }));
-    await user.click(screen.getByRole("menuitem", { name: "删除 官方 OpenAI" }));
+    await user.click(screen.getByRole("button", { name: "删除 官方 OpenAI" }));
     expect(onDelete).toHaveBeenCalledWith(profiles[1]);
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith("codex-official");
   });
 
-  it("opens the more menu on the three-dot trigger and closes it after firing delete", async () => {
+  it("fires delete directly from the row action cluster", async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();
     render(
@@ -586,41 +603,11 @@ describe("ProviderList", () => {
       />,
     );
 
-    expect(screen.queryByRole("menu", { name: "中继 A 更多操作" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "更多 中继 A 操作" }));
-    const menu = screen.getByRole("menu", { name: "中继 A 更多操作" });
-    expect(menu).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "删除 中继 A" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("menuitem", { name: "删除 中继 A" }));
+    await user.click(screen.getByRole("button", { name: "删除 中继 A" }));
     expect(onDelete).toHaveBeenCalledWith(profiles[0]);
-    expect(screen.queryByRole("menu", { name: "中继 A 更多操作" })).not.toBeInTheDocument();
   });
 
-  it("closes the more menu with Escape while focus stays on the trigger", async () => {
-    const user = userEvent.setup();
-    const onDelete = vi.fn();
-    render(
-      <ProviderList
-        profiles={profiles}
-        activeProfileId={null}
-        selectedId={null}
-        onSelect={() => {}}
-        onDelete={onDelete}
-      />,
-    );
-
-    const trigger = screen.getByRole("button", { name: "更多 中继 A 操作" });
-    await user.click(trigger);
-    expect(screen.getByRole("menu", { name: "中继 A 更多操作" })).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("menu", { name: "中继 A 更多操作" })).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
-    expect(onDelete).not.toHaveBeenCalled();
-  });
-
-  it("orders card actions as edit, preview, connectivity, usage, then the more trigger", () => {
+  it("orders card actions as edit, preview, connectivity, usage, then delete", () => {
     render(
       <ProviderList
         profiles={profiles}
@@ -643,12 +630,11 @@ describe("ProviderList", () => {
       "预览 中继 A 变更",
       "测试 中继 A 供应商",
       "配置 中继 A 用量",
-      "更多 中继 A 操作",
+      "删除 中继 A",
     ]);
-    expect(screen.queryByRole("button", { name: "删除 中继 A" })).not.toBeInTheDocument();
   });
 
-  it("expands, collapses, then re-runs a provider endpoint test without selecting the row", async () => {
+  it("expands, collapses, then re-runs a provider endpoint test, selecting the row from the button", async () => {
     invokeMock.mockResolvedValue({
       grade: "ok",
       status: 204,
@@ -680,7 +666,7 @@ describe("ProviderList", () => {
     expect(await screen.findByText(/连通正常 · HTTP 204 · 320 毫秒/)).toBeInTheDocument();
     expect(button).toHaveAttribute("aria-controls", "provider-test-codex-relay-a");
     expect(button).toHaveAttribute("aria-expanded", "true");
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith("codex-relay-a");
 
     await user.click(screen.getByRole("button", { name: "收起 中继 A 供应商测试" }));
     expect(screen.queryByText(/连通正常 · HTTP 204 · 320 毫秒/)).not.toBeInTheDocument();
@@ -709,7 +695,7 @@ describe("ProviderList", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("renders row-level 启用 on non-live rows, routing to the preview flow", async () => {
+  it("routes row-level activation independently from read-only preview", async () => {
     const user = userEvent.setup();
     const onActivate = vi.fn();
     render(
@@ -722,7 +708,7 @@ describe("ProviderList", () => {
       />,
     );
 
-    // The button stays in the tree; its pointer-only reveal is owned by the
+    // The button stays in the tree; its hover/focus reveal is owned by the
     // stylesheet, and selection never changes that visual state.
     const button = screen.getByRole("button", { name: "启用 官方 OpenAI" });
     expect(button.classList.contains("asb-row-activate")).toBe(true);
@@ -730,9 +716,9 @@ describe("ProviderList", () => {
     expect(onActivate).toHaveBeenCalledWith(profiles[1]);
   });
 
-  it("transitions card actions into view only while their provider card is hovered", () => {
+  it("reveals activation on hover or keyboard focus without moving the row", () => {
     const activationBaseRule = providerCardsCss.match(/\.asb-row-item \.asb-row-activate \{[^}]+\}/)?.[0] ?? "";
-    const activationRule = providerCardsCss.match(/\.asb-row-item:hover \.asb-row-activate \{[^}]+\}/)?.[0] ?? "";
+    const activationRule = providerCardsCss.match(/\.asb-row-item:hover \.asb-row-activate,[^{]+\{[^}]+\}/)?.[0] ?? "";
     const iconClusterRule = providerCardsCss.match(/\.asb-row-item \.asb-iconcluster \{[^}]+\}/)?.[0] ?? "";
 
     expect(activationRule).toContain("opacity: 1");
@@ -743,11 +729,12 @@ describe("ProviderList", () => {
     expect(activationBaseRule).toContain("transition:");
     expect(activationBaseRule).toContain("flex: none");
     expect(activationBaseRule).toContain("padding-inline: var(--asb-space-3)");
+    expect(activationBaseRule).not.toContain("visibility: hidden");
     expect(activationBaseRule).not.toContain("max-inline-size");
     expect(activationRule).not.toContain("max-inline-size");
     expect(activationRule).not.toContain("padding-inline");
     expect(iconClusterRule).toContain("opacity: 0");
-    expect(providerCardsCss).not.toContain(":focus-within .asb-row-activate");
+    expect(activationRule).toContain(':root[data-focus-source="key"] .asb-row-item:focus-within .asb-row-activate');
     expect(providerCardsCss).not.toContain('[aria-selected="true"] + .asb-row-activate');
   });
 
@@ -767,7 +754,7 @@ describe("ProviderList", () => {
       />,
     );
 
-    expect(screen.getByRole("option", { name: /中继 A/ }).closest(".asb-row-item")).toHaveClass("is-selected");
+    expect(rowCard(/中继 A/).closest(".asb-row-item")).toHaveClass("is-selected");
     expect(providerCardsCss).toContain("--asb-provider-row-highlight");
   });
 
@@ -776,17 +763,20 @@ describe("ProviderList", () => {
     expect(baseCss).toMatch(/\.asb-row-host:hover \{[^}]*color: var\(--asb-action\)/);
   });
 
-  it("keeps the live-matched row without a 启用 button even when selected", () => {
+  it("offers explicit reactivation on the live row", async () => {
+    const onActivate = vi.fn();
+    const user = userEvent.setup();
     render(
       <ProviderList
         profiles={profiles}
         activeProfileId="codex-relay-a"
         selectedId="codex-relay-a"
         onSelect={() => {}}
-        onActivate={vi.fn()}
+        onActivate={onActivate}
       />,
     );
-    expect(screen.queryByRole("button", { name: "启用 中继 A" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "启用 中继 A" }));
+    expect(onActivate).toHaveBeenCalledWith(profiles[0]);
   });
 
   it("renders drag handles only when reordering is enabled", () => {

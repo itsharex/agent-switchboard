@@ -75,6 +75,7 @@ function ChatReasoningControls({ editor, busy }: Props) {
                 { value: "lowHigh", label: "低-高" },
                 { value: "deepSeek", label: "DeepSeek" },
                 { value: "openRouter", label: "OpenRouter" },
+                { value: "catalog", label: "按模型目录档位" },
               ]}
               onChange={(value) => patch({ effortMode: value as ConfiguredChatReasoning["effortMode"] })} />
           </label>

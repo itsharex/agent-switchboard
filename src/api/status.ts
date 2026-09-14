@@ -23,6 +23,7 @@ export type RuntimeLogAction =
   | "cloudBackupUploaded"
   | "cloudBackupRestored"
   | "sessionResumed"
+  | "sessionDeleted"
   | "ccSwitchProfilesImported"
   | "officialLoginCompleted";
 

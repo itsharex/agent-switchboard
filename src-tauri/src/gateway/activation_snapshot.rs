@@ -29,6 +29,7 @@ impl GatewayController {
         local: &LocalState,
         snapshot: &GatewayActivationSnapshot,
     ) -> Result<(), String> {
+        let mut candidate_routes = Vec::new();
         let activation = match &snapshot.route {
             None => GatewayActivation::Direct { app: snapshot.app },
             Some(saved) => {
@@ -42,6 +43,8 @@ impl GatewayController {
                             return Err("恢复所需的 Codex 供应商连接已改变，保留恢复记录等待处理"
                                 .to_string());
                         }
+                        let (policy, _) = codex::policy::load(local.root())?;
+                        candidate_routes = self.codex_candidate_routes(&file, &policy)?;
                         self.route_for_codex_file(&file)?
                     }
                     AppKind::Claude => {
@@ -56,12 +59,16 @@ impl GatewayController {
                                 "恢复所需的供应商连接已改变，保留恢复记录等待处理".to_string()
                             );
                         }
-                        self.route_for_profile(&profile)?
+                        let route = self.route_for_profile(&profile)?;
+                        candidate_routes = self
+                            .claude_candidate_routes(local, &route.profile_id)
+                            .unwrap_or_else(|_| vec![route.clone()]);
+                        route
                     }
                 };
                 GatewayActivation::Routed(route)
             }
         };
-        self.commit_activation(&activation, || Ok(()))
+        self.commit_activation(&activation, &candidate_routes, || Ok(()))
     }
 }

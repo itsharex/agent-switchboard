@@ -7,9 +7,11 @@
 //! structurally because these functions take `&str` and return `String`.
 
 pub mod claude;
+mod client_settings;
 pub mod codex;
 mod parameters;
 
+pub use client_settings::parse_client_settings;
 pub use parameters::read_provider_parameters;
 
 #[cfg(test)]
@@ -117,9 +119,9 @@ pub fn render_gateway_base_url(
 }
 
 /// Renders only the current client's explicit settings as a
-/// self-contained TOML or JSON fragment. This is a read-only editor preview,
-/// not a candidate client file: provider and host-owned configuration remain
-/// intentionally absent.
+/// self-contained TOML or JSON fragment. This is an editable client-settings
+/// fragment, not a candidate client file: provider and host-owned
+/// configuration remain intentionally absent.
 pub fn render_client_settings(
     app: AppKind,
     client_settings: &SettingsValues,

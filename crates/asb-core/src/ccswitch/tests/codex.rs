@@ -1,8 +1,8 @@
 use super::*;
 
 use crate::contracts::{
-    AppKind, CodexReasoningLevel, CodexUpstream, ConfigValue, RouteMode, SettingValue,
-    CODEX_REASONING_LADDER,
+    AppKind, AuthenticationScheme, CodexReasoningLevel, CodexUpstream, ConfigValue,
+    ProviderAuthBinding, RouteMode, SettingValue, CODEX_REASONING_LADDER,
 };
 use serde_json::{json, Value};
 
@@ -106,10 +106,85 @@ fn codex_plain_row_without_a_catalog_yields_a_seed() {
     assert!(seed
         .warnings
         .contains(&"未导入: meta.costMultiplier".to_string()));
-    assert!(seed
-        .warnings
-        .contains(&"未导入: meta.endpointAutoSelect".to_string()));
+    assert_eq!(seed.connection.endpoint_auto_select, Some(true));
     assert_eq!(seed.warnings, outcome.warnings);
+}
+
+#[test]
+fn codex_meta_preserves_connection_routing_and_authentication_facts() {
+    let source = source_row(
+        &third_party_config("https://relay.example/responses?tenant=one", "responses"),
+        json!({ "OPENAI_API_KEY": API_KEY }),
+        None,
+        Some(json!({
+            "apiFormat": "openai_responses",
+            "is_full_url": true,
+            "customEndpoints": {
+                "https://backup.example/responses": {
+                    "url": "https://backup.example/responses",
+                    "added_at": 10,
+                    "lastUsed": 20
+                }
+            },
+            "endpoint_auto_select": false,
+            "custom_user_agent": "ccswitch-fixture/1",
+            "local_proxy_request_overrides": {
+                "headers": { "X-Tenant": "one" },
+                "body": { "temperature": 0.2 }
+            },
+            "auth_binding": {
+                "source": "managed_account",
+                "auth_provider": "codex_oauth",
+                "account_id": "account-1"
+            },
+            "provider_type": "codex_oauth",
+            "api_key_field": "ANTHROPIC_AUTH_TOKEN"
+        })),
+    );
+
+    let outcome = map_row(&source).expect("metadata should map");
+    let seed = codex_seed(&outcome);
+    assert_eq!(
+        seed.endpoint.0,
+        "https://relay.example/responses?tenant=one"
+    );
+    assert_eq!(seed.authentication, Some(AuthenticationScheme::Bearer));
+    assert!(seed.connection.is_full_url);
+    assert_eq!(seed.connection.endpoint_auto_select, Some(false));
+    assert_eq!(
+        seed.connection.custom_user_agent.as_deref(),
+        Some("ccswitch-fixture/1")
+    );
+    assert_eq!(seed.connection.custom_endpoints.len(), 1);
+    assert_eq!(
+        seed.connection.auth_binding,
+        Some(ProviderAuthBinding {
+            source: "managed_account".to_string(),
+            auth_provider: Some("codex_oauth".to_string()),
+            account_id: Some("account-1".to_string()),
+        })
+    );
+    assert_eq!(
+        seed.connection.provider_type.as_deref(),
+        Some("codex_oauth")
+    );
+    assert!(!seed.warnings.iter().any(|warning| {
+        warning.contains("is_full_url")
+            || warning.contains("custom_endpoints")
+            || warning.contains("endpoint_auto_select")
+            || warning.contains("custom_user_agent")
+            || warning.contains("auth_binding")
+            || warning.contains("provider_type")
+            || warning.contains("api_key_field")
+    }));
+
+    let draft = seed.clone().completion_draft().expect("seed completes");
+    assert_eq!(draft.authentication, Some(AuthenticationScheme::Bearer));
+    assert_eq!(draft.connection, seed.connection);
+    assert_eq!(
+        draft.clone().into_file("id".into(), 1).profile.route_mode,
+        crate::contracts::CodexRouteMode::Gateway
+    );
 }
 
 #[test]
@@ -141,22 +216,31 @@ fn codex_real_catalog_facts_seed_the_editor_catalog() {
             CodexReasoningLevel::High
         ])
     );
+    assert_eq!(main.display_name.as_deref(), Some("GPT-5.6"));
+    assert_eq!(main.description, None);
+    assert_eq!(
+        main.base_instructions.as_deref(),
+        Some("You are a helpful assistant.")
+    );
+    assert_eq!(main.supports_parallel_tool_calls, Some(true));
     let mini = &seed.catalog[1];
     assert_eq!(mini.model, "gpt-5.6-sol-mini");
     assert_eq!(mini.context_window, Some(200_000));
     assert_eq!(mini.images, None);
-    for field in [
-        "displayName",
-        "supportsParallelToolCalls",
-        "baseInstructions",
-    ] {
-        assert!(
-            seed.warnings
-                .iter()
-                .any(|warning| warning.contains(&format!("modelCatalog.models[0].{field}"))),
-            "missing warning for {field}"
-        );
-    }
+    assert!(
+        seed.warnings.is_empty(),
+        "unexpected warnings: {:?}",
+        seed.warnings
+    );
+
+    let draft = seed.completion_draft().expect("catalog facts complete");
+    let completed = draft
+        .catalog
+        .iter()
+        .find(|entry| entry.id == "gpt-5.6-sol")
+        .expect("completed catalog row");
+    assert_eq!(completed.display_name.as_deref(), Some("GPT-5.6"));
+    assert_eq!(completed.supports_parallel_tool_calls, Some(true));
 }
 
 #[test]

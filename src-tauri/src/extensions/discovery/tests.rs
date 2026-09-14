@@ -192,6 +192,7 @@ fn pinned_skill_binding_stays_in_sync_across_definition_updates() {
     );
     let definition = ExtensionDefinition {
         schema_version: 2,
+        mcp_metadata: None,
         id: "ext-skill-1".to_string(),
         name: "api-spec".to_string(),
         revision: 2,
@@ -367,6 +368,7 @@ fn managed_binding_diagnostic_covers_missing_repairable_and_foreign_change() {
         .collect();
     let definition = ExtensionDefinition {
         schema_version: 2,
+        mcp_metadata: None,
         id: "ext-skill-1".to_string(),
         name: "api-spec".to_string(),
         revision: 2,

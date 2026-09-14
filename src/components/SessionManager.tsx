@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteSession,
   getSessionMessages,
   listSessions,
   resumeSession,
@@ -10,7 +11,9 @@ import {
 import { ClientLogo } from "./ClientLogo";
 import { ClientFilter, type ClientFilterValue } from "./ClientFilter";
 import { Button } from "./Button";
+import { ConfirmSheet } from "./ConfirmSheet";
 import { Input } from "./Input";
+import { toast } from "./use-toast";
 import { SessionMessageView } from "./session/SessionMessageView";
 import {
   codexOutlinePreview,
@@ -21,6 +24,7 @@ import {
 } from "./session/session-content";
 import { clientFullName } from "../lib/client-name";
 import { Time } from "./Time";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import { PreviewIcon, RequestIcon, SearchIcon } from "./icons";
 
 const TARGET_HIGHLIGHT_MS = 2000;
@@ -52,6 +56,8 @@ export function SessionManager({ active }: { active: boolean }) {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [resumeStatus, setResumeStatus] = useState<string | null>(null);
   const [resuming, setResuming] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<SessionMeta | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<number>>(() => new Set());
   const [targetMessage, setTargetMessage] = useState<number | null>(null);
   const selectionVersion = useRef(0);
@@ -143,6 +149,8 @@ export function SessionManager({ active }: { active: boolean }) {
     setCopyStatus(null);
     setResumeStatus(null);
     setResuming(false);
+    setPendingDelete(null);
+    setDeleting(false);
     setExpandedMessages(new Set());
     setTargetMessage(null);
     window.clearTimeout(highlightTimer.current);
@@ -224,6 +232,38 @@ export function SessionManager({ active }: { active: boolean }) {
     });
   }, []);
 
+  /* Deletion is irreversible, so the shared confirmation sheet is the only
+     gate; once confirmed the removal is reported by the session vanishing
+     from the list plus a toast, never by a stale inline status. */
+  const runDelete = async () => {
+    const target = pendingDelete;
+    if (!target || deleting) return;
+    setPendingDelete(null);
+    setDeleting(true);
+    try {
+      await deleteSession(target.app, target.sessionId);
+      messageCache.current.delete(`${target.app}:${target.sessionId}`);
+      setSessions((current) =>
+        current
+          ? current.filter(
+              (session) => !(session.app === target.app && session.sessionId === target.sessionId),
+            )
+          : current,
+      );
+      setSelected((current) =>
+        current && current.app === target.app && current.sessionId === target.sessionId
+          ? null
+          : current,
+      );
+      setMessages(null);
+      toast({ kind: "success", title: "已删除会话" });
+    } catch (caught) {
+      toast({ kind: "error", title: (caught as { message?: string }).message ?? "无法删除会话" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const jumpToMessage = useCallback((index: number) => {
     const node = transcriptRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`);
     /* Instant, not smooth: on multi-thousand-line transcripts the animation
@@ -236,25 +276,28 @@ export function SessionManager({ active }: { active: boolean }) {
 
   return (
     <div className="asb-sessions">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">会话</h2>
-        <div className="asb-panel-actions">
-          <Input
-            aria-label="搜索会话"
-            value={query}
-            placeholder="搜索标题、摘要、目录或会话 ID"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <ClientFilter
-            value={filter}
-            onChange={setFilter}
-            label="会话客户端筛选"
-          />
-          <Button variant="secondary" disabled={scanning} onClick={() => void refresh()}>
-            刷新会话
-          </Button>
-        </div>
-      </div>
+      <WorkspaceHeader
+        title="会话"
+        secondary={
+          <>
+            <Input
+              aria-label="搜索会话"
+              value={query}
+              placeholder="搜索标题、摘要、目录或会话 ID"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <ClientFilter
+              value={filter}
+              onChange={setFilter}
+              label="会话客户端筛选"
+              showLogos
+            />
+            <Button variant="secondary" disabled={scanning} onClick={() => void refresh()}>
+              刷新会话
+            </Button>
+          </>
+        }
+      />
       {issues.length > 0 && (
         <ul className="asb-session-issues" aria-label="会话扫描提示">
           {issues.map((issue) => (
@@ -341,6 +384,13 @@ export function SessionManager({ active }: { active: boolean }) {
                   >
                     复制工作目录
                   </Button>
+                  <Button
+                    variant="danger"
+                    disabled={deleting}
+                    onClick={() => setPendingDelete(selected)}
+                  >
+                    删除会话
+                  </Button>
                 </div>
               </header>
               <p className="asb-session-meta-line">
@@ -413,6 +463,20 @@ export function SessionManager({ active }: { active: boolean }) {
           )}
         </section>
       </div>
+      {pendingDelete && (
+        <ConfirmSheet
+          title="删除会话"
+          details={[
+            `将永久删除本地会话「${pendingDelete.title}」`,
+            `会话 ID ${pendingDelete.sessionId}`,
+            "此操作不可恢复；Codex 或 Claude Code 将无法再恢复该会话。",
+          ]}
+          confirmLabel="确认删除"
+          destructive
+          onConfirm={() => void runDelete()}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }

@@ -4,10 +4,10 @@
 use std::fs;
 
 use asb_core::extensions::contracts::{
-    ExtensionDefinition, ExtensionPayload, FileState, McpEditRequest, ProjectRegistration,
-    EXTENSIONS_SCHEMA_VERSION,
+    ExtensionDefinition, ExtensionPayload, FileState, McpEditRequest, McpMetadata,
+    ProjectRegistration, EXTENSIONS_SCHEMA_VERSION,
 };
-use asb_core::extensions::edit::{apply_mcp_edit, mcp_edit_view, McpEditView};
+use asb_core::extensions::edit::{apply_mcp_edit, apply_mcp_metadata, mcp_edit_view, McpEditView};
 use asb_core::extensions::validate::{validate_definition, validate_definition_draft};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -17,7 +17,7 @@ use crate::commands::error::{blocking, require_write_confirmation, state, Comman
 use crate::extensions::discovery::binding_file_state;
 use crate::extensions::secrets::SecretBackend;
 use crate::extensions::secrets::SystemSecrets;
-use crate::extensions::store::LibraryCommit;
+use crate::extensions::store::{ExtensionStore, LibraryCommit};
 
 // ---------------------------------------------------------------- save / edit / delete
 
@@ -25,6 +25,8 @@ use crate::extensions::store::LibraryCommit;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExtensionDraft {
     name: String,
+    #[serde(default)]
+    mcp_metadata: Option<McpMetadata>,
     payload: ExtensionPayload,
 }
 
@@ -39,23 +41,31 @@ pub async fn save_extension(
     blocking(move || {
         let state = state(&app)?;
         let store = extension_store(&state);
-        validate_definition_draft(&draft.name, &draft.payload)
-            .map_err(|error| CommandError::new("extension-invalid", error.message))?;
-        let definition = ExtensionDefinition {
-            schema_version: EXTENSIONS_SCHEMA_VERSION,
-            id: new_id("ext"),
-            name: draft.name,
-            revision: 1,
-            created_at: now(),
-            updated_at: now(),
-            payload: draft.payload,
-        };
-        validate_definition(&definition)
-            .map_err(|error| CommandError::new("extension-invalid", error.message))?;
-        store.create_definition(&definition).map_err(store_error)?;
-        Ok(extension_mutation(&definition))
+        save_definition(&store, draft)
     })
     .await
+}
+
+fn save_definition(
+    store: &ExtensionStore,
+    draft: ExtensionDraft,
+) -> Result<ExtensionMutationDto, CommandError> {
+    validate_definition_draft(&draft.name, &draft.payload)
+        .map_err(|error| CommandError::new("extension-invalid", error.message))?;
+    let definition = ExtensionDefinition {
+        schema_version: EXTENSIONS_SCHEMA_VERSION,
+        id: new_id("ext"),
+        name: draft.name,
+        mcp_metadata: draft.mcp_metadata,
+        revision: 1,
+        created_at: now(),
+        updated_at: now(),
+        payload: draft.payload,
+    };
+    validate_definition(&definition)
+        .map_err(|error| CommandError::new("extension-invalid", error.message))?;
+    store.create_definition(&definition).map_err(store_error)?;
+    Ok(extension_mutation(&definition))
 }
 
 /// The editor's prefilled, redacted projection of one MCP definition. Every
@@ -68,6 +78,8 @@ pub struct McpEditViewDto {
     pub id: String,
     pub revision: u64,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_metadata: Option<McpMetadata>,
     #[serde(flatten)]
     pub view: McpEditView,
 }
@@ -85,6 +97,7 @@ pub(super) fn mcp_edit_view_of(
         id: definition.id.clone(),
         revision: definition.revision,
         name: definition.name.clone(),
+        mcp_metadata: definition.mcp_metadata.clone(),
         view: mcp_edit_view(mcp),
     })
 }
@@ -119,41 +132,55 @@ pub async fn update_mcp_definition(
     blocking(move || {
         let state = state(&app)?;
         let store = extension_store(&state);
-        let mut definition = store
-            .get_definition(&definition_id)
-            .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
-        if definition.revision != edit.expected_revision {
-            return Err(CommandError::new(
-                "extension-conflict",
-                "扩展已被其他窗口修改；请刷新后重试",
-            ));
-        }
-        let previous_revision = definition.revision;
-        let ExtensionPayload::Mcp(current) = &definition.payload else {
-            return Err(CommandError::new(
-                "extension-invalid",
-                "该扩展不是 MCP 定义",
-            ));
-        };
-        let (name, payload) = apply_mcp_edit(&definition.name, current, &edit)
-            .map_err(|error| CommandError::new("extension-invalid", error.message))?;
-        let next_payload = ExtensionPayload::Mcp(payload);
-        if definition.name == name && definition.payload == next_payload {
-            return Ok(extension_mutation(&definition));
-        }
-        definition.name = name;
-        definition.payload = next_payload;
-        definition.revision += 1;
-        definition.updated_at = now();
-        validate_definition(&definition)
-            .map_err(|error| CommandError::new("extension-invalid", error.message))?;
-        store
-            .update_definition(&definition, previous_revision)
-            .map_err(store_error)?;
-        Ok(extension_mutation(&definition))
+        update_mcp(&store, &definition_id, edit)
     })
     .await
+}
+
+fn update_mcp(
+    store: &ExtensionStore,
+    id: &str,
+    edit: McpEditRequest,
+) -> Result<ExtensionMutationDto, CommandError> {
+    let mut definition = store
+        .get_definition(id)
+        .map_err(store_error)?
+        .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+    if definition.revision != edit.expected_revision {
+        return Err(CommandError::new(
+            "extension-conflict",
+            "扩展已被其他窗口修改；请刷新后重试",
+        ));
+    }
+    let ExtensionPayload::Mcp(current) = &definition.payload else {
+        return Err(CommandError::new(
+            "extension-invalid",
+            "该扩展不是 MCP 定义",
+        ));
+    };
+    let (name, payload) = apply_mcp_edit(&definition.name, current, &edit)
+        .map_err(|error| CommandError::new("extension-invalid", error.message))?;
+    let metadata = apply_mcp_metadata(&definition.mcp_metadata, edit.mcp_metadata.as_ref())
+        .map_err(|error| CommandError::new("extension-invalid", error.message))?;
+    let payload = ExtensionPayload::Mcp(payload);
+    if definition.name == name
+        && definition.payload == payload
+        && definition.mcp_metadata == metadata
+    {
+        return Ok(extension_mutation(&definition));
+    }
+    let previous_revision = definition.revision;
+    definition.name = name;
+    definition.payload = payload;
+    definition.mcp_metadata = metadata;
+    definition.revision += 1;
+    definition.updated_at = now();
+    validate_definition(&definition)
+        .map_err(|error| CommandError::new("extension-invalid", error.message))?;
+    store
+        .update_definition(&definition, previous_revision)
+        .map_err(store_error)?;
+    Ok(extension_mutation(&definition))
 }
 
 #[tauri::command]
@@ -308,3 +335,6 @@ pub async fn put_extension_secret(
     })
     .await
 }
+
+#[cfg(test)]
+mod tests;

@@ -119,12 +119,14 @@ mod tests {
         let profile = ProviderProfile::from_draft(
             "p".into(),
             ProviderDraft {
+                authentication: None,
                 parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
                 app: AppKind::Claude,
                 route_mode: RouteMode::Custom,
                 name: "供应商".into(),
                 model: Some("model".into()),
                 base_url: Some("https://example.invalid".into()),
+                connection: Default::default(),
                 api_key: "private-test-key".into(),
                 upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
                 responses_options: None,

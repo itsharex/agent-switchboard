@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getRuntimeOverview, type RuntimeOverview } from "../api/client";
+import { ModuleHeader } from "./WorkspaceHeader";
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
@@ -66,11 +67,7 @@ export function RuntimeOverviewPanel() {
 
   return (
     <section className="asb-panel asb-runtime-overview" aria-labelledby="runtime-overview-heading">
-      <div className="asb-panel-heading">
-        <h2 id="runtime-overview-heading" className="asb-panel-title">
-          运行环境
-        </h2>
-      </div>
+      <ModuleHeader id="runtime-overview-heading" title="运行环境" />
       {runtime === null && error === null && (
         <p className="asb-empty" role="status">
           正在读取运行环境…

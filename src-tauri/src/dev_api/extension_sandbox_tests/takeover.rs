@@ -43,24 +43,8 @@ fn run_takeover_workflow(root: &Path) {
     assert_eq!(mcp_obs["managed"], false);
     assert_eq!(mcp_obs["origin"]["origin"], "userRoot");
 
-    // The preview carries redacted facts only; paths never cross IPC.
-    let preview = api.ok(
-        "preview_discovered_takeover",
-        json!({ "observationId": mcp_obs["observationId"] }),
-    );
-    assert_eq!(preview["kind"], "mcp");
-    assert_eq!(preview["nativeEntryPresent"], true);
-    assert_eq!(preview["definitionExists"], false);
-    assert!(preview["scopeLabel"].as_str().is_some());
-    let skill_preview = api.ok(
-        "preview_discovered_takeover",
-        json!({ "observationId": skill_obs["observationId"] }),
-    );
-    assert_eq!(skill_preview["kind"], "skill");
-    assert_eq!(skill_preview["fileCount"], 1);
-    assert!(skill_preview["nativeEntryPresent"].is_null());
-    assert!(skill_preview["contentDigest"].as_str().is_some());
-
+    assert!(mcp_obs.get("path").is_none());
+    assert!(skill_obs.get("path").is_none());
     // Taking over the MCP entry never writes the client document.
     let mcp_mutation = api.ok(
         "takeover_discovered_extension",

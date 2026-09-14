@@ -207,5 +207,5 @@ fn automatic_values(app: AppKind, owner: SettingOwner) -> SettingsValues {
     {
         settings.insert(spec.key.to_string(), SettingValue::Automatic);
     }
-    SettingsValues { settings }
+    SettingsValues { settings, claude_extra: Default::default() }
 }

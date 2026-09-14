@@ -237,6 +237,7 @@ describe("App.providers", () => {
         onSwitchAccessMode={() => {}}
         onSwitchClient={() => {}}
         onSaveOfficialQuotaInterval={async () => true}
+        loginBlocker={null}
         statuses={[]}
         profiles={[]}
         locks={{}}
@@ -447,6 +448,7 @@ describe("App.providers", () => {
         onSwitchAccessMode={() => {}}
         onSwitchClient={() => {}}
         onSaveOfficialQuotaInterval={async () => true}
+        loginBlocker={null}
         statuses={[]}
         profiles={[]}
         locks={{}}

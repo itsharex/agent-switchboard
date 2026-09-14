@@ -1,3 +1,5 @@
+#[path = "request_native.rs"]
+mod native;
 #[path = "request_parse/mod.rs"]
 mod parse;
 #[path = "request_render/mod.rs"]
@@ -21,34 +23,16 @@ pub(crate) fn convert_request(
     reasoning_transport: Option<&ReasoningTransport>,
     chat_reasoning: Option<&CodexChatReasoning>,
 ) -> Result<ConvertedRequest, TransformError> {
+    if to == UpstreamProtocol::GeminiGenerateContent && from != UpstreamProtocol::AnthropicMessages
+    {
+        return Err(TransformError(
+            "Gemini Native 只支持 Claude Messages 转换".into(),
+        ));
+    }
     let mut value: Value = serde_json::from_slice(body)
         .map_err(|_| TransformError("请求体不是有效 JSON".to_string()))?;
     if from == to {
-        // ASB owns only its versioned compaction envelope. Expand that
-        // envelope even on the native Responses path so a route switch can
-        // replay visible history; provider-owned encrypted items remain
-        // opaque and are forwarded unchanged.
-        let expanded = if from == UpstreamProtocol::Responses {
-            crate::gateway::compaction::expand_input(
-                &mut value,
-                reasoning_transport.map(|transport| transport.continuation_key()),
-            )?
-        } else {
-            false
-        };
-        let body = if expanded {
-            serde_json::to_vec(&value)
-                .map_err(|_| TransformError("无法编码原生 Responses 请求".to_string()))?
-        } else {
-            body.to_vec()
-        };
-        return Ok(ConvertedRequest {
-            stream: value
-                .get("stream")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-            body,
-        });
+        return native::convert(from, value, body, reasoning_transport);
     }
     if from == UpstreamProtocol::Responses {
         crate::gateway::compaction::expand_input(
@@ -59,11 +43,20 @@ pub(crate) fn convert_request(
     }
     let chat_reasoning = chat_reasoning::extract(from, to, &mut value, chat_reasoning)?;
     let anthropic_reasoning = anthropic_reasoning::extract(from, to, &mut value)?;
+    let original = value.clone();
+    if to == UpstreamProtocol::GeminiGenerateContent {
+        if let Some(root) = value.as_object_mut() {
+            root.remove("top_k");
+        }
+    }
     let mut request = parse::parse_request(from, &value, reasoning_transport)?;
     if request.max_tokens.is_none() && to == UpstreamProtocol::AnthropicMessages {
         request.max_tokens = default_max_output_tokens;
     }
     let mut value = render::render_request(to, &request)?;
+    if to == UpstreamProtocol::GeminiGenerateContent {
+        super::claude_gemini::generation(&original, &mut value)?;
+    }
     anthropic_reasoning::render(&mut value, anthropic_reasoning)?;
     chat_reasoning::render(&mut value, chat_reasoning)?;
     Ok(ConvertedRequest {

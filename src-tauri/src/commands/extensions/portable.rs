@@ -119,6 +119,7 @@ pub async fn import_extension_portable(
                     asb_core::extensions::skill::claude_compatibility_notes(&manifest);
                 let definition = ExtensionDefinition {
                     schema_version: EXTENSIONS_SCHEMA_VERSION,
+                    mcp_metadata: None,
                     id: new_id("ext"),
                     name: manifest.name.clone(),
                     revision: 1,
@@ -171,6 +172,7 @@ pub async fn import_extension_portable(
                 }
                 let definition = ExtensionDefinition {
                     schema_version: EXTENSIONS_SCHEMA_VERSION,
+                    mcp_metadata: None,
                     id: new_id("ext"),
                     name,
                     revision: 1,

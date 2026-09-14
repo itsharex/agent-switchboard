@@ -6,6 +6,7 @@
 //! field names. Official rows become a credential-free official route and
 //! never expose or copy the source login material.
 
+mod claude;
 mod codex;
 mod mapping;
 mod row;

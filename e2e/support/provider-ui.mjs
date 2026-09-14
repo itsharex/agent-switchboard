@@ -184,24 +184,34 @@ export async function createProvider(draft) {
 }
 
 export async function previewProvider(name) {
-  await providerRow(name);
-  await clickButton(`预览 ${name} 变更`);
-  const preview = await $('section[aria-label="变更预览"]');
+  const row = await providerRow(name);
+  const button = await clickButton(`预览 ${name} 变更`, row);
+  const preview = await row.$('section[aria-label="变更预览"]');
   await preview.waitForDisplayed();
+  await expect(button).toHaveAttribute("aria-expanded", "true");
+  await expect(preview.$('button=确认切换')).not.toExist();
+  await expect(preview.$('button=取消')).not.toExist();
+  await expect($('[role="dialog"][aria-label="确认切换"]')).not.toExist();
   return preview;
 }
 
-export async function confirmProviderSwitch() {
-  const preview = await $('section[aria-label="变更预览"]');
-  await clickButton("确认切换", preview);
+export async function activateProvider(name) {
+  await clickButton(`启用 ${name}`, await providerRow(name));
   const sheet = await $('[role="dialog"][aria-label="确认切换"]');
   await sheet.waitForDisplayed();
+  assert.equal((await $$('[role="dialog"][aria-label="确认切换"]')).length, 1,
+    "Activating a provider must open exactly one switch confirmation");
+  return sheet;
+}
+
+export async function confirmProviderSwitch() {
+  const sheet = await visibleElement('[role="dialog"][aria-label="确认切换"]');
   await clickButton("确认切换", sheet);
   await sheet.waitForDisplayed({ reverse: true });
 }
 
 export async function switchProvider(name) {
-  await previewProvider(name);
+  await activateProvider(name);
   await confirmProviderSwitch();
   await browser.waitUntil(async () => (await (await providerRow(name)).getAttribute("class")).includes("is-live"), {
     timeout: 20000, interval: 200, timeoutMsg: `The real client file did not activate ${name}`,
@@ -209,9 +219,7 @@ export async function switchProvider(name) {
 }
 
 export async function requestDelete(name) {
-  await clickButton(`更多 ${name} 操作`);
-  const item = await $(`[role="menuitem"][aria-label=${JSON.stringify(`删除 ${name}`)}]`);
-  await item.click();
+  await clickButton(`删除 ${name}`);
   const sheet = await $('[role="dialog"][aria-label="删除供应商"]');
   await sheet.waitForDisplayed();
   return sheet;

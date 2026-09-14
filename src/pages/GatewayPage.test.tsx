@@ -351,6 +351,24 @@ describe("GatewayPage", () => {
     );
   });
 
+  it("状态损坏时通过现有重试入口恢复监听，再提示重新应用", async () => {
+    const user = userEvent.setup();
+    const broken = conflictStatus();
+    broken.status = "needsRepair";
+    broken.repairReason = "网关状态不可用";
+    const repaired = gatewayStatus();
+    repaired.status = "needsRepair";
+    invokeMock.mockImplementation((command: string) => Promise.resolve(
+      command === "gateway_retry_bind" ? repaired : broken,
+    ));
+    render(<GatewayPage active profiles={[]} />);
+    expect(await screen.findByText(/先点击重试恢复监听/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(screen.queryByText(/先点击重试恢复监听/)).not.toBeInTheDocument());
+    expect(invokeMock).toHaveBeenCalledWith("gateway_retry_bind");
+  });
+
+
   it("无路由与无请求时显示空状态", async () => {
     const empty = gatewayStatus();
     empty.routes = [];

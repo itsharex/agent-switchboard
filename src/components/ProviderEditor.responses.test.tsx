@@ -50,7 +50,7 @@ it("creates request options with an always-on gateway and no login or WebSocket 
   }));
 });
 
-it("keeps standard and minimal Responses on the gateway and persists only request mode", async () => {
+it("uses the gateway only for minimal Responses and keeps standard Responses direct", async () => {
   const onSave = vi.fn();
   const user = userEvent.setup();
   render(<ProviderEditor {...props} profile={profile} onSave={onSave} />);
@@ -63,7 +63,7 @@ it("keeps standard and minimal Responses on the gateway and persists only reques
   expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ responsesOptions: { requestMode: "minimal" } }));
   await user.click(screen.getByRole("combobox", { name: "请求模式" }));
   await user.click(screen.getByRole("option", { name: "标准请求" }));
-  expect(screen.queryByText(/切换后客户端直连所填服务地址/)).not.toBeInTheDocument();
+  expect(screen.getByText(/切换后客户端直连所填服务地址/)).toBeInTheDocument();
   expect(screen.queryByRole("checkbox", { name: /WebSocket/ })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "保存供应商" }));
   expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ responsesOptions: { requestMode: "standard" } }));

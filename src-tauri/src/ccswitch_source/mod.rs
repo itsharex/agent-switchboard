@@ -1,12 +1,13 @@
 //! Read-only access to the external provider SQLite database.
 //!
-//! The database is opened with `mode=ro&immutable=1` so a running source
-//! instance is never locked or written. Only the `providers` table is read.
+//! A read-only transaction observes committed WAL changes without modifying
+//! provider data. Only the providers table and its column metadata are read.
 //! Source credentials never cross the IPC boundary: scans expose routing
 //! facts and field names only, and both Claude and Codex rows are imported
 //! entirely inside the backend through the batch command.
 
 mod db;
+mod claude_order;
 
 #[cfg(test)]
 mod tests;

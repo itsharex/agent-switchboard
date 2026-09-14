@@ -2,6 +2,7 @@
 
 use super::route::{upstream_headers, UpstreamClient, UpstreamResponse};
 use super::ActiveRoute;
+use super::MAX_REQUEST_BYTES;
 use crate::provider_diagnostics::{network_diagnostic, ProviderDiagnostic, ProviderFailureKind};
 use bytes::Bytes;
 use std::sync::mpsc;
@@ -10,11 +11,11 @@ use tiny_http::Header;
 use tokio::sync::{mpsc as tokio_mpsc, watch};
 
 #[derive(Clone, Copy)]
-struct Timeouts {
-    headers: Duration,
-    first_byte: Duration,
-    idle: Duration,
-    total: Duration,
+pub(super) struct Timeouts {
+    pub(super) headers: Duration,
+    pub(super) first_byte: Duration,
+    pub(super) idle: Duration,
+    pub(super) total: Duration,
 }
 
 impl Default for Timeouts {
@@ -38,25 +39,74 @@ pub(crate) fn send_upstream_request(
     anthropic_version: Option<&str>,
     anthropic_beta: Option<&str>,
 ) -> Result<UpstreamResponse, ProviderDiagnostic> {
+    send_with_timeouts(
+        client,
+        route,
+        url,
+        method,
+        body,
+        incoming,
+        anthropic_version,
+        anthropic_beta,
+        Timeouts::default(),
+        None,
+    )
+}
+
+pub(super) fn send_with_timeouts(
+    client: &UpstreamClient,
+    route: &ActiveRoute,
+    url: &str,
+    method: reqwest::Method,
+    body: Vec<u8>,
+    incoming: Option<&[Header]>,
+    anthropic_version: Option<&str>,
+    anthropic_beta: Option<&str>,
+    timeouts: Timeouts,
+    cancelled: Option<&dyn Fn() -> bool>,
+) -> Result<UpstreamResponse, ProviderDiagnostic> {
+    // Callers pass the final converted body: overrides must not be replayed
+    // here after Codex compatibility rewrites or model accounting.
+    if body.len() as u64 > MAX_REQUEST_BYTES {
+        return Err(ProviderDiagnostic::new(
+            ProviderFailureKind::RequestParameters,
+            url,
+            "覆盖后的上游请求体超过本机协议网关限制",
+        ));
+    }
+    let mut headers = upstream_headers(route, anthropic_version, anthropic_beta, incoming);
+    crate::gateway::codex::request::headers(route, &mut headers);
+    if let Some(account) = &route.claude_account {
+        crate::claude_auth::request::request_headers(account, &mut headers, &body);
+    }
+    crate::upstream_overrides::apply_header_overrides(&mut headers, &route.connection);
     let request = client
         .client
         .request(method, url)
-        .headers(upstream_headers(
-            route,
-            anthropic_version,
-            anthropic_beta,
-            incoming,
-        ))
+        .headers(headers)
         .body(body);
-    let timeouts = Timeouts::default();
     let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
     let endpoint = url.to_string();
-    client.runtime.spawn(async move {
+    let task = client.runtime.spawn(async move {
         produce_response(request, endpoint, ready_sender, timeouts).await;
     });
-    ready_receiver
-        .recv_timeout(timeouts.headers + timeouts.first_byte)
-        .map_err(|_| timeout_diagnostic(url, "上游服务未在首包期限内响应"))?
+    let deadline = (!timeouts.headers.is_zero() && !timeouts.first_byte.is_zero())
+        .then(|| std::time::Instant::now() + timeouts.headers + timeouts.first_byte);
+    loop {
+        if cancelled.is_some_and(|cancelled| cancelled()) {
+            task.abort();
+            return Err(timeout_diagnostic(url, "客户端已取消请求"));
+        }
+        match ready_receiver.recv_timeout(Duration::from_millis(25)) {
+            Ok(result) => return result,
+            Err(mpsc::RecvTimeoutError::Timeout)
+                if deadline.is_none_or(|deadline| std::time::Instant::now() < deadline) => {}
+            Err(_) => {
+                task.abort();
+                return Err(timeout_diagnostic(url, "上游服务未在首包期限内响应"));
+            }
+        }
+    }
 }
 
 async fn produce_response(
@@ -65,7 +115,7 @@ async fn produce_response(
     ready_sender: mpsc::SyncSender<Result<UpstreamResponse, ProviderDiagnostic>>,
     timeouts: Timeouts,
 ) {
-    let response = match tokio::time::timeout(timeouts.headers, request.send()).await {
+    let response = match timeout_or_unlimited(timeouts.headers, request.send()).await {
         Ok(Ok(response)) => response,
         Ok(Err(error)) => return send_failure(ready_sender, network_diagnostic(&endpoint, &error)),
         Err(_) => {
@@ -81,7 +131,8 @@ async fn produce_response(
     let (body_sender, body_receiver) = tokio_mpsc::channel(2);
     let (cancellation, mut cancellation_receiver) = watch::channel(false);
     let mut response = response;
-    let deadline = tokio::time::Instant::now() + timeouts.total;
+    let deadline =
+        (!timeouts.total.is_zero()).then(|| tokio::time::Instant::now() + timeouts.total);
     let mut first_cancellation = cancellation_receiver.clone();
     let first = match next_chunk(
         &mut response,
@@ -104,7 +155,15 @@ async fn produce_response(
             return send_failure(ready_sender, network_diagnostic(&endpoint, &error))
         }
     };
-    let upstream = UpstreamResponse::new(status, headers, url, body_receiver, cancellation);
+    let initial_body_received = first.is_some();
+    let upstream = UpstreamResponse::new(
+        status,
+        headers,
+        url,
+        initial_body_received,
+        body_receiver,
+        cancellation,
+    );
     if ready_sender.send(Ok(upstream)).is_err() {
         return;
     }
@@ -134,7 +193,7 @@ async fn relay_chunks(
     mut response: reqwest::Response,
     sender: tokio_mpsc::Sender<Result<Bytes, super::route::StreamError>>,
     mut cancellation: watch::Receiver<bool>,
-    deadline: tokio::time::Instant,
+    deadline: Option<tokio::time::Instant>,
     idle_timeout: Duration,
 ) {
     loop {
@@ -174,17 +233,21 @@ enum ChunkResult {
 async fn next_chunk(
     response: &mut reqwest::Response,
     cancellation: &mut watch::Receiver<bool>,
-    deadline: tokio::time::Instant,
+    deadline: Option<tokio::time::Instant>,
     idle_timeout: Duration,
 ) -> ChunkResult {
-    let timeout = deadline
-        .saturating_duration_since(tokio::time::Instant::now())
-        .min(idle_timeout);
-    if timeout.is_zero() {
+    let remaining =
+        deadline.map(|deadline| deadline.saturating_duration_since(tokio::time::Instant::now()));
+    if remaining.is_some_and(|remaining| remaining.is_zero()) {
         return ChunkResult::Timeout;
     }
+    let timeout = match (remaining, idle_timeout.is_zero()) {
+        (Some(remaining), false) => remaining.min(idle_timeout),
+        (Some(remaining), true) => remaining,
+        (None, _) => idle_timeout,
+    };
     tokio::select! {
-        result = tokio::time::timeout(timeout, response.chunk()) => match result {
+        result = timeout_or_unlimited(timeout, response.chunk()) => match result {
             Ok(Ok(Some(bytes))) => ChunkResult::Data(bytes), Ok(Ok(None)) => ChunkResult::End,
             Ok(Err(error)) => ChunkResult::Network(error), Err(_) => ChunkResult::Timeout,
         },
@@ -200,6 +263,17 @@ async fn send_chunk(
     tokio::select! {
         result = sender.send(Ok(bytes)) => result.is_ok(),
         _ = cancellation.changed() => false,
+    }
+}
+
+async fn timeout_or_unlimited<F: std::future::Future>(
+    duration: Duration,
+    future: F,
+) -> Result<F::Output, tokio::time::error::Elapsed> {
+    if duration.is_zero() {
+        Ok(future.await)
+    } else {
+        tokio::time::timeout(duration, future).await
     }
 }
 
@@ -337,6 +411,33 @@ mod tests {
                 .unwrap()
                 .unwrap(),
         );
+        assert!(worker.join().unwrap());
+        drop(runtime);
+    }
+
+    #[test]
+    fn zero_timeouts_disable_limits_without_disabling_cancellation() {
+        let (endpoint, worker) = accept_first_chunk_and_wait_for_close();
+        let timeouts = Timeouts {
+            headers: Duration::ZERO,
+            first_byte: Duration::ZERO,
+            idle: Duration::ZERO,
+            total: Duration::ZERO,
+        };
+        let (runtime, receiver) = start_response(
+            reqwest::Client::builder()
+                .no_proxy()
+                .build()
+                .unwrap()
+                .get(endpoint),
+            timeouts,
+        );
+        let response = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .unwrap();
+        assert!(response.initial_body_received());
+        drop(response);
         assert!(worker.join().unwrap());
         drop(runtime);
     }

@@ -28,6 +28,8 @@
 @import "./base/extension-library.css";
 @import "./base/extension-management.css";
 @import "./base/extension-instructions.css";
+@import "./base/mcp-form.css";
+@import "./base/skill-source-browser.css";
 
 .asb-page-stack {
   display: flex;

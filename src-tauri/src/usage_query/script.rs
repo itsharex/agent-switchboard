@@ -1,5 +1,5 @@
 use super::declarative::is_http_url;
-use asb_core::contracts::{UsageReading, UsageSummary};
+use asb_core::contracts::{ProviderConnectionOptions, UsageReading, UsageSummary};
 use rquickjs::{Context, Runtime};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -277,13 +277,21 @@ pub(super) fn run_script_query(
     source: &str,
     api_key: &str,
     base_url: Option<&str>,
+    connection: &ProviderConnectionOptions,
 ) -> Result<UsageSummary, String> {
     let program = ScriptProgram::new(source)?;
     let request = program.request(api_key, base_url)?;
     let headers = render_script_headers(&request.headers);
-    let body = request.body.as_deref().unwrap_or("").as_bytes();
-    let (status, response_body) =
-        crate::probe::http_request(&request.method, &request.url, &headers, body)?;
+    let mut body = request.body.unwrap_or_default().into_bytes();
+    crate::upstream_overrides::apply_body_override(&mut body, connection)
+        .map_err(|_| "用量查询请求 body 覆盖无效".to_string())?;
+    let (status, response_body) = crate::probe::http_request_with_options(
+        &request.method,
+        &request.url,
+        &headers,
+        &body,
+        connection,
+    )?;
     let response: serde_json::Value =
         serde_json::from_str(&response_body).map_err(|_| "用量响应不是有效 JSON".to_string())?;
     let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

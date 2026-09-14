@@ -11,10 +11,6 @@ use serde_json::{json, Map, Value};
 use crate::config_store::write_json_atomic;
 use asb_switch::sha256_digest;
 
-/// Claude Code stores the plan label next to the token; the community-verified
-/// login writes write "max" and Claude Code refreshes/normalizes it itself.
-const CLAUDE_SUBSCRIPTION_TYPE: &str = "max";
-
 const SERIALIZE_ERROR: &str = "登录凭据无法序列化";
 const WRITE_ERROR: &str = "登录凭据写入失败";
 const EXISTING_READ_ERROR: &str = "无法读取现有登录缓存";
@@ -34,26 +30,6 @@ impl std::fmt::Debug for CodexTokens {
             .field("id_token", &asb_core::redact::REDACTED)
             .field("access_token", &asb_core::redact::REDACTED)
             .field("refresh_token", &asb_core::redact::REDACTED)
-            .finish()
-    }
-}
-
-/// Tokens from one Claude token exchange.
-pub(crate) struct ClaudeTokens {
-    pub(crate) access_token: String,
-    pub(crate) refresh_token: String,
-    pub(crate) expires_in: i64,
-    pub(crate) scope: String,
-}
-
-impl std::fmt::Debug for ClaudeTokens {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("ClaudeTokens")
-            .field("access_token", &asb_core::redact::REDACTED)
-            .field("refresh_token", &asb_core::redact::REDACTED)
-            .field("expires_in", &self.expires_in)
-            .field("scope", &self.scope)
             .finish()
     }
 }
@@ -82,29 +58,6 @@ pub(crate) fn write_codex_auth(
     write_object(path, root)
 }
 
-/// Merges the Claude login cache under `claudeAiOauth`, preserving unknown
-/// sibling keys Claude Code may keep in the same file.
-pub(crate) fn write_claude_credentials(path: &Path, tokens: &ClaudeTokens) -> Result<(), String> {
-    let mut root = existing_object(path)?;
-    let expires_at = chrono::Utc::now().timestamp_millis() + tokens.expires_in.saturating_mul(1000);
-    let scopes: Vec<String> = tokens
-        .scope
-        .split_whitespace()
-        .map(str::to_string)
-        .collect();
-    root.insert(
-        "claudeAiOauth".to_string(),
-        json!({
-            "accessToken": tokens.access_token,
-            "refreshToken": tokens.refresh_token,
-            "expiresAt": expires_at,
-            "scopes": scopes,
-            "subscriptionType": CLAUDE_SUBSCRIPTION_TYPE,
-        }),
-    );
-    write_object(path, root)
-}
-
 /// Decodes the middle claim segment of one JWT without verifying a signature;
 /// the token was received directly over TLS from the vendor token endpoint.
 pub(crate) fn jwt_payload(id_token: &str) -> Option<Value> {
@@ -119,9 +72,12 @@ pub(crate) fn jwt_payload(id_token: &str) -> Option<Value> {
 /// account header.
 pub(crate) fn account_id_from_jwt(payload: &Value) -> Option<String> {
     payload
-        .get("auth")
-        .and_then(|auth| auth.get("account_id"))
+        .get("https://api.openai.com/auth")
+        .and_then(|auth| auth.get("chatgpt_account_id"))
         .and_then(Value::as_str)
+        .or_else(|| payload.get("auth")
+        .and_then(|auth| auth.get("account_id"))
+        .and_then(Value::as_str))
         .or_else(|| payload.get("chatgpt_account_id").and_then(Value::as_str))
         .map(str::to_string)
 }
@@ -202,61 +158,6 @@ mod tests {
         write_codex_auth(&path, &codex_tokens(), None).expect("repairing write");
         serde_json::from_str::<Value>(&fs::read_to_string(&path).expect("read"))
             .expect("repaired file parses");
-    }
-
-    #[test]
-    fn claude_write_replaces_the_oauth_object_and_keeps_sibling_keys() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        let path = directory.path().join(".credentials.json");
-        fs::write(
-            &path,
-            "{\"claudeAiOauth\":{\"accessToken\":\"old\"},\"host_note\":\"keep\"}",
-        )
-        .expect("seed");
-
-        write_claude_credentials(
-            &path,
-            &ClaudeTokens {
-                access_token: "at".to_string(),
-                refresh_token: "rt".to_string(),
-                expires_in: 3600,
-                scope: "user:profile user:inference".to_string(),
-            },
-        )
-        .expect("write");
-
-        let merged: Value =
-            serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("valid json");
-        assert_eq!(merged.get("host_note"), Some(&json!("keep")));
-        let oauth = merged.get("claudeAiOauth").expect("oauth object");
-        assert_eq!(oauth["accessToken"], json!("at"));
-        assert_eq!(oauth["refreshToken"], json!("rt"));
-        assert_eq!(oauth["subscriptionType"], json!("max"));
-        assert_eq!(oauth["scopes"], json!(["user:profile", "user:inference"]));
-        assert!(oauth["expiresAt"].as_i64().expect("epoch millis") > 0);
-    }
-
-    #[test]
-    fn claude_write_fails_closed_when_the_existing_cache_is_unreadable() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        // A directory at the cache path makes the existing-file read fail with
-        // a non-NotFound error, which must abort the write instead of
-        // silently replacing the cache.
-        let blocked = directory.path().join(".credentials.json");
-        std::fs::create_dir(&blocked).expect("seed directory");
-
-        let outcome = write_claude_credentials(
-            &blocked,
-            &ClaudeTokens {
-                access_token: "at".to_string(),
-                refresh_token: "rt".to_string(),
-                expires_in: 3600,
-                scope: String::new(),
-            },
-        );
-
-        assert_eq!(outcome, Err(EXISTING_READ_ERROR.to_string()));
-        assert!(blocked.is_dir());
     }
 
     #[test]

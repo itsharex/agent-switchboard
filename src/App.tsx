@@ -21,7 +21,8 @@ export default function App() {
           ? { latestVersion: updateCheck.updateCheck.latestVersion, onOpen: () => model.openSettings("about") } : null}>
         <AppErrorBoundary><AppWorkspace model={model} /></AppErrorBoundary>
       </AppShell>
-      <OperationConfirmSheets preview={switchPreview.preview} operations={operations} providers={providers} />
+      <OperationConfirmSheets switchCandidate={switchPreview.switchCandidate} busy={busy}
+        onCancelSwitch={switchPreview.cancelSwitch} operations={operations} providers={providers} />
       <Toaster />
     </>
   );

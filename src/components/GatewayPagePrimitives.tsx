@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "./Button";
+import { ModuleHeader } from "./WorkspaceHeader";
 
 export function ConfirmGatewayRecoveryDiscard({ onConfirm }: { onConfirm: () => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -48,10 +49,7 @@ export function CopyGatewayAddressButton({ value }: { value: string }) {
 export function GatewayPanel({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
     <section className="asb-panel" aria-label="协议网关">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">本机协议网关</h2>
-        {aside}
-      </div>
+      <ModuleHeader title="本机协议网关" primaryActions={aside} />
       <div className="asb-gateway-stack">{children}</div>
     </section>
   );

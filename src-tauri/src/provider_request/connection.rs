@@ -9,12 +9,16 @@ impl TryFrom<&ProviderProfile> for ProviderRequestConnection {
         if profile.route_mode != RouteMode::Custom {
             return Err(CommandError::new(
                 "provider-request-custom-only",
-                "真实请求仅适用于使用 API 密钥的自定义供应商",
+                "真实请求仅适用于自定义供应商（API 密钥或托管账号）",
             ));
         }
         Ok(Self {
+            app: profile.app,
+            claude_account: None,
             base_url: profile.base_url.clone().ok_or_else(invalid)?,
+            connection: profile.connection.clone(),
             api_key: profile.api_key.clone(),
+            authentication: profile.authentication,
             upstream_protocol: profile.upstream_protocol.ok_or_else(invalid)?,
             responses_options: profile.responses_options,
             default_model: profile.model.clone(),
@@ -23,7 +27,15 @@ impl TryFrom<&ProviderProfile> for ProviderRequestConnection {
 }
 
 impl ProviderRequestConnection {
-    pub(super) fn endpoint(&self) -> Result<String, CommandError> {
+    pub(super) fn endpoint(&self, model: Option<&str>) -> Result<String, CommandError> {
+        if self.app != asb_core::AppKind::Claude
+            && self.upstream_protocol == UpstreamProtocol::GeminiGenerateContent
+        {
+            return Err(invalid());
+        }
+        if self.app == asb_core::AppKind::Codex && self.connection.claude_models_url.is_some() {
+            return Err(invalid());
+        }
         if self.api_key.trim().is_empty()
             || reqwest::header::HeaderValue::from_str(&self.api_key).is_err()
             || (self.upstream_protocol == UpstreamProtocol::Responses)
@@ -35,17 +47,36 @@ impl ProviderRequestConnection {
         let url = reqwest::Url::parse(&self.base_url).map_err(|_| invalid())?;
         if !url.username().is_empty()
             || url.password().is_some()
-            || url.query().is_some()
             || url.fragment().is_some()
             || self.base_url.chars().any(char::is_control)
         {
             return Err(CommandError::new(
                 "provider-request-endpoint-invalid",
-                "真实请求要求服务地址不含 URL 凭据、查询参数、片段或控制字符",
+                "真实请求要求服务地址不含 URL 凭据、片段或控制字符",
             ));
         }
-        asb_core::endpoint::upstream_endpoint(&self.base_url, self.upstream_protocol)
-            .map_err(|message| CommandError::new("provider-request-endpoint-invalid", message))
+        if self.upstream_protocol == UpstreamProtocol::GeminiGenerateContent {
+            return match model {
+                Some(model) => asb_core::claude_gemini::request_endpoint(
+                    &self.base_url,
+                    self.connection.is_full_url,
+                    model,
+                    false,
+                ),
+                None => asb_core::claude_gemini::request_preview(
+                    &self.base_url,
+                    self.connection.is_full_url,
+                    self.default_model.as_deref(),
+                ),
+            }
+            .map_err(|message| CommandError::new("provider-request-endpoint-invalid", message));
+        }
+        asb_core::endpoint::upstream_endpoint_with_options(
+            &self.base_url,
+            self.upstream_protocol,
+            self.connection.is_full_url,
+        )
+        .map_err(|message| CommandError::new("provider-request-endpoint-invalid", message))
     }
 }
 

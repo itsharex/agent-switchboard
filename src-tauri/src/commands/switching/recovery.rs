@@ -1,4 +1,4 @@
-use super::plan::{build_plan, execute_projection, preview_projection};
+use super::plan::{build_plan, execute_projection_with_auth, preview_projection};
 use super::profile_save::invalidate_provider_readings;
 use crate::commands::error::CommandError;
 use tauri::{AppHandle, Manager};
@@ -39,12 +39,15 @@ pub(crate) fn recover_pending_profile_save(app: &AppHandle) -> Result<(), String
         return super::profile_rollback::clear(&state);
     }
     super::profile_rollback::validate_projection(&state, pending.app, &preview)?;
-    execute_projection(
+    execute_projection_with_auth(
         &state,
         &gateway,
         &projection,
         &preview.content_hash,
         &preview.rendered_hash,
+        preview.auth_hash.as_deref(),
+        preview.auth_existed,
+        preview.auth_rendered_hash.as_deref(),
     )
     .map_err(|error| error.message)?;
     state.configuration().clear_profile_save()?;
@@ -58,21 +61,7 @@ fn saved_profile_revision(
     app: asb_core::AppKind,
     profile_id: &str,
 ) -> Result<String, String> {
-    match app {
-        asb_core::AppKind::Codex => state
-            .configuration()
-            .list_codex_providers()
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .find(|record| record.profile.id == profile_id)
-            .map(|record| record.file_hash)
-            .ok_or_else(|| "Codex 供应商保存恢复记录与当前档案不匹配".to_string()),
-        asb_core::AppKind::Claude => state
-            .configuration()
-            .find_provider_record(profile_id)
-            .map(|record| record.file_hash)
-            .map_err(|error| error.to_string()),
-    }
+    super::transaction::profile_revision(state, app, profile_id)
 }
 
 /// Every later configuration write first completes a previously confirmed
@@ -80,7 +69,14 @@ fn saved_profile_revision(
 /// the provider file changed but before its client projection did.
 pub(crate) fn ensure_profile_save_recovered(app: &AppHandle) -> Result<(), CommandError> {
     recover_pending_profile_save(app)
-        .map_err(|error| CommandError::new("profile-save-recovery-required", error))
+        .map_err(|error| CommandError::new("profile-save-recovery-required", error))?;
+    let state = crate::local_state::LocalState::from_app(app)
+        .map_err(|error| CommandError::new("codex-policy-recovery-required", error))?;
+    super::codex_policy::recover_on_startup(
+        &state,
+        app.state::<crate::gateway::GatewayController>().inner(),
+    )
+    .map_err(|error| CommandError::new("codex-policy-recovery-required", error))
 }
 
 fn already_committed(

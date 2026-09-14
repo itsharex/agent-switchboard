@@ -5,6 +5,8 @@
 //! `toml_edit` instead of re-serializing from a typed mirror.
 
 mod document;
+mod common;
+pub use common::extract_client_settings;
 mod overlay;
 mod preview;
 mod render;
@@ -24,11 +26,27 @@ pub use subagents::{deprecated_subagent_keys, read_subagent_settings, render_sub
 fn validate_projection(
     plan: &crate::contracts::SwitchPlan,
 ) -> Result<(), crate::adapter::AdapterError> {
-    if plan.profile.route_mode == crate::contracts::RouteMode::Custom
-        && (!plan.is_gateway() || !plan.client_base_url().is_some_and(is_gateway_base_url))
-    {
+    if plan.profile.route_mode != crate::contracts::RouteMode::Custom {
+        return Ok(());
+    }
+    if plan.is_gateway() {
+        if !plan.client_base_url().is_some_and(is_gateway_base_url) {
+            return Err(crate::adapter::AdapterError {
+                message: "Codex 网关投影地址无效".into(),
+                line: None,
+            });
+        }
+        return Ok(());
+    }
+    if plan.profile.upstream_protocol != Some(crate::contracts::UpstreamProtocol::Responses) {
         return Err(crate::adapter::AdapterError {
-            message: "Codex 第三方必须通过本机网关投影".into(),
+            message: "Codex Chat Completions 与 Anthropic 上游必须通过本机网关投影".into(),
+            line: None,
+        });
+    }
+    if plan.client_base_url().is_none() {
+        return Err(crate::adapter::AdapterError {
+            message: "Codex 直连投影缺少 Responses 服务地址".into(),
             line: None,
         });
     }

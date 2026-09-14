@@ -1,5 +1,5 @@
 use crate::provider_diagnostics::{ProviderDiagnostic, ProviderFailureKind};
-use asb_core::contracts::{ResponsesOptions, UpstreamProtocol};
+use asb_core::contracts::{ProviderConnectionOptions, ResponsesOptions, UpstreamProtocol};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -10,8 +10,14 @@ pub(super) const MAX_OUTPUT_TOKENS: u32 = 1_024;
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ProviderRequestConnection {
+    pub app: asb_core::AppKind,
+    #[serde(skip)]
+    pub claude_account: Option<crate::claude_auth::ResolvedAccount>,
     pub base_url: String,
+    #[serde(default)]
+    pub connection: ProviderConnectionOptions,
     pub api_key: String,
+    pub authentication: Option<asb_core::AuthenticationScheme>,
     pub upstream_protocol: UpstreamProtocol,
     pub responses_options: Option<ResponsesOptions>,
     pub default_model: Option<String>,

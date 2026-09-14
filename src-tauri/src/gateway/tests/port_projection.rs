@@ -76,7 +76,7 @@ fn confirmed_port_change_rewrites_clients_and_keeps_tokens_stable() {
     gateway.shutdown();
 }
 
-fn prepare_available_port(
+pub(super) fn prepare_available_port(
     gateway: &GatewayController,
     state: &LocalState,
     preparations: &PortChangePreparations,

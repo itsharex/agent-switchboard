@@ -5,6 +5,7 @@ import { currentProviderName } from "../lib/current-provider-name";
 import { Button } from "./Button";
 import { ClientLogo } from "./ClientLogo";
 import { Time } from "./Time";
+import { ModuleHeader } from "./WorkspaceHeader";
 
 export interface ConfigStatusPanelProps {
   statuses: ConfigFileStatus[] | null;
@@ -118,10 +119,12 @@ function ConfigStatusCard({ status, profiles, lock, busy, onRecoverLock }: {
 export function ConfigStatusPanel({ statuses, profiles, locks, busy, onRefresh, onRecoverLock }: ConfigStatusPanelProps) {
   return (
     <section className="asb-panel" aria-label="配置状态">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">配置状态</h2>
-        <Button variant="secondary" disabled={busy} onClick={onRefresh}>刷新状态</Button>
-      </div>
+      <ModuleHeader
+        title="配置状态"
+        primaryActions={
+          <Button variant="secondary" disabled={busy} onClick={onRefresh}>刷新状态</Button>
+        }
+      />
       <div className="asb-status-grid">
         {(statuses ?? []).map((status) => (
           <ConfigStatusCard key={status.app} status={status} profiles={profiles} lock={locks[status.app]}

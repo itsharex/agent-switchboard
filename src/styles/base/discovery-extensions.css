@@ -116,3 +116,49 @@
 .asb-fail-text {
   color: var(--asb-danger);
 }
+
+/* Native imports are a selection list, not an administration table. */
+.asb-ext-import { display: flex; flex-direction: column; gap: var(--asb-space-3); min-height: 0; }
+.asb-ext-import-scan { display: flex; align-items: center; justify-content: space-between; gap: var(--asb-space-2); }
+.asb-ext-import-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content);
+  overflow: hidden;
+}
+.asb-ext-import-row {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-1) var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+.asb-ext-import-row:last-child { border-bottom: 0; }
+.asb-ext-import-row:hover { background: var(--asb-content-muted); }
+.asb-ext-import-identity { flex: 1; min-width: 0; }
+.asb-ext-import-identity .asb-checkbox { font: var(--asb-text-label); font-weight: 600; overflow-wrap: anywhere; }
+.asb-ext-import-description,
+.asb-ext-import-origin {
+  margin: 0 0 var(--asb-space-unit) calc(var(--asb-icon-size-lg) + var(--asb-space-2));
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  overflow-wrap: anywhere;
+}
+.asb-ext-import-origin { display: flex; align-items: center; gap: var(--asb-space-unit); flex-wrap: wrap; }
+.asb-ext-import-status { display: flex; align-items: flex-end; flex-direction: column; gap: var(--asb-space-1); color: var(--asb-text-muted); font: var(--asb-text-caption); }
+.asb-ext-import-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+  background: var(--asb-content);
+}
+.asb-ext-import-footer > .asb-btn-primary { margin-left: auto; }
+.asb-ext-import-errors { margin: 0; padding-left: var(--asb-space-3); color: var(--asb-danger); font: var(--asb-text-label); overflow-wrap: anywhere; }

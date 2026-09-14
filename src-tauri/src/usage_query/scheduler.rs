@@ -100,11 +100,13 @@ pub(crate) fn execute_once(
     let upstream_protocol = profile
         .upstream_protocol
         .ok_or_else(|| "供应商缺少上游 API 格式".to_string())?;
-    match crate::usage_query::run_usage_query(
+    match crate::usage_query::run_usage_query_with_connection(
         &query,
         &profile.api_key,
         profile.base_url.as_deref(),
         upstream_protocol,
+        profile.authentication,
+        &profile.connection,
     ) {
         Ok(summary) => {
             usage_cache::record_success(state, profile, summary.clone())?;

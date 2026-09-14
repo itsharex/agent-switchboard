@@ -1,4 +1,7 @@
-use super::{ResponsesRequestMode, SettingsValues, UpstreamProtocol, UsageQuery};
+use super::{
+    AuthenticationScheme, ProviderConnectionOptions, ResponsesRequestMode, SettingsValues,
+    UpstreamProtocol, UsageQuery,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -17,6 +20,54 @@ pub enum CodexUpstream {
     Responses,
     ChatCompletions,
     AnthropicMessages,
+}
+
+/// How a third-party Codex provider is activated in the local client.
+/// Older files without this field deserialize conservatively as `Gateway`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CodexRouteMode {
+    Direct,
+    Gateway,
+}
+
+impl Default for CodexRouteMode {
+    fn default() -> Self {
+        Self::Gateway
+    }
+}
+
+impl CodexRouteMode {
+    pub const fn for_upstream(upstream: CodexUpstream) -> Self {
+        match upstream {
+            CodexUpstream::Responses => Self::Direct,
+            CodexUpstream::ChatCompletions | CodexUpstream::AnthropicMessages => Self::Gateway,
+        }
+    }
+
+    pub const fn requires_gateway(self) -> bool {
+        matches!(self, Self::Gateway)
+    }
+
+    /// Codex can speak a Responses provider directly only when the provider
+    /// uses the native credential scheme and does not need request rewriting.
+    /// Connection overrides therefore become routing facts rather than UI
+    /// hints: a saved profile must project to the same path on every client.
+    pub fn for_connection(
+        upstream: CodexUpstream,
+        connection: &ProviderConnectionOptions,
+        authentication: Option<AuthenticationScheme>,
+    ) -> Self {
+        let default_authentication = upstream.protocol().authentication_scheme();
+        if upstream != CodexUpstream::Responses
+            || connection.requires_gateway()
+            || authentication.is_some_and(|selected| selected != default_authentication)
+        {
+            Self::Gateway
+        } else {
+            Self::Direct
+        }
+    }
 }
 
 impl CodexUpstream {
@@ -42,81 +93,8 @@ pub enum CodexOperation {
     ImageEdit,
 }
 
-/// The declared rendering of a Codex Responses reasoning request when a
-/// provider exposes only Chat Completions. This is deliberately profile data:
-/// provider names and endpoint hosts are never used to infer a dialect.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum CodexChatReasoning {
-    Unsupported,
-    Configured {
-        thinking_parameter: CodexChatThinkingParameter,
-        effort_parameter: CodexChatEffortParameter,
-        effort_mode: CodexChatEffortMode,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CodexChatThinkingParameter {
-    None,
-    Thinking,
-    EnableThinking,
-    ReasoningSplit,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CodexChatEffortParameter {
-    None,
-    ReasoningEffort,
-    ReasoningObject,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CodexChatEffortMode {
-    Passthrough,
-    LowHigh,
-    DeepSeek,
-    OpenRouter,
-}
-
-/// One Codex-visible reasoning level declared for a specific catalog model.
-/// The provider file owns these levels; the generated model catalog merely
-/// projects them for the local Codex client.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CodexReasoningLevel {
-    None,
-    Minimal,
-    Low,
-    Medium,
-    High,
-    Xhigh,
-    Max,
-    Ultra,
-}
-
-impl CodexReasoningLevel {
-    pub const fn description(self) -> &'static str {
-        match self {
-            Self::None => "Disable Thinking",
-            Self::Minimal => "Minimal Thinking",
-            Self::Low => "Low Thinking",
-            Self::Medium => "Medium Thinking",
-            Self::High => "High Thinking",
-            Self::Xhigh => "Extra High Thinking",
-            Self::Max => "Max Thinking",
-            Self::Ultra => "Ultra Thinking",
-        }
-    }
-}
+mod reasoning;
+pub use reasoning::*;
 
 /// Capabilities declared by a provider. None is inferred from its name or a
 /// response from `/models`.
@@ -219,6 +197,14 @@ pub struct CodexCatalogEntry {
     pub supported_reasoning_levels: Vec<CodexReasoningLevel>,
     pub images: bool,
     pub compact: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_instructions: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supports_parallel_tool_calls: Option<bool>,
 }
 
 impl CodexCatalogEntry {
@@ -226,11 +212,19 @@ impl CodexCatalogEntry {
     /// files own the source facts; both the on-disk projection and `/v1/models`
     /// use this exact representation.
     pub fn model_catalog_entry_json(&self, priority: usize) -> Value {
+        let display_name = self.display_name.as_deref().unwrap_or(&self.id);
+        let description = self.description.as_deref().unwrap_or(display_name);
+        let base_instructions = self.base_instructions.as_deref().unwrap_or(
+            "You are Codex, a coding agent. You and the user share the same workspace and collaborate to achieve the user's goals.",
+        );
+        let supports_parallel_tool_calls = self
+            .supports_parallel_tool_calls
+            .unwrap_or(self.function_tools);
         json!({
             "slug": self.id,
-            "display_name": self.id,
-            "description": self.id,
-            "base_instructions": "You are Codex, a coding agent. You and the user share the same workspace and collaborate to achieve the user's goals.",
+            "display_name": display_name,
+            "description": description,
+            "base_instructions": base_instructions,
             "default_reasoning_level": self.default_reasoning_level,
             "supported_reasoning_levels": self.supported_reasoning_levels.iter().map(|level| json!({
                 "effort": level,
@@ -244,7 +238,7 @@ impl CodexCatalogEntry {
             "default_reasoning_summary": "none",
             "support_verbosity": false,
             "truncation_policy": {"mode": "bytes", "limit": 10_000},
-            "supports_parallel_tool_calls": self.function_tools,
+            "supports_parallel_tool_calls": supports_parallel_tool_calls,
             "supports_image_detail_original": false,
             "context_window": self.context_window,
             "max_output_tokens": self.max_output_tokens,
@@ -291,8 +285,19 @@ pub struct CodexModelRoute {
 pub struct CodexProviderProfile {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub route_mode: CodexRouteMode,
     pub endpoint: CodexEndpoint,
     pub api_key: String,
+    /// Optional explicit upstream credential delivery. Missing values use the
+    /// protocol default; non-native Responses authentication requires the
+    /// local gateway because Codex's config.toml cannot express it.
+    #[serde(default)]
+    pub authentication: Option<AuthenticationScheme>,
+    /// Connection behavior imported from CC Switch or edited by the shared
+    /// provider machinery. It is never written as an arbitrary client key.
+    #[serde(default)]
+    pub connection: ProviderConnectionOptions,
     pub upstream: CodexUpstream,
     /// The native Responses request projection is an explicit Codex routing
     /// fact. It is never inferred from the selected upstream.
@@ -312,6 +317,10 @@ pub struct CodexProviderDraft {
     pub name: String,
     pub endpoint: CodexEndpoint,
     pub api_key: String,
+    #[serde(default)]
+    pub authentication: Option<AuthenticationScheme>,
+    #[serde(default)]
+    pub connection: ProviderConnectionOptions,
     pub upstream: CodexUpstream,
     pub request_mode: ResponsesRequestMode,
     pub default_model: String,
@@ -331,6 +340,7 @@ impl std::fmt::Debug for CodexProviderDraft {
             .field("name", &self.name)
             .field("endpoint", &self.endpoint)
             .field("api_key", &crate::redact::REDACTED)
+            .field("authentication", &self.authentication)
             .field("upstream", &self.upstream)
             .field("default_model", &self.default_model)
             .field("catalog", &self.catalog)
@@ -384,6 +394,7 @@ impl std::fmt::Debug for CodexProviderProfile {
             .debug_struct("CodexProviderProfile")
             .field("id", &self.id)
             .field("name", &self.name)
+            .field("route_mode", &self.route_mode)
             .field("endpoint", &self.endpoint)
             .field("api_key", &crate::redact::REDACTED)
             .field("upstream", &self.upstream)
@@ -400,23 +411,28 @@ impl CodexProviderProfile {
         validate::profile(self)
     }
 
-    /// Resolves the upstream model once at request acceptance. Explicit
-    /// mappings win; native Responses retains an unmapped requested model;
-    /// protocol bridges use the profile default.
+    /// Explicit aliases win; an unmapped catalog model keeps its identity
+    /// for every protocol. The request boundary selects the default only
+    /// when the client omitted a model.
     pub fn resolve_model(&self, requested: &str) -> Result<String, String> {
-        required(requested, "请求模型")?;
-        if let Some(route) = self
-            .model_routes
-            .iter()
-            .find(|route| route.client_model == requested)
-        {
-            return Ok(route.upstream_model.clone());
-        }
-        if self.upstream == CodexUpstream::Responses {
-            return Ok(requested.to_string());
-        }
-        Ok(self.default_model.clone())
+        resolve_catalog_model(&self.catalog, &self.model_routes, requested)
     }
+}
+
+fn resolve_catalog_model(
+    catalog: &[CodexCatalogEntry],
+    routes: &[CodexModelRoute],
+    requested: &str,
+) -> Result<String, String> {
+    required(requested, "请求模型")?;
+    if !catalog.iter().any(|entry| entry.id == requested) {
+        return Err(format!("请求模型不在已激活 Codex 目录中：{requested}"));
+    }
+    Ok(routes
+        .iter()
+        .find(|route| route.client_model == requested)
+        .map(|route| route.upstream_model.clone())
+        .unwrap_or_else(|| requested.to_string()))
 }
 
 pub(super) fn required(value: &str, field: &str) -> Result<(), String> {
@@ -439,6 +455,8 @@ pub struct CodexRouteSnapshot {
     pub provider_id: String,
     pub endpoint: CodexEndpoint,
     pub api_key: String,
+    pub authentication: Option<AuthenticationScheme>,
+    pub connection: ProviderConnectionOptions,
     pub upstream: CodexUpstream,
     pub request_mode: ResponsesRequestMode,
     pub default_model: String,
@@ -456,6 +474,8 @@ impl CodexRouteSnapshot {
             provider_id: profile.id.clone(),
             endpoint: profile.endpoint.clone(),
             api_key: profile.api_key.clone(),
+            authentication: profile.authentication,
+            connection: profile.connection.clone(),
             upstream: profile.upstream,
             request_mode: profile.request_mode,
             default_model: profile.default_model.clone(),
@@ -466,21 +486,7 @@ impl CodexRouteSnapshot {
     }
 
     pub fn resolve_model(&self, requested: &str) -> Result<String, String> {
-        required(requested, "请求模型")?;
-        if !self.catalog.iter().any(|entry| entry.id == requested) {
-            return Err(format!("请求模型不在已激活 Codex 目录中：{requested}"));
-        }
-        if let Some(route) = self
-            .model_routes
-            .iter()
-            .find(|route| route.client_model == requested)
-        {
-            return Ok(route.upstream_model.clone());
-        }
-        if self.upstream == CodexUpstream::Responses {
-            return Ok(requested.to_string());
-        }
-        Ok(self.default_model.clone())
+        resolve_catalog_model(&self.catalog, &self.model_routes, requested)
     }
 }
 

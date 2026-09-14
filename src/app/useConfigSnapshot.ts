@@ -14,6 +14,7 @@ import {
   type LockStatus,
   type ProviderRecord,
 } from "../api/client";
+import { codexLoginBlocker } from "../api/official-login";
 
 interface SnapshotDeps {
   onError: (error: CommandError) => void;
@@ -37,6 +38,7 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const [codexRecords, setCodexRecords] = useState<CodexProviderRecord[]>([]);
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [locks, setLocks] = useState<Partial<Record<AppKind, LockStatus>>>({});
+  const [loginBlocker, setLoginBlocker] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const refreshVersion = useRef(0);
 
@@ -45,15 +47,23 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     try {
-      const [nextStatuses, allRecords, nextCodexRecords, nextBackups, codexLock, claudeLock] =
-        await Promise.all([
-          getConfigStatus(),
-          listProfiles(),
-          listCodexProfiles(),
-          listBackups(),
-          getLockStatus("codex"),
-          getLockStatus("claude"),
-        ]);
+      const [
+        nextStatuses,
+        allRecords,
+        nextCodexRecords,
+        nextBackups,
+        codexLock,
+        claudeLock,
+        nextLoginBlocker,
+      ] = await Promise.all([
+        getConfigStatus(),
+        listProfiles(),
+        listCodexProfiles(),
+        listBackups(),
+        getLockStatus("codex"),
+        getLockStatus("claude"),
+        codexLoginBlocker(),
+      ]);
       if (refreshVersion.current !== version) return;
       setStatuses(nextStatuses);
       // The generic store serves Claude providers and the Codex official-login
@@ -65,6 +75,7 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
       setCodexRecords(nextCodexRecords);
       setBackups(nextBackups);
       setLocks({ codex: codexLock, claude: claudeLock });
+      setLoginBlocker(nextLoginBlocker);
       setSelectedId((current) =>
         current && (nextRecords.some((record) => record.profile.id === current)
           || nextCodexOfficial.some((record) => record.profile.id === current)
@@ -130,6 +141,8 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
     profiles,
     backups,
     locks,
+    /** Why third-party Codex switching is currently blocked, or null. */
+    loginBlocker,
     selectedId,
     setSelectedId,
     refresh,

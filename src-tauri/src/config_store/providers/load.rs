@@ -190,7 +190,9 @@ pub(super) fn same_provider_routing(profile: &ProviderProfile, draft: &ProviderD
         && profile.name == draft.name
         && profile.model == draft.model
         && profile.base_url == draft.base_url
+        && profile.connection == draft.connection
         && profile.api_key == draft.api_key
+        && profile.authentication == draft.authentication
         && profile.upstream_protocol == draft.upstream_protocol
         && profile.max_output_tokens == draft.max_output_tokens
         && profile.model_options == draft.model_options

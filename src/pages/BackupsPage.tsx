@@ -4,6 +4,7 @@ import type { useCloudBackup } from "../app/useCloudBackup";
 import { BackupHistory } from "../components/BackupHistory";
 import { Button } from "../components/Button";
 import { CloudBackupPanel } from "../components/CloudBackupPanel";
+import { ModuleHeader } from "../components/WorkspaceHeader";
 import { Tabs } from "../components/Tabs";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
@@ -35,14 +36,15 @@ export function BackupsPage({
 
   return (
     <section className="asb-panel" aria-label="备份">
-      <div className="asb-panel-heading">
-        <div className="asb-panel-heading-main">
-          <h2 className="asb-panel-title">备份</h2>
+      {/* 设置内容区的子页：模块级 h3 标题独占第一行，备份类型页签在第二行。 */}
+      <ModuleHeader
+        title="备份"
+        primary={
           <Tabs value={activeTab} onChange={setActiveTab} scope="backup" label="备份类型"
             tabs={[{ value: "local", label: "本地备份", controls: "backup-local-panel" },
               { value: "cloud", label: "加密云端备份", controls: "backup-cloud-panel" }]} />
-        </div>
-      </div>
+        }
+      />
       {/* Both tabpanels stay mounted so each tab's aria-controls always
           resolves; inactive content unmounts inside its hidden panel. */}
       <div

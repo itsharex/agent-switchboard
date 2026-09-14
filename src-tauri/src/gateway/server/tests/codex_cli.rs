@@ -72,16 +72,22 @@ fn actual_codex_cli_completes_through_the_isolated_http_gateway() {
 #[test]
 #[ignore = "requires an installed Codex CLI and an isolated loopback sandbox"]
 fn actual_codex_cli_preserves_official_login_through_native_responses_gateway() {
-    verify_responses_cli(ResponsesRequestMode::Standard);
+    verify_responses_cli(ResponsesRequestMode::Standard, false);
 }
 
 #[test]
 #[ignore = "requires an installed Codex CLI and an isolated loopback sandbox"]
 fn actual_codex_cli_completes_through_minimal_responses() {
-    verify_responses_cli(ResponsesRequestMode::Minimal);
+    verify_responses_cli(ResponsesRequestMode::Minimal, false);
 }
 
-fn verify_responses_cli(mode: ResponsesRequestMode) {
+#[test]
+#[ignore = "requires the repository Codex CLI and an isolated loopback sandbox"]
+fn actual_codex_cli_uses_gateway_without_chatgpt_login() {
+    verify_responses_cli(ResponsesRequestMode::Standard, true);
+}
+
+fn verify_responses_cli(mode: ResponsesRequestMode, api_key_only: bool) {
     let upstream = Server::http(("127.0.0.1", 0)).unwrap();
     let upstream_url = endpoint(&upstream);
     let upstream_key = format!("fixture-{}", uuid::Uuid::new_v4());
@@ -110,6 +116,11 @@ fn verify_responses_cli(mode: ResponsesRequestMode) {
     assert!(projection.plan.profile.requires_gateway());
     let (codex_home, workdir) =
         prepare_client(directory.path(), &projection, &gateway, &upstream_key);
+    if api_key_only {
+        fs::write(codex_home.join("auth.json"), serde_json::json!({
+            "auth_mode": "apikey", "OPENAI_API_KEY": "asb-local-gateway"
+        }).to_string()).unwrap();
+    }
     let output = run_isolated_cli(&codex_home, workdir);
     assert_cli_output(&output, &upstream_key, &projection_token(&projection));
     let (authorization, body) = receiver.recv_timeout(Duration::from_secs(5)).unwrap();

@@ -12,6 +12,9 @@ vi.mock("../api/client", () => ({
   getLockStatus: vi.fn(() => Promise.resolve({ state: "free" })),
   onTrayChanged: vi.fn(() => Promise.resolve(() => {})),
 }));
+vi.mock("../api/official-login", () => ({
+  codexLoginBlocker: vi.fn(() => Promise.resolve(null)),
+}));
 
 describe("useConfigSnapshot active provider", () => {
   it.each(["codex", "claude"] as const)("uses %s live identity independently of full configuration matching", async (app) => {

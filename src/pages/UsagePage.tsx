@@ -14,6 +14,7 @@ import { RadioOption } from "../components/RadioOption";
 import { StatCards } from "../components/charts/stat-cards";
 import { Table, type TableColumn } from "../components/Table";
 import { Time } from "../components/Time";
+import { ModuleHeader } from "../components/WorkspaceHeader";
 import { UsageIcon } from "../components/icons";
 import { clientName } from "../lib/client-name";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenCount } from "../lib/token-format";
@@ -126,34 +127,40 @@ export function UsagePage({ active }: { active: boolean }) {
 
   return (
     <section className="asb-panel asb-model-usage" aria-label="模型消耗">
-      <div className="asb-panel-heading">
-        <div>
-          <h2 className="asb-panel-title">模型消耗</h2>
-          {report && (
-            <p className="asb-model-usage-snapshot" role="status">
-              {read?.freshness === "cached" ? "本地快照" : "本次汇总"}：<Time iso={report.generatedAt} />
-              {loading ? " · 正在更新" : null}
-            </p>
-          )}
-        </div>
-        <div className="asb-model-usage-controls">
-          <div className="asb-segments" role="radiogroup" aria-label="模型消耗时间范围">
-            {RANGE_OPTIONS.map((option) => (
-              <RadioOption
-                key={option.value}
-                name="model-usage-range"
-                checked={range === option.value}
-                disabled={!active}
-                label={option.label}
-                onChange={() => changeRange(option.value)}
-              />
-            ))}
+      <ModuleHeader
+        title="模型消耗"
+        primary={
+          <p className="asb-model-usage-snapshot" role="status">
+            {report ? (
+              <>
+                {read?.freshness === "cached" ? "本地快照" : "本次汇总"}：<Time iso={report.generatedAt} />
+                {loading ? " · 正在更新" : null}
+              </>
+            ) : (
+              "尚无本地汇总"
+            )}
+          </p>
+        }
+        primaryActions={
+          <div className="asb-model-usage-controls">
+            <div className="asb-segments" role="radiogroup" aria-label="模型消耗时间范围">
+              {RANGE_OPTIONS.map((option) => (
+                <RadioOption
+                  key={option.value}
+                  name="model-usage-range"
+                  checked={range === option.value}
+                  disabled={!active}
+                  label={option.label}
+                  onChange={() => changeRange(option.value)}
+                />
+              ))}
+            </div>
+            <Button variant="secondary" disabled={loading || !active} onClick={() => void refresh()}>
+              {loading ? "刷新中" : "刷新"}
+            </Button>
           </div>
-          <Button variant="secondary" disabled={loading || !active} onClick={() => void refresh()}>
-            {loading ? "刷新中" : "刷新"}
-          </Button>
-        </div>
-      </div>
+        }
+      />
       {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}
       {read?.cacheWarning && <p className="asb-warn-text" role="alert">{read.cacheWarning}</p>}
       {report?.issues.length ? (

@@ -1,4 +1,6 @@
-use asb_core::contracts::{UpstreamProtocol, UsageReading, UsageSummary};
+use asb_core::contracts::{
+    ProviderConnectionOptions, UpstreamProtocol, UsageReading, UsageSummary,
+};
 
 /// Substitutes placeholders in the stored URL. `{{baseUrl}}` loses any
 /// trailing slash so `/user/balance` style paths concatenate cleanly.
@@ -68,14 +70,16 @@ pub(super) fn run_declarative_query(
     api_key: &str,
     base_url: Option<&str>,
     upstream_protocol: UpstreamProtocol,
+    authentication: Option<asb_core::AuthenticationScheme>,
+    connection: &ProviderConnectionOptions,
 ) -> Result<UsageSummary, String> {
     let url = render_url(url_template, api_key, base_url);
     if !is_http_url(&url) {
         return Err("查询地址必须是 http(s) URL".to_string());
     }
     let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let headers = crate::probe::provider_auth_headers(api_key, upstream_protocol);
-    let (status, body) = crate::probe::http_get(&url, &headers)?;
+    let headers = crate::probe::provider_auth_headers(api_key, upstream_protocol, authentication)?;
+    let (status, body) = crate::probe::http_get_with_options(&url, &headers, connection)?;
     if status == 401 || status == 403 {
         return Err(format!(
             "服务地址拒绝了 API 密钥（HTTP {status}），请确认密钥仍然有效"

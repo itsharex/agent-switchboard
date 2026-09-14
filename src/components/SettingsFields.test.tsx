@@ -96,4 +96,37 @@ describe("SettingsFields", () => {
     fireEvent.click(restoreGroup);
     expect(onResetGroup).toHaveBeenCalledWith("模型行为");
   });
+
+  it("places a changed visual control's diff directly beneath its buttons or slider", () => {
+    render(
+      <SettingsFields
+        specs={specs}
+        groups={["模型行为", "安全与审批"]}
+        values={{
+          hide_agent_reasoning: { mode: "automatic" },
+          model_reasoning_effort: { mode: "explicit", value: "xhigh" },
+          sandbox_mode: { mode: "automatic" },
+        }}
+        baselineValues={{
+          hide_agent_reasoning: { mode: "automatic" },
+          model_reasoning_effort: { mode: "explicit", value: "minimal" },
+          sandbox_mode: { mode: "explicit", value: "read-only" },
+        }}
+        busy={false}
+        onChange={vi.fn()}
+        onResetGroup={vi.fn()}
+      />,
+    );
+
+    const slider = screen.getByRole("slider", { name: "推理强度" });
+    const sliderDiff = screen.getByRole("list", { name: "推理强度 未保存差异" });
+    expect(sliderDiff).toHaveTextContent("minimal");
+    expect(sliderDiff).toHaveTextContent("xhigh");
+    expect(slider.compareDocumentPosition(sliderDiff) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    const segmentDiff = screen.getByRole("list", { name: "沙箱模式 未保存差异" });
+    expect(segmentDiff).toHaveTextContent("read-only");
+    expect(segmentDiff).toHaveTextContent("移除");
+    expect(screen.queryByRole("list", { name: "隐藏推理摘要 未保存差异" })).toBeNull();
+  });
 });

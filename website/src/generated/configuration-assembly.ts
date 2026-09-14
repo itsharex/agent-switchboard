@@ -109,23 +109,43 @@ export const configurationAssembly = {
         "value": "http://127.0.0.1:47821"
       },
       {
+        "key": "env.ANTHROPIC_DEFAULT_FABLE_MODEL",
+        "value": "asb-claude-fable"
+      },
+      {
+        "key": "env.ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "value": "asb-claude-haiku"
+      },
+      {
+        "key": "env.ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "value": "asb-claude-opus"
+      },
+      {
+        "key": "env.ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "value": "asb-claude-sonnet"
+      },
+      {
         "key": "env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
         "value": "1"
       },
       {
         "key": "model",
-        "value": "Claude Opus 5.1"
+        "value": "asb-claude-primary"
       }
     ],
     "fileName": "settings.json",
     "filePath": "~/.claude/settings.json",
     "codeLines": [
       "{",
-      "  \"model\": \"Claude Opus 5.1\",",
+      "  \"model\": \"asb-claude-primary\",",
       "  \"env\": {",
       "    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:47821\",",
       "    \"ANTHROPIC_AUTH_TOKEN\": \"••••••••\",",
-      "    \"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS\": \"1\"",
+      "    \"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS\": \"1\",",
+      "    \"ANTHROPIC_DEFAULT_HAIKU_MODEL\": \"asb-claude-haiku\",",
+      "    \"ANTHROPIC_DEFAULT_SONNET_MODEL\": \"asb-claude-sonnet\",",
+      "    \"ANTHROPIC_DEFAULT_OPUS_MODEL\": \"asb-claude-opus\",",
+      "    \"ANTHROPIC_DEFAULT_FABLE_MODEL\": \"asb-claude-fable\"",
       "  },",
       "  \"autoCompactEnabled\": true,",
       "  \"effortLevel\": \"high\"",

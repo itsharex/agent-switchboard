@@ -72,16 +72,28 @@ pub(super) fn run_restore(
         operation: WriteOperation::Restore,
     };
     let app = record.app;
-    let candidate = validate_restore_source(state, gateway, record, &target)?;
-    super::transaction::begin(
+    let candidate = validate_restore_source(state, gateway, record)?;
+    let catalog = if app == AppKind::Codex {
+        let projected = gateway
+            .restored_codex_catalog(state, &candidate)
+            .map_err(|error| CommandError::new("backup-catalog-invalid", error))?;
+        super::plan::catalog_artifact(&target, projected.as_ref())?
+    } else {
+        None
+    };
+    let auth = super::codex_restore_auth::intent(state, record, &target, &candidate)?;
+    super::transaction::begin_with_codex_backfill_and_auth(
         state,
         gateway,
         app,
         None,
         &asb_switch::sha256_hex(&candidate),
         record.target_existed,
+        catalog.clone(),
         None,
+        auth,
     )?;
+    super::transaction::stage_catalog(state, gateway, catalog.as_ref())?;
     let execution = restore_projected(&FsIo, record, &target, Some(&candidate), |outcome| {
         gateway.reconcile_restored(state, app, || {
             state
@@ -102,13 +114,15 @@ fn validate_restore_source(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
     record: &BackupRecord,
-    target: &std::path::Path,
 ) -> Result<String, CommandError> {
     let app = record.app;
     if app == AppKind::Codex
         && scan_backups(&FsIo, &state.backup_dir())
             .iter()
-            .any(|candidate| candidate.linked_backup_id.as_deref() == Some(record.id.as_str()))
+            .any(|candidate| {
+                candidate.linked_backup_id.as_deref() == Some(record.id.as_str())
+                    && candidate.reason != "codex-auth-projection"
+            })
     {
         return Err(CommandError::new(
             "backup-contract-retired",
@@ -131,20 +145,5 @@ fn validate_restore_source(
     } else {
         candidate
     };
-    if app == AppKind::Codex
-        && candidate
-            .parse::<toml_edit::DocumentMut>()
-            .ok()
-            .and_then(|doc| {
-                doc.get("openai_base_url")
-                    .and_then(|value| value.as_str())
-                    .map(str::to_owned)
-            })
-            .is_some()
-    {
-        crate::official_login::observation::observe_codex_login_for_config(target, &candidate)
-            .require()
-            .map_err(|error| CommandError::new("codex-official-login-required", error))?;
-    }
     Ok(candidate)
 }

@@ -52,7 +52,7 @@ fn responses_options_round_trip_and_reapply_an_active_provider() {
 #[test]
 fn gateway_requirement_has_one_protocol_and_request_mode_owner() {
     let mut profile = ProviderProfile::from_draft("responses-route".into(), responses_draft());
-    assert!(profile.requires_gateway());
+    assert!(!profile.requires_gateway());
     assert!(!profile.requires_protocol_translation());
     profile.responses_options.as_mut().unwrap().request_mode = ResponsesRequestMode::Minimal;
     assert!(profile.requires_gateway());

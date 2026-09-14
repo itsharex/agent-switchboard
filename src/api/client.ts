@@ -90,7 +90,10 @@ export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> 
  * their public surface so consumers keep importing from "./api/client". */
 export * from "./shared";
 export * from "./usage";
+export * from "./claude-ledger";
 export * from "./providers";
+export * from "./codex-management";
+export * from "./codex-gateway";
 export * from "./provider-request";
 export * from "./switching";
 export * from "./status";
@@ -216,6 +219,11 @@ export function pickDirectory(): Promise<string | null> {
   return invoke<string | null>("pick_directory");
 }
 
+/** Opens the native ZIP file picker and returns the selected absolute path. */
+export function pickSkillZip(): Promise<string | null> {
+  return invoke<string | null>("pick_skill_zip");
+}
+
 export function getWindowMaximized(): Promise<boolean> {
   if (isBrowserDevelopment) return Promise.resolve(false);
   return invoke<boolean>("window_is_maximized");
@@ -225,3 +233,6 @@ export function onWindowResized(handler: () => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return getCurrentWindow().onResized(() => handler());
 }
+
+export * from "./claude-gateway";
+

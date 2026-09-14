@@ -9,7 +9,7 @@ pub const REDACTED: &str = "••••••••";
 
 /// Key fragments that mark a value as secret-shaped. Matched
 /// case-insensitively against the dotted key path.
-const SECRET_MARKERS: &[&str] = &["token", "secret", "api_key", "apikey", "credential", "auth"];
+const SECRET_MARKERS: &[&str] = &["token", "secret", "api_key", "access_key", "apikey", "credential", "auth"];
 
 /// True when a key path names something secret-like.
 pub fn is_secret_key(key: &str) -> bool {

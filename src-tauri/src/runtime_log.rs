@@ -92,6 +92,7 @@ pub enum RuntimeLogAction {
     CloudBackupUploaded,
     CloudBackupRestored,
     SessionResumed,
+    SessionDeleted,
     CcSwitchProfilesImported,
     OfficialLoginCompleted,
 }

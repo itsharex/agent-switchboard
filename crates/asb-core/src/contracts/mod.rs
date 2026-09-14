@@ -4,7 +4,16 @@
 //! This module is the single owner of every field list. Nothing else may
 //! redefine these shapes.
 
+mod claude_provider;
 mod codex;
+mod codex_auth;
+pub use codex_auth::CodexManagedAuth;
+mod codex_request;
+mod money;
+pub use codex_request::{CodexRequestOptions, CodexPromptCacheRouting, CodexAnthropicCacheTtl};
+pub use money::{decimal_micros, format_usd_micros};
+mod connection;
+pub use claude_provider::{ClaudeBilling, ClaudePricingModelSource};
 mod kinds;
 mod model;
 mod plan;
@@ -21,18 +30,25 @@ pub use codex::{
     CodexCatalogEntry, CodexChatEffortMode, CodexChatEffortParameter, CodexChatReasoning,
     CodexChatThinkingParameter, CodexEndpoint, CodexModelRoute, CodexOperation, CodexProviderDraft,
     CodexProviderFile, CodexProviderProfile, CodexProviderRecord, CodexReasoningLevel,
-    CodexRouteSnapshot, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION, CODEX_REASONING_LADDER,
-    DEFAULT_CODEX_CAPABILITIES,
+    CodexRouteMode, CodexRouteSnapshot, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION,
+    CODEX_REASONING_LADDER, DEFAULT_CODEX_CAPABILITIES,
+};
+pub use connection::{
+    ClaudeApiKeyField, LocalProxyRequestOverrides, ProviderAuthBinding, ProviderConnectionOptions,
+    ProviderEndpoint,
 };
 pub use kinds::{AppKind, AuthenticationScheme, GlobalPromptDocument, RouteMode, UpstreamProtocol};
-pub use model::{ClaudeModelSettings, CodexModelSettings, ExplicitMaxOutputTokens, ModelOptions};
+pub use model::{
+    ClaudeModelDisplayNames, ClaudeModelSettings, CodexModelSettings, ExplicitMaxOutputTokens,
+    ModelOptions,
+};
 pub use plan::{
     BackupRecord, ChangeKind, ConfigWriteRecord, KeyChange, MatchStatus, RouteState, SwitchPlan,
     SwitchPreview, WriteOperation,
 };
 pub use provider::{
-    classify_profile_save, ProfileSaveKind, ProviderDraft, ProviderFile, ProviderProfile,
-    ProviderRecord,
+    classify_profile_save, codex_official_draft, ProfileSaveKind, ProviderDraft, ProviderFile,
+    ProviderProfile, ProviderRecord,
 };
 pub use responses::{ResponsesOptions, ResponsesRequestMode};
 pub use settings::{

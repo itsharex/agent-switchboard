@@ -69,6 +69,13 @@
   background: var(--asb-surface-sheet);
 }
 
+/* Keep the previous dialog mounted while a confirmation replaces it. This
+   preserves focus restoration without exposing a second interactive surface. */
+.asb-dialog-backdrop.is-suspended {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* An inline sheet is scoped to the workspace instead of the viewport, so the
    top rail and its navigation stay reachable while the sheet is open. */
 .asb-dialog-backdrop.is-inline {

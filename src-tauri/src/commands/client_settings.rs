@@ -223,6 +223,21 @@ pub async fn preview_client_settings(
     .await
 }
 
+/// Parses an editable client-settings fragment back into the application
+/// preference contract. This is pure: it cannot read or write a real client
+/// configuration file, and provider or host-owned keys are rejected.
+#[tauri::command]
+pub async fn parse_client_settings(
+    target: AppKind,
+    content: String,
+) -> Result<SettingsValues, CommandError> {
+    blocking(move || {
+        asb_core::adapter::parse_client_settings(target, &content)
+            .map_err(|error| CommandError::new("client-settings-parse-failed", error.to_string()))
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +311,21 @@ mod tests {
         assert_eq!(preview.app, AppKind::Codex);
         assert!(preview.target.contains("config.toml"));
         assert!(preview.content.contains("所有客户端设置均为自动"));
+    }
+
+    #[test]
+    fn parser_returns_a_complete_client_draft_without_touching_client_files() {
+        let parsed = tauri::async_runtime::block_on(parse_client_settings(
+            AppKind::Claude,
+            r#"{"spinnerTipsEnabled":true}"#.to_string(),
+        ))
+        .expect("parse");
+        assert_eq!(
+            parsed.settings["spinnerTipsEnabled"],
+            asb_core::contracts::SettingValue::Explicit {
+                value: asb_core::contracts::ConfigValue::Bool(true),
+            }
+        );
+        assert!(parsed.settings.contains_key("autoScrollEnabled"));
     }
 }

@@ -44,6 +44,12 @@ pub(super) fn render_chat_content(parts: &[Part]) -> Result<Value, TransformErro
                 return error("工具内容不能嵌入 Chat 文本内容数组");
             }
             Part::Reasoning(_) => return error("推理内容不能嵌入 Chat 文本内容数组"),
+            Part::Document(document) => values.extend(super::claude_media::render_document(
+                document,
+                UpstreamProtocol::ChatCompletions,
+            )?),
+            Part::ToolReference(tool) => values
+                .push(json!({"type":"text", "text": super::claude_media::reference_text(tool)})),
         }
     }
     Ok(Value::Array(values))
@@ -58,9 +64,7 @@ pub(super) fn render_anthropic_content(parts: &[Part]) -> Result<Value, Transfor
                 "type": "image",
                 "source": { "type": "base64", "media_type": media_type, "data": data },
             })),
-            Part::Image(ImageSource::Url(_)) => {
-                return error("远程图片 URL 无法无损转换到 Anthropic Messages；请使用 base64 图片");
-            }
+            Part::Image(ImageSource::Url(url)) => values.push(json!({"type":"image", "source":{"type":"url", "url":url}})),
             Part::ToolCall {
                 id,
                 name,
@@ -90,6 +94,8 @@ pub(super) fn render_anthropic_content(parts: &[Part]) -> Result<Value, Transfor
                 "is_error": is_error,
             })),
             Part::Reasoning(reasoning) => values.push(replay_anthropic_reasoning(reasoning)?),
+            Part::Document(document) => values.extend(super::claude_media::render_document(document, UpstreamProtocol::AnthropicMessages)?),
+            Part::ToolReference(tool) => values.push(json!({"type":"tool_reference", "tool_name": tool.name})),
         }
     }
     Ok(Value::Array(values))
@@ -108,6 +114,13 @@ pub(super) fn render_responses_content(parts: &[Part]) -> Result<Value, Transfor
                 return error("工具内容不能嵌入 Responses message content");
             }
             Part::Reasoning(_) => return error("推理内容不能嵌入 Responses message content"),
+            Part::Document(document) => values.extend(super::claude_media::render_document(
+                document,
+                UpstreamProtocol::Responses,
+            )?),
+            Part::ToolReference(tool) => values.push(
+                json!({"type":"input_text", "text": super::claude_media::reference_text(tool)}),
+            ),
         }
     }
     Ok(Value::Array(values))

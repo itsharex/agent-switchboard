@@ -2,15 +2,23 @@
 //! executor transaction and records an audit entry so it can be undone.
 
 mod backups;
+pub(crate) mod claude_gateway;
+mod codex_backfill;
+mod codex_restore_auth;
+pub(crate) mod codex_policy;
 mod codex_profile_save;
 mod plan;
+mod projection_transaction;
 mod profile_rollback;
 mod profile_save;
 mod recovery;
+#[cfg(test)]
+mod restore_tests;
 mod transaction;
 #[cfg(test)]
 mod transaction_tests;
 
+pub(crate) use codex_policy::CodexPolicyPreparations;
 pub(crate) use codex_profile_save::CodexProfileSavePreparations;
 pub use profile_save::ProfileSavePreparation;
 pub(crate) use profile_save::ProfileSavePreparations;
@@ -33,7 +41,7 @@ use codex_profile_save::{
     commit as commit_codex_profile_save_data, prepare_data as prepare_codex_profile_save_data,
     PreparedCodexProfileSave,
 };
-use plan::{build_plan, execute_projection, preview_projection};
+use plan::{build_plan, preview_projection};
 use profile_save::{
     commit_prepared_profile_save, invalidate_provider_readings, prepare_profile_save_data,
     PreparedProfileSave,
@@ -42,6 +50,11 @@ use std::path::PathBuf;
 use std::time::Instant;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
+
+#[tauri::command]
+pub async fn cancel_codex_profile_save(app: AppHandle, preparation_id: String) -> Result<(), CommandError> {
+    app.state::<CodexProfileSavePreparations>().cancel(&preparation_id)
+}
 
 /// Validates a draft and binds it to one one-shot server-side preparation. No
 /// provider or client file is modified here.
@@ -258,6 +271,9 @@ pub async fn execute_switch(
     expected_hash: String,
     expected_rendered_hash: String,
     confirm_write: bool,
+    auth_hash: Option<String>,
+    auth_existed: Option<bool>,
+    auth_rendered_hash: Option<String>,
 ) -> Result<SwitchOutcome, CommandError> {
     observe(RuntimeLogAction::ConfigurationSwitched, async move {
         require_write_confirmation(confirm_write, "写入配置")?;
@@ -273,12 +289,15 @@ pub async fn execute_switch(
                 .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
             ensure_profile_save_recovered(&app)?;
             let projection = build_plan(&state, &gateway, &profile_id)?;
-            let outcome = execute_projection(
+            let outcome = plan::execute_projection_with_auth(
                 &state,
                 &gateway,
                 &projection,
                 &expected_hash,
                 &expected_rendered_hash,
+                auth_hash.as_deref(),
+                auth_existed,
+                auth_rendered_hash.as_deref(),
             )?;
             crate::tray::refresh(&app);
             Ok(outcome)

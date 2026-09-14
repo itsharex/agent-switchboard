@@ -28,16 +28,8 @@ pub(super) fn build_codex_plan(
     gateway: &crate::gateway::GatewayController,
     file: asb_core::contracts::CodexProviderFile,
 ) -> Result<crate::gateway::GatewayProjection, CommandError> {
-    let target = state
-        .target(AppKind::Codex)
-        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    crate::official_login::observation::require_codex_login(&target)
-        .map_err(|error| CommandError::new("codex-official-login-required", error))?;
-    let client_settings = state
-        .configuration()
-        .get_client_settings(AppKind::Codex)
-        .map_err(store_error)?
-        .settings;
+    let client_settings = crate::codex_common::resolve(state, &file.profile.id)
+        .map_err(|error| CommandError::new("codex-common-config-invalid", error))?;
     gateway
         .project_codex(&file, client_settings)
         .map_err(|error| CommandError::new("gateway-projection-invalid", error))
@@ -48,23 +40,25 @@ pub(super) fn build_plan_for_profile(
     gateway: &crate::gateway::GatewayController,
     profile: ProviderProfile,
 ) -> Result<crate::gateway::GatewayProjection, CommandError> {
-    let client_settings = state
-        .configuration()
-        .get_client_settings(profile.app)
-        .map_err(store_error)?
-        .settings;
-    if profile.app == AppKind::Codex && profile.route_mode == asb_core::RouteMode::Custom {
-        let target = state
-            .target(AppKind::Codex)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        crate::official_login::observation::require_codex_login(&target)
+    let client_settings = if profile.app == AppKind::Codex {
+        crate::codex_common::resolve(state, &profile.id)
+            .map_err(|error| CommandError::new("codex-common-config-invalid", error))?
+    } else {
+        state
+            .configuration()
+            .get_client_settings(profile.app)
+            .map_err(store_error)?
+            .settings
+    };
+    let mut plan = SwitchPlan::direct(profile, client_settings);
+    if plan.app() == AppKind::Codex && plan.profile.route_mode == asb_core::RouteMode::Official {
+        plan = crate::codex_auth::projection::official_plan(state, plan)
             .map_err(|error| CommandError::new("codex-official-login-required", error))?;
     }
-    let plan = SwitchPlan::direct(profile, client_settings);
     asb_core::validate_plan(&plan.profile, &plan.client_settings)
         .map_err(|error| CommandError::new("invalid-plan", error.to_string()))?;
     gateway
-        .project(&plan)
+        .project_with_candidates(state, &plan)
         .map_err(|error| CommandError::new("gateway-projection-invalid", error))
 }
 
@@ -79,6 +73,23 @@ pub(super) fn preview_projection(
     let backup_dir = state.backup_dir();
     let mut preview = read_preview(&FsIo, &target, plan, &backup_dir.to_string_lossy())
         .map_err(CommandError::from)?;
+    if plan.app() == AppKind::Codex && plan.profile.route_mode == asb_core::RouteMode::Custom {
+        preview
+            .preview
+            .warnings
+            .push(if plan.codex_preserve_official_login() {
+                "第三方认证与 ChatGPT 登录分开；保留现有官方令牌，缺少登录时网关使用本机专用凭据"
+                    .into()
+            } else {
+                "已选择不保留官方登录：本次切换会备份并移除 auth.json 中的 OAuth 令牌".into()
+            });
+    }
+    if plan.codex_managed_auth().is_some() {
+        preview.preview.warnings.push(
+            "将使用绑定的 Codex 托管账号；认证文件独立备份、校验并可恢复，令牌不会显示在预览中"
+                .into(),
+        );
+    }
     if let Some(warning) = projection.warning() {
         preview.preview.warnings.push(warning.to_string());
     }
@@ -107,69 +118,116 @@ pub(super) fn execute_projection(
     expected_hash: &str,
     expected_rendered_hash: &str,
 ) -> Result<asb_switch::SwitchOutcome, CommandError> {
+    let auth_preview = if projection.plan.app() == AppKind::Codex {
+        let target = state
+            .target(AppKind::Codex)
+            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+        let preview = read_preview(
+            &FsIo,
+            &target,
+            &projection.plan,
+            &state.backup_dir().to_string_lossy(),
+        )
+        .map_err(CommandError::from)?;
+        if preview.content_hash != expected_hash || preview.rendered_hash != expected_rendered_hash
+        {
+            return Err(CommandError::new(
+                "switch-stale",
+                "Codex 配置预览已失效，请重新查看差异",
+            ));
+        }
+        Some(preview)
+    } else {
+        None
+    };
+    execute_projection_with_auth(
+        state,
+        gateway,
+        projection,
+        expected_hash,
+        expected_rendered_hash,
+        auth_preview
+            .as_ref()
+            .and_then(|preview| preview.auth_hash.as_deref()),
+        auth_preview
+            .as_ref()
+            .and_then(|preview| preview.auth_existed),
+        auth_preview
+            .as_ref()
+            .and_then(|preview| preview.auth_rendered_hash.as_deref()),
+    )
+}
+
+pub(super) fn execute_projection_with_auth(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+    projection: &crate::gateway::GatewayProjection,
+    expected_hash: &str,
+    expected_rendered_hash: &str,
+    expected_auth_hash: Option<&str>,
+    expected_auth_existed: Option<bool>,
+    expected_auth_rendered_hash: Option<&str>,
+) -> Result<asb_switch::SwitchOutcome, CommandError> {
     let plan = &projection.plan;
+    let _account_guard = plan
+        .codex_managed_auth()
+        .map(|auth| {
+            crate::codex_auth::projection::commit_guard(state.root(), &plan.profile.id, auth)
+                .map_err(|error| CommandError::new("codex-account-preview-stale", error))
+        })
+        .transpose()?;
     let target = state
         .target(plan.app())
         .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    if plan.app() == AppKind::Codex && plan.profile.route_mode == asb_core::RouteMode::Custom {
-        crate::official_login::observation::require_codex_login(&target)
+    if plan.app() == AppKind::Codex
+        && plan.profile.route_mode == asb_core::RouteMode::Official
+        && plan.codex_managed_auth().is_none()
+    {
+        crate::codex_auth::projection::require_native(&target)
             .map_err(|error| CommandError::new("codex-official-login-required", error))?;
     }
-    let catalog = match (plan.app(), plan.profile.route_mode) {
-        (AppKind::Codex, asb_core::RouteMode::Custom) => catalog_artifact(&target, projection)?,
-        (AppKind::Codex, asb_core::RouteMode::Official) => official_catalog_artifact(&target)?,
-        (AppKind::Claude, _) => None,
-    };
-    let profile_id = (plan.profile.route_mode == asb_core::RouteMode::Custom)
-        .then_some(plan.profile.id.as_str());
-    super::transaction::begin(
+    let auth = super::projection_transaction::auth_intent(
+        expected_auth_hash,
+        expected_auth_existed,
+        expected_auth_rendered_hash,
+    )?;
+    super::projection_transaction::begin(
         state,
         gateway,
-        plan.app(),
-        profile_id,
+        projection,
+        &target,
+        expected_hash,
         expected_rendered_hash,
-        true,
-        catalog.clone(),
+        auth,
     )?;
-    if let Some(catalog) = catalog.as_ref() {
-        if let Err(error) = super::transaction::apply_catalog_artifact(catalog) {
-            super::transaction::recover(state, gateway)
-                .map_err(|recovery| CommandError::new("config-recovery-required", recovery))?;
-            return Err(error);
-        }
-    }
-    let execution = asb_switch::execute(
-        &FsIo,
-        &asb_switch::SwitchRequest {
-            target: &target,
-            plan,
-            backup_dir: &state.backup_dir(),
-            expected_hash,
-            expected_rendered_hash,
-        },
-        |outcome| {
-            gateway.commit(projection, || {
-                state
-                    .configuration()
-                    .record_config_write(asb_core::ConfigWriteRecord {
-                        app: plan.app(),
-                        profile_id: profile_id.map(str::to_string),
-                        profile_name: profile_id.map(|_| plan.profile.name.clone()),
-                        content_hash: outcome.final_hash.clone(),
-                        backup_id: outcome.backup.id.clone(),
-                        at: outcome.backup.created_at.clone(),
-                        operation: asb_core::WriteOperation::Projection,
-                    })
-                    .map_err(|error| error.to_string())
-            })
-        },
-    );
+    let request = asb_switch::SwitchRequest {
+        target: &target,
+        plan,
+        backup_dir: &state.backup_dir(),
+        expected_hash,
+        expected_rendered_hash,
+    };
+    let commit = |outcome: &asb_switch::SwitchOutcome| {
+        super::projection_transaction::commit(state, gateway, projection, outcome)
+    };
+    let execution = if plan.app() == AppKind::Codex {
+        asb_switch::execute_codex(
+            &FsIo,
+            &request,
+            expected_auth_hash,
+            expected_auth_existed,
+            expected_auth_rendered_hash,
+            commit,
+        )
+    } else {
+        asb_switch::execute(&FsIo, &request, commit)
+    };
     let mut outcome = super::transaction::finish(state, gateway, execution)?;
     outcome.preview.target = target.to_string_lossy().into_owned();
     Ok(outcome)
 }
 
-fn official_catalog_artifact(
+pub(super) fn official_catalog_artifact(
     config_target: &Path,
 ) -> Result<Option<super::transaction::CatalogArtifact>, CommandError> {
     let text = match fs::read_to_string(config_target) {
@@ -218,11 +276,11 @@ fn official_catalog_artifact(
     )))
 }
 
-fn catalog_artifact(
+pub(super) fn catalog_artifact(
     config_target: &Path,
-    projection: &crate::gateway::GatewayProjection,
+    catalog: Option<&crate::gateway::CodexCatalogProjection>,
 ) -> Result<Option<super::transaction::CatalogArtifact>, CommandError> {
-    let Some(catalog) = &projection.codex_catalog else {
+    let Some(catalog) = catalog else {
         return Ok(None);
     };
     let directory = config_target
@@ -268,6 +326,8 @@ mod tests {
             name: "relay".to_string(),
             endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
             api_key: "fixture-key".to_string(),
+            authentication: None,
+            connection: Default::default(),
             upstream: CodexUpstream::Responses,
             request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
             default_model: "fixture-model".to_string(),
@@ -286,6 +346,10 @@ mod tests {
                 ],
                 images: true,
                 compact: true,
+                display_name: None,
+                description: None,
+                base_instructions: None,
+                supports_parallel_tool_calls: None,
             }],
             model_routes: vec![CodexModelRoute {
                 client_model: "fixture-model".to_string(),
@@ -314,14 +378,17 @@ mod tests {
     }
 
     #[test]
-    fn third_party_preflight_requires_official_login_without_writing_config() {
+    fn third_party_preflight_does_not_require_official_login_or_write_auth() {
         let _paths = crate::test_client_paths::redirect_client_paths();
         let directory = tempfile::tempdir().unwrap();
         let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
         let gateway = crate::gateway::GatewayController::start(&state);
         let target = state.target(AppKind::Codex).unwrap();
-        let file = codex_file();
-        assert!(build_codex_plan(&state, &gateway, file.clone()).is_err());
+        let mut file = codex_file();
+        file.profile.upstream = CodexUpstream::ChatCompletions;
+        file.profile.route_mode = asb_core::contracts::CodexRouteMode::Gateway;
+        let projection = build_codex_plan(&state, &gateway, file.clone()).unwrap();
+        assert!(projection.plan.is_gateway());
         assert!(!target.exists());
         let auth = target.parent().unwrap().join("auth.json");
         for value in [
@@ -329,18 +396,18 @@ mod tests {
             r#"{"auth_mode":"apikey","tokens":{"access_token":"residue"}}"#,
         ] {
             std::fs::write(&auth, value).unwrap();
-            assert!(build_codex_plan(&state, &gateway, file.clone()).is_err());
+            let projection = build_codex_plan(&state, &gateway, file.clone()).unwrap();
+            assert!(projection.plan.is_gateway());
             assert_eq!(std::fs::read_to_string(&auth).unwrap(), value);
             assert!(!target.exists());
         }
-        let official = r#"{"auth_mode":"chatgpt","tokens":{"access_token":"at","refresh_token":"rt","id_token":"id"}}"#;
-        std::fs::write(&auth, official).unwrap();
-        let projection = build_codex_plan(&state, &gateway, file).unwrap();
-        assert!(projection.plan.is_gateway());
         let preview = preview_projection(&state, &projection).unwrap();
         assert!(!preview.content.contains("fixture-key"));
         assert!(!target.exists());
-        assert_eq!(std::fs::read_to_string(&auth).unwrap(), official);
+        assert_eq!(
+            std::fs::read_to_string(&auth).unwrap(),
+            r#"{"auth_mode":"apikey","tokens":{"access_token":"residue"}}"#
+        );
         gateway.shutdown();
     }
 

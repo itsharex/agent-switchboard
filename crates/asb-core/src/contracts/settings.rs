@@ -81,6 +81,8 @@ impl<'de> Deserialize<'de> for SettingValue {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingsValues {
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub claude_extra: crate::claude_common::Extra,
     pub settings: BTreeMap<String, SettingValue>,
 }
 

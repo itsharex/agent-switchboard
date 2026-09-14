@@ -1,19 +1,22 @@
 use super::*;
 
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, CodexModelSettings, ModelOptions, RouteMode, UpstreamProtocol,
-    UsageQuery,
+    AppKind, ClaudeModelSettings, CodexModelSettings, ModelOptions, ProviderConnectionOptions,
+    ProviderEndpoint, RouteMode, UpstreamProtocol, UsageQuery,
 };
 use crate::validate::error::MAX_NOTES_LEN;
+use std::collections::BTreeMap;
 
 pub(super) fn profile(app: AppKind) -> ProviderProfile {
     ProviderProfile {
+        authentication: None,
         id: "p1".into(),
         app,
         route_mode: RouteMode::Custom,
         name: "Relay A".into(),
         model: Some("m-1".into()),
         base_url: Some("https://example.internal/v1".into()),
+        connection: Default::default(),
         api_key: "test-api-key".into(),
         upstream_protocol: Some(UpstreamProtocol::Responses),
         responses_options: Some(crate::contracts::ResponsesOptions {
@@ -64,6 +67,26 @@ fn rejects_non_http_base_url() {
     let mut p = profile(AppKind::Codex);
     p.base_url = Some("example.internal".into());
     assert!(matches!(p.validate(), Err(ValidationError::BadBaseUrl(_))));
+}
+
+#[test]
+fn rejects_invalid_custom_endpoint_keys_because_keys_are_request_targets() {
+    let mut p = profile(AppKind::Claude);
+    let mut endpoints = BTreeMap::new();
+    endpoints.insert(
+        "not-a-url".to_string(),
+        ProviderEndpoint {
+            url: "https://valid.example/messages".to_string(),
+            added_at: 0,
+            last_used: None,
+        },
+    );
+    p.connection = ProviderConnectionOptions {
+        is_full_url: true,
+        custom_endpoints: endpoints,
+        ..Default::default()
+    };
+    assert!(matches!(p.validate(), Err(ValidationError::BadFullUrl(_))));
 }
 
 #[test]
@@ -154,6 +177,12 @@ fn codex_anthropic_routes_require_an_explicit_positive_output_limit() {
 fn rejects_model_options_that_do_not_match_the_app() {
     let mut p = profile(AppKind::Codex);
     p.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: false,
         haiku_model: None,
         sonnet_model: None,
@@ -178,6 +207,12 @@ fn rejects_zero_context_window_and_blank_available_models() {
 
     let mut c = profile(AppKind::Claude);
     c.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: false,
         haiku_model: None,
         sonnet_model: None,
@@ -193,6 +228,12 @@ fn rejects_zero_context_window_and_blank_available_models() {
 fn claude_one_m_is_explicit_and_model_identifiers_are_marker_free() {
     let mut primary = profile(AppKind::Claude);
     primary.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: true,
         haiku_model: None,
         sonnet_model: None,
@@ -218,6 +259,12 @@ fn claude_one_m_is_explicit_and_model_identifiers_are_marker_free() {
     let mut missing_primary = profile(AppKind::Claude);
     missing_primary.model = None;
     missing_primary.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: true,
         haiku_model: None,
         sonnet_model: None,
@@ -233,6 +280,12 @@ fn claude_one_m_is_explicit_and_model_identifiers_are_marker_free() {
 
     let mut mappings = profile(AppKind::Claude);
     mappings.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: false,
         haiku_model: Some("haiku[1m]".into()),
         sonnet_model: Some("sonnet".into()),
@@ -247,6 +300,12 @@ fn claude_one_m_is_explicit_and_model_identifiers_are_marker_free() {
     );
 
     mappings.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: false,
         haiku_model: None,
         sonnet_model: None,

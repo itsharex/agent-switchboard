@@ -52,6 +52,7 @@ fn http_current() -> McpDefinition {
 fn empty_request_keeps_everything_including_unshown_sensitive_values() {
     let request = McpEditRequest {
         expected_revision: 3,
+        mcp_metadata: None,
         server_key: None,
         transport: None,
         fields: McpFieldEdits::default(),
@@ -83,6 +84,7 @@ fn replaces_renames_and_deletes_each_editable_field() {
     );
     let request = McpEditRequest {
         expected_revision: 1,
+        mcp_metadata: None,
         server_key: Some("docs_v2".to_string()),
         transport: None,
         fields: McpFieldEdits {
@@ -134,6 +136,7 @@ fn http_fields_replace_and_delete() {
     );
     let request = McpEditRequest {
         expected_revision: 2,
+        mcp_metadata: None,
         server_key: None,
         transport: None,
         fields: McpFieldEdits {
@@ -165,6 +168,7 @@ fn required_positions_cannot_be_deleted() {
     for request in [
         McpEditRequest {
             expected_revision: 1,
+            mcp_metadata: None,
             server_key: None,
             transport: None,
             fields: McpFieldEdits {
@@ -174,6 +178,7 @@ fn required_positions_cannot_be_deleted() {
         },
         McpEditRequest {
             expected_revision: 1,
+            mcp_metadata: None,
             server_key: None,
             transport: None,
             fields: McpFieldEdits {
@@ -196,6 +201,7 @@ fn required_positions_cannot_be_deleted() {
 fn inapplicable_field_edits_are_rejected_per_transport() {
     let request = McpEditRequest {
         expected_revision: 1,
+        mcp_metadata: None,
         server_key: None,
         transport: None,
         fields: McpFieldEdits {
@@ -218,6 +224,7 @@ fn inapplicable_field_edits_are_rejected_per_transport() {
     );
     let request = McpEditRequest {
         expected_revision: 1,
+        mcp_metadata: None,
         server_key: None,
         transport: None,
         fields: McpFieldEdits {
@@ -236,6 +243,7 @@ fn transport_switch_replaces_the_variant_and_rejects_field_edits() {
     };
     let request = McpEditRequest {
         expected_revision: 1,
+        mcp_metadata: None,
         server_key: None,
         transport: Some(replacement.clone()),
         fields: McpFieldEdits::default(),
@@ -259,6 +267,7 @@ fn transport_switch_replaces_the_variant_and_rejects_field_edits() {
 fn server_keys_are_validated_on_change() {
     let request = McpEditRequest {
         expected_revision: 1,
+        mcp_metadata: None,
         server_key: Some("not a key".to_string()),
         transport: None,
         fields: McpFieldEdits::default(),
@@ -300,6 +309,7 @@ fn synthesized_definitions_must_pass_whole_validation() {
     // A replacement URL that is not http(s) fails the unified validator.
     let request = McpEditRequest {
         expected_revision: 1,
+        mcp_metadata: None,
         server_key: None,
         transport: None,
         fields: McpFieldEdits {
@@ -322,6 +332,7 @@ fn synthesized_definitions_must_pass_whole_validation() {
     );
     let request = McpEditRequest {
         expected_revision: 1,
+        mcp_metadata: None,
         server_key: None,
         transport: None,
         fields: McpFieldEdits {

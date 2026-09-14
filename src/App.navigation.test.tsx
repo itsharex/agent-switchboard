@@ -101,12 +101,12 @@ describe("workspace navigation", () => {
     expect(screen.getByRole("region", { name: "偏好设置" })).toBeVisible();
   });
 
-  it("saves preferences, requests a fresh complete preview, and still requires confirmation", async () => {
+  it("saves preferences into a read-only preview and only confirms after explicit activation", async () => {
     primeActiveProvider();
     const previews = vi
       .spyOn(client, "previewSwitch")
       .mockResolvedValueOnce(filePreview)
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         ...filePreview,
         renderedHash: "fresh-rendered-hash",
       });
@@ -135,10 +135,12 @@ describe("workspace navigation", () => {
     expect(
       invokeMock.mock.calls.some(([command]) => command === "execute_switch"),
     ).toBe(false);
-    await user.click(screen.getByRole("button", { name: "确认切换" }));
+    expect(screen.queryByRole("dialog", { name: "确认切换" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "启用 备用网关" }));
     const confirmation = await screen.findByRole("dialog", {
       name: "确认切换",
     });
+    expect(previews).toHaveBeenCalledTimes(3);
     await user.click(
       within(confirmation).getByRole("button", { name: "确认切换" }),
     );
@@ -152,7 +154,7 @@ describe("workspace navigation", () => {
     );
   });
 
-  it("saves Codex preferences and opens the specialized Codex confirmation preview", async () => {
+  it("saves Codex preferences into the existing inline preview before confirmation", async () => {
     primeActiveCodexProvider();
     const user = userEvent.setup();
     render(<App />);
@@ -174,8 +176,9 @@ describe("workspace navigation", () => {
     });
     expect(invokeMock.mock.calls.filter(([command]) => command === "preview_switch")).toHaveLength(1);
     expect(invokeMock.mock.calls.some(([command]) => command === "execute_switch")).toBe(false);
-
-    await user.click(screen.getByRole("button", { name: "确认切换" }));
+    expect(screen.queryByRole("dialog", { name: "确认切换" })).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("region", { name: "变更预览" }))
+      .getByRole("button", { name: "确认切换" }));
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("execute_switch", {
         profileId: codexProfiles[0].profile.id,
@@ -184,6 +187,7 @@ describe("workspace navigation", () => {
         confirmWrite: true,
       }),
     );
+    expect(invokeMock.mock.calls.filter(([command]) => command === "preview_switch")).toHaveLength(1);
   });
 
   it("keeps a failed preference draft in place and never advances to an apply preview", async () => {
@@ -279,10 +283,11 @@ describe("workspace navigation", () => {
       name: "供应商客户端",
     });
     expect(within(picker).getByRole("radio", { name: "Claude" })).toBeChecked();
-    expect(screen.getByRole("option", { name: /备用网关/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    // Selection is presentational now: the saved row keeps the selected
+    // highlight class (2026-09-12).
+    expect(
+      screen.getByText(/备用网关/, { selector: ".asb-row-name" }).closest("li"),
+    ).toHaveClass("is-selected");
   });
 
   it("retains the supplier edit target, revision and draft while another workspace changes clients", async () => {

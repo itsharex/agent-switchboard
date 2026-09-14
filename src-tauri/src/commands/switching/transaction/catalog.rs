@@ -71,6 +71,20 @@ pub(super) fn verify_catalog_after(intent: &SwitchIntent) -> Result<(), String> 
     }
 }
 
+pub(in super::super) fn stage_catalog(
+    state: &LocalState,
+    gateway: &GatewayController,
+    catalog: Option<&CatalogArtifact>,
+) -> Result<(), CommandError> {
+    if let Some(catalog) = catalog {
+        if let Err(failure) = apply_catalog_artifact(catalog) {
+            super::recover(state, gateway).map_err(super::error)?;
+            return Err(failure);
+        }
+    }
+    Ok(())
+}
+
 pub(in super::super) fn apply_catalog_artifact(
     catalog: &CatalogArtifact,
 ) -> Result<(), CommandError> {
@@ -117,6 +131,8 @@ mod tests {
                 before.map(str::to_string),
                 after.map(str::to_string),
             )),
+            codex_backfill: None,
+            auth: None,
         }
     }
 

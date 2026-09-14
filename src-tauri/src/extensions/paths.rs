@@ -12,10 +12,7 @@ use asb_core::contracts::AppKind;
 /// The Codex configuration document: `$CODEX_HOME/config.toml` or
 /// `~/.codex/config.toml`.
 pub fn codex_config_path(home: &Path, codex_home: Option<&Path>) -> PathBuf {
-    match codex_home {
-        Some(directory) => directory.join("config.toml"),
-        None => home.join(".codex").join("config.toml"),
-    }
+    crate::local_state::codex_paths::root_in_home(home, codex_home).join("config.toml")
 }
 
 /// The Claude user document holding `mcpServers` and `projects`: the

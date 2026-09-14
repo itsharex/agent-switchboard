@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
     AppKind, AuthenticationScheme, CodexModelSettings, ProviderProfile, RouteMode, SettingsValues,
-    UpstreamProtocol,
 };
 
 /// The full side-effect-free input for one switch.
@@ -16,6 +15,9 @@ pub struct SwitchPlan {
     pub client_settings: SettingsValues,
     client_route: ClientRoute,
     codex_model_catalog: Option<String>,
+    codex_managed_auth: Option<super::CodexManagedAuth>,
+    codex_preserve_official_login: bool,
+    claude_route_revision: Option<String>,
 }
 #[derive(Clone, PartialEq, Eq)]
 enum ClientRoute {
@@ -43,6 +45,9 @@ impl SwitchPlan {
             client_settings,
             client_route: ClientRoute::Direct,
             codex_model_catalog: None,
+            codex_managed_auth: None,
+            codex_preserve_official_login: true,
+            claude_route_revision: None,
         }
     }
 
@@ -62,6 +67,9 @@ impl SwitchPlan {
                 bearer_token,
             },
             codex_model_catalog: None,
+            codex_managed_auth: None,
+            codex_preserve_official_login: true,
+            claude_route_revision: None,
         }
     }
     /// Adds the relative `model_catalog_json` pointer owned by a Codex
@@ -71,21 +79,62 @@ impl SwitchPlan {
         self
     }
 
+    pub fn with_codex_preserve_official_login(mut self, preserve: bool) -> Self {
+        self.codex_preserve_official_login = preserve;
+        self
+    }
+    pub fn codex_preserve_official_login(&self) -> bool {
+        self.codex_preserve_official_login
+    }
+    pub fn codex_gateway_credential(&self) -> Option<&str> {
+        if self.profile.app != AppKind::Codex {
+            return None;
+        }
+        match &self.client_route {
+            ClientRoute::Gateway { bearer_token, .. } => Some(if bearer_token.is_empty() {
+                "asb-local-gateway"
+            } else {
+                bearer_token
+            }),
+            ClientRoute::Direct => None,
+        }
+    }
+
+    pub fn with_codex_managed_auth(mut self, auth: super::CodexManagedAuth) -> Self {
+        self.codex_managed_auth = Some(auth);
+        self
+    }
+
+    pub fn codex_managed_auth(&self) -> Option<&super::CodexManagedAuth> {
+        self.codex_managed_auth.as_ref()
+    }
+
     pub fn codex_model_catalog(&self) -> Option<&str> {
         self.codex_model_catalog.as_deref()
+    }
+
+    /// A local restore discriminator, never used to authorize client requests.
+    /// The bearer capability remains stable across Claude provider switches.
+    pub fn with_claude_route_revision(mut self, revision: String) -> Self {
+        self.claude_route_revision = Some(revision);
+        self
+    }
+
+    pub fn claude_route_revision(&self) -> Option<&str> {
+        self.claude_route_revision.as_deref()
     }
 
     /// Credential delivery used by the client configuration written for this
     /// execution plan. It is absent for official logins.
     pub fn client_authentication(&self) -> Option<AuthenticationScheme> {
-        if self.profile.app == AppKind::Codex || self.profile.route_mode != RouteMode::Custom {
+        if self.profile.app == AppKind::Codex
+            || self.profile.route_mode != RouteMode::Custom
+            || self.profile.connection.claude_native.is_some()
+        {
             return None;
         }
         match &self.client_route {
-            ClientRoute::Direct => self
-                .profile
-                .upstream_protocol
-                .map(UpstreamProtocol::authentication_scheme),
+            ClientRoute::Direct => self.profile.upstream_authentication(),
             ClientRoute::Gateway { .. } => Some(AuthenticationScheme::Bearer),
         }
     }

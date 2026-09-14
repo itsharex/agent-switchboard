@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { Button } from "../Button";
 import { CloseIcon } from "../icons";
@@ -12,6 +12,19 @@ interface Props {
   wide?: boolean;
 }
 
+const ExtensionDialogSuspensionContext = createContext(false);
+
+export function ExtensionDialogSuspension({ suspended, children }: {
+  suspended: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <ExtensionDialogSuspensionContext.Provider value={suspended}>
+      {children}
+    </ExtensionDialogSuspensionContext.Provider>
+  );
+}
+
 /**
  * The app's modal wrapper. Structure and geometry belong to the `.asb-dialog*`
  * skeleton in styles/base/overlays.css — this component only supplies React
@@ -19,6 +32,7 @@ interface Props {
  * dialog in the app lands on one anatomy and one of three widths.
  */
 export function ExtensionDialog({ title, busy, onClose, children, footer, wide = false }: Props) {
+  const suspended = useContext(ExtensionDialogSuspensionContext);
   return (
     <ModalOverlay
       isOpen
@@ -27,7 +41,8 @@ export function ExtensionDialog({ title, busy, onClose, children, footer, wide =
       onOpenChange={(open) => {
         if (!open && !busy) onClose();
       }}
-      className="asb-dialog-backdrop"
+      aria-hidden={suspended || undefined}
+      className={`asb-dialog-backdrop${suspended ? " is-suspended" : ""}`}
     >
       <Modal className={`asb-dialog${wide ? " is-wide" : ""}`}>
         <Dialog aria-label={title} className="asb-dialog-surface">

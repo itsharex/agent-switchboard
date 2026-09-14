@@ -1,8 +1,10 @@
 use super::*;
 
 use crate::adapter::codex::document::{item_at, item_repr};
-use crate::contracts::{ChangeKind, ConfigValue, RouteMode, SettingValue, SwitchPlan};
-use crate::contracts::{CodexModelSettings, ModelOptions, ProviderProfile, UpstreamProtocol};
+use crate::contracts::{
+    ChangeKind, ConfigValue, RouteMode, SettingValue, SwitchPlan, UpstreamProtocol,
+};
+use crate::contracts::{CodexModelSettings, ModelOptions, ProviderProfile};
 use crate::ownership::{default_client_settings, default_provider_parameters};
 use crate::ownership::{
     CODEX_PROVIDER_BASE_URL_KEY, CODEX_SUBAGENT_MODEL_KEY, CODEX_SUBAGENT_REASONING_EFFORT_KEY,
@@ -17,12 +19,14 @@ mod responses;
 fn plan_b() -> SwitchPlan {
     SwitchPlan::through_gateway(
         ProviderProfile {
+            authentication: None,
             id: "p2".into(),
             app: AppKind::Codex,
             route_mode: crate::contracts::RouteMode::Custom,
             name: "Relay B".into(),
             model: Some("gpt-5.2".into()),
             base_url: Some("https://relay-b.internal/v1".into()),
+            connection: Default::default(),
             api_key: "CODEX_RELAY_B_KEY".into(),
             upstream_protocol: Some(UpstreamProtocol::Responses),
             responses_options: Some(crate::contracts::ResponsesOptions {
@@ -397,9 +401,12 @@ wire_api = "responses"
 "#;
     let state = route_state(external);
     assert_eq!(state.route_mode, RouteMode::Custom);
-    assert_eq!(state.provider_name.as_deref(), Some("gateway"));
-    assert!(state.base_url.is_none());
-    assert!(state.wire_api.is_none());
+    assert_eq!(state.provider_name.as_deref(), Some("Gateway"));
+    assert_eq!(
+        state.base_url.as_deref(),
+        Some("https://gateway.internal/v1")
+    );
+    assert_eq!(state.wire_api.as_deref(), Some("responses"));
 }
 
 #[test]

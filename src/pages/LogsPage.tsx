@@ -13,6 +13,7 @@ import { RadioOption } from "../components/RadioOption";
 import { Select } from "../components/Select";
 import { Table, type TableColumn } from "../components/Table";
 import { Time } from "../components/Time";
+import { ModuleHeader } from "../components/WorkspaceHeader";
 import { SearchIcon } from "../components/icons";
 
 type LevelFilter = "all" | RuntimeLogSeverity;
@@ -53,6 +54,7 @@ const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   cloudBackupUploaded: "已上传云端备份",
   cloudBackupRestored: "已恢复云端备份",
   sessionResumed: "已恢复会话",
+  sessionDeleted: "已删除会话",
   ccSwitchProfilesImported: "已导入 CC Switch 档案",
   officialLoginCompleted: "已完成官方登录",
 };
@@ -145,48 +147,50 @@ export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
 
   return (
     <section className="asb-panel asb-runtime-logs" aria-label="日志">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">日志</h2>
-        <div className="asb-panel-actions">
-          <div className="asb-runtime-log-level-control">
-            <span className="asb-runtime-log-level-label">记录级别</span>
-            <Select
-              value={logLevel}
-              options={LOG_LEVEL_OPTIONS}
-              ariaLabel="记录级别"
-              placeholder="加载中"
-              disabled={busy || logLevel === null}
-              onChange={(level) => onLogLevelChange(level as RuntimeLogLevel)}
-            />
-          </div>
-          <div className="asb-segments" role="radiogroup" aria-label="日志级别筛选">
-            {LEVEL_FILTERS.map((option) => (
-              <RadioOption
-                key={option.value}
-                name="runtime-log-level-filter"
-                checked={filter === option.value}
-                disabled={false}
-                label={option.label}
-                onChange={() => setFilter(option.value)}
+      <ModuleHeader
+        title="日志"
+        secondary={
+          <>
+            <div className="asb-runtime-log-level-control">
+              <span className="asb-runtime-log-level-label">记录级别</span>
+              <Select
+                value={logLevel}
+                options={LOG_LEVEL_OPTIONS}
+                ariaLabel="记录级别"
+                placeholder="加载中"
+                disabled={busy || logLevel === null}
+                onChange={(level) => onLogLevelChange(level as RuntimeLogLevel)}
               />
-            ))}
-          </div>
-          <Button
-            variant="secondary"
-            disabled={loading}
-            onClick={() => void refresh()}
-          >
-            {loading ? "刷新中" : "刷新"}
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={openingFolder}
-            onClick={() => void openLogDirectory()}
-          >
-            {openingFolder ? "打开中" : "打开日志文件夹"}
-          </Button>
-        </div>
-      </div>
+            </div>
+            <div className="asb-segments" role="radiogroup" aria-label="日志级别筛选">
+              {LEVEL_FILTERS.map((option) => (
+                <RadioOption
+                  key={option.value}
+                  name="runtime-log-level-filter"
+                  checked={filter === option.value}
+                  disabled={false}
+                  label={option.label}
+                  onChange={() => setFilter(option.value)}
+                />
+              ))}
+            </div>
+            <Button
+              variant="secondary"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              {loading ? "刷新中" : "刷新"}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={openingFolder}
+              onClick={() => void openLogDirectory()}
+            >
+              {openingFolder ? "打开中" : "打开日志文件夹"}
+            </Button>
+          </>
+        }
+      />
       {error && (
         <p className="asb-runtime-log-notice" role="alert">
           无法读取应用日志：{error.message}

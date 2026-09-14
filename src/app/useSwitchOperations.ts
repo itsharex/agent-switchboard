@@ -20,7 +20,7 @@ interface SwitchOperationDeps {
   onError: (error: CommandError) => void;
   clearError: () => void;
   setBusy: (busy: boolean) => void;
-  preview: { profileId: string; file: FilePreview } | null;
+  switchCandidate: { profileId: string; file: FilePreview } | null;
   retractPreview: () => void;
   invalidateCandidates: () => void;
   selectProfile: (profileId: string) => Promise<void> | void;
@@ -40,7 +40,7 @@ export function useSwitchOperations({
   onError,
   clearError,
   setBusy,
-  preview,
+  switchCandidate,
   retractPreview,
   invalidateCandidates,
   selectProfile,
@@ -49,7 +49,6 @@ export function useSwitchOperations({
   refresh,
   refreshDiscoveryOrAppend,
 }: SwitchOperationDeps) {
-  const [confirmingSwitch, setConfirmingSwitch] = useState(false);
   const [undoPending, setUndoPending] = useState<ConfigWriteRecord | null>(null);
   const [undoDiff, setUndoDiff] = useState<
     | { state: "idle" | "loading" }
@@ -87,17 +86,17 @@ export function useSwitchOperations({
   }, []);
 
   const runSwitch = useCallback(async () => {
-    if (busy || !selectedId || !preview || !selectedProfile) return;
-    setConfirmingSwitch(false);
+    if (busy || !switchCandidate || !selectedProfile || switchCandidate.profileId !== selectedId) return;
     invalidateCandidates();
     setBusy(true);
     clearError();
     try {
       const result = await executeSwitch(
-        selectedId,
-        preview.file.contentHash,
-        preview.file.renderedHash,
+        switchCandidate.profileId,
+        switchCandidate.file.contentHash,
+        switchCandidate.file.renderedHash,
         true,
+        switchCandidate.file,
       );
       await refresh();
       await selectProfile(selectedId);
@@ -121,7 +120,7 @@ export function useSwitchOperations({
     clearError,
     invalidateCandidates,
     onError,
-    preview,
+    switchCandidate,
     refresh,
     refreshDiscoveryOrAppend,
     retractPreview,
@@ -218,8 +217,6 @@ export function useSwitchOperations({
   }, [busy, clearError, onError, recoverLockPending, refresh, setBusy]);
 
   return {
-    confirmingSwitch,
-    setConfirmingSwitch,
     undoPending,
     undoDiff,
     requestUndo,

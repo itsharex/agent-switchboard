@@ -1,0 +1,66 @@
+//! Codex settings IPC forwarding; business logic stays in the typed command owner.
+use super::super::http::{argument, as_json, InvokeRequest};
+use crate::commands::{self, error::CommandError};
+use asb_core::contracts::{CodexSubagentSettings, SubagentSettingsPlan};
+use serde_json::Value;
+use tauri::AppHandle;
+
+macro_rules! command {
+    ($future:expr) => {
+        as_json($future.await).map(Some)
+    };
+}
+
+pub(super) async fn dispatch(
+    app: &AppHandle,
+    request: &InvokeRequest,
+) -> Result<Option<Value>, CommandError> {
+    match request.command.as_str() {
+        "get_codex_common_config" => command!(commands::codex_common::get_codex_common_config(app.clone())),
+        "extract_codex_common_config" => command!(commands::codex_common::extract_codex_common_config(app.clone())),
+        "set_codex_common_config_enabled" => command!(commands::codex_common::set_codex_common_config_enabled(
+            app.clone(), argument(&request.args, "profileId")?, argument(&request.args, "enabled")?, argument(&request.args, "expectedRevision")?)),
+        "get_codex_subagent_settings" => {
+            command!(commands::subagent_settings::get_codex_subagent_settings(
+                app.clone(),
+            ))
+        }
+        "preview_codex_subagent_settings_command" => {
+            command!(
+                commands::subagent_settings::preview_codex_subagent_settings_command(
+                    app.clone(),
+                    argument::<CodexSubagentSettings>(&request.args, "settings")?,
+                    argument::<String>(&request.args, "expectedHash")?,
+                )
+            )
+        }
+        "apply_codex_subagent_settings" => {
+            command!(commands::subagent_settings::apply_codex_subagent_settings(
+                app.clone(),
+                argument::<SubagentSettingsPlan>(&request.args, "plan")?,
+                argument::<bool>(&request.args, "confirmWrite")?,
+            ))
+        }
+        "query_codex_official_quota" => command!(commands::query_codex_official_quota(
+            app.clone(),
+            argument(&request.args, "profileId")?,
+        )),
+        "get_cached_codex_official_reset" => {
+            command!(commands::get_cached_codex_official_reset(app.clone()))
+        }
+        "refresh_codex_official_reset" => {
+            command!(commands::refresh_codex_official_reset(app.clone()))
+        }
+        "get_cached_codex_reset_status" => {
+            command!(commands::get_cached_codex_reset_status(app.clone()))
+        }
+        "check_codex_reset_status" => command!(commands::check_codex_reset_status(app.clone())),
+        "codex_login_blocker" => {
+            command!(commands::official_login::codex_login_blocker(app.clone()))
+        }
+        "ensure_codex_official_record" => command!(
+            commands::official_login::ensure_codex_official_record(app.clone())
+        ),
+        _ => Ok(None),
+    }
+}

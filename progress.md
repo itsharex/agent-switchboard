@@ -4,6 +4,10 @@
 
 ## 工作规则
 
+**供应商预览只读化收尾（2026-09-12，完成）：** 接续 zcode `sess_91fa839e-bf02-4993-88dd-1f2e9955a393` 的未完实现。Codex 第三方、Codex 官方登录与 Claude 行内「变更预览」均只展示假设差异，没有「确认切换」「取消」操作，再次点击预览图标收起。两端共用 `useSwitchPreview`，只读预览与显式启用的意图绑定到各自候选；「启用」始终重新读取候选，即使同档案的只读预览尚未完成也不复用旧请求，随后打开统一的 `SwitchConfirmSheet`。取消确认保留只读差异，离开列表、撤回预览或写入失效后，迟到响应不能恢复确认。生效行补齐重新启用入口，并保持键盘可达；「保存并预览应用」只保存应用内偏好、跳回只读预览，不再自动进入切换确认。Codex 行渲染按职责移入 `CodexProviderRows`，保留官方登录、额度、编辑、删除与排序行为。README、DESIGN 及端到端预览/启用/确认消费者同步更新。
+
+验证：相关 10 个前端测试文件 / 115 项通过，覆盖三类供应商只读预览、取消后再次预览、重新启用、精确候选哈希、设置预览及异步请求失效；`npm run typecheck` 与 `npm run build -- --logLevel warn` 通过，构建仅保留既有大 chunk 提示。三个改动的 E2E 文件 `node --check` 通过，本次文件范围的 `git diff --check` 通过。未运行原生桌面 E2E 或 Rust 测试，未改后端配置写入路径、未对真实客户端配置或凭据执行写入测试；保留工作区其他并行改动，未提交或发布。
+
 **全局排版规则与守卫（2026-09-11，用户指令「排版规则」，未提交）：** 本轮先彻查扩展工作区与全局字阶 / 间距现状，再落地规范。诊断结论是「规范有洞，扩展界面把每个洞都踩了一遍」，因此改的是洞本身，不是逐处样式微调。
 
 字阶补洞与封顶：`tokens.css` 原只有 5 档且**缺失 caption 档**，却有 3 处 CSS 引用不存在的 `--asb-text-caption`（`panels.css` 两处、`app-settings.css` 一处）与 1 处不存在的 `--asb-text-primary`。`font: var(--未定义)` 在计算值层面直接失效，这些文字静默继承父级字体——「看着不对但说不出哪不对」的典型来源。现补齐 `--asb-text-caption`（`400 12px/1.4`）、修正幽灵引用，并把字阶收紧为封闭五档（`title` 18 / `section` 15 / `body` 15 / `label` 13 / `caption` 12，另 `code` 为字族而非新档）；`--asb-text-signal`（72px）明确登记为**唯一展示数值**，不属于字阶。标题只有三个类并全部由 `panels.css` 唯一持有：`.asb-panel-title`、`.asb-section-title`、新增 `.asb-group-title`（卡片内字段簇，取标签档 600）。
@@ -782,3 +786,74 @@
 **token_plan 全供应商收口（2026-09-11 完成，清掉上一条留下的「未纳入」债）：** 用户指令「无兼容无过渡无技术债实现修复」。上一条只纳入了智谱个人版，kimi/minimax/zenmux/volcengine/opencode_go 仍是「未纳入模板导入」跳过，且 `zhipu_team` 被错误映射到个人版脚本。按钉定参考基线（`f3b18df` services/coding_plan.rs）补全 token_plan 分发：**五家新脚本**——Kimi（固定端点 `/coding/v1/usages`，limits/usage 双窗口绝对 limit/remaining 数值）、MiniMax（按档案地址选 minimaxi.com/minimax.io 域，`coding_plan/remains` 的 general 模型条目、周窗口仅 status=1 时激活、剩余百分比反转为已用）、ZenMux（端点即档案自身地址，美元值 used/max 优先、百分比回退）、OpenCode Go（固定端点 `/zen/go/v1/usage` 三窗口滚动/周/月，不可解析窗口跳过不整体失败）、智谱团队（个人端点 + `?type=2` + `bigmodel-organization`/`bigmodel-project` 头，**组织/项目 ID 从源端 meta 烘焙进合成脚本**并经 `javascript_string` 转义，缺任一给精确理由跳过）；`volcengine` 依赖控制面 AccessKey ID/Secret（非推理 API 密钥），与 newapi/github_copilot 同类——**不可表达即精确点名跳过**，不伪造。消费的模板键（codingPlanProvider、teamOrganizationId/teamProjectId）不再误报未导入。全部脚本只用档案自身 baseUrl/apiKey 输入。
 
 验证：`cargo test -p asb-core` **281 通过**（token_plan 测试改写为：四家数据面供应商合成端点标记、团队版烘焙+转义+键消费、团队缺配置精确跳过、volcengine AccessKey 理由、未知供应商点名）；`cargo test --manifest-path src-tauri/Cargo.toml --lib` **518 通过**（新增 Kimi 引擎级测试：rquickjs 真实驱动 request/extract，URL/认证头/双窗口绝对数值与百分比投影全对）；`cargo fmt --all -- --check` 通过。未提交或推送。
+
+**重置逃生门收口（2026-09-11 完成）：** 用户报障「清空旧档案并重新开始」永远失败并复现同错。根因有二：①`reset_profile_store` 在删除前先走 `ensure_profile_save_recovered`，其入口 `pending_profile_save()` 第一步即 `ensure_layout()`，被旧版布局标记（本机为 `state/configuration/common/`）判 `Unsupported` 直接中止——逃生门被它要清除的状态锁死；②`ConfigStore::reset()` 只删 `configuration/` 树与 `profiles.json`，不删 `state/configuration-upgrade.json`（`ensure_layout` 四个拒绝条件之一），该标记残留时重置后依然全拒绝。按「无兼容无过渡无技术债」收口：重置命令的恢复前置改为**尽力而为**（恢复仍会执行以尽可能对齐真实客户端文件，但任何恢复失败只记 warn 不得阻止已确认的清空；网关活动路由守卫保留阻断，事务备份仍在 `state/backups` 供事后手动恢复）——依据是 `ProfileStoreError` 的既有契约「重置是类型化读取器所拒绝状态的恢复路径」，故重置必须在该类状态下无条件可用；`reset()` 补删迁移 journal，使 `ensure_layout` 四个拒绝条件（`profiles.json`、`configuration/common`、`configuration-upgrade.json`、`client-settings` 非目录）全部可被一次重置清除。其余命令的恢复门不变。
+
+验证：`cargo test --manifest-path src-tauri/Cargo.toml --lib` **519 通过**（新增 `reset_clears_every_layout_rejection_marker`：四标记齐备时 `ensure_layout` 拒绝、一次 reset 后干净）；`cargo fmt --all -- --check` 通过。命令层改动为两行控制流（门改尽力而为），无 AppHandle 测试基建故未加命令级用例。本机旧状态将在新构建中经同一按钮清除。未提交或推送。
+
+**供应商行删除直出（2026-09-11 完成）：** 用户指令「把里面的删除按钮拿出来，不做更多操作的子选择栏按钮了」。供应商行尾动作簇的「更多操作」三点菜单只有「删除」一项，按「无兼容无过渡无技术债」整条拆除：删除成为动作簇第五个直接图标按钮（TrashIcon、Tooltip 与可及名「删除 ××」、点击即进共享删除确认弹窗，与编辑/预览/测试/用量同构），`ProviderMoreActions` 组件及其开合/Esc/外点关闭逻辑、`.asb-row-more`/`.asb-row-menu`/`.asb-row-menu-item` 样式全部删除（`--asb-surface-menu` 令牌他处仍在用故保留）。三个使用方同步：Claude 列表 `ProviderList`、Codex 页官方登录行与第三方行（后者维持仅非生效行可删的既有语义）、e2e `requestDelete` 助手改为直接点删除按钮。DESIGN.md §动作簇条目同步为「删除五个内联线性图标」。
+
+验证：`npm run typecheck` 0 错误；全量 vitest **101 文件 656 项全部通过**（菜单开合/Esc 两测删除，新增「动作簇直接触发删除」并改写顺序断言为「…用量，then delete」；App 删除流程改单步点击）。e2e 桌面套件未运行（需真实桌面环境）。未提交或推送。
+
+**登录阻断横幅前置到供应商列表（2026-09-11 完成）：** 用户指令「需要更明显的提示显示在供应商列表界面」——此前第三方启用被登录前置拦下时只有一次性 toast（即「Codex 当前处于 API-key 登录模式」报障场景），列表页毫无预示。新增后端只读命令 `codex_login_blocker`（commands/official_login.rs）：返回「当前第三方 Codex 切换被什么阻断」的文案或 None——文案直接复用 `observation::CodexLoginState::require()` 的失败文本，横幅与失败 toast 同源、永不漂移（单一文本所有者仍是 observation.rs，命令只是搬运）。前端 Codex 工作区在「存在第三方供应商且阻断存在」时于客户端页签下方渲染常驻警示横幅（`asb-banner-warning` + `role="status"`，新样式 `asb-provider-login-notice`），附「完成官方登录」按钮原地展开 `OfficialLoginPanel`（同一组件同一状态机），登录完成自动重查并消失；官方行「重新登录」完成也经 `onReloginFinished` 回调刷新。横幅只陈述事实，预览/编辑/删除等操作不受影响；命令失败静默降级为无横幅。共享夹具补 `codex_login_blocker: null`。
+
+验证：`cargo test --manifest-path src-tauri/Cargo.toml --lib` **519 通过**、`cargo fmt --all -- --check` 通过；`npm run typecheck` 0 错误；全量 vitest **101 文件 657 项全部通过**（新增「登录阻断时列表页常驻警示横幅并可原地展开登录面板」）。未提交或推送。
+
+**登录阻断横幅收口到统一快照（2026-09-12 完成）：** 用户指令「无兼容无过渡无技术债实现」。审计横幅首版发现两处债：①页面级 `useEffect` 自建了第二条刷新生命周期——外部 `codex login` 后横幅陈旧（不随窗口聚焦/托盘事件更新）；②命令失败被 `catch(() => null)` 静默吞掉。收口：`codexLoginBlocker` 读取并入 `useConfigSnapshot.refresh()` 的 `Promise.all`（挂载、窗口聚焦、托盘事件、每次操作后四条刷新路径统一生效），快照暴露 `loginBlocker` 经 `ProvidersWorkspace` 下传为页面 prop——页面零自有请求逻辑，登录完成/官方行重登完成都走既有 `onRefresh` 通道；读取失败按快照错误统一上报，静默分支删除。
+
+验证：`npm run typecheck` 0 错误；全量 vitest **101 文件 657 项全部通过**（横幅测试补「外部登录后窗口聚焦即消失」断言；`useConfigSnapshot` 测试文件补 official-login 模块 mock——未 mock 时真实 invoke 拒绝导致 refresh 整体失败，正是并入统一快照后错误不再被吞的证明）。后端无改动（519 通过维持）。未提交或推送。
+
+**登录连续性收口：登录完成官方行自动出现（2026-09-12 完成）：** 用户指令「方向正确的，无兼容无过渡无技术债实现」。报障：横幅登录完成后官方行不出现——官方行是存储里的档案记录而非登录状态推导，此前只有编辑器/导入两个显式创建入口，连续路径断成三截。收口：①canonical 官方草稿唯一所有者落地 asb-core `contracts::codex_official_draft(parameters)`（名称「Codex 官方登录」、无端点凭据目录），ccswitch 官方行导入删除私有副本改为消费同一构造函数；②存储层 `ConfigStore::ensure_codex_official_record()` 幂等 find-or-create——缺档时以全 Automatic 默认参数创建 canonical 档案，已存在（含用户重命名/自定义的）原样返回 `(record, created)`；③命令 `ensure_codex_official_record`（恢复门 + `operation_error` 映射 + 仅真创建时记 `ProfileCreated` 日志与托盘刷新，幂等空转不进历史）；④横幅登录面板 `onFinished(completed)` → `run(ensure + onRefresh)`——「完成登录 → 官方行出现 → 可启用」一条路径，编辑器与导入两条显式入口不变（编辑器臂仍走用户显式保存，不自动建档以免与显式创建语义冲突）。
+
+验证：`cargo test -p asb-core` **281 通过**（导入官方行映射回归）；`cargo test --manifest-path src-tauri/Cargo.toml --lib` **520 通过**（新增：ensure 创建 canonical 档案且参数为全 Automatic 默认、二次 ensure 同版本不重建、用户重命名后原样保留）；`cargo fmt --all -- --check` 通过；`npm run typecheck` 0 错误；全量 vitest **101 文件 657 项通过**（横幅测试扩为完整连续性：展开登录 → 真实 3 秒轮询完成 → `ensure_codex_official_record` 被调 → 聚焦后横幅消失；夹具补 official_login_start/poll 与 ensure 桩）。未提交或推送。
+
+**扩展工作区对齐 cc-switch：写入即时执行（2026-09-12 完成）：** 用户指令「skill 与 mcp 界面模块简化流程，向 cc-switch 对齐 UIUX、默认显示与启用实现，无兼容无过渡无技术债重新一轮重构」。先通读 cc-switch（farion1231/cc-switch）源码：其 MCP/Skills 面板为统一平铺列表＋每客户端图标开关一键直写 live 配置（MCP 写 `~/.claude.json`/`config.toml`，Skills 经 SSOT 目录 symlink），新建默认启用全部客户端，仅删除/卸载保留一句话确认。本项目布局已对齐（单工具带＋ClientToggleGroup＋计数胶囊），差距在流程：每次开关都走 prepare→ExtensionPlanSheet→确认→apply 三步。按新契约重构：**`useExtensionApplies` 成为唯一扩展写入所有者**——prepare 与 apply 在同一互斥运行内背靠背执行（忙碌渲染前的同步操作锁保留），结果 toast 报告、事务历史可查可恢复；仅三类操作写入前停下确认：①计划任一目标 `writesSensitiveConnectionData`（后端 redact 判定，仅凭据值/带凭据地址写入触发）→ ExtensionPlanSheet（「确认<操作>（写入敏感数据）」+脱敏 diff+「确认写入」）；②删除仍有安装的定义 → 一句话确认「删除并撤销部署」，前端组合「同一管线批量移除绑定 + 删除已无绑定定义」（后端 `delete_definition_if_unbound` 契约不变）；③停用 Claude 项目共享 Skill → 范围单（「执行停用」选定后立即执行；`needsDisableScope` 收紧为 `sharedSettings == null` 才拦，杜绝范围确认死循环）。**默认部署对齐**：新建 MCP 表单默认勾选全部支持客户端、按钮改「保存并部署」、stdio 提供可选预设（fetch/memory/time）；来源浏览候选入库后立即部署到适用客户端（hostScoped 收窄）；本机发现「复制到扩展库」仍只入库（同客户端原生安装已在位，统一由「管理现有安装」接管，不制造冲突部署）。**旧路径全删**：`useExtensionPlans.ts`、`useExtensionLibrary` 的 preparePlan/applyPlan/prepareRestore、`useSkillLibrary`/`applyMcpEdit` 各自拼装计划的分支（改为返回 `needsDeploy` 由编辑器走统一管线）、`ExtensionRemoveSheet` 的「先去管理安装」引导（改一句话确认）、常驻预览弹窗与「生成停用预览」文案。Skill 更新（逐项/全部/编辑/版本恢复）、MCP 编辑、修复、历史恢复全部改走即时管线。e2e 改写：toggle 等待 aria-pressed 翻转或敏感确认单；外部冲突拒绝测试迁移到敏感确认等待窗口（唯一可插入窗口，同一执行器拒绝路径）；取消部署用例随取消能力一并移除。DESIGN.md 扩展契约（173 行总则＋详情删除/目标意图/即时执行管线/新建导入默认部署/更新/版本固定/历史恢复/一键修复条目）与 README 扩展三段同步改写，无旧文案残留。
+
+验证：`npm run typecheck` 0 错误；扩展相关 11 个测试文件 58 项全部通过（改写：批量/混合/范围停用断言 prepare+apply 直达；敏感写入断言确认单出现且确认前不落盘；删除有绑定定义断言「移除绑定→apply→delete_extension」链；技能更新三项断言即时部署；MCP 编辑重命名断言即时重部署；修复断言无弹窗直达 apply+复扫）。全量 vitest 与桌面 e2e 未在本轮运行（e2e 需真实桌面环境）。未提交或推送。
+
+**三页头部两行制收口（2026-09-12 完成）：** 用户指令按页给出行布局——扩展：标题独占顶行，第二行 Skills/MCP/全局指令页签＋从本机发现/发现/更多操作，第三行搜索＋客户端页签（数量标签并入选项内显示）；会话：标题独占顶行，第二行搜索＋客户端页签（新加 Codex/Claude 图标）＋刷新；用量：标题独占顶行，第二行分类页签；模块内模型消耗标题独占一行，第二行快照文本＋范围页签＋刷新。实现：新布局原语 `.asb-panel-subheading`（panels.css 唯一所有者）承载「标题行下的控件行」，三页共用；`ClientFilter` 增可选 `counts` 渲染选项内数量徽标（会话页同步开图标）；扩展数量胶囊行与「全部更新」按钮删除——批量部署开关与全部更新以菜单项并入「更多扩展操作」（deployment-state 计算不变，整库语义不变），页脚注脚同步指向新位置；孤儿样式 `.asb-ext-count-*` 全删（与详情弹窗 `asb-ext-clienttoggle` 共享的状态着色选择器保留改写）；`asb-ext-toolbar-actions`、会话页 `asb-panel-actions` 作用域规则随结构删除。DESIGN.md 头部契约（184/185）、扩展节（页签与入口/列表/目标与意图/更新）、用量节同步。
+
+验证：`npm run typecheck` 0 错误；全量 vitest **101 文件 657 项全部通过**（6 个断言数量胶囊/全部更新按钮的测试改写为菜单项路径并保留原行为断言——批量启停含搜索外条目、mixed 状态、不支持客户端时禁用；ClientFilter 可及名含计数后相关查询同步）；浏览器实测三页截图符合规格。后端零改动。未提交或推送。
+
+**供应商行按钮紧凑档（2026-09-12 完成）：** 用户指令「单供应商栏的按钮可以缩小一些」。启用主钮、重新登录次级钮与图标簇从标准档 40px 收敛到紧凑档 `--asb-control-height-compact`（32px），作用域 `.asb-row-line`（展开面板在行线之外，不受影响）；这是 §5 档位表「紧凑档：行内图标钮」既有契约的落地，不引入第四档高度。拖拽手柄（unstyled 无按钮几何）与头像不变。DESIGN.md 供应商列表动作簇条目补档位说明。
+
+验证：全量 vitest **101 文件 657 项通过**（纯 CSS 改动）；浏览器样式级联实测——注入 `.asb-row-line` 临时元素读取计算样式，primary/secondary/icon 均为 32px。发现并修正一处作用域不一致（图标宽高初版误挂在 `.asb-row-item`，统一到 `.asb-row-line`）。未提交或推送。
+
+**行内按钮间隔对齐参考设计（2026-09-12 完成）：** 用户指令「按钮间隔参考如图设计」（附 cc-switch 截图）。图标簇 `.asb-iconcluster` 的 `gap: 0`（按钮贴死）改为 `--asb-space-2`（12px）——与 `.asb-row-line` 既有行内间隔同值，形成启用钮—图标簇—图标间均匀的 12px 节奏；cc-switch 参考图中相邻图标中心距≈44px，对应 32px 紧凑钮＋12px 间隔。DESIGN.md 动作簇条目补间隔说明。
+
+验证：浏览器样式级联实测 gap 12px、图标钮 32px；全量 vitest 657 项维持通过（纯 CSS 间隔改动）。未提交或推送。
+
+
+**会话消息目录常驻（2026-09-12 完成）：** 用户指令「查看会话详细时，不要因为窗口过小导致消息目录隐藏起来，常驻实现」＋「无兼容无过渡无技术债实现」。根因：`.asb-session-toc` 默认 `display:none`、仅 `≥1280px` 显示，而主窗口 `minWidth: 940`、默认 1180px——默认尺寸下目录从不出现。终态：目录列成为详情正文常驻栏，**任何窗口宽度单一行为**——固定 248px（`--asb-session-toc-width` 具名声明，满足样式守卫）、无显示断点、无宽度分档（首版的 ≤1099px 收窄档已按无过渡指令删除）；`<900px` 堆叠模式同为可见，随详情页整体滚动。目录渲染条件维持「用户消息目录项 > 2」（内容条件，与窗口无关）不变；React 组件零改动，纯 CSS 收口。DESIGN.md 会话管理条目同步「常驻栏、列宽不随窗口分档」契约。
+
+验证：`npm run typecheck` 通过；SessionManager 切片 17 项（含消息目录导航与 Codex 清洗用例）与样式守卫 `tokens.test.ts` 9 项（含裸 px 禁令）通过——jsdom 不应用媒体查询，宽度无关，旧测试即覆盖新行为的 DOM 结构。最小窗口 940px 下正文列 ≈320px，`pre` 带 `overflow-wrap: anywhere` 自动换行不横滚，经样式核对确认；未做浏览器级联实测（纯 CSS 声明改动，无运行时分支）。
+
+**供应商行信息栏去点击化＋按钮承载选择（2026-09-12 完成）：** 用户指令「模型栏移除鼠标可点击的实现，只有按钮可点击，点击后模型栏仍然高亮」。行身份栏（头像/名称/模型与地址元信息）从可点击的 `role="option"` 按钮改为纯展示 `div`——不再有 hover 指针与选中语义；选择改由动作按钮承载：双端全部行内按钮（启用/预览/编辑/测试/用量/删除/重新登录/订阅额度）点击即选中本行，选中高亮（`is-selected` 安静状态面）持续保留。列表语义随之降档：`ul role="listbox"`→`role="list"`，行上 `aria-selected` 移除（选择成为表现态，由类承载）。`ProviderRowShell` 的 `onSelect` prop 删除——页面各自在按钮处理器中显式选中（Claude 走既有 `onSelect` 回调链，Codex 走本地 `selectedId`，官方行新增 `onSelect` prop）。附带语义：点击行内按钮会收回打开中的预览（与原行点击行为一致）。
+
+验证：`npm run typecheck` 0 错误；全量 vitest **102 文件 665 项全部通过**——改写「行点击选中」为「信息栏惰性＋按钮选中」、aria-selected 断言改 is-selected 类断言、「动作不选中」契约反转为「动作即选中」（ProviderRequestPanel 的 select 断言同步）；浏览器开发数据受限，采用样式级联+测试验证。注意：工作区存在另一条并行工作线的未提交改动（扩展即时执行管线、WorkspaceHeader 等），本轮 4 个失败测试中 3 个为本变更所致并已修复，1 个（ProvidersPage 文档位置断言）在并行改动中途的运行中出现过、复跑稳定通过。未提交或推送。
+
+**页头结构组件化收口（2026-09-12 完成）：** 用户指令按「标题独占第一行，导航/页面操作第二行，列表筛选第三行」标准全局审查并组件化。新增唯一结构所有者 `src/components/WorkspaceHeader.tsx`：`WorkspaceHeader`（顶层页面与独立子工作区，h2 页标题）与 `ModuleHeader`（嵌入模块，统一 h3 `.asb-section-title`）两个入口，固定三行语法（title 行仅返回钮＋标题；primary 行左导航/上下文＋右 `.asb-panel-actions` 操作；secondary 行局部视图控件），`primary` 缺失时 `secondary` 自动升为第二行不产生空工具行。接入：扩展（`ExtensionToolbar` 持有全部三行，`ExtensionLibraryPanel` 重复筛选行删除；搜索＋客户端过滤在窄宽度前的拉伸回归经浏览器实测修复——`.asb-header-secondary .asb-ext-toolbar` 补 `flex: 1 1 auto`）、会话（两行）、用量＋模型消耗模块（两行）、供应商（页头第二行＝客户端切换＋偏好设置/切换历史/导入/新建供应商，双连接卡移到页头之后，`asb-tabs-bar`/`asb-provider-toolbar` 删除）、诊断/备份/日志（设置内容区子页，h3 模块标题＋页签行/控件行）、导入供应商与用量查询（`WorkspaceHeader`，用量查询的供应商名作为 primary 行上下文与页签同行）、设置分类面板、配置状态、运行环境、本机协议网关、额度与重置、CC Switch/本机配置导入（`ModuleHeader`）。孤儿布局类与死规则全删（`.asb-ext-nav`、`.asb-sessions-toolbar`、`.asb-tabs-bar`、`.asb-provider-toolbar`、`.asb-model-usage-subheading`、gap 容器内 `.asb-panel-heading` 零边距规则、≤600px 会话死规则），响应式规则改挂新头部类。`.asb-panel-heading`/`.asb-panel-subheading` 成为组件内部行实现，供应商编辑器与行内变更预览沿用既有头部（编辑器 h2 持有焦点 ref 契约，变更预览按钮位于展开区头部为本节既有契约）。DESIGN.md 页面框架唯一契约（184）改为组件所有者表述，供应商（48/50/172/236/237）同步。
+
+验证：`npm run typecheck` 0 错误；全量 vitest **102 文件 665 项全部通过**（新增 `WorkspaceHeader.test.tsx` 8 项锁定三行结构/h2-h3 层级/id 接线/空行抑制；`ProvidersPage` 导航测试随新页头序改断言「客户端选择器在双连接卡之前」）；浏览器 vite 实测 1280/900/640 三档——供应商页头一行放下客户端切换＋全部操作、640px 动作区右对齐换行，扩展页三行且 640px 入口簇落 `1fr 1fr` 网格，会话两行，用量与模型消耗各两行，日志控件行在 640px 自然换行（≤600px 纵向堆叠规则保留），设置内容区仅侧栏一个 h2。注：本条验证完成后，另一并行会话正在改写供应商行内切换预览流（ProvidersPage `onRequestSwitch` 契约、预览头按钮、CodexProvidersPage 行选择），其半程改动暂使工作区 typecheck 报 3 处其文件内错误、预览头相关 2 项测试未过——均不涉及本轮页头改动文件。未提交或推送。
+
+
+**会话删除（2026-09-12 完成）：** 用户指令「无兼容无过渡无技术债实现会话的删除功能」，前置对比了 cc-switch 会话模块（其 `delete_session`/`delete_sessions` 为硬删除＋不可恢复确认单＋批量模式；`sourcePath` 进前端契约、后端只做根目录 containment 与 ID 复核；终端恢复接受 renderer 任意命令并注释为已接受风险）。本实现按 cc-switch 语义、按自身架构收口：**删除目标是（客户端, 会话 ID）**——后端 `resolve_session` 自扫描解析路径（路径不出 IPC 边界，解析天然含「文件在批准根目录内＋解析出的 ID 与请求一致」保障），随后硬删除记录文件（无回收站无备份，与切换执行器的配置写事务不同类：会话记录不属于档案存储，不进切换历史）；Claude 记录的同名附属目录随删（对齐 cc-switch，Codex 无此形态不处理）；`sessionDeleted` 记入运行日志（`observe` 包装，成功/失败各记），前端详情动作簇新增「删除会话」危险钮 → 共享 `ConfirmSheet`（标题/会话 ID/不可恢复警示）→ 成功后本地收口（列表剔除、选中与 30 秒转录缓存条目清除、toast 报告），失败保留一切并 toast 错误。批量删除未做：本会话列表无多选模型，单删是本次指令范围。命令 `delete_session`（`session-delete-failed` 错误码）经 dev 桥接同步暴露。DESIGN.md 会话管理行操作条目改写（原「不提供删除会话」契约废止）。e2e `sessions-usage-discovery` 新增删除用例（自建一次性会话文件，不触碰共享 fixture，末位执行不影响用量断言）。
+
+验证：`cargo test --lib session_manager` 9 项通过（新增：删除文件＋Claude 附属目录随删＋无关兄弟文件保留、缺失记录报错）；`npm run typecheck` 通过；`SessionManager` 切片 20 项（新增：确认单流＋列表/缓存/选中收口、取消保留、失败保留并报错）与 `client.test` 30 项（受控命令断言含 `delete_session`）全部通过。两点如实说明：①本轮 cargo 曾因并行会话的 `cargo run` 持锁失败（os error 32），经用户指示终止该进程后重跑通过；②e2e 删除用例已编写并通过语法检查，但本轮未执行真实桌面 e2e（需打包应用与 WebDriver 环境）。
+
+**扩展工作区对齐 cc-switch：数量条与列表结构复刻（2026-09-12 完成）：** 用户指令「skill、mcp 的 UI/UX/功能继续对齐，现在看着一点都不像 cc-switch 的复刻实现」。此前一轮把批量部署收进「更多」菜单、计数并入客户端过滤选项，恰好藏掉了 cc-switch 最具辨识度的元素。按 AppCountBar 复刻重建：**`ExtensionCountBar` 唯一所有者**——内容列自上而下固定为「数量条 → 搜索行 → 单容器紧凑列表」，与 cc-switch 面板同构。数量条左侧「Skills/MCP · N」总数字徽章，右侧每客户端一枚可点击计数胶囊（logo＋名称＋启用数，三态：未启用/部分虚线/全部品牌色底），胶囊即整库批量部署开关，单击经即时执行管线生效；Skills 可更新时末尾出现「全部更新（N）」。**移除客户端过滤**（cc-switch 无此控件；行内开关承载客户端状态、搜索负责查找），`ClientFilter` 的 counts 扩展与 `.asb-client-filter-count` 样式随之删除；「更多」菜单不再持有部署类动作。搜索行从页头副行移入内容列（`ExtensionSearch`，与发现弹窗共用）。行内开关启用态补齐 Claude 品牌色底（此前仅 Codex 有着色）。**NewMcpForm 功能对齐**：新增「填写方式」分段切换「结构化表单 / 粘贴 JSON」——粘贴模式接受整份 mcpServers 文档（首条目、键为服务名）、单个命名条目或裸服务对象，解析回填结构化字段后走同一保存与凭据路径，sse/ws 传输明确拒绝；预设从 3 个扩到 6 个（＋filesystem / sequential-thinking / context7）。DESIGN.md 扩展工作区「页签与入口/数量条与列表/目标与意图/新建与导入/更新」五条契约同步改写。
+
+验证：`npx tsc --noEmit` 0 错误；扩展相关 8 文件 38 项（含新增 NewMcpForm.test 4 项：预设填充、mcpServers 文档解析回填、裸对象与 sse 拒绝、按客户端保存部署）通过；全量串行 vitest 102 文件 672 项全部通过。桌面 e2e 未运行（需真实桌面环境）。未提交或推送。
+
+**Claude 功能对齐第一阶段（2026-09-12，整体目标未完成）：** 保留 Claude 页面布局、样式和现有控件，以及供应商参数 / 客户端偏好的可视化单一所有权。独立认证已贯通导入、编辑、切换、模型获取、请求测试、用量与网关；补齐 Fable / 子 agent / 显示名与 1M 模型数据并在切换时清理旧覆盖。补齐工具错误与图片结果、缓存标记、thinking / effort、Chat 流式空增量和并行工具，以及 Responses 原生推理的 JSON / SSE 两轮回放；本机信封不发给上游。现有网关重试可保留损坏状态诊断副本并重建状态，随后仍经原执行器重新应用。用量转换统一输入总量和缓存计数，不将缓存重复累计。
+
+验证：工作区相关前端 12 文件 / 134 项通过。临时验证副本中 152 项 Rust 专项、4 项真实 Claude Code 2.1.259 本机上游测试通过（完整内置工具声明，只授权 Read，覆盖原生 / Chat / Responses、失败纠正与图片）。副本逐文件核对 Claude 涉及源码一致，仅隔离其他 Codex 任务留下的无实现 live 模块声明，不作为真实工作区整包构建通过证明。真实工作区目前因缺少 codex/live.rs 无法完整 Rust 构建，且扩展来源页接口尚未接齐导致全量 typecheck 失败。未提交、打包、发布或使用真实配置/凭据。完整功能清单和剩余验收见 docs/claude-ccswitch-parity.md；接管热切换、故障转移、托管认证、完整预设和请求历史等仍待实现，未缩减或标记整体完成。
+
+
+**Claude 本地后端续作（2026-09-13，总体仍未完成）：** 保留既有 Claude 界面与可视化通用配置；新增业务放在独立的 Claude 账号、Prompt、预设、网关与请求模块。托管账号（Copilot、用于 Claude 的 ChatGPT OAuth、xAI OAuth）具备设备登录、取消、重登、默认/指定账号、刷新、模型和订阅查询；请求时凭据贯通已有模型获取/测试请求与网关，不写原生 Codex/Claude 登录缓存。修复取消后的迟到授权保存、刷新成功但保存失败时的新凭据丢失，以及准备后换默认账号的问题。
+
+离线 90 个 Claude 预设保留功能数据与来源许可，87 个可准备为有效档案；Gemini Native 与两个 Bedrock 预设明确不可用。补齐模型查询地址、Haiku 1M 保真与克隆。Claude Prompt 库实现 CRUD/排序、预览/启停、备份、双修订校验、中断恢复及 CC Switch 只读导入，所有 CLAUDE.md 写入仍交给执行器。22 个新接口同时接通桌面命令与开发接口；页面入口尚未全部接齐，不能以接口存在宣称完整功能对齐。
+
+验证：真实工作区 asb-core 327 项通过；asb-switch 全套 76 项通过；Claude 后端专项 122 项通过（默认跳过的 5 个 CLI 测试另行全部执行并通过）；前端相关 10 文件 145 项通过；typecheck、生产前端构建与 Rust 非测试构建检查通过。真实 CLI 用例使用固定 2.1.259、隔离 HOME/配置和仅本机上游，覆盖首轮、完整工具声明、错误纠正、图片与原生推理回放，并校验已知模型方言的 effort。旧首轮测试改用相同隔离启动器，修复 Anthropic 客户端 beta 查询提示被转发到 OpenAI 协议的问题；供应商自己配置的查询参数保留。
+
+全库后端：905 通过 / 1 失败 / 14 默认跳过。失败为 Codex 原生接管恢复/改端口用例，恢复时遇到 API-key 登录模式并返回 codex-official-login-required；单独运行也失败，未改其认证/恢复业务或弱化断言。定向最终 diff/空白与代码长度检查完成，样式目录相对本轮起点无变化；没有使用真实配置/凭据做写入测试，没有提交或发布。完整剩余项见 docs/claude-ccswitch-parity.md，接口和文件所有权见 docs/claude-local-backend.md。

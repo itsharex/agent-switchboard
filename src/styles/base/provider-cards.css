@@ -77,12 +77,19 @@
 
 /* Icon-action cluster — ghost buttons inside the card: no resting fill, so
    solid-ink icons stay readable on white and on the tinted live card; the
-   surface only appears on hover. */
+   surface only appears on hover. Buttons breathe with an even 12px rhythm
+   (user directive 2026-09-12, cc-switch reference). */
 .asb-iconcluster {
   display: inline-flex;
   align-items: center;
-  gap: 0;
+  gap: var(--asb-space-2);
   flex: none;
+}
+
+/* The Codex provider page preserves its original action cadence and menu
+   affordance while the shared Claude workspace can use the newer spacing. */
+.asb-provider-workspace-legacy .asb-iconcluster {
+  gap: 0;
 }
 
 .asb-provider-usage {
@@ -367,28 +374,46 @@
   border-color: var(--asb-action);
 }
 
-/* Row-level actions stay invisible until the row is hovered. The activate
-   button reserves its layout space permanently — like the icon cluster — so
-   the reveal animates only opacity and visibility; a collapsed width snapped
-   the whole right cluster sideways on every hover and twitched the list
-   (2026-09-11 user report). */
+/* Activation remains keyboard-focusable while visually hidden, including
+   official rows without a drag handle. Reveal never changes row geometry. */
 .asb-row-item .asb-row-activate {
   flex: none;
   display: inline-flex;
   padding-inline: var(--asb-space-3);
   opacity: 0;
-  visibility: hidden;
   pointer-events: none;
+  transition: opacity var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-provider-workspace-legacy .asb-row-item .asb-row-activate {
+  visibility: hidden;
   transition:
     opacity var(--asb-motion-press) var(--asb-easing),
     visibility 0s linear var(--asb-motion-press);
 }
 
-.asb-row-item:hover .asb-row-activate {
+.asb-row-item:hover .asb-row-activate,
+:root[data-focus-source="key"] .asb-row-item:focus-within .asb-row-activate {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
   transition-delay: 0s;
+}
+
+.asb-provider-workspace-legacy .asb-row-item:hover .asb-row-activate {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.asb-provider-workspace-legacy .asb-row-line .asb-btn-primary,
+.asb-provider-workspace-legacy .asb-row-line .asb-btn-secondary,
+.asb-provider-workspace-legacy .asb-row-line .asb-btn-icon {
+  min-height: initial;
+}
+
+.asb-provider-workspace-legacy .asb-row-line .asb-btn-icon {
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
 }
 
 .asb-row-item .asb-iconcluster {
@@ -423,9 +448,22 @@
   box-shadow: none;
 }
 
+/* Row actions sit on the compact control tier (user directive 2026-09-12):
+   the enable CTA and the icon cluster stay visually secondary to the row's
+   name and meta, so they use the same 32px height as segments and pills. */
+.asb-row-line .asb-btn-primary,
+.asb-row-line .asb-btn-secondary,
+.asb-row-line .asb-btn-icon {
+  min-height: var(--asb-control-height-compact);
+}
+
+.asb-row-line .asb-btn-icon {
+  width: var(--asb-control-height-compact);
+  height: var(--asb-control-height-compact);
+}
+
 /* List action glyphs stay deliberately quieter than the provider name and
-   the sole blue enable action. Their shared button geometry keeps them
-   legible inside the 40px click target. */
+   the sole blue enable action. */
 .asb-row-item .asb-btn-icon {
   color: var(--asb-text-muted);
 }
@@ -439,7 +477,7 @@
 }
 
 /* The three-dot more trigger anchors a small action menu (delete lives
-   there). The menu reuses the app's floating-surface language. */
+   there). The menu reuses the provider page's floating-surface language. */
 .asb-row-more {
   position: relative;
   display: inline-flex;

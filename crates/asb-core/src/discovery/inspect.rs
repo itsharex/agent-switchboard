@@ -2,7 +2,7 @@ use toml_edit::Item;
 
 use crate::contracts::{AppKind, RouteMode, RouteState};
 
-use crate::discovery::import::claude_import_model_fields;
+use crate::claude_model::{import_models, ModelSource};
 use crate::discovery::report::{DiscoveredFile, DiscoveredState};
 
 /// Inspects configuration content and classifies it. `text` is the raw file
@@ -55,14 +55,37 @@ fn import_supported(
     warnings: &mut Vec<String>,
 ) -> bool {
     if app == AppKind::Codex {
-        warnings.push(
-            "Codex 配置不能导入；第三方档案必须显式提供模型目录、映射、能力和请求模式，请新建专用档案"
-                .to_string(),
-        );
-        return false;
+        if route.route_mode == RouteMode::Official {
+            return true;
+        }
+        if route
+            .base_url
+            .as_deref()
+            .is_some_and(crate::adapter::codex::is_gateway_base_url)
+        {
+            return false;
+        }
+        let mut importable = true;
+        if route.base_url.is_none() {
+            warnings.push("当前 Codex 自定义路由缺少服务地址".to_string());
+            importable = false;
+        }
+        if route.model.is_none() {
+            warnings.push("当前 Codex 自定义路由缺少主模型".to_string());
+            importable = false;
+        }
+        if let Err(error) = crate::adapter::read_provider_parameters(app, text) {
+            warnings.push(format!("供应商运行参数无法导入：{error}"));
+            importable = false;
+        }
+        return importable;
     }
-    let claude_import_error = claude_import_model_fields(route).err();
-    let mut importable = route.route_mode == RouteMode::Official
+    let root: serde_json::Value =
+        serde_json::from_str(text).expect("syntax checked before import inspection");
+    let claude_import_error = import_models(&root, ModelSource::Client).err();
+    let native = crate::claude_native::from_config(&root);
+    if let Err(error) = &native { warnings.push(format!("Claude 原生云配置无法导入：{error}")); return false; }
+    let mut importable = native.ok().flatten().is_some() || route.route_mode == RouteMode::Official
         || (route.base_url.is_some() && claude_import_error.is_none());
     if route.route_mode == RouteMode::Custom {
         if let Some(error) = claude_import_error {

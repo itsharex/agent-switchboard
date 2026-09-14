@@ -106,7 +106,16 @@ fn parse_responses_input_item(
     input: &mut ResponsesInput,
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<(), TransformError> {
-    let kind = string(item.get("type"), "input.type")?;
+    // Responses EasyInputMessage makes type optional; canonical history items
+    // still require their explicit type and call identity.
+    let kind = if !item.contains_key("type")
+        && item.contains_key("role")
+        && item.contains_key("content")
+    {
+        "message".to_string()
+    } else {
+        string(item.get("type"), "input.type")?
+    };
     match kind.as_str() {
         "message" => parse_responses_message(item, input),
         "function_call" => parse_function_call(item, input),

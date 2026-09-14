@@ -7,6 +7,7 @@ use std::path::Path;
 
 fn profile() -> ProviderProfile {
     ProviderProfile {
+        authentication: None,
         id: "p1".to_string(),
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
         app: AppKind::Codex,
@@ -14,6 +15,7 @@ fn profile() -> ProviderProfile {
         name: "当前档案".to_string(),
         model: Some("gpt-5.4".to_string()),
         base_url: Some("https://gateway.example/v1".to_string()),
+        connection: Default::default(),
         api_key: "test-api-key".into(),
         upstream_protocol: Some(asb_core::UpstreamProtocol::Responses),
         responses_options: Some(asb_core::contracts::ResponsesOptions {

@@ -23,6 +23,8 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
     routeMode: "custom",
     baseUrl: draft.endpoint,
     apiKey: draft.apiKey,
+    authentication: draft.authentication,
+    connection: draft.connection,
     upstreamProtocol: draft.upstream,
     responsesOptions: draft.upstream === "responses" ? { requestMode: draft.requestMode } : null,
   });

@@ -4,7 +4,6 @@ import type {
   ApplyOutcome,
   ExtensionDiscovery,
   ExtensionDraft,
-  ExtensionKind,
   ExtensionMutation,
   ExtensionOperationRecord,
   ExtensionPlanView,
@@ -62,8 +61,8 @@ export function scanLocalSkillSource(root: string): Promise<SkillCandidateDto[]>
 
 export function resolveSkillSource(
   repo: string,
-  subpath: string,
-  refName: string | null,
+  subpath = "",
+  refName: string | null = null,
 ): Promise<SkillCandidateDto[]> {
   return invoke<SkillCandidateDto[]>("resolve_skill_source", { repo, subpath, refName });
 }
@@ -82,24 +81,6 @@ export function importDiscoveredSkill(observationId: string): Promise<ExtensionM
 
 export function importDiscoveredMcp(observationId: string): Promise<ExtensionMutation> {
   return invoke<ExtensionMutation>("import_discovered_mcp", { observationId });
-}
-
-/** The redacted preview of one takeover: what the library would start
- * owning, without any path or raw parameter. */
-export interface TakeoverPreview {
-  kind: ExtensionKind;
-  name: string;
-  client: AppKind;
-  scopeLabel: string;
-  nativeEntryPresent: boolean | null;
-  fileCount: number | null;
-  contentDigest: string | null;
-  definitionExists: boolean;
-  warnings: string[];
-}
-
-export function previewDiscoveredTakeover(observationId: string): Promise<TakeoverPreview> {
-  return invoke<TakeoverPreview>("preview_discovered_takeover", { observationId });
 }
 
 /** Confirms a takeover. The native entry or directory is recorded as the

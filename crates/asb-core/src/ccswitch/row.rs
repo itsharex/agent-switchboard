@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    AppKind, CodexEndpoint, CodexReasoningLevel, CodexUpstream, ProviderDraft,
-    ResponsesRequestMode, SettingsValues, UsageQuery,
+    AppKind, AuthenticationScheme, CodexEndpoint, CodexReasoningLevel, CodexUpstream,
+    ProviderConnectionOptions, ProviderDraft, ResponsesRequestMode, SettingsValues, UsageQuery,
 };
 
 /// One source `providers` row, already read by the caller.
@@ -69,8 +69,15 @@ pub struct CodexImportSeed {
     /// Empty when the source row exposes no usable credential; the editor
     /// blocks saving until the user provides one.
     pub api_key: String,
+    /// Explicit upstream credential delivery, when the source declared one.
+    /// Missing values use the protocol default at completion time.
+    pub authentication: Option<AuthenticationScheme>,
+    /// Source connection behavior that is safe to carry into the strict
+    /// Codex profile contract.
+    pub connection: ProviderConnectionOptions,
     pub upstream: CodexUpstream,
     pub request_mode: ResponsesRequestMode,
+    pub chat_reasoning: crate::contracts::CodexChatReasoning,
     pub default_model: String,
     pub catalog: Vec<CodexCatalogSeed>,
     pub parameters: SettingsValues,
@@ -88,6 +95,8 @@ impl std::fmt::Debug for CodexImportSeed {
             .field("name", &self.name)
             .field("endpoint", &self.endpoint)
             .field("api_key", &crate::redact::REDACTED)
+            .field("authentication", &self.authentication)
+            .field("connection", &self.connection)
             .field("upstream", &self.upstream)
             .field("default_model", &self.default_model)
             .field("catalog", &self.catalog)
@@ -102,6 +111,10 @@ pub struct CodexCatalogSeed {
     pub model: String,
     pub context_window: Option<u64>,
     pub images: Option<bool>,
+    pub display_name: Option<String>,
+    pub description: Option<String>,
+    pub base_instructions: Option<String>,
+    pub supports_parallel_tool_calls: Option<bool>,
     pub default_reasoning_level: Option<CodexReasoningLevel>,
     pub reasoning_levels: Option<Vec<CodexReasoningLevel>>,
 }

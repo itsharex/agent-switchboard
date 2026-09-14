@@ -18,7 +18,18 @@ pub(crate) fn preview(
         warnings
             .push("settings.json 的 env.ANTHROPIC_MODEL 会覆盖 model；切换将移除该键".to_string());
     }
-    preview_entries_from_root(root, overlay(plan), warnings, backup_dir)
+    let mut entries = overlay(plan);
+    entries.extend(super::native::entries(current, plan)?);
+    let mut preview = preview_entries_from_root(root, entries, warnings, backup_dir)?;
+    preview.changes.extend(
+        crate::claude_common::changes(current, &plan.client_settings.claude_extra).map_err(
+            |message| AdapterError {
+                message,
+                line: None,
+            },
+        )?,
+    );
+    Ok(preview)
 }
 
 fn preview_entries_from_root(

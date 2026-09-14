@@ -1,5 +1,6 @@
 import { invoke } from "./client";
 import type { AppKind, UpstreamProtocol } from "./shared";
+import type { ProviderConnectionOptions } from "./providers";
 
 /** One declarative usage-balance query: a GET against the provider endpoint
  * with `{{baseUrl}}` / `{{apiKey}}` placeholders plus JSON Pointer paths. */
@@ -180,6 +181,8 @@ export function testUsageQuery(
   apiKey: string,
   baseUrl: string | null,
   upstreamProtocol: UpstreamProtocol,
+  authentication?: import("./shared").AuthenticationScheme | null,
+  connection?: ProviderConnectionOptions | null,
 ): Promise<UsageSummary> {
   return invoke<UsageSummary>("test_usage_query", {
     request: {
@@ -187,6 +190,8 @@ export function testUsageQuery(
       apiKey,
       baseUrl,
       upstreamProtocol,
+      ...(authentication ? { authentication } : {}),
+      ...(connection ? { connection } : {}),
     },
   });
 }

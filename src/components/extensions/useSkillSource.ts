@@ -1,93 +1,82 @@
 import { useState } from "react";
-import type { AppKind, ExtensionMutation, SkillCandidateDto } from "../../api/client";
+import type { ExtensionListItem } from "../../api/client";
+import type { SkillDirectoryEntry } from "../../api/extensions/skill-sources";
+import {
+  skillCandidateInstalled, type SkillSourceActions, type SkillSourceFilter, type SkillSourceKind, type SkillSourceRow,
+} from "./skill-source-model";
+import { skillRepositoryLabel, skillSourceUrl } from "./skill-repository-model";
+import { useSkillSourceCatalog } from "./useSkillSourceCatalog";
+import { useSkillSourceDirectory } from "./useSkillSourceDirectory";
+import { useSkillSourceFiles } from "./useSkillSourceFiles";
+import { useSkillSourceInstall } from "./useSkillSourceInstall";
+import { useSkillSourceRepositories } from "./useSkillSourceRepositories";
 
-export interface SkillSourceActions {
-  onScanLocal: (root: string) => Promise<SkillCandidateDto[] | null>;
-  onResolveGithub: (
-    repository: string,
-    subpath: string,
-    ref: string | null,
-  ) => Promise<SkillCandidateDto[] | null>;
-  onImport: (digest: string, name: string, host: AppKind | null) => Promise<ExtensionMutation | null>;
-  onPickDirectory: () => Promise<string | null>;
+export type { SkillSourceActions } from "./skill-source-model";
+
+function sourceRows(source: SkillSourceKind, catalog: ReturnType<typeof useSkillSourceCatalog>,
+  files: ReturnType<typeof useSkillSourceFiles>): SkillSourceRow[] | null {
+  if (source === "catalog") return catalog.result?.candidates.map((candidate) => ({
+    candidate, key: JSON.stringify([candidate.repositoryId, candidate.subpath, candidate.digest]),
+    repositoryId: candidate.repositoryId, label: skillRepositoryLabel(candidate),
+    sourceUrl: skillSourceUrl(candidate.repo, candidate.readmeUrl),
+  })) ?? null;
+  if (files.result?.kind !== source) return null;
+  return files.result.candidates.map((candidate) => ({
+    candidate, key: candidate.digest, label: files.result!.label, sourceUrl: null,
+  }));
 }
 
-export function useSkillSource(actions: SkillSourceActions) {
-  const [source, setSource] = useState<"github" | "local">("github");
-  const [fields, setFields] = useState({ root: "", repository: "", subpath: "", ref: "" });
-  const [host, setHost] = useState<"all" | AppKind>("all");
+export function useSkillSource(actions: SkillSourceActions & { busy: boolean; items: ExtensionListItem[] }) {
+  const [source, setSource] = useState<SkillSourceKind>("catalog");
   const [query, setQuery] = useState("");
-  const [candidates, setCandidates] = useState<SkillCandidateDto[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const changeSource = (next: "github" | "local") => {
-    setSource(next);
-    setCandidates(null);
-    setError(null);
-    setQuery("");
+  const [filter, setFilter] = useState<SkillSourceFilter>("all");
+  const [repository, setRepository] = useState("all");
+  const [managerOpen, setManagerOpen] = useState(false);
+  const catalog = useSkillSourceCatalog(actions.busy);
+  const directory = useSkillSourceDirectory(actions.busy);
+  const files = useSkillSourceFiles(actions);
+  const loading = catalog.loading || directory.loading || files.loading;
+  const imports = useSkillSourceInstall(actions, actions.items,
+    actions.busy || catalog.loading || files.loading || directory.searching);
+  const repositories = useSkillSourceRepositories(actions.busy || imports.busy || loading, (next) => {
+    catalog.reconcile(next);
+    setRepository((current) => next?.some((repo) => repo.id === current) ? current : "all");
+  });
+  const locked = () => imports.isLocked() || (actions.busy && !loading);
+  const changeSource = (next: SkillSourceKind) => {
+    if (locked() || next === source || (managerOpen && repositories.loading)) return;
+    setSource(next); catalog.cancel(); directory.cancel();
+    if ((next === "local" || next === "zip") && files.result?.kind !== next) files.clear();
+    else files.cancel();
+    setQuery(""); setFilter("all"); setRepository("all");
   };
-  const changeField = (key: keyof typeof fields, value: string) => {
-    setFields((previous) => ({ ...previous, [key]: value }));
-    setCandidates(null);
-    setError(null);
+  const search = async () => {
+    if (locked()) return;
+    if (source === "catalog") {
+      if (repositories.ready && !repositories.loading) await catalog.refresh(repositories.items);
+    } else if (source === "directory") await directory.search();
+    else await files.scan(source);
   };
-  const search = async (rootOverride?: string) => {
-    setError(null);
-    const root = rootOverride ?? fields.root;
-    if (source === "local" ? !root.trim() : !fields.repository.trim() || !fields.subpath.trim()) {
-      setError(source === "local" ? "请输入本地来源目录" : "请填写 GitHub 仓库和 Skill 子目录");
-      return;
-    }
-    setLoading(true);
-    try {
-      const result =
-        source === "local"
-          ? await actions.onScanLocal(root.trim())
-          : await actions.onResolveGithub(
-              fields.repository.trim(),
-              fields.subpath.trim(),
-              fields.ref.trim() || null,
-            );
-      if (result !== null) setCandidates(result);
-      else setError(candidates === null ? "来源读取失败，请检查地址后重试" : "来源读取失败，仍显示上次结果");
-    } finally {
-      setLoading(false);
-    }
+  const pick = async () => {
+    if (locked() || (source !== "zip" && source !== "local")) return;
+    if (await files.pick(source)) { setQuery(""); setFilter("all"); }
   };
-  const pickDirectory = async () => {
-    setError(null);
-    let picked: string | null;
-    try {
-      picked = (await actions.onPickDirectory())?.trim() ?? null;
-    } catch {
-      setError("无法打开目录选择对话框");
-      return;
-    }
-    if (!picked) return;
-    setFields((previous) => ({ ...previous, root: picked }));
-    setCandidates(null);
-    setQuery("");
-    await search(picked);
+  const installDirectory = async (entry: SkillDirectoryEntry) => {
+    if (locked()) return;
+    const candidates = await directory.resolve(entry);
+    if (candidates?.length === 1) await imports.install(candidates[0]);
   };
-  const visible =
-    candidates?.filter((candidate) =>
-      `${candidate.name} ${candidate.description ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()),
-    ) ?? [];
+  const candidates = sourceRows(source, catalog, files);
+  const rows = candidates?.map((row) => ({ ...row, installed: skillCandidateInstalled(row.candidate, actions.items) })) ?? [];
+  const visible = rows.filter((row) =>
+    (repository === "all" || row.repositoryId === repository) &&
+    (filter === "all" || (filter === "installed" ? row.installed : !row.installed)) &&
+    `${row.candidate.name} ${row.candidate.description ?? ""} ${row.label}`.toLowerCase().includes(query.trim().toLowerCase()));
   return {
-    source,
-    fields,
-    host,
-    setHost,
-    query,
-    setQuery,
-    candidates,
-    visible,
-    error,
-    loading,
-    changeSource,
-    changeField,
-    search,
-    pickDirectory,
+    source, query, setQuery, filter, setFilter, repository, setRepository, managerOpen, setManagerOpen,
+    catalog, directory, files, repositories, changeSource, search, pick, installDirectory,
+    candidates, visible, installedCount: rows.filter((row) => row.installed).length, loading, imports,
+    error: source === "catalog" ? catalog.error : source === "directory" ? directory.error : files.error,
   };
 }
 

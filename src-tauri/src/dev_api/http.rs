@@ -119,6 +119,19 @@ pub(super) fn argument<T: DeserializeOwned>(args: &Value, name: &str) -> Result<
         .map_err(|_| CommandError::new("web-argument-invalid", format!("参数无效：{name}")))
 }
 
+pub(super) fn optional_argument<T: DeserializeOwned>(
+    args: &Value,
+    name: &str,
+) -> Result<Option<T>, CommandError> {
+    args.get(name)
+        .cloned()
+        .map(|value| {
+            serde_json::from_value(value)
+                .map_err(|_| CommandError::new("web-argument-invalid", format!("参数无效：{name}")))
+        })
+        .transpose()
+}
+
 pub(super) fn as_json<T: Serialize>(
     result: Result<T, CommandError>,
 ) -> Result<Value, CommandError> {

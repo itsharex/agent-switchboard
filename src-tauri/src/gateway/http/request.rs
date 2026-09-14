@@ -30,6 +30,11 @@ impl Request {
     pub(crate) fn headers(&self) -> &[Header] {
         &self.headers
     }
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.stop.load(std::sync::atomic::Ordering::Acquire)
+            || self.reply.as_ref().is_none_or(|reply| reply.is_closed())
+    }
+
     pub(crate) fn take_body(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.body)
     }

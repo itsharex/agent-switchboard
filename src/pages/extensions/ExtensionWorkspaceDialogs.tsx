@@ -1,12 +1,11 @@
 import { Button } from "../../components/Button";
-import { ExtensionDialog } from "../../components/extensions/ExtensionDialog";
+import { ExtensionDialog, ExtensionDialogSuspension } from "../../components/extensions/ExtensionDialog";
 import {
   ExtensionPlanSheet,
   ExtensionRemoveSheet,
   SkillDisableScopeSheet,
 } from "../../components/extensions/ExtensionPlanSheet";
 import { ExtensionDetailsDialog } from "./ExtensionDetailsDialog";
-import { ExtensionDiscoveryDialog } from "./ExtensionDiscoveryDialog";
 import { McpEditorDialog, SkillEditorDialog } from "./ExtensionEditorDialogs";
 import {
   HistoryDialog,
@@ -16,13 +15,13 @@ import {
   ProjectDialog,
 } from "./ExtensionUtilityDialogs";
 import { PortableExportSheet } from "./PortableExportSheet";
-import { TakeoverConfirmSheet } from "./TakeoverConfirmSheet";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
-function WorkspaceDialog({ workspace: w }: { workspace: ExtensionWorkspace }) {
+function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWorkspace; suspended: boolean }) {
   const dialog = w.nav.dialog;
   if (!dialog) return null;
-  switch (dialog.type) {
+  const content = (() => {
+    switch (dialog.type) {
     case "newMcp":
       return <NewMcpDialog workspace={w} />;
     case "newSkill":
@@ -33,8 +32,6 @@ function WorkspaceDialog({ workspace: w }: { workspace: ExtensionWorkspace }) {
       return <ProjectDialog workspace={w} />;
     case "history":
       return <HistoryDialog workspace={w} />;
-    case "import":
-      return <ExtensionDiscoveryDialog workspace={w} />;
     case "export":
       return <PortableExportSheet workspace={w} item={dialog.item} />;
     case "mcpEditor":
@@ -44,13 +41,8 @@ function WorkspaceDialog({ workspace: w }: { workspace: ExtensionWorkspace }) {
         <ExtensionRemoveSheet
           item={dialog.item}
           busy={w.busy}
-          onManage={() => w.nav.showDefinition(dialog.item.id, dialog.item.kind)}
           onCancel={w.nav.closeDialog}
-          onConfirm={() =>
-            void w.ext.removeDefinition(dialog.item.id).then((removed) => {
-              if (removed) w.nav.closeDialog();
-            })
-          }
+          onConfirm={() => void w.deleteDefinition(dialog.item)}
         />
       );
     case "detail":
@@ -71,42 +63,37 @@ function WorkspaceDialog({ workspace: w }: { workspace: ExtensionWorkspace }) {
         <ExtensionDetailsDialog key={item.id} workspace={w} item={item} />
       );
     }
-  }
+    }
+  })();
+  return (
+    <ExtensionDialogSuspension suspended={suspended}>
+      {content}
+    </ExtensionDialogSuspension>
+  );
 }
 
 export function ExtensionWorkspaceDialogs({ workspace: w }: { workspace: ExtensionWorkspace }) {
+  const hasApplyPrompt = Boolean(w.applies.pendingWrite || w.applies.pendingDisable);
   return (
     <>
-      <WorkspaceDialog workspace={w} />
-      {w.plans.view && (
+      <WorkspaceDialog workspace={w} suspended={hasApplyPrompt} />
+      {w.applies.pendingWrite && (
         <ExtensionPlanSheet
-          view={w.plans.view}
-          busy={w.busy}
+          view={w.applies.pendingWrite.plan}
+          busy={w.applies.confirmationBusy}
           projectNames={w.projectNames}
           resourceNames={w.resourceNames}
-          onConfirm={() => void w.plans.confirm()}
-          onCancel={w.plans.close}
+          onConfirm={w.applies.confirmPendingWrite}
+          onCancel={w.applies.cancelPendingWrite}
         />
       )}
-      {w.plans.pendingDisable && (
+      {w.applies.pendingDisable && (
         <SkillDisableScopeSheet
-          sharedSettings={w.plans.sharedSettings}
-          busy={w.busy}
-          onSharedSettingsChange={w.plans.setSharedSettings}
-          onConfirm={() => void w.plans.confirmScope()}
-          onCancel={w.plans.cancelScope}
-        />
-      )}
-      {w.discovery.takeover && (
-        <TakeoverConfirmSheet
-          takeoverPreview={w.discovery.takeover.preview}
-          busy={w.busy}
-          cancelTakeover={w.discovery.cancelTakeover}
-          confirmTakeover={() =>
-            void w.discovery.confirmTakeover().then((result) => {
-              if (result) w.nav.showDefinition(result.definition.id, result.kind);
-            })
-          }
+          sharedSettings={w.applies.sharedSettings}
+          busy={w.applies.confirmationBusy}
+          onSharedSettingsChange={w.applies.setSharedSettings}
+          onConfirm={() => void w.applies.confirmDisableScope()}
+          onCancel={w.applies.cancelDisableScope}
         />
       )}
     </>

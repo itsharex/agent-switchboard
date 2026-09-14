@@ -52,7 +52,16 @@ pub(super) fn prepare(
         return Err(TransformError("没有可压缩的历史".into()));
     }
     let history = summary_input(&root, key, protocol)?;
-    let budget = limit.unwrap_or(4096).min(8192);
+    let request_budget = match root.get("max_output_tokens") {
+        None => None,
+        Some(value) => Some(
+            value
+                .as_u64()
+                .filter(|budget| *budget > 0)
+                .ok_or_else(|| TransformError("压缩请求 max_output_tokens 必须是正整数".into()))?,
+        ),
+    };
+    let budget = request_budget.or(limit).unwrap_or(4096).min(8192);
     if budget < 512 {
         return Err(TransformError(
             "当前档案的输出预算不足以生成压缩摘要".into(),

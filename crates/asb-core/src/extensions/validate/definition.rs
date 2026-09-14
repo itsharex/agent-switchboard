@@ -32,6 +32,12 @@ pub fn validate_definition(
     if definition.created_at.trim().is_empty() || definition.updated_at.trim().is_empty() {
         return reject("createdAt", "扩展时间戳不能为空");
     }
+    if let Some(metadata) = &definition.mcp_metadata {
+        if !matches!(definition.payload, ExtensionPayload::Mcp(_)) {
+            return reject("mcpMetadata", "MCP 元信息只能用于 MCP 定义");
+        }
+        super::metadata::validate_mcp_metadata(metadata)?;
+    }
     match &definition.payload {
         ExtensionPayload::Skill(skill) => {
             validate_skill_definition(&skill.manifest, skill.host_scoped, &skill.dependencies)

@@ -17,6 +17,7 @@ use tempfile::TempDir;
 pub(super) fn stdio_definition(id: &str, name: &str, revision: u64) -> ExtensionDefinition {
     ExtensionDefinition {
         schema_version: EXTENSIONS_SCHEMA_VERSION,
+        mcp_metadata: None,
         id: id.to_string(),
         name: name.to_string(),
         revision,
@@ -205,6 +206,7 @@ pub(super) fn redeploy_reports_a_pinned_binding_instead_of_moving_it() {
     let store = ExtensionStore::from_root(dir.path().join("state"));
     let definition = ExtensionDefinition {
         schema_version: EXTENSIONS_SCHEMA_VERSION,
+        mcp_metadata: None,
         id: "ext-skill-1".to_string(),
         name: "api-spec".to_string(),
         revision: 3,
@@ -289,6 +291,7 @@ pub(super) fn redeploy_skips_a_disabled_pinned_binding_entirely() {
     let store = ExtensionStore::from_root(dir.path().join("state"));
     let definition = ExtensionDefinition {
         schema_version: EXTENSIONS_SCHEMA_VERSION,
+        mcp_metadata: None,
         id: "ext-skill-1".to_string(),
         name: "api-spec".to_string(),
         revision: 3,

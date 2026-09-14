@@ -1,218 +1,112 @@
-import type { ExtensionListItem, SkillCandidateDto } from "../../api/client";
+import { LoaderCircle, Plus, RefreshCw } from "lucide-react";
+import type { ExtensionListItem } from "../../api/client";
 import { Button } from "../Button";
 import { Input } from "../Input";
-import { RadioOption } from "../RadioOption";
 import { Select } from "../Select";
-import { CheckIcon, FolderOpenIcon, PlusIcon, SearchIcon } from "../icons";
+import { SearchIcon } from "../icons";
+import { SkillDirectoryResults } from "./SkillDirectoryResults";
+import { SkillRepositoryManager } from "./SkillRepositoryManager";
+import { SkillSourceCandidate } from "./SkillSourceCandidate";
+import { SkillSourceForm } from "./SkillSourceForm";
+import { sourceErrorMessage, type SkillSourceFilter } from "./skill-source-model";
+import { skillRepositoryLabel, skillRepositoryName } from "./skill-repository-model";
 import { useSkillSource, type SkillSourceActions, type SkillSourceState } from "./useSkillSource";
 
-interface Props extends SkillSourceActions {
-  busy: boolean;
-  items: ExtensionListItem[];
+interface Props extends SkillSourceActions { busy: boolean; items: ExtensionListItem[] }
+
+function SourceFilters({ state }: { state: SkillSourceState }) {
+  return <div className="asb-skill-source-toolbar">
+    <div className="asb-skill-source-search">
+      <SearchIcon />
+      <Input type="search" placeholder="搜索名称、描述或来源" aria-label="筛选发现的 Skills"
+        value={state.query} onChange={(event) => state.setQuery(event.target.value)} />
+    </div>
+    {state.source === "catalog" && <Select value={state.repository} onChange={state.setRepository}
+      ariaLabel="Skill 来源仓库" options={[
+        { value: "all", label: "全部仓库" },
+        ...state.repositories.items.map((repo) => ({ value: repo.id, label: skillRepositoryLabel(repo) })),
+      ]} />}
+    <Select value={state.filter} onChange={(value) => state.setFilter(value as SkillSourceFilter)}
+      ariaLabel="Skill 安装状态" options={[
+        { value: "all", label: "全部状态" }, { value: "installed", label: "已安装" }, { value: "pending", label: "待安装" },
+      ]} />
+  </div>;
 }
 
-function SourceFields({ state, busy }: { state: SkillSourceState; busy: boolean }) {
-  return (
-    <form
-      className="asb-ext-source-form"
-      aria-label="Skill 来源"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void state.search();
-      }}
-    >
-      <div className="asb-segments" role="radiogroup" aria-label="Skill 来源类型">
-        {(["github", "local"] as const).map((source) => (
-          <RadioOption
-            key={source}
-            name="skill-source-type"
-            checked={state.source === source}
-            disabled={busy}
-            label={source === "github" ? "GitHub 仓库" : "本地目录"}
-            onChange={() => state.changeSource(source)}
-          />
-        ))}
-      </div>
-      <div className="asb-ext-source-fields">
-        {state.source === "local" ? (
-          <label className="asb-field asb-ext-source-root">
-            <span>本地来源目录</span>
-            <Input
-              required
-              placeholder="D:\skills"
-              value={state.fields.root}
-              disabled={busy}
-              onChange={(event) => state.changeField("root", event.target.value)}
-            />
-          </label>
-        ) : (
-          <>
-            <label className="asb-field">
-              <span>GitHub 仓库</span>
-              <Input
-                required
-                placeholder="owner/repository"
-                value={state.fields.repository}
-                disabled={busy}
-                onChange={(event) => state.changeField("repository", event.target.value)}
-              />
-            </label>
-            <label className="asb-field">
-              <span>Skill 子目录</span>
-              <Input
-                required
-                placeholder="skills/api-spec"
-                value={state.fields.subpath}
-                disabled={busy}
-                onChange={(event) => state.changeField("subpath", event.target.value)}
-              />
-            </label>
-            <label className="asb-field">
-              <span>分支或提交（可选）</span>
-              <Input
-                placeholder="默认分支"
-                value={state.fields.ref}
-                disabled={busy}
-                onChange={(event) => state.changeField("ref", event.target.value)}
-              />
-            </label>
-          </>
-        )}
-        <div className="asb-ext-source-actions">
-          {state.source === "local" && (
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void state.pickDirectory()}
-            >
-              <FolderOpenIcon />
-              浏览…
-            </Button>
-          )}
-          <Button type="submit" variant="primary" disabled={busy}>
-            <SearchIcon />
-            {state.loading ? "正在读取…" : state.source === "github" ? "解析来源" : "扫描来源"}
-          </Button>
-        </div>
-      </div>
-    </form>
-  );
-}
-
-function SourceCandidate({
-  candidate,
-  installed,
-  busy,
-  onImport,
-}: {
-  candidate: SkillCandidateDto;
-  installed: boolean;
-  busy: boolean;
-  onImport: () => void;
-}) {
-  return (
-    <li className="asb-ext-source-card">
-      <h4 className="asb-group-title">{candidate.name}</h4>
-      {candidate.description && <p>{candidate.description}</p>}
-      {candidate.diagnostics.length > 0 && (
-        <ul className="asb-ext-source-diagnostics">
-          {candidate.diagnostics.map((message) => (
-            <li key={message}>{message}</li>
-          ))}
-        </ul>
-      )}
-      <div className="asb-ext-source-card-footer">
-        <span>{candidate.fileCount} 个文件</span>
-        <Button
-          variant="secondary"
-          disabled={busy || installed}
-          onClick={onImport}
-          aria-label={`${installed ? "已在扩展库" : "加入扩展库"} ${candidate.name}`}
-        >
-          {installed ? <CheckIcon /> : <PlusIcon />}
-          {installed ? "已在扩展库" : "加入扩展库"}
-        </Button>
-      </div>
-    </li>
-  );
-}
-
-function SourceResults({ state, props }: { state: SkillSourceState; props: Props }) {
-  if (state.candidates === null)
-    return (
-      <div className="asb-empty-state">
-        <span className="asb-empty-state-icon" aria-hidden="true">
-          <SearchIcon />
-        </span>
-        <h3 className="asb-section-title">从来源发现 Skills</h3>
-        <p className="asb-empty-state-detail">填写仓库或本地目录，读取后选择要加入扩展库的 Skill。</p>
-      </div>
-    );
-  const host = state.host === "all" ? null : state.host;
-  const installed = new Set(
-    props.items.flatMap((item) =>
-      item.kind === "skill" && item.hostScoped === host ? [item.contentDigest] : [],
-    ),
+function SourceResults({ state, busy }: { state: SkillSourceState; busy: boolean }) {
+  const noRepositories = state.source === "catalog" && state.repositories.ready && state.repositories.items.length === 0;
+  if (noRepositories) return <div className="asb-skill-source-empty" role="status">
+    <SearchIcon /><p>尚未添加仓库</p>
+    <Button variant="secondary" disabled={busy || state.imports.busy} onClick={() => state.setManagerOpen(true)}>
+      <Plus size={16} />添加仓库
+    </Button>
+  </div>;
+  if (state.candidates === null) return (
+    <div className="asb-skill-source-empty" role="status">
+      {state.loading ? <LoaderCircle size={24} className="asb-skill-source-spinner" /> : <SearchIcon />}
+      <p>{state.loading ? "正在读取 Skills" : state.source === "catalog" ? "尚未刷新仓库" : "尚未扫描来源"}</p>
+    </div>
   );
   return (
-    <section className="asb-ext-source-results" aria-label="Skill 来源候选">
-      <div className="asb-ext-toolbar">
-        <div className="asb-ext-toolbar-view">
-          <Input
-            type="search"
-            placeholder="筛选发现的 Skills"
-            aria-label="筛选发现的 Skills"
-            value={state.query}
-            onChange={(event) => state.setQuery(event.target.value)}
-          />
-        </div>
-        <div className="asb-ext-toolbar-actions">
-          <span className="asb-scope-note">{state.visible.length} 项</span>
-          <Select
-            value={state.host}
-            onChange={(value) => state.setHost(value as "all" | "codex" | "claude")}
-            disabled={props.busy}
-            ariaLabel="Skill 兼容范围"
-            options={[
-              { value: "all", label: "Codex 与 Claude" },
-              { value: "codex", label: "仅 Codex" },
-              { value: "claude", label: "仅 Claude" },
-            ]}
-          />
-        </div>
-      </div>
+    <section className="asb-skill-source-results" aria-label="Skill 来源候选" aria-busy={state.loading}>
+      <SourceFilters state={state} />
+      <p className="asb-skill-source-count asb-num" role="status">
+        {state.visible.length} / {state.candidates.length} 个 Skills · 已安装 {state.installedCount}
+        {state.loading && " · 正在重新扫描…"}
+      </p>
       {state.visible.length === 0 ? (
-        <p className="asb-empty">
-          {state.candidates.length === 0 ? "来源中未发现可导入的 Skill" : "没有符合搜索条件的 Skill"}
-        </p>
-      ) : (
-        <ul className="asb-ext-source-grid">
-          {state.visible.map((candidate) => (
-            <SourceCandidate
-              key={candidate.digest}
-              candidate={candidate}
-              installed={installed.has(candidate.digest)}
-              busy={props.busy}
-              onImport={() => void props.onImport(candidate.digest, candidate.name, host)}
-            />
-          ))}
-        </ul>
-      )}
+        <div className="asb-skill-source-empty">
+          <p>{state.candidates.length === 0 ? (state.source === "catalog" && state.catalog.result?.failures.length ?
+            "未获取到候选结果" : "来源中没有 SKILL.md") : "没有符合筛选条件的 Skill"}</p>
+          {state.candidates.length > 0 && <Button variant="secondary" onClick={() => {
+            state.setQuery(""); state.setFilter("all"); state.setRepository("all");
+          }}>清除筛选</Button>}
+        </div>
+      ) : <ul className="asb-skill-source-grid">
+        {state.visible.map((row) => <SkillSourceCandidate key={row.key} row={row} installed={row.installed}
+          imports={state.imports} source={state.source} busy={busy || state.loading} />)}
+      </ul>}
     </section>
   );
+}
+
+function SourceErrors({ state, busy }: { state: SkillSourceState; busy: boolean }) {
+  const disabled = busy || state.loading || state.imports.busy;
+  return <>
+    {state.error && <p className="asb-warn-text" role="alert">{state.error}</p>}
+    {state.imports.error && <p className="asb-warn-text" role="alert">{state.imports.error}</p>}
+    {state.source === "directory" && state.directory.resolveError &&
+      <p className="asb-warn-text" role="alert">{state.directory.resolveError}</p>}
+    {!state.managerOpen && state.repositories.error && <div className="asb-skill-source-error" role="alert">
+      <span>{state.repositories.error}</span>
+      <Button variant="secondary" disabled={disabled || state.repositories.loading}
+        onClick={() => void state.repositories.reload()}><RefreshCw size={16} />重试加载仓库</Button>
+    </div>}
+    {state.source === "catalog" && Boolean(state.catalog.result?.failures.length) &&
+      <div className="asb-skill-source-error" role="alert">
+        <ul className="asb-skill-source-diagnostics">
+          {state.catalog.result!.failures.map((failure) => <li key={failure.repositoryId}>
+            {skillRepositoryName(failure.repo) ?? "GitHub 仓库"}：{sourceErrorMessage(failure.message, "仓库刷新失败")}
+            {state.catalog.count(failure.repositoryId) !== null && "；仍显示上次结果"}
+          </li>)}
+        </ul>
+        <Button variant="secondary" disabled={disabled || state.repositories.loading} onClick={() => void state.search()}>
+          <RefreshCw size={16} />重试刷新
+        </Button>
+      </div>}
+  </>;
 }
 
 export function SkillSourceBrowser(props: Props) {
   const state = useSkillSource(props);
   return (
-    <section className="asb-ext-source-browser" aria-label="发现 Skills">
-      <SourceFields state={state} busy={props.busy || state.loading} />
-      {state.error && (
-        <p className="asb-warn-text" role="alert">
-          {state.error}
-        </p>
-      )}
-      <SourceResults state={state} props={props} />
+    <section className="asb-skill-source-browser" aria-label="发现 Skills">
+      <SkillSourceForm state={state} busy={props.busy} />
+      {state.managerOpen ? <SkillRepositoryManager state={state} busy={props.busy} /> : <>
+        <SourceErrors state={state} busy={props.busy} />
+        {state.source === "directory" ? <SkillDirectoryResults state={state} busy={props.busy} items={props.items} /> :
+          <SourceResults state={state} busy={props.busy} />}
+      </>}
     </section>
   );
 }

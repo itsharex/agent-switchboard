@@ -15,6 +15,7 @@ mod responses;
 
 use super::sse::render_event;
 use super::{CanonicalResponse, ReasoningTransport, StopReason, TransformError};
+use crate::gateway::usage_metadata::{metadata_from_value, TokenUsage};
 use crate::provider_diagnostics::ProviderDiagnostic;
 use asb_core::contracts::UpstreamProtocol;
 use serde_json::Value;
@@ -28,6 +29,7 @@ const SOURCE_READ_CHUNK: usize = 8 * 1024;
 pub(crate) struct SseTranscoder<R> {
     source: R,
     mode: StreamMode,
+    source_protocol: UpstreamProtocol,
     target: UpstreamProtocol,
     max_source_bytes: u64,
     source_bytes: u64,
@@ -39,7 +41,10 @@ pub(crate) struct SseTranscoder<R> {
     direct_completed: bool,
     diagnostic: Option<ProviderDiagnostic>,
     secrets: Vec<String>,
+    model: Option<String>,
+    usage: TokenUsage,
     failed: bool,
+    has_token: bool,
 }
 
 enum StreamMode {
@@ -52,6 +57,7 @@ enum StreamTransformer {
     ChatToAnthropic(chat::ChatToAnthropic),
     AnthropicToResponses(anthropic::AnthropicToResponses),
     ResponsesToAnthropic(responses::ResponsesToAnthropic),
+    GeminiToAnthropic(super::claude_gemini::stream::GeminiToAnthropic),
 }
 
 impl StreamTransformer {
@@ -61,6 +67,11 @@ impl StreamTransformer {
         reasoning_transport: Option<ReasoningTransport>,
     ) -> Result<Self, TransformError> {
         match (from, to) {
+            (UpstreamProtocol::GeminiGenerateContent, UpstreamProtocol::AnthropicMessages) => {
+                Ok(Self::GeminiToAnthropic(
+                    super::claude_gemini::stream::GeminiToAnthropic::new(reasoning_transport),
+                ))
+            }
             (UpstreamProtocol::ChatCompletions, UpstreamProtocol::Responses) => Ok(
                 Self::ChatToResponses(chat::ChatToResponses::new(reasoning_transport)),
             ),
@@ -87,6 +98,7 @@ impl StreamTransformer {
             Self::ChatToAnthropic(transformer) => transformer.on_frame(frame),
             Self::AnthropicToResponses(transformer) => transformer.on_frame(frame),
             Self::ResponsesToAnthropic(transformer) => transformer.on_frame(frame),
+            Self::GeminiToAnthropic(transformer) => transformer.on_frame(frame),
         }
     }
 
@@ -96,6 +108,7 @@ impl StreamTransformer {
             Self::ChatToAnthropic(transformer) => transformer.finish(),
             Self::AnthropicToResponses(transformer) => transformer.finish(),
             Self::ResponsesToAnthropic(transformer) => transformer.finish(),
+            Self::GeminiToAnthropic(transformer) => transformer.finish(),
         }
     }
 }
@@ -123,6 +136,7 @@ where
         Ok(Self {
             source,
             mode,
+            source_protocol: from,
             target,
             max_source_bytes,
             source_bytes: 0,
@@ -134,8 +148,23 @@ where
             direct_completed: false,
             diagnostic: None,
             secrets: Vec::new(),
+            model: None,
+            usage: TokenUsage::default(),
             failed: false,
+            has_token: false,
         })
+    }
+
+    pub(crate) fn model(&self) -> Option<String> {
+        self.model.clone()
+    }
+
+    pub(crate) fn has_token(&self) -> bool {
+        self.has_token
+    }
+
+    pub(crate) fn usage(&self) -> TokenUsage {
+        self.usage.clone()
     }
 
     fn pending_is_empty(&self) -> bool {
@@ -160,9 +189,12 @@ where
         while let Some((index, delimiter_length)) = frame_boundary(&self.source_buffer) {
             let frame_bytes = self.source_buffer[..index].to_vec();
             self.source_buffer.drain(..index + delimiter_length);
-            match parse_frame(&frame_bytes)
-                .and_then(|frame| self.convert_frame(frame, &frame_bytes))
-            {
+            match parse_frame(&frame_bytes).and_then(|frame| {
+                if let Some(frame) = &frame {
+                    self.observe_frame(frame);
+                }
+                self.convert_frame(frame, &frame_bytes)
+            }) {
                 Ok(bytes) => self.append(bytes),
                 Err(error) => {
                     self.fail(&format!("无法转换上游 SSE：{error}"));
@@ -173,6 +205,18 @@ where
                 break;
             }
         }
+    }
+
+    fn observe_frame(&mut self, frame: &Frame) {
+        let Ok(value) = serde_json::from_str::<Value>(&frame.data) else {
+            return;
+        };
+        self.has_token |= super::usage::frame_has_token(self.source_protocol, &value);
+        let (model, usage) = metadata_from_value(self.source_protocol, &value);
+        if model.is_some() {
+            self.model = model;
+        }
+        self.usage.merge_from(&usage);
     }
 
     fn convert_frame(
@@ -190,7 +234,7 @@ where
         if matches!(&self.mode, StreamMode::Direct) {
             return self.convert_direct_frame(frame, bytes);
         }
-        if self.upstream_failed(&frame) {
+        if !self.is_token_limit_incomplete(&frame) && self.upstream_failed(&frame) {
             return Ok(Vec::new());
         }
         match &mut self.mode {

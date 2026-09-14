@@ -3,6 +3,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ValidationError {
+    #[error("Codex 请求选项不能用于其他客户端")]
+    CodexOptionsRequireCodex,
+    #[error("{0}")]
+    ClaudeProviderOptions(String),
+    #[error("{0}")]
+    CodexProviderOptions(String),
     #[error("供应商名称不能为空")]
     EmptyName,
     #[error("供应商标识不能为空")]
@@ -11,8 +17,12 @@ pub enum ValidationError {
     CustomRequiresBaseUrl,
     #[error("服务地址无效：{0}")]
     BadBaseUrl(String),
+    #[error("完整服务地址无效：{0}")]
+    BadFullUrl(String),
     #[error("必须填写 API 密钥")]
     EmptyApiKey,
+    #[error("API 密钥不能包含换行或其他控制字符")]
+    InvalidApiKeyCharacters,
     #[error("自定义供应商必须选择上游 API 格式")]
     CustomRequiresProtocol,
     #[error("自定义 Responses 供应商必须明确配置请求模式")]
@@ -25,6 +35,12 @@ pub enum ValidationError {
     UnexpectedMaxOutputTokens,
     #[error("API 密钥最长 {0} 个字符")]
     ApiKeyTooLong(usize),
+    #[error("自定义 User-Agent 不能包含控制字符或为空")]
+    InvalidCustomUserAgent,
+    #[error("自定义请求头无效：{0}")]
+    InvalidConnectionHeader(String),
+    #[error("自定义 body 覆盖必须是 JSON 对象")]
+    InvalidConnectionBody,
     #[error("官方登录不得携带服务地址、API 密钥、上游协议或模型覆盖；请先移除这些自定义路由字段")]
     OfficialRouteHasCustomFields,
     #[error("模型参数类型 {options_kind:?} 与供应商所属客户端 {app:?} 不一致")]
@@ -46,6 +62,8 @@ pub enum ValidationError {
     BadContextWindow,
     #[error("availableModels 不能包含空行；请每行填写一个模型标识")]
     EmptyAvailableModel,
+    #[error("模型显示名称不能为空或包含控制字符")]
+    InvalidModelDisplayName,
     #[error("{field} 不能包含 1M 标记；请通过 1M 上下文复选框设置")]
     InlineOneMMarker { field: &'static str },
     #[error("{field} 已启用 1M 上下文，但未填写模型")]
@@ -74,6 +92,8 @@ pub enum ValidationError {
     QuotaIntervalRequiresOfficialCodex,
     #[error("订阅额度自动刷新间隔须为 1–{0} 分钟；未设置表示关闭")]
     OfficialQuotaRefreshIntervalOutOfRange(u32),
+    #[error("{0}")]
+    ClaudeCommonOptions(String),
     #[error("子 agent 的{field}必须是{allowed}，当前值为 {value:?}")]
     SubagentBadValue {
         field: &'static str,

@@ -1,4 +1,4 @@
-//! Durable intent for a single client file; account credentials never enter this journal.
+//! Durable intent for a client projection and its optional Codex auth sibling.
 use crate::{io::SwitchIo, RecoveryOutcome, SwitchError};
 use asb_core::AppKind;
 use asb_core::BackupRecord;
@@ -11,6 +11,16 @@ pub struct PendingConfigWrite {
     pub version: u8,
     pub app: AppKind,
     pub profile_id: Option<String>,
+    pub backup: BackupRecord,
+    pub after_hash: String,
+    pub after_existed: bool,
+    #[serde(default)]
+    pub auth: Option<PendingAuthWrite>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PendingAuthWrite {
     pub backup: BackupRecord,
     pub after_hash: String,
     pub after_existed: bool,
@@ -44,6 +54,19 @@ pub fn pending_config_write<Io: SwitchIo>(
     {
         return Err(recovery_error("未完成配置事务身份不匹配", &path));
     }
+    if let Some(auth) = &pending.auth {
+        let auth_target = Path::new(&auth.backup.target_path);
+        let expected_auth_target =
+            Path::new(&pending.backup.target_path).with_file_name("auth.json");
+        if pending.app != AppKind::Codex
+            || auth.backup.app != AppKind::Codex
+            || auth.backup.linked_backup_id.as_deref() != Some(pending.backup.id.as_str())
+            || auth_target != expected_auth_target
+            || Path::new(&auth.backup.backup_path).parent() != Some(directory)
+        {
+            return Err(recovery_error("未完成认证事务身份不匹配", &path));
+        }
+    }
     Ok(Some(pending))
 }
 
@@ -74,6 +97,10 @@ pub(crate) fn track<Io: SwitchIo, T>(
     let text = serde_json::to_string(&pending).expect("journal serializes");
     io.sync_file(Path::new(&pending.backup.backup_path))
         .map_err(|_| recovery_error("配置事务备份无法持久化", &path))?;
+    if let Some(auth) = &pending.auth {
+        io.sync_file(Path::new(&auth.backup.backup_path))
+            .map_err(|_| recovery_error("认证事务备份无法持久化", &path))?;
+    }
     io.write_new_file(&path, &text)
         .and_then(|_| io.sync_file(&path))
         .and_then(|_| io.sync_dir(directory))
@@ -99,6 +126,12 @@ pub(crate) fn track<Io: SwitchIo, T>(
     if pending.after_existed {
         io.sync_file(target)
             .map_err(|_| recovery_error("配置提交尚未持久化，保留恢复记录", &path))?;
+    }
+    if let Some(auth) = &pending.auth {
+        if auth.after_existed {
+            io.sync_file(Path::new(&auth.backup.target_path))
+                .map_err(|_| recovery_error("认证提交尚未持久化，保留恢复记录", &path))?;
+        }
     }
     io.sync_dir(target.parent().expect("target directory"))
         .map_err(|_| recovery_error("配置目录提交尚未持久化，保留恢复记录", &path))?;
@@ -132,8 +165,14 @@ pub fn finish_config_recovery<Io: SwitchIo>(
                 &path,
             ));
         }
+        if let Some((auth_hash, auth_existed)) =
+            auth_expected_state(pending, expected_hash, expected_existed)
+        {
+            verify_sibling_snapshot(io, pending, auth_hash, auth_existed, &path)?;
+        }
         commit().map_err(|message| recovery_error(&message, &path))?;
         sync_target(io, target, expected_existed, &path)?;
+        sync_auth_target(io, pending, &path)?;
         io.remove(&path)
             .and_then(|_| io.sync_dir(directory))
             .map_err(|_| recovery_error("恢复已完成，但事务清理失败", &path))
@@ -180,8 +219,23 @@ pub fn rollback_pending_config<Io: SwitchIo>(
                 recovery: restored,
             });
         }
+        if let Some(auth) = &pending.auth {
+            let restored_auth = crate::restore::restore_backup_content(
+                io,
+                Path::new(&auth.backup.target_path),
+                &auth.backup,
+            );
+            if !matches!(restored_auth, RecoveryOutcome::Restored { .. }) {
+                return Err(SwitchError::CommitFailed {
+                    stage: "transaction-recovery",
+                    message: "事务认证补偿未完成".into(),
+                    recovery: restored_auth,
+                });
+            }
+        }
         commit().map_err(|message| recovery_error(&message, &journal_path))?;
         sync_target(io, target, pending.backup.target_existed, &journal_path)?;
+        sync_auth_target(io, pending, &journal_path)?;
         io.remove(&journal_path)
             .and_then(|_| io.sync_dir(directory))
             .map_err(|_| recovery_error("事务补偿清理失败", &journal_path))?;
@@ -209,6 +263,67 @@ fn sync_target<Io: SwitchIo>(
     }
     io.sync_dir(target.parent().expect("target directory"))
         .map_err(|_| recovery_error("恢复目录尚未持久化", journal))
+}
+
+fn auth_expected_state<'a>(
+    pending: &'a PendingConfigWrite,
+    expected_hash: &str,
+    expected_existed: bool,
+) -> Option<(&'a str, bool)> {
+    let auth = pending.auth.as_ref()?;
+    if pending.after_hash == expected_hash && pending.after_existed == expected_existed {
+        return Some((&auth.after_hash, auth.after_existed));
+    }
+    if pending.backup.content_hash == expected_hash
+        && pending.backup.target_existed == expected_existed
+    {
+        return Some((&auth.backup.content_hash, auth.backup.target_existed));
+    }
+    None
+}
+
+fn verify_sibling_snapshot<Io: SwitchIo>(
+    io: &Io,
+    pending: &PendingConfigWrite,
+    expected_hash: &str,
+    expected_existed: bool,
+    journal: &Path,
+) -> Result<(), SwitchError> {
+    let Some(auth) = pending.auth.as_ref() else {
+        return Ok(());
+    };
+    let target = Path::new(&auth.backup.target_path);
+    let (content, existed) = match io.read_file(target) {
+        Ok(content) => (content, true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (String::new(), false),
+        Err(_) => return Err(recovery_error("无法读取恢复认证目标", journal)),
+    };
+    if existed == expected_existed && crate::sha256_hex(&content) == expected_hash {
+        return Ok(());
+    }
+    Err(recovery_error(
+        "认证文件已发生额外变化，请从事务备份显式恢复",
+        journal,
+    ))
+}
+
+fn sync_auth_target<Io: SwitchIo>(
+    io: &Io,
+    pending: &PendingConfigWrite,
+    journal: &Path,
+) -> Result<(), SwitchError> {
+    let Some(auth) = pending.auth.as_ref() else {
+        return Ok(());
+    };
+    let target = Path::new(&auth.backup.target_path);
+    match io.read_file(target) {
+        Ok(_) => io
+            .sync_file(target)
+            .map_err(|_| recovery_error("认证文件尚未持久化", journal))?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(recovery_error("无法确认认证文件持久化状态", journal)),
+    }
+    Ok(())
 }
 
 fn recovery_error(message: &str, path: &Path) -> SwitchError {

@@ -139,6 +139,7 @@ describe("ProviderEditor.models", () => {
       name: "中继 D",
       model: null,
       baseUrl: "https://relay-d.example",
+      connection: {},
       apiKey: "sk-test-key",
       upstreamProtocol: "anthropicMessages",
       responsesOptions: null,
@@ -180,6 +181,7 @@ describe("ProviderEditor.models", () => {
       name: "清除旧映射",
       model: null,
       baseUrl: "https://relay.example",
+      connection: {},
       apiKey: "sk-test-key",
       upstreamProtocol: "anthropicMessages",
       responsesOptions: null,
@@ -233,6 +235,7 @@ describe("ProviderEditor.models", () => {
     // explicit protocol contract.
     expect(invokeMock).toHaveBeenCalledWith("fetch_provider_models", {
       request: {
+        app: "claude",
         url: "https://gateway.example/v1",
         apiKey: "sk-test-key",
         upstreamProtocol: "responses",
@@ -303,6 +306,7 @@ describe("ProviderEditor.models", () => {
       "fetch_provider_models",
       expect.objectContaining({
         request: {
+          app: "claude",
           url: "https://gateway.example",
           apiKey: "sk-entered-key",
           upstreamProtocol: "responses",
@@ -384,6 +388,7 @@ describe("ProviderEditor.models", () => {
       name: "中继 C",
       model: null,
       baseUrl: "https://relay-c.internal",
+      connection: {},
       apiKey: "sk-test-key",
       upstreamProtocol: "anthropicMessages",
       responsesOptions: null,

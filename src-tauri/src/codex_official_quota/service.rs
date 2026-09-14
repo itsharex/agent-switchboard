@@ -20,6 +20,8 @@ pub(super) fn cache() -> &'static Mutex<HashMap<String, CachedQuota>> {
 
 #[derive(Deserialize)]
 struct AuthFile {
+    #[serde(rename = "OPENAI_API_KEY")]
+    openai_api_key: Option<String>,
     tokens: Option<AuthTokens>,
 }
 
@@ -153,6 +155,13 @@ pub(super) fn fetch(auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
 
 pub(super) fn parse_credentials(content: &str) -> Option<AuthCredentials> {
     let auth: AuthFile = serde_json::from_str(content).ok()?;
+    if auth
+        .openai_api_key
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return None;
+    }
     crate::official_login::observation::parse_codex_login(content)
         .require()
         .ok()?;
@@ -189,7 +198,7 @@ fn has_header_control_characters(value: &str) -> bool {
     value.chars().any(char::is_control)
 }
 
-pub(super) fn quota_from_http_response(status: u16, body: &str, at: String) -> CodexOfficialQuota {
+pub(crate) fn quota_from_http_response(status: u16, body: &str, at: String) -> CodexOfficialQuota {
     match status {
         200..=299 => quota_from_body(body, at)
             .unwrap_or_else(|| empty(CodexOfficialQuotaStatus::Unavailable)),

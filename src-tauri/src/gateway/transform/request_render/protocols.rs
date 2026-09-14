@@ -2,163 +2,46 @@
 
 use super::*;
 
-pub(super) fn render_chat(request: &CanonicalRequest) -> Result<Value, TransformError> {
-    let mut messages = Vec::new();
-    if !request.system.is_empty() {
-        messages.push(json!({
-            "role": "system",
-            "content": render_chat_content(&request.system)?,
-        }));
-    }
-    for message in &request.messages {
-        match message.role {
-            Role::User => {
-                let mut ordinary = Vec::new();
-                for part in &message.parts {
-                    if let Part::ToolResult {
-                        id,
-                        content,
-                        is_error,
-                        ..
-                    } = part
-                    {
-                        if *is_error {
-                            return error(
-                                "Chat Completions 不支持无损的 tool_result.is_error 映射",
-                            );
-                        }
-                        if !ordinary.is_empty() {
-                            messages.push(json!({
-                                "role": "user",
-                                "content": render_chat_content(&ordinary)?,
-                            }));
-                            ordinary.clear();
-                        }
-                        messages.push(json!({
-                            "role": "tool",
-                            "tool_call_id": id,
-                            "content": render_chat_content(content)?,
-                        }));
-                    } else {
-                        if matches!(part, Part::Reasoning(_)) {
-                            return error("reasoning 只能出现在 assistant 消息中");
-                        }
-                        ordinary.push(part.clone());
-                    }
-                }
-                if !ordinary.is_empty() {
-                    messages.push(json!({
-                        "role": "user",
-                        "content": render_chat_content(&ordinary)?,
-                    }));
-                }
-            }
-            Role::Assistant => {
-                let mut text = Vec::new();
-                let mut calls = Vec::new();
-                let mut reasoning = String::new();
-                for part in &message.parts {
-                    match part {
-                        Part::Text(_) | Part::Image(_) => text.push(part.clone()),
-                        Part::Reasoning(value) => {
-                            // Chat history can only carry a readable trace. An
-                            // upstream opaque block belongs to another backend
-                            // and must not be silently dropped here.
-                            if value.content.is_empty() {
-                                return error(
-                                    "该推理是不透明上游块，无法用于 Chat Completions 历史",
-                                );
-                            }
-                            reasoning.push_str(&value.content);
-                        }
-                        Part::ToolCall {
-                            id,
-                            name,
-                            namespace,
-                            kind,
-                            input,
-                        } => {
-                            let arguments = match kind {
-                                ToolKind::Function => input.clone(),
-                                ToolKind::Custom => {
-                                    json!({ "input": input.as_str().ok_or_else(|| TransformError("custom 工具输入必须是字符串".to_string()))? })
-                                }
-                                ToolKind::ToolSearch => input.clone(),
-                            };
-                            calls.push(json!({
-                                "id": id,
-                                "type": "function",
-                                "function": { "name": render_target_name(UpstreamProtocol::ChatCompletions, namespace.as_deref(), name, *kind)?, "arguments": serde_json::to_string(&arguments).map_err(|_| TransformError("无法编码工具参数".to_string()))? },
-                            }));
-                        }
-                        Part::ToolResult { .. } => {
-                            return error("assistant 消息不能包含 tool_result")
-                        }
-                    }
-                }
-                let mut output = Map::new();
-                output.insert("role".to_string(), Value::String("assistant".to_string()));
-                output.insert(
-                    "content".to_string(),
-                    if text.is_empty() {
-                        Value::Null
-                    } else {
-                        render_chat_content(&text)?
-                    },
-                );
-                if !calls.is_empty() {
-                    output.insert("tool_calls".to_string(), Value::Array(calls));
-                }
-                if !reasoning.is_empty() {
-                    output.insert("reasoning_content".to_string(), Value::String(reasoning));
-                }
-                messages.push(Value::Object(output));
-            }
-            Role::System => {
-                if message
-                    .parts
-                    .iter()
-                    .any(|part| !matches!(part, Part::Text(_) | Part::Image(_)))
-                {
-                    return error("system 消息只能包含文本或图片");
-                }
-                messages.push(json!({
-                    "role": "system",
-                    "content": render_chat_content(&message.parts)?,
-                }));
-            }
-            Role::Developer => return error("developer 消息应在规范化阶段处理"),
-        }
-    }
-    let mut root = Map::new();
-    root.insert("model".to_string(), Value::String(request.model.clone()));
-    root.insert("messages".to_string(), Value::Array(messages));
-    if let Some(user_id) = &request.user_id {
-        root.insert("user".to_string(), Value::String(user_id.clone()));
-    }
-    if let Some(reasoning_effort) = request.reasoning_effort {
-        root.insert(
-            "reasoning_effort".to_string(),
-            Value::String(
-                match reasoning_effort {
-                    ReasoningEffort::Low => "low",
-                    ReasoningEffort::High => "high",
-                    ReasoningEffort::Max => "max",
-                }
-                .to_string(),
-            ),
-        );
-    }
-    insert_common_chat(&mut root, request)?;
-    Ok(Value::Object(root))
-}
-
 pub(super) fn render_anthropic(request: &CanonicalRequest) -> Result<Value, TransformError> {
     let max_tokens = request.max_tokens.ok_or_else(|| {
         TransformError("转换到 Anthropic Messages 时必须提供最大输出 token 数".to_string())
     })?;
-    let mut messages = Vec::new();
-    for message in &request.messages {
+    let mut root = Map::new();
+    root.insert("model".to_string(), Value::String(request.model.clone()));
+    root.insert(
+        "messages".to_string(),
+        render_anthropic_messages(&request.messages)?,
+    );
+    root.insert("max_tokens".to_string(), Value::Number(max_tokens.into()));
+    if let Some(effort) = request.reasoning_effort {
+        root.insert(
+            "output_config".to_string(),
+            json!({ "effort": effort_name(effort) }),
+        );
+    }
+    if let Some(user_id) = &request.user_id {
+        root.insert("metadata".to_string(), json!({ "user_id": user_id }));
+    }
+    if !request.system.is_empty() {
+        root.insert(
+            "system".to_string(),
+            render_anthropic_content(&request.system)?,
+        );
+    }
+    if !request.tools.is_empty() {
+        root.insert("tools".to_string(), render_anthropic_tools(&request.tools)?);
+        root.insert(
+            "tool_choice".to_string(),
+            render_anthropic_tool_choice(&request.tool_choice, request.parallel_tool_calls)?,
+        );
+    }
+    insert_common_anthropic(&mut root, request);
+    Ok(Value::Object(root))
+}
+
+fn render_anthropic_messages(messages: &[Message]) -> Result<Value, TransformError> {
+    let mut output = Vec::new();
+    for message in messages {
         let role = match message.role {
             Role::User => "user",
             Role::Assistant => "assistant",
@@ -173,95 +56,43 @@ pub(super) fn render_anthropic(request: &CanonicalRequest) -> Result<Value, Tran
         {
             return error("reasoning 只能出现在 assistant 消息中");
         }
-        messages.push(json!({
-            "role": role,
-            "content": render_anthropic_content(&message.parts)?,
-        }));
+        output.push(json!({ "role": role, "content": render_anthropic_content(&message.parts)? }));
     }
-    let mut root = Map::new();
-    root.insert("model".to_string(), Value::String(request.model.clone()));
-    root.insert("messages".to_string(), Value::Array(messages));
-    root.insert("max_tokens".to_string(), Value::Number(max_tokens.into()));
-    if let Some(reasoning_effort) = request.reasoning_effort {
-        // The inverse of `parse_anthropic_output_effort`: Anthropic expresses
-        // the Codex reasoning level as the documented output effort control.
-        root.insert(
-            "output_config".to_string(),
-            json!({
-                "effort": match reasoning_effort {
-                    ReasoningEffort::Low => "low",
-                    ReasoningEffort::High => "high",
-                    ReasoningEffort::Max => "max",
-                },
-            }),
-        );
-    }
-    if let Some(user_id) = &request.user_id {
-        root.insert("metadata".to_string(), json!({ "user_id": user_id }));
-    }
-    if !request.system.is_empty() {
-        root.insert(
-            "system".to_string(),
-            render_anthropic_content(&request.system)?,
-        );
-    }
-    if !request.tools.is_empty() {
-        if request.tools.iter().any(|tool| tool.strict) {
-            return error("Anthropic Messages 无法无损表达 strict 工具");
-        }
-        root.insert(
-            "tools".to_string(),
-            Value::Array(
-                request
-                    .tools
-                    .iter()
-                    .map(|tool| -> Result<Value, TransformError> {
-                        let mut value = Map::new();
-                        value.insert(
-                            "name".to_string(),
-                            Value::String(render_target_name(
-                                UpstreamProtocol::AnthropicMessages,
-                                tool.namespace.as_deref(),
-                                &tool.name,
-                                tool.kind,
-                            )?),
-                        );
-                        if let Some(description) = &tool.description {
-                            value.insert(
-                                "description".to_string(),
-                                Value::String(description.clone()),
-                            );
-                        }
-                        value.insert("input_schema".to_string(), tool.input_schema.clone());
-                        Ok(Value::Object(value))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-        );
-        root.insert(
-            "tool_choice".to_string(),
-            render_anthropic_tool_choice(&request.tool_choice, request.parallel_tool_calls)?,
-        );
-    }
-    insert_common_anthropic(&mut root, request);
-    Ok(Value::Object(root))
+    Ok(Value::Array(output))
 }
 
-pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, TransformError> {
-    if request.reasoning_effort.is_some() {
-        return error("reasoning_effort 无法无损转换到 Responses 请求");
+fn render_anthropic_tools(tools: &[Tool]) -> Result<Value, TransformError> {
+    if tools.iter().any(|tool| tool.strict) {
+        return error("Anthropic Messages 无法无损表达 strict 工具");
     }
+    let mut values = Vec::new();
+    for tool in tools {
+        let mut value = Map::new();
+        value.insert(
+            "name".to_string(),
+            Value::String(render_target_name(
+                UpstreamProtocol::AnthropicMessages,
+                tool.namespace.as_deref(),
+                &tool.name,
+                tool.kind,
+            )?),
+        );
+        if let Some(description) = &tool.description {
+            value.insert(
+                "description".to_string(),
+                Value::String(description.clone()),
+            );
+        }
+        value.insert("input_schema".to_string(), tool.input_schema.clone());
+        values.push(Value::Object(value));
+    }
+    Ok(Value::Array(values))
+}
+
+fn render_responses_input(request: &CanonicalRequest) -> Result<Vec<Value>, TransformError> {
     let mut input = Vec::new();
     for message in &request.messages {
-        if message.parts.is_empty() {
-            return error("消息不含可转换内容");
-        }
-        let role = match message.role {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::System => "system",
-            Role::Developer => "developer",
-        };
+        let role = responses_message_role(message)?;
         let mut ordinary = Vec::new();
         for part in &message.parts {
             match part {
@@ -274,24 +105,9 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
                     if message.role != Role::User {
                         return error("tool_result 只能出现在 user 消息中");
                     }
-                    if *is_error {
-                        return error("Responses 不支持无损的 tool_result.is_error 映射");
-                    }
                     push_responses_message(&mut input, role, &ordinary)?;
                     ordinary.clear();
-                    match kind {
-                        ToolKind::Function => input.push(json!({
-                            "type": "function_call_output",
-                            "call_id": id,
-                            "output": render_responses_content(content)?,
-                        })),
-                        ToolKind::ToolSearch => {
-                            input.push(tool_search_output_from_content(id, content)?)
-                        }
-                        ToolKind::Custom => {
-                            return error("custom_tool_call_output 无法无损转换到 Responses")
-                        }
-                    }
+                    input.push(render_responses_tool_result(id, *kind, content, *is_error)?);
                 }
                 Part::ToolCall {
                     id,
@@ -305,58 +121,9 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
                     }
                     push_responses_message(&mut input, role, &ordinary)?;
                     ordinary.clear();
-                    let mut call = Map::new();
-                    call.insert(
-                        "type".to_string(),
-                        Value::String(
-                            match kind {
-                                ToolKind::Function => "function_call",
-                                ToolKind::Custom => "custom_tool_call",
-                                ToolKind::ToolSearch => "tool_search_call",
-                            }
-                            .to_string(),
-                        ),
-                    );
-                    call.insert("call_id".to_string(), Value::String(id.clone()));
-                    call.insert("name".to_string(), Value::String(name.clone()));
-                    if let Some(namespace) = namespace {
-                        call.insert("namespace".to_string(), Value::String(namespace.clone()));
-                    }
-                    match kind {
-                        ToolKind::Function => {
-                            call.insert(
-                                "arguments".to_string(),
-                                Value::String(
-                                    serde_json::to_string(arguments).map_err(|_| {
-                                        TransformError("无法编码工具参数".to_string())
-                                    })?,
-                                ),
-                            );
-                        }
-                        ToolKind::Custom => {
-                            call.insert(
-                                "input".to_string(),
-                                Value::String(
-                                    arguments
-                                        .as_str()
-                                        .ok_or_else(|| {
-                                            TransformError(
-                                                "custom 工具输入必须是字符串".to_string(),
-                                            )
-                                        })?
-                                        .to_string(),
-                                ),
-                            );
-                        }
-                        ToolKind::ToolSearch => {
-                            call.insert(
-                                "execution".to_string(),
-                                Value::String("client".to_string()),
-                            );
-                            call.insert("arguments".to_string(), arguments.clone());
-                        }
-                    }
-                    input.push(Value::Object(call));
+                    input.push(render_responses_tool_call(
+                        id, name, namespace, *kind, arguments,
+                    )?);
                 }
                 Part::Reasoning(reasoning) => {
                     if message.role != Role::Assistant {
@@ -364,21 +131,42 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
                     }
                     push_responses_message(&mut input, role, &ordinary)?;
                     ordinary.clear();
-                    input.push(json!({
-                        "type": "reasoning",
-                        "summary": [],
-                        "content": [],
-                        "encrypted_content": reasoning.continuation,
-                    }));
+                    input.push(reasoning.responses_input_item()?);
+                }
+                Part::Document(_) | Part::ToolReference(_) if message.role == Role::User => {
+                    ordinary.push(part.clone())
+                }
+                Part::Document(_) | Part::ToolReference(_) => {
+                    return error("文档和工具引用只能出现在用户输入或工具结果中")
                 }
                 Part::Text(_) | Part::Image(_) => ordinary.push(part.clone()),
             }
         }
         push_responses_message(&mut input, role, &ordinary)?;
     }
+    Ok(input)
+}
+
+fn responses_message_role(message: &Message) -> Result<&'static str, TransformError> {
+    if message.parts.is_empty() {
+        return error("消息不含可转换内容");
+    }
+    Ok(match message.role {
+        Role::User => "user",
+        Role::Assistant => "assistant",
+        Role::System => "system",
+        Role::Developer => "developer",
+    })
+}
+
+pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, TransformError> {
     let mut root = Map::new();
     root.insert("model".to_string(), Value::String(request.model.clone()));
-    root.insert("input".to_string(), Value::Array(input));
+    root.insert(
+        "input".to_string(),
+        Value::Array(render_responses_input(request)?),
+    );
+    insert_openai_reasoning(&mut root, request, UpstreamProtocol::Responses);
     if let Some(user_id) = &request.user_id {
         root.insert("metadata".to_string(), json!({ "user_id": user_id }));
     }
@@ -411,21 +199,52 @@ pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, Tran
     Ok(Value::Object(root))
 }
 
-fn tool_search_output_from_content(id: &str, content: &[Part]) -> Result<Value, TransformError> {
-    let [Part::Text(serialized)] = content else {
-        return error("tool_search_output 必须保留为单个 JSON 文本结果");
-    };
-    let item: Value = serde_json::from_str(serialized)
-        .map_err(|_| TransformError("tool_search_output 不是有效 JSON".to_string()))?;
-    let item = item
-        .as_object()
-        .ok_or_else(|| TransformError("tool_search_output 必须是对象".to_string()))?;
-    if item.get("type").and_then(Value::as_str) != Some("tool_search_output")
-        || item.get("call_id").and_then(Value::as_str) != Some(id)
-    {
-        return error("tool_search_output 与工具调用不一致");
+fn render_responses_tool_call(
+    id: &str,
+    name: &str,
+    namespace: &Option<String>,
+    kind: ToolKind,
+    arguments: &Value,
+) -> Result<Value, TransformError> {
+    let mut call = Map::new();
+    call.insert(
+        "type".to_string(),
+        Value::String(
+            match kind {
+                ToolKind::Function => "function_call",
+                ToolKind::Custom => "custom_tool_call",
+                ToolKind::ToolSearch => "tool_search_call",
+            }
+            .to_string(),
+        ),
+    );
+    call.insert("call_id".to_string(), Value::String(id.to_string()));
+    call.insert("name".to_string(), Value::String(name.to_string()));
+    if let Some(namespace) = namespace {
+        call.insert("namespace".to_string(), Value::String(namespace.clone()));
     }
-    Ok(Value::Object(item.clone()))
+    match kind {
+        ToolKind::Function => {
+            call.insert(
+                "arguments".to_string(),
+                Value::String(
+                    serde_json::to_string(arguments)
+                        .map_err(|_| TransformError("无法编码工具参数".to_string()))?,
+                ),
+            );
+        }
+        ToolKind::Custom => {
+            let input = arguments
+                .as_str()
+                .ok_or_else(|| TransformError("custom 工具输入必须是字符串".to_string()))?;
+            call.insert("input".to_string(), Value::String(input.to_string()));
+        }
+        ToolKind::ToolSearch => {
+            call.insert("execution".to_string(), Value::String("client".to_string()));
+            call.insert("arguments".to_string(), arguments.clone());
+        }
+    }
+    Ok(Value::Object(call))
 }
 
 pub(super) fn push_responses_message(

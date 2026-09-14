@@ -9,9 +9,17 @@
 //! behind it may be listening, failed, or awaiting repair. A failed bind is a
 //! visible, recoverable runtime state — never a reason to refuse the window.
 
+pub(crate) mod claude_pricing;
+pub(crate) mod claude_settings;
+pub(crate) mod codex;
+pub(crate) mod failover;
+mod health_state;
 mod metrics;
 pub(crate) mod port_change;
 mod port_probe;
+mod provider_health;
+pub(crate) mod request_ledger;
+mod usage_metadata;
 mod server;
 mod transform;
 
@@ -20,8 +28,8 @@ use metrics::{GatewayMetrics, GatewayMetricsSnapshot};
 use crate::local_state::LocalState;
 use asb_core::adapter;
 use asb_core::contracts::{
-    AppKind, CodexRouteSnapshot, ProviderProfile, ResponsesOptions, RouteMode, SwitchPlan,
-    UpstreamProtocol,
+    AppKind, ClaudeModelSettings, CodexRouteSnapshot, ModelOptions, ProviderConnectionOptions,
+    ProviderProfile, ResponsesOptions, RouteMode, SwitchPlan, UpstreamProtocol,
 };
 use asb_core::validate_plan;
 use serde::{Deserialize, Serialize};
@@ -38,7 +46,11 @@ use tiny_http::Server;
 use uuid::Uuid;
 
 mod activation_snapshot;
+mod claude_routing;
 mod controller;
+pub(crate) use claude_routing::claude_uses_gateway;
+mod codex_routing;
+mod runtime;
 pub(crate) use activation_snapshot::GatewayActivationSnapshot;
 mod compaction;
 mod content_encoding;
@@ -48,13 +60,21 @@ mod lifecycle;
 mod restore_validation;
 mod routing;
 mod state;
+mod state_repair;
 
 #[cfg(test)]
 mod responses_tests;
 #[cfg(test)]
 mod tests;
 
+use health_state::ClaudeHealthStore;
 use identity::*;
+pub(crate) use identity::{codex_catalog_file_name, codex_route_fingerprint};
+pub(crate) use provider_health::{
+    is_retryable_http_status, ProviderHealth, ProviderHealthConfig, ProviderHealthSnapshot,
+    ProviderHealthState,
+};
+use request_ledger::ClaudeRequestLedger;
 use state::*;
 
 pub(crate) use port_change::{
@@ -93,6 +113,10 @@ pub(crate) struct GatewayProjection {
     activation: GatewayActivation,
     warning: Option<String>,
     pub(crate) codex_catalog: Option<CodexCatalogProjection>,
+    /// Claude failover candidates captured with the switch preview. The
+    /// active route remains the source of the client projection; candidates
+    /// never change the client-facing token or endpoint.
+    pub(crate) candidate_routes: Vec<ActiveRoute>,
 }
 
 /// One immutable model-catalog file named from the selected provider and its
@@ -137,10 +161,17 @@ pub(crate) struct ActiveRoute {
     pub(crate) client_token: String,
     pub(crate) continuation_key: [u8; 32],
     pub(crate) upstream_base_url: String,
+    pub(crate) connection: ProviderConnectionOptions,
     pub(crate) upstream_protocol: UpstreamProtocol,
     pub(crate) responses_options: Option<ResponsesOptions>,
     pub(crate) max_output_tokens: Option<u64>,
     pub(crate) api_key: String,
+    pub(crate) authentication: asb_core::AuthenticationScheme,
+    /// Claude's request-time model routing snapshot. These fields are absent
+    /// for Codex because its model catalog owns that mapping separately.
+    pub(crate) claude_primary_model: Option<String>,
+    pub(crate) claude_model_options: Option<ClaudeModelSettings>,
+    pub(crate) claude_account: Option<crate::claude_auth::ResolvedAccount>,
     /// Present only for Codex. This is the accepted-request routing source
     /// for its typed catalog, model mapping, and operation capabilities.
     pub(crate) codex: Option<CodexRouteSnapshot>,
@@ -190,8 +221,16 @@ pub(crate) enum ListenerState {
 
 pub(crate) struct GatewayInner {
     pub(crate) state_path: PathBuf,
+    pub(crate) state_root: PathBuf,
+    pub(crate) endpoint_write_lock: Arc<Mutex<()>>,
     pub(crate) state: Mutex<GatewayStateFile>,
     pub(crate) routes: RwLock<BTreeMap<AppKind, ActiveRoute>>,
+    pub(crate) candidate_routes: RwLock<BTreeMap<AppKind, Vec<ActiveRoute>>>,
+    pub(crate) provider_health: RwLock<BTreeMap<String, Arc<ProviderHealth>>>,
+    pub(crate) health_store: Arc<ClaudeHealthStore>,
+    pub(crate) codex_health: Arc<codex::health::CodexHealthStore>,
+    pub(crate) claude_request_ledger: Arc<ClaudeRequestLedger>,
+    pub(crate) claude_auth: Arc<crate::claude_auth::ClaudeAuth>,
     pub(crate) activation_lock: Mutex<()>,
     pub(crate) listener: RwLock<ListenerState>,
     /// While set, the serve loop answers new requests with 503 so a port
@@ -214,20 +253,6 @@ pub(crate) struct GatewayInner {
     pub(crate) metrics: Arc<GatewayMetrics>,
 }
 
-impl GatewayInner {
-    /// The loopback base URL derived from the persisted port — the single
-    /// address contract, read live so a port change takes effect everywhere.
-    pub(crate) fn configured_base_url(&self) -> String {
-        format!(
-            "http://127.0.0.1:{}",
-            self.state
-                .lock()
-                .map(|state| state.port)
-                .unwrap_or(DEFAULT_GATEWAY_PORT)
-        )
-    }
-}
-
 /// Drops the in-flight count when the request handler exits, including via
 /// panic unwinding, so a drain can never wait on a leaked counter.
 pub(crate) struct InflightGuard(Arc<GatewayInner>);
@@ -247,6 +272,9 @@ pub(crate) struct RouteObservation {
     pub(crate) app: AppKind,
     pub(crate) profile_id: String,
     pub(crate) upstream_protocol: UpstreamProtocol,
+    pub(crate) health: ProviderHealthState,
+    pub(crate) consecutive_failures: u32,
+    pub(crate) candidate_count: usize,
 }
 
 /// The listener's runtime condition, kept distinct from the configured port.
@@ -323,142 +351,6 @@ pub(crate) struct GatewayObservation {
 #[derive(Clone)]
 pub(crate) struct GatewayController {
     pub(crate) inner: Arc<GatewayInner>,
-}
-
-impl GatewayController {
-    /// The saved port every client-facing address is derived from.
-    pub(crate) fn configured_port(&self) -> u16 {
-        self.inner
-            .state
-            .lock()
-            .map(|state| state.port)
-            .unwrap_or(DEFAULT_GATEWAY_PORT)
-    }
-
-    /// The loopback base URL that client configurations are written against.
-    /// It follows the configured port, the single address contract, whether
-    /// or not the listener is currently up.
-    pub(crate) fn configured_base_url(&self) -> String {
-        self.inner.configured_base_url()
-    }
-
-    pub(crate) fn listening(&self) -> Option<BoundListener> {
-        let listener = self.inner.listener.read().ok()?;
-        match &*listener {
-            ListenerState::Listening { listener }
-                if !listener.stop_signal().load(Ordering::Acquire) =>
-            {
-                Some(listener.clone())
-            }
-            ListenerState::Listening { .. } => None,
-            ListenerState::Failed(_) => None,
-        }
-    }
-
-    /// The served base URL; `None` while the listener is down.
-    pub(crate) fn listening_base_url(&self) -> Option<String> {
-        self.listening()
-            .map(|listener| format!("http://127.0.0.1:{}", listener.port()))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn is_listening(&self) -> bool {
-        self.listening().is_some()
-    }
-
-    pub(crate) fn blocked_recovery(&self) -> Option<port_change::BlockedPortChange> {
-        self.inner
-            .blocked_recovery
-            .lock()
-            .ok()
-            .and_then(|guard| guard.clone())
-    }
-
-    pub(crate) fn state_available(&self) -> bool {
-        self.inner.state_available.load(Ordering::Acquire)
-    }
-
-    /// Persists the one listener-address contract before publishing it to
-    /// callers. The port-change journal decides whether a later failure rolls
-    /// this fact back or completes it.
-    pub(crate) fn persist_port(&self, port: u16) -> Result<(), String> {
-        let mut state = self
-            .inner
-            .state
-            .lock()
-            .map_err(|_| "本机协议网关状态锁不可用".to_string())?;
-        let mut next = state.clone();
-        next.port = port;
-        write_state(&self.inner.state_path, &next)?;
-        *state = next;
-        Ok(())
-    }
-
-    /// Publishes a replacement listener and returns the previous listener so
-    /// the caller can stop that exact socket after the handoff.
-    pub(crate) fn replace_listener(&self, listener: BoundListener) -> Option<BoundListener> {
-        // The listener lock protects only this process's publication slot. If
-        // a handler panicked while holding it, keeping the poisoned old slot
-        // would strand a committed endpoint transaction, so retain its value
-        // and complete the deterministic handoff.
-        let mut state = self
-            .inner
-            .listener
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let previous = std::mem::replace(&mut *state, ListenerState::Listening { listener });
-        match previous {
-            ListenerState::Listening { listener } => Some(listener),
-            ListenerState::Failed(_) => None,
-        }
-    }
-
-    pub(crate) fn block_port_change(&self, blocked: port_change::BlockedPortChange) {
-        if let Ok(mut slot) = self.inner.blocked_recovery.lock() {
-            *slot = Some(blocked);
-        }
-    }
-
-    pub(crate) fn clear_blocked_port_change(&self) -> Result<(), String> {
-        let mut slot = self
-            .inner
-            .blocked_recovery
-            .lock()
-            .map_err(|_| "端口修改恢复状态锁不可用".to_string())?;
-        *slot = None;
-        Ok(())
-    }
-
-    /// Replaces the listener fact atomically.
-    pub(crate) fn set_listener(&self, state: ListenerState) {
-        if let Ok(mut listener) = self.inner.listener.write() {
-            *listener = state;
-        }
-    }
-
-    pub(crate) fn shutdown(&self) {
-        self.inner.stopping.store(true, Ordering::Release);
-        if let Some(listener) = self.listening() {
-            listener.stop();
-        }
-    }
-}
-
-/// Reads the client files best-effort and reports whether either still points
-/// at a loopback gateway endpoint with this application's capability token.
-pub(crate) fn points_at_gateway_files(local: &LocalState) -> bool {
-    for app in [AppKind::Codex, AppKind::Claude] {
-        let Ok(target) = local.target(app) else {
-            continue;
-        };
-        let Ok(text) = fs::read_to_string(target) else {
-            continue;
-        };
-        if routing::config_points_at_gateway(app, &text) {
-            return true;
-        }
-    }
-    false
 }
 
 /// A minimal failure report for lock-poisoned or test-only paths.

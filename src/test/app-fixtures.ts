@@ -132,6 +132,7 @@ export const codexProfiles: CodexProviderRecord[] = [
       endpoint: "https://backup.internal/v1",
       apiKey: "OPENAI_API_KEY",
       upstream: "responses",
+      routeMode: "direct",
       requestMode: "standard",
       defaultModel: "gpt-5.4",
       catalog: [{
@@ -442,6 +443,22 @@ export function primeBackend(logEntries: RuntimeLogEntry[] = []) {
         return Promise.resolve("github");
       case "get_cached_codex_official_reset":
         return Promise.resolve(null);
+      case "codex_login_blocker":
+        return Promise.resolve(null);
+      case "official_login_start":
+        return Promise.resolve({
+          userCode: "WDJB-MJHT",
+          verificationUrl: "https://auth.openai.com/verify",
+        });
+      case "official_login_poll":
+        return Promise.resolve({
+          phase: "completed",
+          userCode: null,
+          verificationUrl: "",
+          message: null,
+        });
+      case "ensure_codex_official_record":
+        return Promise.resolve(codexOfficialRecord);
       case "list_extensions":
         return Promise.resolve({
           generation: 1,

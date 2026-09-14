@@ -146,12 +146,31 @@ fn commit_document<Io: SwitchIo>(
             message: error.to_string(),
             recovery: RecoveryOutcome::NotNeeded,
         })?;
+    if let Err(error) = io.sync_file(&temporary) {
+        let _ = io.remove(&temporary);
+        return Err(SwitchError::CommitFailed {
+            stage: "temp-sync",
+            message: error.to_string(),
+            recovery: RecoveryOutcome::NotNeeded,
+        });
+    }
+    if let Err(error) = read_expected_current(io, target, &backup.content_hash) {
+        let _ = io.remove(&temporary);
+        return Err(error);
+    }
     if let Err(error) = io.rename_replace(&temporary, target) {
         let _ = io.remove(&temporary);
         return Err(SwitchError::CommitFailed {
             stage: "atomic-replace",
             message: error.to_string(),
             recovery: RecoveryOutcome::NotNeeded,
+        });
+    }
+    if let Err(error) = io.sync_dir(target.parent().expect("prompt parent")) {
+        return Err(SwitchError::CommitFailed {
+            stage: "prompt-directory-sync",
+            message: error.to_string(),
+            recovery: restore_backup_content(io, target, backup),
         });
     }
     let verified = matches!(io.read_file(target), Ok(live) if live == content);
@@ -165,10 +184,14 @@ fn commit_document<Io: SwitchIo>(
     Ok(())
 }
 
-fn execute_locked<Io: SwitchIo>(
+fn execute_locked<Io: SwitchIo, Commit>(
     io: &Io,
     request: &GlobalPromptDocumentRequest,
-) -> Result<GlobalPromptDocumentOutcome, SwitchError> {
+    commit: Commit,
+) -> Result<GlobalPromptDocumentOutcome, SwitchError>
+where
+    Commit: FnOnce(&GlobalPromptDocumentOutcome) -> Result<(), String>,
+{
     let finish = |result| match (result, lockfile::release(io, request.target)) {
         (Ok(outcome), Ok(())) => Ok(outcome),
         (Ok(_), Err(reason)) => Err(SwitchError::CommitFailed {
@@ -200,10 +223,27 @@ fn execute_locked<Io: SwitchIo>(
     if let Err(error) = commit_document(io, request.target, request.content, &backup) {
         return finish(Err(error));
     }
-    finish(Ok(GlobalPromptDocumentOutcome {
+    let outcome = GlobalPromptDocumentOutcome {
         document: document_snapshot(request.app, request.content.to_string(), true),
         backup,
-    }))
+    };
+    if let Err(message) = commit(&outcome) {
+        let recovery = match io.read_file(request.target) {
+            Ok(current) if current == request.content => {
+                restore_backup_content(io, request.target, &outcome.backup)
+            }
+            _ => RecoveryOutcome::RestoreFailed {
+                reason: "全局指令已在提交期间外改，未覆盖外部内容".into(),
+                backup_path: outcome.backup.backup_path.clone(),
+            },
+        };
+        return finish(Err(SwitchError::CommitFailed {
+            stage: "prompt-state-commit",
+            message,
+            recovery,
+        }));
+    }
+    finish(Ok(outcome))
 }
 
 /// Saves a global prompt document through the same observable transaction
@@ -212,6 +252,18 @@ pub fn write_global_prompt_document<Io: SwitchIo>(
     io: &Io,
     request: &GlobalPromptDocumentRequest,
 ) -> Result<GlobalPromptDocumentOutcome, SwitchError> {
+    write_global_prompt_document_with_commit(io, request, |_| Ok(()))
+}
+
+/// Coordinates a prompt library state change with the locked live document.
+pub fn write_global_prompt_document_with_commit<Io: SwitchIo, Commit>(
+    io: &Io,
+    request: &GlobalPromptDocumentRequest,
+    commit: Commit,
+) -> Result<GlobalPromptDocumentOutcome, SwitchError>
+where
+    Commit: FnOnce(&GlobalPromptDocumentOutcome) -> Result<(), String>,
+{
     if let Some(parent) = request.target.parent() {
         io.ensure_dir(parent)
             .map_err(|error| SwitchError::CommitFailed {
@@ -221,7 +273,7 @@ pub fn write_global_prompt_document<Io: SwitchIo>(
             })?;
     }
     match lockfile::acquire(io, request.target, PROCESS_NAME) {
-        AcquireOutcome::Acquired => execute_locked(io, request),
+        AcquireOutcome::Acquired => execute_locked(io, request, commit),
         AcquireOutcome::Busy(status) => Err(SwitchError::BlockedByLock { status }),
     }
 }

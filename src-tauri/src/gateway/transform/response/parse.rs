@@ -1,16 +1,18 @@
 //! Protocol-specific response parsers and their JSON accessors.
 use super::*;
 mod accessors;
-mod reasoning;
+mod anthropic;
+mod chat;
+mod responses;
 
 pub(super) use accessors::*;
-use reasoning::responses_reasoning_text;
 
 pub(super) fn parse_responses(
     value: &Value,
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<CanonicalResponse, TransformError> {
     let map = object(value, "Responses 响应")?;
+    let terminal = lifecycle::ResponsesTerminal::parse(map)?;
     allowed(
         map,
         &[
@@ -32,403 +34,50 @@ pub(super) fn parse_responses(
             "top_p",
             "max_output_tokens",
             "instructions",
+            "reasoning",
+            "store",
+            "text",
+            "top_logprobs",
+            "truncation",
+            "user",
+            "previous_response_id",
+            "service_tier",
+            "max_tool_calls",
+            "prompt_cache_key",
+            "safety_identifier",
         ],
         "Responses 响应",
     )?;
-    if let Some(error_value) = map.get("error") {
-        if !error_value.is_null() {
-            return error("上游 Responses 返回错误");
-        }
-    }
-    if map.get("status").and_then(Value::as_str) == Some("incomplete") {
-        return error("上游 Responses 返回不完整响应，无法安全转换");
-    }
-    let mut content = Vec::new();
-    for value in array(
+    let content = responses::parse_parts(
         map.get("output")
-            .ok_or_else(|| TransformError("Responses 响应缺少 output".to_string()))?,
-        "output",
-    )? {
-        let item = object(value, "Responses output item")?;
-        let kind = string(item.get("type"), "output.type")?;
-        match kind.as_str() {
-            "message" => {
-                allowed(
-                    item,
-                    &["type", "id", "status", "role", "content"],
-                    "Responses message",
-                )?;
-                if string(item.get("role"), "message.role")? != "assistant" {
-                    return error("Responses output message 不是 assistant");
-                }
-                for part in array(
-                    item.get("content").ok_or_else(|| {
-                        TransformError("Responses message 缺少 content".to_string())
-                    })?,
-                    "message.content",
-                )? {
-                    let part = object(part, "Responses output content")?;
-                    let part_type = string(part.get("type"), "content.type")?;
-                    match part_type.as_str() {
-                        "output_text" | "refusal" => {
-                            allowed(
-                                part,
-                                &["type", "text", "refusal", "annotations"],
-                                "Responses output text",
-                            )?;
-                            let field = if part_type == "refusal" {
-                                "refusal"
-                            } else {
-                                "text"
-                            };
-                            content.push(ResponsePart::Text(string(part.get(field), field)?));
-                        }
-                        other => {
-                            return error(format!(
-                                "Responses output content.type {other} 不支持转换"
-                            ))
-                        }
-                    }
-                }
-            }
-            "function_call" => {
-                allowed(
-                    item,
-                    &[
-                        "type",
-                        "id",
-                        "call_id",
-                        "name",
-                        "namespace",
-                        "arguments",
-                        "status",
-                    ],
-                    "Responses function_call",
-                )?;
-                let arguments = string(item.get("arguments"), "function_call.arguments")?;
-                content.push(ResponsePart::ToolCall {
-                    id: string(item.get("call_id"), "function_call.call_id")?,
-                    name: string(item.get("name"), "function_call.name")?,
-                    namespace: optional_string(item, "namespace", "Responses function_call")?,
-                    kind: ToolKind::Function,
-                    input: serde_json::from_str(&arguments).map_err(|_| {
-                        TransformError("Responses function_call.arguments 不是 JSON".to_string())
-                    })?,
-                });
-            }
-            "custom_tool_call" => {
-                content.push(parse_custom_tool_call(item)?);
-            }
-            "tool_search_call" => {
-                allowed(
-                    item,
-                    &["type", "id", "call_id", "status", "execution", "arguments"],
-                    "Responses tool_search_call",
-                )?;
-                if item.get("execution").and_then(Value::as_str) != Some("client") {
-                    return error("Responses tool_search_call.execution 必须是 client");
-                }
-                let input = item.get("arguments").cloned().unwrap_or_else(|| json!({}));
-                if !input.is_object() {
-                    return error("Responses tool_search_call.arguments 必须是对象");
-                }
-                content.push(ResponsePart::ToolCall {
-                    id: string(item.get("call_id"), "tool_search_call.call_id")?,
-                    name: CODEX_TOOL_SEARCH_NAME.to_string(),
-                    namespace: None,
-                    kind: ToolKind::ToolSearch,
-                    input,
-                });
-            }
-            "reasoning" => {
-                allowed(
-                    item,
-                    &[
-                        "type",
-                        "id",
-                        "status",
-                        "summary",
-                        "content",
-                        "encrypted_content",
-                    ],
-                    "Responses reasoning",
-                )?;
-                if let Some(status) = item.get("status") {
-                    if status.as_str() != Some("completed") {
-                        return error("Responses reasoning.status 必须是 completed");
-                    }
-                }
-                if let Some(summary) = item.get("summary") {
-                    if !summary.is_array() {
-                        return error("Responses reasoning.summary 必须是数组");
-                    }
-                }
-                let transport = reasoning_transport
-                    .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
-                let encrypted = match item.get("encrypted_content") {
-                    None | Some(Value::Null) => None,
-                    Some(Value::String(value)) if !value.is_empty() => Some(value.as_str()),
-                    Some(Value::String(_)) => {
-                        return error("Responses reasoning.encrypted_content 不能为空")
-                    }
-                    Some(_) => {
-                        return error("Responses reasoning.encrypted_content 必须是字符串或 null")
-                    }
-                };
-                let reasoning = if let Some(encrypted) = encrypted {
-                    transport.from_continuation(encrypted.to_string())?
-                } else {
-                    let text = responses_reasoning_text(item)?;
-                    transport.from_chat_content(text)?
-                };
-                content.push(ResponsePart::Reasoning(reasoning));
-            }
-            other => return error(format!("Responses output.type {other} 不支持转换")),
-        }
-    }
+            .ok_or_else(|| TransformError("Responses 响应缺少 output".into()))?,
+        reasoning_transport,
+        terminal,
+    )?;
+    let stop = terminal.stop_reason(
+        content
+            .iter()
+            .any(|part| matches!(part, ResponsePart::ToolCall { .. })),
+    );
     Ok(CanonicalResponse {
         id: string(map.get("id"), "id")?,
         model: string(map.get("model"), "model")?,
         content,
-        stop: if map
-            .get("status")
-            .and_then(Value::as_str)
-            .is_some_and(|status| status == "completed")
-        {
-            StopReason::EndTurn
-        } else {
-            StopReason::MaxTokens
-        },
+        stop,
         usage: super::super::usage::parse(UpstreamProtocol::Responses, map.get("usage"))?,
     })
 }
+
 pub(super) fn parse_chat(
     value: &Value,
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<CanonicalResponse, TransformError> {
-    let map = object(value, "Chat 响应")?;
-    allowed(
-        map,
-        &[
-            "id",
-            "object",
-            "created",
-            "model",
-            "choices",
-            "usage",
-            "system_fingerprint",
-            "service_tier",
-        ],
-        "Chat 响应",
-    )?;
-    if let Some(service_tier) = map.get("service_tier") {
-        if !service_tier.is_null() {
-            service_tier
-                .as_str()
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| {
-                    TransformError("Chat service_tier 必须是非空字符串或 null".to_string())
-                })?;
-        }
-    }
-    let choice = array(
-        map.get("choices")
-            .ok_or_else(|| TransformError("Chat 响应缺少 choices".to_string()))?,
-        "choices",
-    )?
-    .first()
-    .ok_or_else(|| TransformError("Chat 响应 choices 为空".to_string()))?;
-    let choice = object(choice, "choice")?;
-    allowed(
-        choice,
-        &["index", "message", "finish_reason", "logprobs"],
-        "Chat choice",
-    )?;
-    if choice.get("logprobs").is_some() && !choice.get("logprobs").is_some_and(Value::is_null) {
-        return error("Chat logprobs 无法安全转换");
-    }
-    let message = object(
-        choice
-            .get("message")
-            .ok_or_else(|| TransformError("Chat choice 缺少 message".to_string()))?,
-        "Chat message",
-    )?;
-    allowed(
-        message,
-        &[
-            "role",
-            "content",
-            "tool_calls",
-            "refusal",
-            "reasoning_content",
-        ],
-        "Chat message",
-    )?;
-    if string(message.get("role"), "message.role")? != "assistant" {
-        return error("Chat 响应 message 不是 assistant");
-    }
-    let mut content = Vec::new();
-    if let Some(reasoning_content) = message.get("reasoning_content") {
-        match reasoning_content {
-            Value::Null => {}
-            Value::String(value) if value.is_empty() => {}
-            Value::String(value) => {
-                let transport = reasoning_transport
-                    .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
-                content.push(ResponsePart::Reasoning(
-                    transport.from_chat_content(value.clone())?,
-                ));
-            }
-            _ => return error("Chat reasoning_content 必须是字符串或 null"),
-        }
-    }
-    if let Some(value) = message.get("content") {
-        if let Some(text) = value.as_str() {
-            content.push(ResponsePart::Text(text.to_string()));
-        } else if !value.is_null() {
-            return error("Chat assistant content 必须是字符串或 null");
-        }
-    }
-    if let Some(refusal) = message.get("refusal") {
-        if let Some(text) = refusal.as_str() {
-            content.push(ResponsePart::Text(text.to_string()));
-        } else if !refusal.is_null() {
-            return error("Chat refusal 必须是字符串或 null");
-        }
-    }
-    if let Some(calls) = message.get("tool_calls") {
-        for value in array(calls, "tool_calls")? {
-            let call = object(value, "tool_call")?;
-            allowed(call, &["id", "type", "function"], "tool_call")?;
-            if string(call.get("type"), "tool_call.type")? != "function" {
-                return error("Chat tool_call 仅支持 function");
-            }
-            let function = object(
-                call.get("function")
-                    .ok_or_else(|| TransformError("tool_call 缺少 function".to_string()))?,
-                "tool_call.function",
-            )?;
-            allowed(function, &["name", "arguments"], "tool_call.function")?;
-            content.push(ResponsePart::ToolCall {
-                id: string(call.get("id"), "tool_call.id")?,
-                name: string(function.get("name"), "tool_call.function.name")?,
-                namespace: None,
-                kind: ToolKind::Function,
-                input: serde_json::from_str(&string(
-                    function.get("arguments"),
-                    "tool_call.function.arguments",
-                )?)
-                .map_err(|_| TransformError("Chat tool_call arguments 不是 JSON".to_string()))?,
-            });
-        }
-    }
-    Ok(CanonicalResponse {
-        id: string(map.get("id"), "id")?,
-        model: string(map.get("model"), "model")?,
-        content,
-        stop: parse_chat_stop(choice.get("finish_reason"))?,
-        usage: super::super::usage::parse(UpstreamProtocol::ChatCompletions, map.get("usage"))?,
-    })
+    chat::parse(value, reasoning_transport)
 }
 
 pub(super) fn parse_anthropic(
     value: &Value,
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<CanonicalResponse, TransformError> {
-    let map = object(value, "Anthropic 响应")?;
-    allowed(
-        map,
-        &[
-            "id",
-            "type",
-            "role",
-            "model",
-            "content",
-            "stop_reason",
-            "stop_sequence",
-            "usage",
-        ],
-        "Anthropic 响应",
-    )?;
-    if string(map.get("role"), "role")? != "assistant" {
-        return error("Anthropic 响应 role 不是 assistant");
-    }
-    let mut content = Vec::new();
-    for value in array(
-        map.get("content")
-            .ok_or_else(|| TransformError("Anthropic 响应缺少 content".to_string()))?,
-        "content",
-    )? {
-        let part = object(value, "Anthropic content")?;
-        let kind = string(part.get("type"), "content.type")?;
-        match kind.as_str() {
-            "text" => {
-                allowed(part, &["type", "text", "citations"], "Anthropic text")?;
-                if part.get("citations").is_some()
-                    && !part.get("citations").is_some_and(Value::is_null)
-                {
-                    return error("Anthropic citations 无法安全转换");
-                }
-                content.push(ResponsePart::Text(string(part.get("text"), "text")?));
-            }
-            "tool_use" => {
-                allowed(part, &["type", "id", "name", "input"], "Anthropic tool_use")?;
-                content.push(ResponsePart::ToolCall {
-                    id: string(part.get("id"), "tool_use.id")?,
-                    name: string(part.get("name"), "tool_use.name")?,
-                    namespace: None,
-                    kind: ToolKind::Function,
-                    input: part
-                        .get("input")
-                        .cloned()
-                        .ok_or_else(|| TransformError("tool_use 缺少 input".to_string()))?,
-                });
-            }
-            "thinking" => {
-                allowed(
-                    part,
-                    &["type", "thinking", "signature"],
-                    "Anthropic thinking",
-                )?;
-                // The upstream signature authenticates this exact trace, so it
-                // is sealed with the text and replayed verbatim on the next
-                // turn instead of being replaced by a local placeholder.
-                let signature = match part.get("signature") {
-                    None | Some(Value::Null) => None,
-                    Some(value) => Some(string(Some(value), "thinking.signature")?),
-                };
-                let thinking = string(part.get("thinking"), "thinking")?;
-                if !thinking.is_empty() {
-                    let transport = reasoning_transport.ok_or_else(|| {
-                        TransformError("当前转换缺少本机推理续接通道".to_string())
-                    })?;
-                    content.push(ResponsePart::Reasoning(
-                        transport.from_anthropic_thinking(thinking, signature)?,
-                    ));
-                }
-            }
-            "redacted_thinking" => {
-                allowed(part, &["type", "data"], "Anthropic redacted_thinking")?;
-                let transport = reasoning_transport
-                    .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
-                let data = string(part.get("data"), "redacted_thinking.data")?;
-                // A payload this gateway issued is reopened; anything else is
-                // the upstream's own opaque block and is sealed for replay.
-                let reasoning = if ReasoningTransport::is_continuation(&data) {
-                    transport.from_continuation(data)?
-                } else {
-                    transport.from_redacted(data)?
-                };
-                content.push(ResponsePart::Reasoning(reasoning));
-            }
-            other => return error(format!("Anthropic content.type {other} 不支持转换")),
-        }
-    }
-    Ok(CanonicalResponse {
-        id: string(map.get("id"), "id")?,
-        model: string(map.get("model"), "model")?,
-        content,
-        stop: parse_anthropic_stop(map.get("stop_reason"))?,
-        usage: super::super::usage::parse(UpstreamProtocol::AnthropicMessages, map.get("usage"))?,
-    })
+    anthropic::parse(value, reasoning_transport)
 }

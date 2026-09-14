@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { clickButton, fill, navigate, readSandbox, selectOption, waitForText } from "../support/ui.mjs";
 import {
-  backupRecords, clientFile, clientSnapshot, confirmProviderSwitch, createProvider,
+  activateProvider, backupRecords, clientFile, clientSnapshot, confirmProviderSwitch, createProvider,
   ensureSandboxPath, jsonFile, openProviderDraft, previewProvider, providerFiles,
   providerRow, providerSnapshot, readOptional, refreshConfiguration, reorderOneUp,
   requestDelete, selectClient, switchProvider, waitForFile,
@@ -130,18 +130,29 @@ const providerCases = [
     assert.deepEqual(await clientSnapshot("codex"), before);
   }],
 
-  ["Codex preview and confirmation cancellations write nothing; confirmed native switch writes config/auth and exact pre-switch backups", async () => {
+  ["Codex read-only preview toggles and activation cancellation write nothing; only confirmation writes config/auth and exact pre-switch backups", async () => {
     const profile = await createProvider(draft("E2E direct Codex"));
     const before = await clientSnapshot("codex");
     const backupsBefore = await backupRecords();
-    let preview = await previewProvider(profile.name);
+    const preview = await previewProvider(profile.name);
     assert(!(await preview.getText()).includes(profile.apiKey), "Preview must redact the synthetic credential");
-    await clickButton("取消", preview);
     assert.deepEqual(await clientSnapshot("codex"), before);
     assert.deepEqual(await backupRecords(), backupsBefore);
-    preview = await previewProvider(profile.name);
-    await clickButton("确认切换", preview);
-    await clickButton("取消", await $('[role="dialog"][aria-label="确认切换"]'));
+    const eye = await clickButton(`收起 ${profile.name} 预览`, await providerRow(profile.name));
+    await preview.waitForDisplayed({ reverse: true });
+    await expect(eye).toHaveAttribute("aria-expanded", "false");
+    await expect($('[role="dialog"][aria-label="确认切换"]')).not.toExist();
+    assert.deepEqual(await clientSnapshot("codex"), before);
+    assert.deepEqual(await backupRecords(), backupsBefore);
+    await previewProvider(profile.name);
+    const sheet = await activateProvider(profile.name);
+    assert.deepEqual(await clientSnapshot("codex"), before);
+    assert.deepEqual(await backupRecords(), backupsBefore);
+    await clickButton("取消", sheet);
+    await sheet.waitForDisplayed({ reverse: true });
+    assert.deepEqual(await clientSnapshot("codex"), before);
+    assert.deepEqual(await backupRecords(), backupsBefore);
+    await activateProvider(profile.name);
     assert.deepEqual(await clientSnapshot("codex"), before);
     assert.deepEqual(await backupRecords(), backupsBefore);
     await confirmProviderSwitch();
@@ -166,6 +177,28 @@ const providerCases = [
     const authBackup = added.find((record) => record.linkedBackupId === configBackup.id);
     assert(authBackup, "Codex authentication backup must be linked to its configuration backup");
     assert.equal(await readOptional(authBackup.backupPath), before.auth);
+  }],
+
+  ["activation refreshes a read-only preview candidate after external client changes and writes only on confirmation", async () => {
+    const profile = await createProvider(draft("E2E refreshed switch"));
+    const before = await clientSnapshot("codex");
+    const backupsBefore = await backupRecords();
+    await previewProvider(profile.name);
+    assert.deepEqual(await clientSnapshot("codex"), before);
+    assert.deepEqual(await backupRecords(), backupsBefore);
+    const marker = "# outside-process change before activation must survive";
+    const external = `${before.config}\n${marker}\n`;
+    await writeFile(clientFile("codex"), external);
+    await activateProvider(profile.name);
+    assert.deepEqual(await clientSnapshot("codex"), { ...before, config: external });
+    assert.deepEqual(await backupRecords(), backupsBefore);
+    await confirmProviderSwitch();
+    await waitForFile(clientFile("codex"), (text) => text?.includes(profile.model));
+    assert((await readOptional(clientFile("codex"))).includes(marker));
+    const backup = (await backupRecords()).find((record) => record.targetPath === clientFile("codex")
+      && !backupsBefore.some((old) => old.id === record.id));
+    assert(backup, "The refreshed switch must back up the latest external configuration");
+    assert.equal(await readOptional(backup.backupPath), external);
   }],
 
   ["active provider editing cancels without writes and confirmed save applies both the stored model and the real client model", async () => {
@@ -193,9 +226,9 @@ const providerCases = [
     assert.equal(await readOptional(path.join(readSandbox().state, "configuration", "save-journal.json")), null);
   }],
 
-  ["external client changes after preview are shown as an error and survive a confirmed switch byte for byte", async () => {
+  ["external client changes after activation opens confirmation are shown as an error and survive confirmation byte for byte", async () => {
     const profile = await createProvider(draft("E2E stale switch"));
-    await previewProvider(profile.name);
+    await activateProvider(profile.name);
     const before = await clientSnapshot("codex");
     const backupsBefore = await backupRecords();
     const external = `${before.config}\n# outside-process change must survive\n`;

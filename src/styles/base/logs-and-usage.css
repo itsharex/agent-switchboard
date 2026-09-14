@@ -115,7 +115,7 @@
 }
 
 .asb-model-usage-snapshot {
-  margin: var(--asb-space-1) 0 0;
+  margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }

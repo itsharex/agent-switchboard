@@ -9,6 +9,7 @@ import { ProviderIdentityFields, ProviderNotesField } from "./provider-editor/Pr
 import { ParametersLoadStatus, ProviderParametersPage } from "./provider-editor/ProviderParametersPage";
 import { ResponsesOptionsFields } from "./provider-editor/ResponsesOptionsFields";
 import { useProviderEditor, type ProviderEditorState } from "./provider-editor/useProviderEditor";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import "../styles/base/provider-editor.css";
 
 interface Props {
@@ -64,8 +65,10 @@ function ProviderForm({ editor, ...props }: Props & { editor: ProviderEditorStat
           <ResponsesOptionsFields key={`responses-${draft.app}`} busy={busy}
             options={draft.responsesOptions}
             onChange={(next) => setDraft((current) => ({ ...current, responsesOptions: next }))} />}
-        <ProviderConnectionTest busy={busy} active={props.active && !editor.parametersOpen}
+        <ProviderConnectionTest app={draft.app} busy={busy} active={props.active && !editor.parametersOpen}
           baseUrl={draft.baseUrl} apiKey={draft.apiKey} upstreamProtocol={draft.upstreamProtocol}
+          connection={draft.connection}
+          authentication={draft.authentication}
           responsesOptions={draft.responsesOptions} defaultModel={draft.model} />
       </>}
       {official && (
@@ -91,18 +94,19 @@ function ProviderEditorSession(props: Props) {
   const title = editor.parametersOpen ? "运行参数" : props.profile ? "编辑供应商" : "新建供应商";
   return (
     <div className="asb-edit-view asb-provider-editor">
-      <div className="asb-panel-heading">
-        <div className="asb-panel-heading-main">
+      <WorkspaceHeader
+        title={title}
+        titleRef={editor.headingRef}
+        back={
           <Button variant="back" disabled={props.busy}
             aria-label={editor.parametersOpen ? "返回供应商编辑" : "返回供应商列表"}
             onClick={() => editor.parametersOpen ? editor.setParametersOpen(false) : props.onCancel()}>←</Button>
-          <h2 ref={editor.headingRef} tabIndex={-1} className="asb-panel-title">{title}</h2>
-        </div>
-        {!editor.parametersOpen && (
+        }
+        primaryActions={!editor.parametersOpen ? (
           <Button ref={editor.triggerRef} variant="secondary" disabled={props.busy}
             onClick={() => editor.setParametersOpen(true)}>配置运行参数 <span aria-hidden="true">→</span></Button>
-        )}
-      </div>
+        ) : undefined}
+      />
       <section className="asb-panel asb-edit-panel">
         <div hidden={editor.parametersOpen}><ProviderForm {...props} editor={editor} /></div>
         {editor.parametersOpen && <ProviderParametersPage editor={editor} busy={props.busy} />}

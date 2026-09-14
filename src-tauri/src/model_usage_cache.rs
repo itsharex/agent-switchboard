@@ -15,6 +15,7 @@ pub(crate) const MODEL_USAGE_REFRESH_INTERVAL: Duration = Duration::minutes(5);
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ModelUsageCache {
+    source_roots_revision: String,
     entries: Vec<CachedModelUsage>,
 }
 
@@ -66,12 +67,29 @@ pub(crate) fn get_or_refresh(
     state: &LocalState,
     request: ModelUsageRequest,
 ) -> Result<ModelUsageRead, String> {
-    resolve(state, request, crate::model_usage::scan_model_usage_report)
+    let roots = crate::session_manager::session_roots()?;
+    let encoded = serde_json::to_string(&roots).map_err(|_| "会话来源目录无法序列化")?;
+    resolve_source(state, request, asb_switch::sha256_hex(&encoded), |range| {
+        crate::model_usage::report_from_roots(range, &roots, chrono::Local::now())
+    })
 }
 
+#[cfg(test)]
 fn resolve<F>(
     state: &LocalState,
     request: ModelUsageRequest,
+    scan: F,
+) -> Result<ModelUsageRead, String>
+where
+    F: FnOnce(ModelUsageRange) -> ModelUsageReport,
+{
+    resolve_source(state, request, "fixture-session-roots".into(), scan)
+}
+
+fn resolve_source<F>(
+    state: &LocalState,
+    request: ModelUsageRequest,
+    source_roots_revision: String,
     scan: F,
 ) -> Result<ModelUsageRead, String>
 where
@@ -85,6 +103,13 @@ where
             vec!["本地会话快照不可读，已重新汇总并重建缓存。".to_string()],
         ),
     };
+
+    if cache.source_roots_revision != source_roots_revision {
+        cache = ModelUsageCache {
+            source_roots_revision,
+            entries: Vec::new(),
+        };
+    }
 
     if !request.force_refresh {
         if let Some(cached) = cache.cached(request.range) {
@@ -229,5 +254,31 @@ mod tests {
             rebuilt.cache_warning.as_deref(),
             Some("本地会话快照不可读，已重新汇总并重建缓存。")
         );
+    }
+
+    #[test]
+    fn changing_codex_home_invalidates_otherwise_fresh_usage() {
+        let temporary = tempfile::tempdir().unwrap();
+        let state = LocalState::from_root(temporary.path().join("state"));
+        for (source, total) in [("first-root", 11), ("second-root", 29)] {
+            let read = resolve_source(
+                &state,
+                request(ModelUsageRange::Today, false),
+                source.to_string(),
+                |range| report(range, total),
+            )
+            .unwrap();
+            assert_eq!(read.freshness, ModelUsageFreshness::Fresh);
+            assert_eq!(read.report.unassigned_tokens.total_tokens, total);
+        }
+        let cached = resolve_source(
+            &state,
+            request(ModelUsageRange::Today, false),
+            "second-root".to_string(),
+            |_| panic!("same root should use cache"),
+        )
+        .unwrap();
+        assert_eq!(cached.freshness, ModelUsageFreshness::Cached);
+        assert_eq!(cached.report.unassigned_tokens.total_tokens, 29);
     }
 }

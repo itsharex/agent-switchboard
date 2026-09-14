@@ -14,7 +14,7 @@ pub(crate) use preview::read_current_or_empty;
 pub use preview::read_preview;
 pub use rendered::execute_rendered;
 pub(crate) use switch::verify_live_snapshot;
-pub use switch::{execute, restore, restore_projected};
+pub use switch::{execute, execute_codex, restore, restore_projected};
 
 use asb_core::{BackupRecord, LockStatus, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,16 @@ pub struct FilePreview {
     /// Redacted candidate file text for the pretty-printed UI view. The
     /// executor keeps the original candidate private for hashing and writes.
     pub content: String,
+    /// Hash of the current Codex auth.json when this preview owns a direct
+    /// Responses credential update. The credential content is never returned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_rendered_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_existed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_rendered_existed: Option<bool>,
 }
 
 /// What happened to the live file after a failure.

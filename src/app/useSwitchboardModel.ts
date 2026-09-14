@@ -69,14 +69,14 @@ export function useSwitchboardModel() {
   const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });
   const updateCheck = useUpdateCheck({ onError: reportError });
   const discoveryState = useDiscovery({
-    ...operationContext, invalidateCandidates, refresh: refreshSnapshot, selectProfile, setAppFilter, setPage,
+    ...operationContext, app: appFilter, invalidateCandidates, refresh: refreshSnapshot, selectProfile, setAppFilter, setPage,
   });
   const ccImport = useCcImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
     records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, selectProfile, setAppFilter });
   const selectedRecord = records.find((record) => record.profile.id === selectedId) ?? null;
   const selectedProfile = selectedRecord?.profile ?? null;
   const operations = useSwitchOperations({
-    ...operationContext, preview: switchPreview.preview, retractPreview: switchPreview.retractPreview,
+    ...operationContext, switchCandidate: switchPreview.switchCandidate, retractPreview: switchPreview.retractPreview,
     invalidateCandidates, selectProfile, selectedId, selectedProfile, refresh,
     refreshDiscoveryOrAppend: discoveryState.refreshDiscoveryOrAppend,
   });

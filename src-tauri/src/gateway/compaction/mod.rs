@@ -13,6 +13,7 @@ pub(crate) use exchange::execute;
 
 pub(crate) struct CompactionResult {
     pub(crate) response: Value,
+    pub(crate) upstream_model: Option<String>,
 }
 
 impl CompactionResult {
@@ -143,6 +144,7 @@ fn finish(body: &[u8], key: &[u8; 32]) -> Result<CompactionResult, TransformErro
         ));
     }
     Ok(CompactionResult {
+        upstream_model: None,
         response: json!({
             "id":format!("asb_compact_{}", Uuid::new_v4().simple()), "object":"response",
             "status":"completed", "model":response["model"], "error":null,

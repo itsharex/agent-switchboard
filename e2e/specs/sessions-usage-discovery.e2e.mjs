@@ -102,6 +102,31 @@ describe('Real desktop sessions and CLI resume', () => {
     await assertSessionSourcesUnchanged();
   });
 
+  it('deletes a disposable session only through the confirmation sheet and removes its record file', async () => {
+    const id = 'e2e-codex-delete-me';
+    const title = 'E2E Codex delete me';
+    const file = path.join(sandbox.home, '.codex', 'sessions', `${id}.jsonl`);
+    await writeFile(file, `${JSON.stringify({
+      type: 'session_meta', timestamp: new Date().toISOString(), payload: { id, cwd: sandbox.fixtures }, customTitle: title,
+    })}\n`);
+
+    await navigate('会话');
+    await clickButton('刷新会话');
+    await (await sessionRow(title)).click();
+    const detail = await $('section[aria-label="会话详情"]');
+    await clickButton('删除会话', detail);
+    await clickButton('确认删除');
+
+    await waitForText('已删除会话');
+    await browser.waitUntil(async () => {
+      const rows = await $$('.asb-session-item');
+      const texts = await Promise.all(rows.map((row) => row.getText()));
+      return !texts.some((text) => text.includes(title));
+    }, { timeout: 15000, timeoutMsg: 'deleted session is still listed' });
+    await waitForText('选择一条会话即可查看内容并复制恢复命令。');
+    assert.equal(await readOptional(file), null);
+  });
+
 });
 
 describe('Real desktop usage and persisted snapshots', () => {

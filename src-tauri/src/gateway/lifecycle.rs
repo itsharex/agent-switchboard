@@ -6,7 +6,15 @@ impl GatewayController {
     /// Resolves state, recovers a port transaction, binds, and rehydrates.
     /// Every failure becomes an observable controller state so the window can
     /// still open with an actionable repair surface.
+    #[cfg(test)]
     pub(crate) fn start(local: &LocalState) -> Self {
+        Self::start_with_write_lock(local, Arc::new(Mutex::new(())))
+    }
+
+    pub(crate) fn start_with_write_lock(
+        local: &LocalState,
+        endpoint_write_lock: Arc<Mutex<()>>,
+    ) -> Self {
         let state_path = local.gateway_state_path();
         let (mut state, unusable, repair_reason) = match read_or_create_state(&state_path) {
             StateLoad::Ready(state) | StateLoad::Created(state) => (state, None, None),
@@ -32,11 +40,28 @@ impl GatewayController {
             None
         };
         let state_available = unusable.is_none();
+        let health_store = Arc::new(health_state::ClaudeHealthStore::load_preserving_damage(
+            local.root(),
+        ));
+        if let Some(warning) = health_store.warning() {
+            log::warn!("{warning}");
+        }
+        let claude_request_ledger = Arc::new(request_ledger::ClaudeRequestLedger::new(
+            local.claude_request_ledger_path(),
+        ));
         let controller = Self {
             inner: Arc::new(GatewayInner {
                 state_path,
+                state_root: local.root().to_path_buf(),
+                endpoint_write_lock,
                 state: Mutex::new(state),
                 routes: RwLock::new(BTreeMap::new()),
+                candidate_routes: RwLock::new(BTreeMap::new()),
+                provider_health: RwLock::new(BTreeMap::new()),
+                health_store,
+                codex_health: Arc::new(codex::health::CodexHealthStore::new(local.root())),
+                claude_request_ledger,
+                claude_auth: crate::claude_auth::ClaudeAuth::shared(local.root()),
                 activation_lock: Mutex::new(()),
                 listener: RwLock::new(ListenerState::Failed(Box::new(GatewayFailureReport {
                     port: 0,
@@ -177,7 +202,7 @@ impl GatewayController {
 
     fn reload_state(&self, local: &LocalState) -> bool {
         let state_path = local.gateway_state_path();
-        let mut state = match read_or_create_state(&state_path) {
+        let mut state = match state_repair::read_for_retry(&state_path) {
             StateLoad::Ready(state) | StateLoad::Created(state) => state,
             StateLoad::Unusable(detail) => {
                 if let Ok(mut reason) = self.inner.repair_reason.lock() {
@@ -213,6 +238,11 @@ impl GatewayController {
         drop(stored);
         if let Ok(mut routes) = self.inner.routes.write() {
             routes.clear();
+        } else {
+            return false;
+        }
+        if let Ok(mut candidates) = self.inner.candidate_routes.write() {
+            candidates.clear();
         } else {
             return false;
         }
@@ -274,5 +304,124 @@ pub(super) fn bind_failure_report(
             pid: info.pid,
             name: info.name,
         }),
+    }
+}
+
+impl GatewayController {
+    /// The saved port every client-facing address is derived from.
+    pub(crate) fn configured_port(&self) -> u16 {
+        self.inner
+            .state
+            .lock()
+            .map(|state| state.port)
+            .unwrap_or(DEFAULT_GATEWAY_PORT)
+    }
+
+    /// The loopback base URL that client configurations are written against.
+    /// It follows the configured port, the single address contract, whether
+    /// or not the listener is currently up.
+    pub(crate) fn configured_base_url(&self) -> String {
+        self.inner.configured_base_url()
+    }
+
+    pub(crate) fn listening(&self) -> Option<BoundListener> {
+        let listener = self.inner.listener.read().ok()?;
+        match &*listener {
+            ListenerState::Listening { listener }
+                if !listener.stop_signal().load(Ordering::Acquire) =>
+            {
+                Some(listener.clone())
+            }
+            ListenerState::Listening { .. } => None,
+            ListenerState::Failed(_) => None,
+        }
+    }
+
+    /// The served base URL; `None` while the listener is down.
+    pub(crate) fn listening_base_url(&self) -> Option<String> {
+        self.listening()
+            .map(|listener| format!("http://127.0.0.1:{}", listener.port()))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_listening(&self) -> bool {
+        self.listening().is_some()
+    }
+
+    pub(crate) fn blocked_recovery(&self) -> Option<port_change::BlockedPortChange> {
+        self.inner
+            .blocked_recovery
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone())
+    }
+
+    pub(crate) fn state_available(&self) -> bool {
+        self.inner.state_available.load(Ordering::Acquire)
+    }
+
+    /// Persists the one listener-address contract before publishing it to
+    /// callers. The port-change journal decides whether a later failure rolls
+    /// this fact back or completes it.
+    pub(crate) fn persist_port(&self, port: u16) -> Result<(), String> {
+        let mut state = self
+            .inner
+            .state
+            .lock()
+            .map_err(|_| "本机协议网关状态锁不可用".to_string())?;
+        let mut next = state.clone();
+        next.port = port;
+        write_state(&self.inner.state_path, &next)?;
+        *state = next;
+        Ok(())
+    }
+
+    /// Publishes a replacement listener and returns the previous listener so
+    /// the caller can stop that exact socket after the handoff.
+    pub(crate) fn replace_listener(&self, listener: BoundListener) -> Option<BoundListener> {
+        // The listener lock protects only this process's publication slot. If
+        // a handler panicked while holding it, keeping the poisoned old slot
+        // would strand a committed endpoint transaction, so retain its value
+        // and complete the deterministic handoff.
+        let mut state = self
+            .inner
+            .listener
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = std::mem::replace(&mut *state, ListenerState::Listening { listener });
+        match previous {
+            ListenerState::Listening { listener } => Some(listener),
+            ListenerState::Failed(_) => None,
+        }
+    }
+
+    pub(crate) fn block_port_change(&self, blocked: port_change::BlockedPortChange) {
+        if let Ok(mut slot) = self.inner.blocked_recovery.lock() {
+            *slot = Some(blocked);
+        }
+    }
+
+    pub(crate) fn clear_blocked_port_change(&self) -> Result<(), String> {
+        let mut slot = self
+            .inner
+            .blocked_recovery
+            .lock()
+            .map_err(|_| "端口修改恢复状态锁不可用".to_string())?;
+        *slot = None;
+        Ok(())
+    }
+
+    /// Replaces the listener fact atomically.
+    pub(crate) fn set_listener(&self, state: ListenerState) {
+        if let Ok(mut listener) = self.inner.listener.write() {
+            *listener = state;
+        }
+    }
+
+    pub(crate) fn shutdown(&self) {
+        self.inner.stopping.store(true, Ordering::Release);
+        if let Some(listener) = self.listening() {
+            listener.stop();
+        }
     }
 }

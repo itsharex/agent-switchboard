@@ -6,13 +6,19 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
+mod mcp_view;
+mod source_view;
+pub use mcp_view::McpConnectionView;
+pub use source_view::SkillSourceViewDto;
+
 use asb_core::contracts::AppKind;
 use asb_core::extensions::contracts::{
     DependencyState, DesiredState, ExtensionBinding, ExtensionDefinition, ExtensionPayload,
-    ExtensionTarget, FileState, McpCheckResult, ObservedExtension, SecretValue, SkillDependency,
-    SkillManifest, EXTENSIONS_SCHEMA_VERSION,
+    ExtensionTarget, FileState, McpCheckResult, McpMetadata, ObservedExtension, SecretValue,
+    SkillDependency, SkillManifest, EXTENSIONS_SCHEMA_VERSION,
 };
 use asb_core::extensions::plan::ExtensionPlan;
+#[cfg(test)]
 use asb_core::redact::REDACTED;
 use serde::Serialize;
 
@@ -191,16 +197,6 @@ pub struct DependencyStatusDto {
     pub(super) state: DependencyState,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillSourceViewDto {
-    /// Source identities can name private repositories or local paths. The
-    /// renderer only needs to know that provenance was retained and which
-    /// immutable source revision is associated with it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    resolved_commit: Option<String>,
-}
-
 /// A renderer-safe value position. Library definitions retain the full
 /// SecretValue internally; no plain value or credential-store handle crosses
 /// the IPC boundary back to the renderer.
@@ -266,19 +262,10 @@ pub enum ExtensionListItemDto {
         revision: u64,
         created_at: String,
         updated_at: String,
-        transport: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        command: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        argument_count: Option<usize>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        url: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        env: Option<BTreeMap<String, SecretValueViewDto>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        headers: Option<BTreeMap<String, SecretValueViewDto>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        bearer: Option<SecretValueViewDto>,
+        mcp_metadata: Option<McpMetadata>,
+        #[serde(flatten)]
+        connection: McpConnectionView,
         bindings: Vec<BindingStatusDto>,
         dependency_states: Vec<DependencyStatusDto>,
         last_check: Option<McpCheckResult>,
@@ -295,6 +282,7 @@ pub(super) fn extension_list_item(
         schema_version,
         id,
         name,
+        mcp_metadata,
         revision,
         created_at,
         updated_at,
@@ -310,9 +298,7 @@ pub(super) fn extension_list_item(
             updated_at,
             content_digest: skill.content_digest,
             manifest: skill.manifest,
-            source: skill.source.map(|source| SkillSourceViewDto {
-                resolved_commit: source.resolved_commit,
-            }),
+            source: skill.source.map(source_view::skill_source_view),
             host_scoped: skill.host_scoped,
             compatibility: skill.compatibility,
             dependencies: skill.dependencies,
@@ -320,71 +306,19 @@ pub(super) fn extension_list_item(
             dependency_states,
             last_check,
         },
-        ExtensionPayload::Mcp(mcp) => {
-            let (transport, command, argument_count, url, env, headers, bearer) = match mcp {
-                asb_core::extensions::contracts::McpDefinition::Stdio {
-                    command,
-                    args,
-                    env,
-                    ..
-                } => (
-                    "stdio".to_string(),
-                    Some(command),
-                    Some(args.len()),
-                    None,
-                    Some(secret_value_views(env)),
-                    None,
-                    None,
-                ),
-                asb_core::extensions::contracts::McpDefinition::Http {
-                    headers, bearer, ..
-                } => (
-                    "http".to_string(),
-                    None,
-                    None,
-                    Some(REDACTED.to_string()),
-                    None,
-                    Some(secret_value_views(headers)),
-                    bearer.map(Into::into),
-                ),
-                asb_core::extensions::contracts::McpDefinition::ClaudeSse { headers, .. } => (
-                    "claudeSse".to_string(),
-                    None,
-                    None,
-                    Some(REDACTED.to_string()),
-                    None,
-                    Some(secret_value_views(headers)),
-                    None,
-                ),
-                asb_core::extensions::contracts::McpDefinition::ClaudeWs { headers, .. } => (
-                    "claudeWs".to_string(),
-                    None,
-                    None,
-                    Some(REDACTED.to_string()),
-                    None,
-                    Some(secret_value_views(headers)),
-                    None,
-                ),
-            };
-            ExtensionListItemDto::Mcp {
-                schema_version,
-                id,
-                name,
-                revision,
-                created_at,
-                updated_at,
-                transport,
-                command,
-                argument_count,
-                url,
-                env,
-                headers,
-                bearer,
-                bindings,
-                dependency_states,
-                last_check,
-            }
-        }
+        ExtensionPayload::Mcp(mcp) => ExtensionListItemDto::Mcp {
+            schema_version,
+            id,
+            name,
+            mcp_metadata,
+            revision,
+            created_at,
+            updated_at,
+            connection: mcp.into(),
+            bindings,
+            dependency_states,
+            last_check,
+        },
     }
 }
 

@@ -10,25 +10,7 @@ pub(super) fn parse_chat(
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<CanonicalRequest, TransformError> {
     let map = object(value, "Chat Completions 请求")?;
-    allowed(
-        map,
-        &[
-            "model",
-            "messages",
-            "tools",
-            "tool_choice",
-            "parallel_tool_calls",
-            "stream",
-            "max_tokens",
-            "max_completion_tokens",
-            "temperature",
-            "top_p",
-            "stop",
-            "user",
-            "reasoning_effort",
-        ],
-        "Chat Completions 请求",
-    )?;
+    allowed(map, CHAT_REQUEST_FIELDS, "Chat Completions 请求")?;
     let mut system = Vec::new();
     let mut messages = Vec::new();
     for value in array(
@@ -36,67 +18,11 @@ pub(super) fn parse_chat(
             .ok_or_else(|| TransformError("Chat Completions 请求缺少 messages".to_string()))?,
         "messages",
     )? {
-        let item = object(value, "message")?;
-        allowed(
-            item,
-            &[
-                "role",
-                "content",
-                "tool_calls",
-                "tool_call_id",
-                "reasoning_content",
-            ],
-            "Chat message",
-        )?;
-        let role = parse_role(&string(item.get("role"), "message.role")?)?;
-        let mut parts = match item.get("content") {
-            Some(Value::Null) | None => vec![],
-            Some(content) => parse_chat_content(content)?,
-        };
-        if let Some(reasoning_content) = item.get("reasoning_content") {
-            if role != Role::Assistant {
-                return error("reasoning_content 只能出现在 assistant message 中");
-            }
-            match reasoning_content {
-                Value::Null => {}
-                Value::String(content) if content.is_empty() => {}
-                Value::String(content) => {
-                    let transport = reasoning_transport.ok_or_else(|| {
-                        TransformError("当前转换缺少本机推理续接通道".to_string())
-                    })?;
-                    parts.insert(
-                        0,
-                        Part::Reasoning(transport.from_chat_content(content.clone())?),
-                    );
-                }
-                _ => return error("reasoning_content 必须是字符串或 null"),
-            }
-        }
-        if let Some(calls) = item.get("tool_calls") {
-            if role != Role::Assistant {
-                return error("tool_calls 只能出现在 assistant message 中");
-            }
-            parts.extend(parse_chat_tool_calls(calls)?);
-        }
-        if role == Role::User && item.get("tool_call_id").is_some() {
-            return error("Chat tool 结果必须使用 role=tool");
-        }
-        if item.get("tool_call_id").is_some() {
-            let id = string(item.get("tool_call_id"), "tool_call_id")?;
-            parts = vec![Part::ToolResult {
-                id,
-                kind: ToolKind::Function,
-                content: parts,
-                is_error: false,
-            }];
-            messages.push(Message {
-                role: Role::User,
-                parts,
-            });
-        } else if matches!(role, Role::System | Role::Developer) {
-            system.extend(parts);
+        let message = parse_chat_message(object(value, "message")?, reasoning_transport)?;
+        if matches!(message.role, Role::System | Role::Developer) {
+            system.extend(message.parts);
         } else {
-            messages.push(Message { role, parts });
+            messages.push(message);
         }
     }
     Ok(CanonicalRequest {
@@ -120,35 +46,144 @@ pub(super) fn parse_chat(
     })
 }
 
+const CHAT_REQUEST_FIELDS: &[&str] = &[
+    "model",
+    "messages",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "stream",
+    "max_tokens",
+    "max_completion_tokens",
+    "temperature",
+    "top_p",
+    "stop",
+    "user",
+    "reasoning_effort",
+];
+
+fn parse_chat_message(
+    item: &Map<String, Value>,
+    transport: Option<&ReasoningTransport>,
+) -> Result<Message, TransformError> {
+    allowed(
+        item,
+        &[
+            "role",
+            "content",
+            "tool_calls",
+            "tool_call_id",
+            "reasoning_content",
+        ],
+        "Chat message",
+    )?;
+    let role_name = string(item.get("role"), "message.role")?;
+    let role = parse_role(&role_name)?;
+    let mut parts = match item.get("content") {
+        Some(Value::Null) | None => vec![],
+        Some(content) => parse_chat_content(content)?,
+    };
+    if let Some(reasoning) = item.get("reasoning_content") {
+        parse_chat_reasoning_content(reasoning, role, &mut parts, transport)?;
+    }
+    if let Some(calls) = item.get("tool_calls") {
+        if role != Role::Assistant {
+            return error("tool_calls 只能出现在 assistant message 中");
+        }
+        parts.extend(parse_chat_tool_calls(calls)?);
+    }
+    if role_name == "tool" {
+        parts = vec![Part::ToolResult {
+            id: string(item.get("tool_call_id"), "tool_call_id")?,
+            kind: ToolKind::Function,
+            content: parts,
+            is_error: false,
+        }];
+    } else if item.contains_key("tool_call_id") {
+        return error("Chat tool 结果必须使用 role=tool");
+    }
+    Ok(Message { role, parts })
+}
+
+fn parse_chat_reasoning_content(
+    value: &Value,
+    role: Role,
+    parts: &mut Vec<Part>,
+    transport: Option<&ReasoningTransport>,
+) -> Result<(), TransformError> {
+    if role != Role::Assistant {
+        return error("reasoning_content 只能出现在 assistant message 中");
+    }
+    match value {
+        Value::Null => {}
+        Value::String(content) if content.is_empty() => {}
+        Value::String(content) => {
+            let transport = transport
+                .ok_or_else(|| TransformError("当前转换缺少本机推理续接通道".to_string()))?;
+            parts.insert(
+                0,
+                Part::Reasoning(transport.from_chat_content(content.clone())?),
+            );
+        }
+        _ => return error("reasoning_content 必须是字符串或 null"),
+    }
+    Ok(())
+}
+
 pub(super) fn parse_anthropic(
     value: &Value,
     reasoning_transport: Option<&ReasoningTransport>,
 ) -> Result<CanonicalRequest, TransformError> {
     let map = object(value, "Anthropic Messages 请求")?;
-    allowed(
-        map,
-        &[
-            "model",
-            "messages",
-            "system",
-            "tools",
-            "tool_choice",
-            "stream",
-            "max_tokens",
-            "temperature",
-            "top_p",
-            "stop_sequences",
-            "metadata",
-            "thinking",
-            "output_config",
-        ],
-        "Anthropic Messages 请求",
-    )?;
+    allowed(map, ANTHROPIC_REQUEST_FIELDS, "Anthropic Messages 请求")?;
+    let tools = parse_anthropic_tools(map.get("tools"))?;
     let system = match map.get("system") {
         None => vec![],
         Some(Value::String(text)) => vec![Part::Text(text.clone())],
-        Some(value) => parse_anthropic_content(value, Role::System, reasoning_transport)?,
+        Some(value) => parse_anthropic_content(value, Role::System, reasoning_transport, &tools)?,
     };
+    let messages = parse_anthropic_messages(map, reasoning_transport, &tools)?;
+    let thinking_effort = parse_anthropic_thinking(map.get("thinking"))?;
+    let reasoning_effort =
+        parse_anthropic_output_effort(map.get("output_config"))?.or(thinking_effort);
+    Ok(CanonicalRequest {
+        model: string(map.get("model"), "model")?,
+        system,
+        messages,
+        tools,
+        tool_choice: parse_anthropic_tool_choice(map.get("tool_choice"))?,
+        parallel_tool_calls: parse_anthropic_parallel_tool_calls(map.get("tool_choice"))?,
+        stream: optional_bool(map, "stream")?,
+        max_tokens: optional_u64(map, "max_tokens")?,
+        temperature: optional_number(map, "temperature")?,
+        top_p: optional_number(map, "top_p")?,
+        stop: parse_anthropic_stop_sequences(map.get("stop_sequences"))?,
+        user_id: parse_user_metadata(map.get("metadata"), "Anthropic metadata")?,
+        reasoning_effort,
+    })
+}
+
+const ANTHROPIC_REQUEST_FIELDS: &[&str] = &[
+    "model",
+    "messages",
+    "system",
+    "tools",
+    "tool_choice",
+    "stream",
+    "max_tokens",
+    "temperature",
+    "top_p",
+    "stop_sequences",
+    "metadata",
+    "thinking",
+    "output_config",
+];
+
+fn parse_anthropic_messages(
+    map: &Map<String, Value>,
+    transport: Option<&ReasoningTransport>,
+    tools: &[Tool],
+) -> Result<Vec<Message>, TransformError> {
     let mut messages = Vec::new();
     for value in array(
         map.get("messages")
@@ -166,26 +201,10 @@ pub(super) fn parse_anthropic(
         let content = item
             .get("content")
             .ok_or_else(|| TransformError("Anthropic message 缺少 content".to_string()))?;
-        let parts = parse_anthropic_content(content, role, reasoning_transport)?;
-        messages.push(Message { role, parts });
+        messages.push(Message {
+            role,
+            parts: parse_anthropic_content(content, role, transport, tools)?,
+        });
     }
-    let tool_choice = parse_anthropic_tool_choice(map.get("tool_choice"))?;
-    let adaptive_thinking = parse_anthropic_adaptive_thinking(map.get("thinking"))?;
-    let reasoning_effort = parse_anthropic_output_effort(map.get("output_config"))?
-        .or(adaptive_thinking.then_some(ReasoningEffort::Max));
-    Ok(CanonicalRequest {
-        model: string(map.get("model"), "model")?,
-        system,
-        messages,
-        tools: parse_anthropic_tools(map.get("tools"))?,
-        tool_choice,
-        parallel_tool_calls: parse_anthropic_parallel_tool_calls(map.get("tool_choice"))?,
-        stream: optional_bool(map, "stream")?,
-        max_tokens: optional_u64(map, "max_tokens")?,
-        temperature: optional_number(map, "temperature")?,
-        top_p: optional_number(map, "top_p")?,
-        stop: parse_anthropic_stop_sequences(map.get("stop_sequences"))?,
-        user_id: parse_user_metadata(map.get("metadata"), "Anthropic metadata")?,
-        reasoning_effort,
-    })
+    Ok(messages)
 }

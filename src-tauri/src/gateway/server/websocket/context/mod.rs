@@ -10,6 +10,9 @@ use uuid::Uuid;
 #[derive(Default)]
 pub(super) struct ConversationContext {
     latest: Option<CachedResponse>,
+    observed_route: Option<String>,
+    // After a route change, opaque input must come from the current bound cache.
+    require_known_continuation: bool,
 }
 
 #[derive(Clone)]
@@ -78,12 +81,20 @@ impl ContextError {
 }
 
 impl ConversationContext {
+    pub(super) fn for_route(route_revision: &str) -> Self {
+        Self {
+            observed_route: Some(route_revision.to_string()),
+            ..Self::default()
+        }
+    }
+
     pub(super) fn prepare(
         &mut self,
         route_revision: &str,
         mode: ResponsesRequestMode,
         text: &str,
     ) -> Result<PreparedResponse, ContextError> {
+        self.validate_wire_binding(route_revision, text)?;
         self.prepare_normalized(route_revision, normalize_request(mode, text)?, false)
     }
 
@@ -114,22 +125,9 @@ impl ConversationContext {
             route_revision: route_revision.to_string(),
             session_id,
         };
-        if previous_response_id.is_none()
-            && contains_opaque_continuation(&input)
-            && self
-                .latest
-                .as_ref()
-                .is_some_and(|previous| previous.binding != binding)
-        {
-            return Err(ContextError::stale_continuation());
-        }
-        let full_input = if let Some(previous_response_id) = previous_response_id {
-            let Some(previous) = self.latest.as_ref() else {
-                return Err(ContextError::missing_previous());
-            };
-            if previous.id != previous_response_id || previous.binding != binding {
-                return Err(ContextError::stale_continuation());
-            }
+        self.validate_continuation(&binding, &input, previous_response_id.as_deref())?;
+        let full_input = if previous_response_id.is_some() {
+            let previous = self.latest.as_ref().expect("validated previous response");
             if (!native && previous.template != template)
                 || (native && previous.template.get("model") != template.get("model"))
             {
@@ -144,31 +142,7 @@ impl ConversationContext {
         };
 
         if !generate {
-            if !full_input.is_empty() {
-                return Err(ContextError::invalid(
-                    "generate=false 预热请求的 input 必须为空数组",
-                ));
-            }
-            let id = format!("asb_prewarm_{}", Uuid::new_v4().simple());
-            let response = json!({
-                "id": id,
-                "object": "response",
-                "status": "completed",
-                "model": model,
-                "output": [],
-                "usage": { "input_tokens": 0, "output_tokens": 0, "total_tokens": 0 },
-                "error": null,
-            });
-            self.latest = Some(CachedResponse {
-                id,
-                binding,
-                template,
-                full_input,
-                output: vec![],
-            });
-            return Ok(PreparedResponse::Prewarm(PrewarmResponse {
-                value: response,
-            }));
+            return self.prepare_prewarm(model, binding, template, full_input);
         }
 
         let mut root = template.clone();
@@ -182,6 +156,110 @@ impl ConversationContext {
             native,
             template,
             full_input,
+        }))
+    }
+
+    fn validate_wire_binding(
+        &mut self,
+        route_revision: &str,
+        text: &str,
+    ) -> Result<(), ContextError> {
+        let value: Value = serde_json::from_str(text)
+            .map_err(|_| ContextError::invalid("Codex WebSocket 请求不是有效 JSON"))?;
+        let root = object(&value, "Codex WebSocket 请求")?;
+        let binding = ConversationBinding {
+            route_revision: route_revision.to_string(),
+            session_id: session_id(&value)?,
+        };
+        let previous = optional_nonempty_string(root, "previous_response_id")?;
+        let input = root
+            .get("input")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        self.validate_continuation(&binding, input, previous.as_deref())
+    }
+
+    fn validate_continuation(
+        &mut self,
+        binding: &ConversationBinding,
+        input: &[Value],
+        previous_response_id: Option<&str>,
+    ) -> Result<(), ContextError> {
+        self.require_known_continuation |= self
+            .observed_route
+            .as_ref()
+            .is_some_and(|route| route != &binding.route_revision)
+            || self
+                .latest
+                .as_ref()
+                .is_some_and(|previous| previous.binding != *binding);
+        self.observed_route = Some(binding.route_revision.clone());
+        if let Some(id) = previous_response_id {
+            let previous = self
+                .latest
+                .as_ref()
+                .ok_or_else(ContextError::missing_previous)?;
+            if previous.id != id || previous.binding != *binding {
+                return Err(ContextError::stale_continuation());
+            }
+        }
+        if self.require_known_continuation
+            && input
+                .iter()
+                .filter(|item| is_opaque_continuation(item))
+                .any(|item| !self.known_continuation(binding, item))
+        {
+            return Err(ContextError::stale_continuation());
+        }
+        Ok(())
+    }
+
+    fn known_continuation(&self, binding: &ConversationBinding, item: &Value) -> bool {
+        self.latest
+            .as_ref()
+            .filter(|previous| previous.binding == *binding)
+            .is_some_and(|previous| {
+                previous
+                    .full_input
+                    .iter()
+                    .chain(&previous.output)
+                    .any(|known| {
+                        known.get("type") == item.get("type")
+                            && match item.get("encrypted_content") {
+                                Some(payload) => known.get("encrypted_content") == Some(payload),
+                                None => known == item,
+                            }
+                    })
+            })
+    }
+
+    fn prepare_prewarm(
+        &mut self,
+        model: String,
+        binding: ConversationBinding,
+        template: Map<String, Value>,
+        full_input: Vec<Value>,
+    ) -> Result<PreparedResponse, ContextError> {
+        if !full_input.is_empty() {
+            return Err(ContextError::invalid(
+                "generate=false 预热请求的 input 必须为空数组",
+            ));
+        }
+        let id = format!("asb_prewarm_{}", Uuid::new_v4().simple());
+        let response = json!({
+            "id":id, "object":"response", "status":"completed", "model":model, "output":[],
+            "usage":{"input_tokens":0, "output_tokens":0, "total_tokens":0}, "error":null,
+        });
+        self.latest = Some(CachedResponse {
+            id,
+            binding,
+            template,
+            full_input,
+            output: vec![],
+        });
+        Ok(PreparedResponse::Prewarm(PrewarmResponse {
+            value: response,
         }))
     }
 
@@ -234,16 +312,12 @@ fn session_id(value: &Value) -> Result<Option<String>, ContextError> {
         .transpose()
 }
 
-fn contains_opaque_continuation(input: &[Value]) -> bool {
-    input.iter().any(|item| {
-        let Some(item) = item.as_object() else {
-            return false;
-        };
-        matches!(
-            item.get("type").and_then(Value::as_str),
-            Some("reasoning" | "compaction")
-        ) && item.contains_key("encrypted_content")
-    })
+fn is_opaque_continuation(item: &Value) -> bool {
+    match item.get("type").and_then(Value::as_str) {
+        Some("reasoning") => item.get("encrypted_content").is_some(),
+        Some("compaction" | "context_compaction" | "item_reference") => true,
+        _ => false,
+    }
 }
 
 mod completed;

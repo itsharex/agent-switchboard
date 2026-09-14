@@ -79,6 +79,7 @@ function SettingsHarness(
       onOpenProviders={vi.fn()}
       onRetryLoad={vi.fn()}
       onPreview={vi.fn()}
+      onPreviewContentChange={vi.fn()}
       {...props}
     />
   );
@@ -167,6 +168,33 @@ describe("ClientSettingsPanel", () => {
     expect(onSaveAndPreview).toHaveBeenCalledExactlyOnceWith("codex");
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onPreview).not.toHaveBeenCalled();
+  });
+
+  it("shows the changed client preference diff immediately after selecting a visual option", async () => {
+    const user = userEvent.setup();
+    function DiffHarness() {
+      const [draft, setDraft] = useState(cleanSettings.draft!);
+      const changed = draft["tui.notifications"].mode === "explicit";
+      return (
+        <SettingsHarness
+          editorState={{ ...cleanSettings, phase: changed ? "dirty" : "clean", draft }}
+          onValueChange={(_, key, value) => setDraft((current) => ({ ...current, [key]: value }))}
+        />
+      );
+    }
+    render(<DiffHarness />);
+
+    expect(screen.queryByRole("list", { name: "桌面通知 未保存差异" })).toBeNull();
+    const enabled = screen.getByRole("radio", { name: "开启" });
+    await user.click(enabled);
+
+    const diff = screen.getByRole("list", { name: "桌面通知 未保存差异" });
+    expect(diff).toHaveTextContent("tui.notifications");
+    expect(diff).toHaveTextContent("true");
+    expect(enabled.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(screen.getByRole("radio", { name: "自动" }));
+    expect(screen.queryByRole("list", { name: "桌面通知 未保存差异" })).toBeNull();
   });
 });
 
@@ -296,9 +324,10 @@ describe("ClientSettingsPanel draft recovery", () => {
     expect(onSave).toHaveBeenCalledWith("codex");
   });
 
-  it("renders the client fragment on demand and keeps it while reading directory help", async () => {
+  it("edits the client fragment on demand and keeps it while reading directory help", async () => {
     const user = userEvent.setup();
     const onPreview = vi.fn();
+    const onPreviewContentChange = vi.fn();
     function DemandHarness() {
       const [preview, setPreview] =
         useState<ClientSettingsEditorState["preview"]>();
@@ -313,34 +342,49 @@ describe("ClientSettingsPanel draft recovery", () => {
               content: "tui.notifications = true\n",
             });
           }}
+          onPreviewContentChange={(target, content) => {
+            onPreviewContentChange(target, content);
+            setPreview((current) => current ? { ...current, content } : current);
+          }}
         />
       );
     }
     render(<DemandHarness />);
 
     await user.click(
-      screen.getByRole("button", { name: "查看客户端配置预览" }),
+      screen.getByRole("button", { name: "编辑客户端配置片段" }),
     );
     expect(onPreview).toHaveBeenCalledExactlyOnceWith("codex");
-    expect(
-      screen.getByLabelText("~/.codex/config.toml 客户端配置片段 配置预览"),
-    ).toHaveTextContent("tui.notifications = true");
+    const editor = screen.getByRole("textbox", {
+      name: "~/.codex/config.toml 客户端配置片段 配置编辑器内容",
+    });
+    expect(editor).toHaveValue("tui.notifications = true\n");
+    await user.clear(editor);
+    await user.type(editor, "tui.notifications = false");
+    expect(onPreviewContentChange).toHaveBeenLastCalledWith(
+      "codex",
+      "tui.notifications = false",
+    );
     await user.click(screen.getByRole("button", { name: "官方设置目录" }));
     await user.click(screen.getByRole("button", { name: "返回偏好设置" }));
     expect(
-      screen.getByRole("button", { name: "收起客户端配置预览" }),
+      screen.getByRole("button", { name: "收起客户端配置编辑器" }),
     ).toHaveAttribute("aria-expanded", "true");
     await user.click(
-      screen.getByRole("button", { name: "收起客户端配置预览" }),
+      screen.getByRole("button", { name: "收起客户端配置编辑器" }),
     );
     expect(
-      screen.queryByLabelText("~/.codex/config.toml 客户端配置片段 配置预览"),
+      screen.queryByRole("textbox", {
+        name: "~/.codex/config.toml 客户端配置片段 配置编辑器内容",
+      }),
     ).toBeNull();
     await user.click(
-      screen.getByRole("button", { name: "展开客户端配置预览" }),
+      screen.getByRole("button", { name: "展开客户端配置编辑器" }),
     );
     expect(
-      screen.getByLabelText("~/.codex/config.toml 客户端配置片段 配置预览"),
+      screen.getByRole("textbox", {
+        name: "~/.codex/config.toml 客户端配置片段 配置编辑器内容",
+      }),
     ).toBeVisible();
     expect(onPreview).toHaveBeenCalledTimes(1);
   });

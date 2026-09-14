@@ -44,7 +44,15 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
         return None;
     }
     let settings = claude_settings(profile);
+    if plan.is_gateway() {
+        if let Some(value) = super::gateway::model_value(plan, key, settings) {
+            return value;
+        }
+    }
     match key {
+        crate::ownership::CLAUDE_GATEWAY_REVISION_KEY => plan
+            .claude_route_revision()
+            .map(|value| ConfigValue::Str(value.into())),
         "model" => rendered_model(
             profile.model.as_ref(),
             settings.is_some_and(|value| value.primary_one_m),
@@ -54,6 +62,7 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
                 ConfigValue::Array(models.iter().cloned().map(ConfigValue::Str).collect())
             })
         }),
+        "env.ANTHROPIC_BASE_URL" if profile.connection.claude_native.is_some() => None,
         "env.ANTHROPIC_BASE_URL" => plan
             .client_base_url()
             .map(|url| ConfigValue::Str(url.into())),
@@ -69,9 +78,10 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
             .map(|_| ConfigValue::Str("1".to_string())),
         // This older override must be removed for any current provider.
         ENV_MODEL_KEY | DEPRECATED_MODEL_KEY => None,
-        "env.ANTHROPIC_DEFAULT_HAIKU_MODEL" => {
-            rendered_model(settings.and_then(|value| value.haiku_model.as_ref()), false)
-        }
+        "env.ANTHROPIC_DEFAULT_HAIKU_MODEL" => rendered_model(
+            settings.and_then(|value| value.haiku_model.as_ref()),
+            settings.is_some_and(|value| value.haiku_one_m),
+        ),
         "env.ANTHROPIC_DEFAULT_SONNET_MODEL" => rendered_model(
             settings.and_then(|value| value.sonnet_model.as_ref()),
             settings.is_some_and(|value| value.sonnet_one_m),
@@ -80,8 +90,35 @@ fn provider_value(plan: &SwitchPlan, key: &str) -> Option<ConfigValue> {
             settings.and_then(|value| value.opus_model.as_ref()),
             settings.is_some_and(|value| value.opus_one_m),
         ),
+        "env.ANTHROPIC_DEFAULT_FABLE_MODEL" => rendered_model(
+            settings.and_then(|value| value.fable_model.as_ref()),
+            settings.is_some_and(|value| value.fable_one_m),
+        ),
+        "env.CLAUDE_CODE_SUBAGENT_MODEL" => rendered_model(
+            settings.and_then(|value| value.subagent_model.as_ref()),
+            settings.is_some_and(|value| value.subagent_one_m),
+        ),
+        "env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME"
+        | "env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME"
+        | "env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME"
+        | "env.ANTHROPIC_DEFAULT_FABLE_MODEL_NAME" => model_name(settings, key),
         _ => unreachable!("Claude provider mapping must be declared in the ownership directory"),
     }
+}
+
+fn model_name(
+    settings: Option<&crate::contracts::ClaudeModelSettings>,
+    key: &str,
+) -> Option<ConfigValue> {
+    let names = settings?.display_names.as_ref()?;
+    let name = match key {
+        "env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME" => &names.haiku,
+        "env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME" => &names.sonnet,
+        "env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME" => &names.opus,
+        "env.ANTHROPIC_DEFAULT_FABLE_MODEL_NAME" => &names.fable,
+        _ => unreachable!("model display name key"),
+    };
+    name.clone().map(ConfigValue::Str)
 }
 
 /// Setting intent is explicit: automatic removes a previously managed

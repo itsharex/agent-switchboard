@@ -119,34 +119,8 @@ impl CalendarRange {
     }
 }
 
-/// Builds one report from the fixed user-level session roots. Failures at one
-/// root or file become local issues; readable records from other sources stay
-/// available to the renderer.
-pub(crate) fn scan_model_usage_report(range: ModelUsageRange) -> ModelUsageReport {
-    let now = Local::now();
-    let roots = match crate::session_manager::session_roots() {
-        Ok(roots) => roots,
-        Err(message) => {
-            return ModelUsageReport {
-                range,
-                generated_at: now.with_timezone(&Utc).to_rfc3339(),
-                groups: Vec::new(),
-                days: Vec::new(),
-                unassigned_tokens: ModelUsageTokens::default(),
-                issues: [AppKind::Codex, AppKind::Claude]
-                    .into_iter()
-                    .map(|app| ModelUsageIssue {
-                        app,
-                        message: message.clone(),
-                    })
-                    .collect(),
-            }
-        }
-    };
-    report_from_roots(range, &roots, now)
-}
-
-fn report_from_roots(
+/// Builds a report from the exact roots whose revision owns the cache.
+pub(crate) fn report_from_roots(
     range: ModelUsageRange,
     roots: &[(AppKind, std::path::PathBuf)],
     now: DateTime<Local>,

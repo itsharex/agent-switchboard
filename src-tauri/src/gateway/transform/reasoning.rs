@@ -6,7 +6,9 @@ use aes_gcm::aead::{
 use aes_gcm::{Aes256Gcm, Nonce};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
+mod responses;
 
 const CONTINUATION_PREFIX: &str = "asb-reasoning-v3.";
 /// Any version of this gateway's reasoning payload. Another version is a stale
@@ -30,12 +32,26 @@ struct Record {
     signature: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     redacted: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    responses_item: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    gemini_turn: Option<super::claude_gemini::replay::GeminiTurn>,
 }
 
 impl Record {
     fn validate(&self) -> Result<(), TransformError> {
-        if self.text.is_empty() && self.redacted.is_none() {
+        if self.text.is_empty()
+            && self.redacted.is_none()
+            && self.responses_item.is_none()
+            && self.gemini_turn.is_none()
+        {
             return Err(TransformError("推理续接载荷不含内容".to_string()));
+        }
+        if let Some(turn) = &self.gemini_turn {
+            turn.validate()?;
+        }
+        if let Some(item) = &self.responses_item {
+            responses::validate_item(item)?;
         }
         Ok(())
     }
@@ -52,6 +68,8 @@ pub(crate) struct Reasoning {
     pub(crate) signature: Option<String>,
     /// An upstream opaque block, replayable only to the backend that issued it.
     pub(crate) redacted: Option<String>,
+    pub(crate) responses_item: Option<Value>,
+    pub(crate) gemini_turn: Option<super::claude_gemini::replay::GeminiTurn>,
 }
 
 /// Uses a backend-bound continuation key independent of access capabilities.
@@ -84,6 +102,8 @@ impl ReasoningTransport {
             text: content,
             signature: None,
             redacted: None,
+            responses_item: None,
+            gemini_turn: None,
         })
     }
 
@@ -98,6 +118,8 @@ impl ReasoningTransport {
             text,
             signature: signature.filter(|value| !value.is_empty()),
             redacted: None,
+            responses_item: None,
+            gemini_turn: None,
         })
     }
 
@@ -108,6 +130,21 @@ impl ReasoningTransport {
             text: String::new(),
             signature: None,
             redacted: Some(data),
+            responses_item: None,
+            gemini_turn: None,
+        })
+    }
+
+    pub(crate) fn from_gemini_turn(
+        &self,
+        turn: super::claude_gemini::replay::GeminiTurn,
+    ) -> Result<Reasoning, TransformError> {
+        self.seal(Record {
+            text: String::new(),
+            signature: None,
+            redacted: None,
+            responses_item: None,
+            gemini_turn: Some(turn),
         })
     }
 
@@ -124,6 +161,8 @@ impl ReasoningTransport {
             continuation,
             signature: record.signature,
             redacted: record.redacted,
+            responses_item: record.responses_item,
+            gemini_turn: record.gemini_turn,
         })
     }
 
@@ -159,6 +198,8 @@ impl ReasoningTransport {
             continuation: format!("{CONTINUATION_PREFIX}{}", URL_SAFE_NO_PAD.encode(payload)),
             signature: record.signature,
             redacted: record.redacted,
+            responses_item: record.responses_item,
+            gemini_turn: record.gemini_turn,
         })
     }
 

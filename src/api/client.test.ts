@@ -17,6 +17,7 @@ import {
   getModelUsageReport,
   getUpdateChannel,
   getUsageHistory,
+  deleteSession,
   getSessionMessages,
   listSessions,
   listRuntimeLogs,
@@ -34,6 +35,7 @@ import {
   saveGlobalPromptDocument,
   saveClientSettings,
   previewClientSettings,
+  parseClientSettings,
   applyCodexSubagentSettings,
   getCodexSubagentSettings,
   previewCodexSubagentSettings,
@@ -111,7 +113,7 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenCalledWith("config_status");
   });
 
-  it("reads, previews, and saves client preferences without a client-file write command", async () => {
+  it("reads, renders, parses, and saves client preferences without a client-file write command", async () => {
     invokeMock.mockResolvedValue({});
 
     await getClientSettingsEditor("codex");
@@ -123,6 +125,7 @@ describe("api client boundary", () => {
     await previewClientSettings("codex", {
       settings: { approval_policy: { mode: "explicit", value: "on-request" } },
     });
+    await parseClientSettings("codex", "approval_policy = \"on-request\"\n");
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, "get_client_settings_editor", {
       target: "codex",
@@ -135,6 +138,10 @@ describe("api client boundary", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(3, "preview_client_settings", {
       target: "codex",
       settings: { settings: { approval_policy: { mode: "explicit", value: "on-request" } } },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(4, "parse_client_settings", {
+      target: "codex",
+      content: "approval_policy = \"on-request\"\n",
     });
   });
 
@@ -462,6 +469,7 @@ describe("api client boundary", () => {
     await listSessions();
     await getSessionMessages("codex", "019f4b74-c859-7e72-bb0c-9f83347954fb");
     await resumeSession("claude", "019f4b74-c859-7e72-bb0c-9f83347954fb");
+    await deleteSession("claude", "019f4b74-c859-7e72-bb0c-9f83347954fb");
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, "list_sessions");
     expect(invokeMock).toHaveBeenNthCalledWith(2, "get_session_messages", {
@@ -469,6 +477,10 @@ describe("api client boundary", () => {
       sessionId: "019f4b74-c859-7e72-bb0c-9f83347954fb",
     });
     expect(invokeMock).toHaveBeenNthCalledWith(3, "resume_session", {
+      app: "claude",
+      sessionId: "019f4b74-c859-7e72-bb0c-9f83347954fb",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(4, "delete_session", {
       app: "claude",
       sessionId: "019f4b74-c859-7e72-bb0c-9f83347954fb",
     });

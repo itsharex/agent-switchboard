@@ -185,3 +185,43 @@ fn rejects_opaque_continuation_from_the_previous_route_without_a_response_id() {
     assert_eq!(error.code, "previous_response_not_found");
     assert!(error.message.contains("without opaque continuation state"));
 }
+
+#[test]
+fn stale_native_input_is_rejected_before_cross_protocol_normalization() {
+    let mut context = ConversationContext::for_route(ROUTE_A);
+    let first = pending(
+        &mut context,
+        ROUTE_A,
+        request(json!([message("user", "first")]), None, "session-a"),
+    );
+    context
+        .record_completed(&first, &completed("response-a"))
+        .unwrap();
+    for previous in [Some("response-a"), None] {
+        let error = context
+            .prepare(
+                ROUTE_B,
+                ResponsesRequestMode::Standard,
+                &request(
+                    json!([{"type":"context_compaction", "encrypted_content":"opaque-a"}]),
+                    previous,
+                    "session-a",
+                ),
+            )
+            .expect_err("old native state must ask for visible context, not a new protocol shape");
+        assert_eq!(error.code, "previous_response_not_found");
+        assert!(error.message.contains("full request"));
+    }
+    let retry = pending(
+        &mut context,
+        ROUTE_B,
+        request(json!([message("user", "visible retry")]), None, "session-a"),
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&retry.body).unwrap()["input"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}

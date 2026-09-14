@@ -3,7 +3,7 @@ use super::switching;
 use crate::local_state::LocalState;
 use crate::runtime_log::RuntimeLogAction;
 use asb_core::contracts::AppKind;
-use asb_core::discovery::{self, DiscoveryPaths, DiscoveryReport};
+use asb_core::discovery::{self, CodexImportSource, DiscoveryPaths, DiscoveryReport};
 use tauri::Manager;
 
 /// Standard user-level configuration locations. This resolver does not read,
@@ -13,22 +13,43 @@ pub fn local_config_paths() -> Result<DiscoveryPaths, String> {
         codex: LocalState::user_config_path(AppKind::Codex)?
             .to_string_lossy()
             .to_string(),
+        codex_auth: LocalState::codex_auth_path()?.to_string_lossy().to_string(),
         claude: LocalState::user_config_path(AppKind::Claude)?
             .to_string_lossy()
             .to_string(),
     })
 }
 
-pub(super) fn discovery_report() -> Result<DiscoveryReport, CommandError> {
-    let paths = local_config_paths()
-        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    let read = |path: &str| match std::fs::read_to_string(path) {
+fn read_discovery_file(path: &str) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(path) {
         Ok(text) if std::path::Path::new(path).is_file() => Ok(Some(text)),
         Ok(_) => Ok(None),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => Err("无法读取配置文件".to_string()),
-    };
-    Ok(discovery::discover(&paths, read))
+    }
+}
+
+/// Re-reads the current Codex files for the import boundary. The returned
+/// source may contain a draft and is never serialized to the renderer.
+pub(super) fn codex_import_source() -> Result<CodexImportSource, CommandError> {
+    let paths = local_config_paths()
+        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+    let config = read_discovery_file(&paths.codex)
+        .map_err(|error| CommandError::new("codex-import-unavailable", error))?
+        .ok_or_else(|| CommandError::new("import-unavailable", "当前没有可读取的 Codex 配置"))?;
+    let auth = read_discovery_file(&paths.codex_auth)
+        .map_err(|error| CommandError::new("codex-import-unavailable", error))?;
+    discovery::codex_import_proposal(&paths.codex, &config, auth.as_deref(), |path| {
+        read_discovery_file(&path.to_string_lossy())
+    })
+    .map_err(|error| CommandError::new("import-unavailable", error))?
+    .ok_or_else(|| CommandError::new("import-unavailable", "当前配置没有可导入的 Codex 供应商"))
+}
+
+pub(super) fn discovery_report() -> Result<DiscoveryReport, CommandError> {
+    let paths = local_config_paths()
+        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+    Ok(discovery::discover(&paths, read_discovery_file))
 }
 
 /// Read-only discovery of local Codex and Claude Code configuration. Reads at
@@ -97,6 +118,21 @@ pub async fn resume_session(
         blocking(move || {
             crate::session_manager::resume_session(app, &session_id)
                 .map_err(|message| CommandError::new("session-resume-failed", message))
+        })
+        .await
+    })
+    .await
+}
+
+/// Permanently removes the one local session record the backend resolves from
+/// the approved roots. Irreversible by contract; the confirmation sheet in
+/// the renderer is the only gate.
+#[tauri::command]
+pub async fn delete_session(app: AppKind, session_id: String) -> Result<(), CommandError> {
+    observe(RuntimeLogAction::SessionDeleted, async move {
+        blocking(move || {
+            crate::session_manager::delete_session(app, &session_id)
+                .map_err(|message| CommandError::new("session-delete-failed", message))
         })
         .await
     })

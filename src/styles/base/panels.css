@@ -58,13 +58,58 @@
   margin-bottom: 0;
 }
 
-/* In gap-owning containers the layout gap owns the space below the heading. */
-.asb-page-stack > .asb-panel-heading,
-.asb-edit-view > .asb-panel-heading,
-.asb-diagnostics > .asb-panel-heading,
-.asb-usage-workspace > .asb-panel-heading,
-.asb-provider-import > .asb-panel-heading,
-.asb-sessions > .asb-panel-heading {
+/* ---------------------------------------------------------------------------
+ * Workspace header — the single page/module header structure (user directive
+ * 2026-09-12), owned by WorkspaceHeader.tsx (WorkspaceHeader + ModuleHeader).
+ * Row 1 is the title alone (plus a sub-workspace back button); row 2 pairs
+ * left navigation with right page actions; row 3 holds local view controls.
+ * `.asb-panel-heading` / `.asb-panel-subheading` below are the rows that make
+ * up this header; pages assemble neither by hand.
+ * ------------------------------------------------------------------------- */
+.asb-workspace-header,
+.asb-module-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  margin-bottom: var(--asb-space-3);
+  min-width: 0;
+}
+
+/* Inside the header the root owns all spacing; rows never add their own. */
+.asb-workspace-header .asb-panel-heading,
+.asb-workspace-header .asb-panel-subheading,
+.asb-module-header .asb-panel-heading,
+.asb-module-header .asb-panel-subheading {
+  margin-bottom: 0;
+}
+
+/* In gap-owning containers the layout gap owns the space below the header. */
+.asb-page-stack > .asb-workspace-header,
+.asb-provider-import > .asb-workspace-header,
+.asb-usage-workspace > .asb-workspace-header,
+.asb-sessions > .asb-workspace-header,
+.asb-diagnostics > .asb-module-header {
+  margin-bottom: 0;
+}
+
+/* The one control row directly under a title-only page heading (user
+   directive 2026-09-12): section tabs, page-level filters, search, and the
+   refresh action live here instead of crowding the title row. */
+.asb-panel-subheading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-3);
+}
+
+/* Header row 2: navigation/context left, page actions right. */
+.asb-header-primary > .asb-panel-actions {
+  margin-left: auto;
+}
+
+.asb-header-primary .asb-tabs {
+  align-self: center;
   margin-bottom: 0;
 }
 
@@ -75,7 +120,17 @@
   gap: var(--asb-space-2);
 }
 
-.asb-panel-heading .asb-tabs {
+/* The Codex provider page intentionally keeps the original client/action row
+   below the dual-route cards. Newer workspaces use WorkspaceHeader instead. */
+.asb-tabs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  margin-bottom: var(--asb-space-3);
+}
+
+.asb-tabs-bar .asb-tabs {
   align-self: center;
   margin-bottom: 0;
 }
@@ -171,21 +226,6 @@
    re-declaring the property at each value. */
 .asb-num {
   font-variant-numeric: var(--asb-num-font-variant);
-}
-
-/* Client switch row: segmented tabs left, the primary new-provider action
-   right — one row, equal tab touch height (user directive 2026-09-02). */
-.asb-tabs-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-2);
-  margin-bottom: var(--asb-space-3);
-}
-
-.asb-tabs-bar .asb-tabs {
-  align-self: center;
-  margin-bottom: 0;
 }
 
 /* Client tabs — segmented control with a solid active segment and a quiet

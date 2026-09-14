@@ -1,5 +1,5 @@
 import { invoke } from "./client";
-import type { AppKind } from "./shared";
+import type { AppKind, ProviderRecord } from "./client";
 
 /** Phases of one in-flight official login. */
 export type OfficialLoginPhase = "pending" | "completed" | "failed";
@@ -34,4 +34,16 @@ export function pollOfficialLogin(target: AppKind): Promise<OfficialLoginStatus>
 /** Cancels one in-flight official login; a no-op without a running session. */
 export function cancelOfficialLogin(target: AppKind): Promise<void> {
   return invoke<void>("official_login_cancel", { target });
+}
+
+/** Why third-party Codex switching is blocked right now, or null when the
+ * official login is ready. The text is the same one a failed enable reports. */
+export function codexLoginBlocker(): Promise<string | null> {
+  return invoke<string | null>("codex_login_blocker");
+}
+
+/** Creates the canonical Codex official-login record when absent and returns
+ * it; an existing record — including a user-customized one — is untouched. */
+export function ensureCodexOfficialRecord(): Promise<ProviderRecord> {
+  return invoke<ProviderRecord>("ensure_codex_official_record");
 }

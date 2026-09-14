@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import {
   testUsageQuery,
   type DeclarativeUsageQuery,
+  type ProviderConnectionOptions,
   type UpstreamProtocol,
   type UsageQuery,
   type UsageSummary,
@@ -11,6 +12,7 @@ import { Tabs } from "./Tabs";
 import { Time } from "./Time";
 import { Textarea } from "./Textarea";
 import { Button } from "./Button";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import { UsageIcon } from "./icons";
 import { UsageReadingsTable } from "./UsageReadingsTable";
 import { normalizeUsageQuery } from "../lib/usage-query";
@@ -19,6 +21,8 @@ interface Props {
   providerName: string;
   value: UsageQuery | null;
   apiKey: string;
+  authentication?: import("../api/shared").AuthenticationScheme | null;
+  connection?: ProviderConnectionOptions | null;
   baseUrl: string | null;
   upstreamProtocol: UpstreamProtocol | null;
   busy: boolean;
@@ -70,6 +74,8 @@ export function UsageQueryWorkspace({
   providerName,
   value,
   apiKey,
+  authentication,
+  connection,
   baseUrl,
   upstreamProtocol,
   busy,
@@ -100,7 +106,14 @@ export function UsageQueryWorkspace({
     setQuerying(true);
     setError(null);
     try {
-      const next = await testUsageQuery(draft, apiKey, baseUrl, upstreamProtocol);
+      const next = await testUsageQuery(
+        draft,
+        apiKey,
+        baseUrl,
+        upstreamProtocol,
+        authentication,
+        connection,
+      );
       if (queryVersion.current === version) setSummary(next);
     } catch (caught) {
       if (queryVersion.current === version) {
@@ -186,8 +199,9 @@ export function UsageQueryWorkspace({
       onKeyDown={(event) => {
         if (event.key === "Escape" && !querying && !saving && !busy) onClose();
       }}>
-      <header className="asb-panel-heading">
-        <div className="asb-panel-heading-main">
+      <WorkspaceHeader
+        title="用量查询"
+        back={
           <Button
             variant="back"
             aria-label="返回供应商配置"
@@ -196,20 +210,20 @@ export function UsageQueryWorkspace({
           >
             ←
           </Button>
-          <div>
-            <h2 className="asb-panel-title">用量查询</h2>
+        }
+        primary={
+          <>
             <p className="asb-usage-provider">{providerName.trim() || "未命名供应商"}</p>
-          </div>
-        </div>
-      </header>
-
-      <Tabs value={kind} onChange={selectKind} scope={modeScope} label="查询方式"
-        tabs={[
-          { value: "declarative" as const, label: "字段提取", disabled: controlsDisabled,
-            controls: `${modeScope}-declarative-panel` },
-          { value: "script" as const, label: "自编脚本", disabled: controlsDisabled,
-            controls: `${modeScope}-script-panel` },
-        ]} />
+            <Tabs value={kind} onChange={selectKind} scope={modeScope} label="查询方式"
+              tabs={[
+                { value: "declarative" as const, label: "字段提取", disabled: controlsDisabled,
+                  controls: `${modeScope}-declarative-panel` },
+                { value: "script" as const, label: "自编脚本", disabled: controlsDisabled,
+                  controls: `${modeScope}-script-panel` },
+              ]} />
+          </>
+        }
+      />
 
       {/* Both tabpanels stay mounted so each tab's aria-controls always
           resolves; the inactive editor unmounts inside its hidden panel. */}

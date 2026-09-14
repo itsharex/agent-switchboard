@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import type { RuntimeLogLevel } from "../api/client";
 import { DIAGNOSTIC_SECTIONS, type DiagnosticSection } from "../app/navigation";
 import { ConfigStatusPanel, type ConfigStatusPanelProps } from "../components/ConfigStatusPanel";
+import { ModuleHeader } from "../components/WorkspaceHeader";
 import { RuntimeOverviewPanel } from "../components/RuntimeOverviewPanel";
 import { Tabs } from "../components/Tabs";
 import { GatewayPage } from "./GatewayPage";
 import { LogsPage } from "./LogsPage";
+import { ClaudeToolsLauncher } from "../components/claude-management/ClaudeToolsLauncher";
+import { CodexToolsLauncher } from "../components/codex-management/CodexToolsLauncher";
 
 interface DiagnosticsPageProps extends ConfigStatusPanelProps {
   active: boolean;
@@ -24,18 +27,21 @@ export function DiagnosticsPage(props: DiagnosticsPageProps) {
   const opened = (target: DiagnosticSection) => visited.includes(target) || (active && section === target);
   return (
     <section className="asb-diagnostics" aria-label="诊断" hidden={!active}>
-      <div className="asb-panel-heading">
-        <div className="asb-panel-heading-main">
-          <h2 className="asb-panel-title">诊断</h2>
+      {/* 设置内容区的子页：模块级 h3 标题独占第一行，分类页签在第二行。 */}
+      <ModuleHeader
+        title="诊断"
+        primary={
           <Tabs value={section} onChange={onSectionChange} scope="diagnostics" label="诊断内容"
             tabs={DIAGNOSTIC_SECTIONS.map((tab) => ({ ...tab, controls: `diagnostics-${tab.value}-panel` }))} />
-        </div>
-      </div>
+        }
+      />
       <div id="diagnostics-configuration-panel" role="tabpanel" aria-labelledby="diagnostics-configuration-tab" hidden={section !== "configuration"}>
         {opened("configuration") && <div className="asb-diagnostics-configuration">
           <ConfigStatusPanel statuses={props.statuses} profiles={profiles} locks={props.locks}
             busy={busy} onRefresh={props.onRefresh} onRecoverLock={props.onRecoverLock} />
           <RuntimeOverviewPanel />
+          <CodexToolsLauncher onChanged={props.onRefresh} />
+          <ClaudeToolsLauncher onChanged={props.onRefresh} />
         </div>}
       </div>
       <div id="diagnostics-gateway-panel" role="tabpanel" aria-labelledby="diagnostics-gateway-tab" hidden={section !== "gateway"}>

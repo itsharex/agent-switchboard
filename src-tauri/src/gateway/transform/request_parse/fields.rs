@@ -26,25 +26,42 @@ pub(super) fn parse_chat_reasoning_effort(
     };
     match value.as_str() {
         Some("low") => Ok(Some(ReasoningEffort::Low)),
+        Some("medium") => Ok(Some(ReasoningEffort::Medium)),
         Some("high") => Ok(Some(ReasoningEffort::High)),
-        Some("max") => Ok(Some(ReasoningEffort::Max)),
+        Some("max" | "xhigh") => Ok(Some(ReasoningEffort::Max)),
         Some(other) => error(format!("reasoning_effort {other} 不支持")),
-        None => error("reasoning_effort 必须是 low、high 或 max"),
+        None => error("reasoning_effort 必须是 low、medium、high、max 或 xhigh"),
     }
 }
 
-pub(super) fn parse_anthropic_adaptive_thinking(
+pub(super) fn parse_anthropic_thinking(
     value: Option<&Value>,
-) -> Result<bool, TransformError> {
+) -> Result<Option<ReasoningEffort>, TransformError> {
     let Some(value) = value else {
-        return Ok(false);
+        return Ok(None);
     };
     let thinking = object(value, "Anthropic thinking")?;
-    allowed(thinking, &["type"], "Anthropic thinking")?;
-    if string(thinking.get("type"), "thinking.type")? != "adaptive" {
-        return error("仅支持 Anthropic thinking.type=adaptive");
+    match string(thinking.get("type"), "thinking.type")?.as_str() {
+        "enabled" => {
+            allowed(thinking, &["type", "budget_tokens"], "Anthropic thinking")?;
+            Ok(Some(match optional_u64(thinking, "budget_tokens")? {
+                Some(budget) if budget < 4_000 => ReasoningEffort::Low,
+                Some(budget) if budget < 16_000 => ReasoningEffort::Medium,
+                _ => ReasoningEffort::High,
+            }))
+        }
+        "adaptive" => {
+            allowed(thinking, &["type"], "Anthropic thinking")?;
+            Ok(Some(ReasoningEffort::Max))
+        }
+        "disabled" => {
+            allowed(thinking, &["type"], "Anthropic thinking")?;
+            // CC Switch omits effort for disabled thinking; it does not send
+            // an unsupported `none` value to reasoning-only OpenAI models.
+            Ok(None)
+        }
+        other => error(format!("Anthropic thinking.type={other} 不支持")),
     }
-    Ok(true)
 }
 
 pub(super) fn parse_anthropic_output_effort(
@@ -59,19 +76,19 @@ pub(super) fn parse_anthropic_output_effort(
         None => Ok(None),
         Some(Value::String(value)) => match value.as_str() {
             "low" => Ok(Some(ReasoningEffort::Low)),
+            "medium" => Ok(Some(ReasoningEffort::Medium)),
             "high" => Ok(Some(ReasoningEffort::High)),
             "max" => Ok(Some(ReasoningEffort::Max)),
-            "medium" | "xhigh" => error(format!(
-                "Anthropic output_config.effort={value} 无法无损转换到 Chat reasoning_effort"
+            _ => error(format!(
+                "Anthropic output_config.effort={value} 不支持；必须是 low、medium、high 或 max"
             )),
-            _ => error("Anthropic output_config.effort 必须是 low、high 或 max"),
         },
         Some(_) => error("Anthropic output_config.effort 必须是字符串"),
     }
 }
 
 /// Prompt-cache placement affects Anthropic's serving and billing behavior,
-/// not the message, tool, or generation semantics. Chat Completions has no
+/// not the message, tool, or generation semantics. Chat and Responses have no
 /// equivalent. Only Anthropic's documented ephemeral marker is therefore
 /// accepted and omitted during cross-protocol rendering.
 pub(super) fn validate_anthropic_cache_control(value: &Value) -> Result<(), TransformError> {

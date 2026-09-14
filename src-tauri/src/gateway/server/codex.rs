@@ -6,7 +6,7 @@ use asb_core::contracts::{
     codex_model_catalog_document, CodexCatalogEntry, CodexOperation as ContractOperation,
     CodexRouteSnapshot, UpstreamProtocol,
 };
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 pub(super) fn ensure_operation(
     route: &ActiveRoute,
@@ -76,11 +76,48 @@ pub(super) fn resolve_model_and_validate(
     };
     let upstream = snapshot.resolve_model(&requested)?;
     validate_request_capabilities(snapshot, operation, &requested, &value)?;
-    value
+    let object = value
         .as_object_mut()
-        .expect("validated Codex request remains an object")
-        .insert("model".to_string(), Value::String(upstream));
+        .expect("validated Codex request remains an object");
+    if route.upstream_protocol != UpstreamProtocol::Responses
+        && matches!(
+            operation,
+            CodexOperation::Responses | CodexOperation::Compact
+        )
+    {
+        // HTTP and WS share this admission path. Resolve the client budget
+        // before rewriting its model ID, which may alias another catalog entry.
+        // The field is an internal bridge contract and is consumed by both
+        // normal Responses conversion and the compaction summarizer.
+        apply_anthropic_output_budget(object, catalog_entry(snapshot, &requested)?)?;
+    }
+    super::codex_reasoning::apply(snapshot, catalog_entry(snapshot, &requested)?, object)?;
+    object.insert("model".to_string(), Value::String(upstream));
     serde_json::to_vec(&value).map_err(|_| "Codex 请求序列化失败".to_string())
+}
+
+fn apply_anthropic_output_budget(
+    request: &mut Map<String, Value>,
+    model: &CodexCatalogEntry,
+) -> Result<(), String> {
+    let Some(value) = request.get("max_output_tokens") else {
+        request.insert(
+            "max_output_tokens".to_string(),
+            Value::from(model.max_output_tokens),
+        );
+        return Ok(());
+    };
+    let budget = value
+        .as_u64()
+        .filter(|budget| *budget > 0)
+        .ok_or_else(|| "Codex 请求 max_output_tokens 必须是正整数".to_string())?;
+    if budget > model.max_output_tokens {
+        return Err(format!(
+            "请求的 max_output_tokens 超出 Codex 模型 {} 的输出上限 {}",
+            model.id, model.max_output_tokens
+        ));
+    }
+    Ok(())
 }
 
 fn contract_operation(operation: CodexOperation) -> ContractOperation {

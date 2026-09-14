@@ -7,6 +7,7 @@ fn missing_files_are_reported_not_guessed() {
     let report = discover(
         &DiscoveryPaths {
             codex: "~/.codex/config.toml".into(),
+            codex_auth: "~/.codex/auth.json".into(),
             claude: "~/.claude/settings.json".into(),
         },
         |_| Ok(None),
@@ -21,6 +22,7 @@ fn parse_errors_carry_line_and_scrubbed_message() {
     let report = discover(
         &DiscoveryPaths {
             codex: "c".into(),
+            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |p| {
@@ -42,6 +44,7 @@ fn test_configuration_produces_routes_and_imports_api_keys() {
     let report = discover(
         &DiscoveryPaths {
             codex: "c".into(),
+            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |p| {
@@ -132,10 +135,10 @@ fn plaintext_token_gets_a_warning() {
 }
 
 #[test]
-fn codex_configuration_requires_a_new_specialized_profile() {
+fn codex_gateway_configuration_is_managed_and_not_reimported() {
     let current = r#"
-model_provider = "gateway"
-experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
+model_provider = "openai"
+openai_base_url = "http://127.0.0.1:47821/codex/asb_codex_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/v1"
 "#;
     let file = inspect(AppKind::Codex, "c", Some(current));
     let DiscoveredState::Ok {
@@ -147,8 +150,177 @@ experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
         panic!("should parse");
     };
     assert!(!importable);
-    assert!(warnings.iter().any(|w| w.contains("新建专用档案")));
+    assert!(warnings.is_empty());
     assert!(claude_import_proposal(&file, Some(current)).is_none());
+}
+
+#[test]
+fn codex_custom_provider_is_importable_and_reports_live_route_facts() {
+    let current = r#"
+model_provider = "relay"
+model = "vendor-codex"
+
+[model_providers.relay]
+name = "Relay"
+base_url = "https://relay.example/v1"
+wire_api = "chat"
+experimental_bearer_token = "TEST_CODEX_IMPORT_KEY"
+"#;
+    let file = inspect(AppKind::Codex, "c", Some(current));
+    let DiscoveredState::Ok {
+        route,
+        importable,
+        warnings,
+        ..
+    } = &file.state
+    else {
+        panic!("should parse");
+    };
+    assert!(*importable);
+    assert!(warnings.is_empty());
+    assert_eq!(route.provider_name.as_deref(), Some("Relay"));
+    assert_eq!(route.base_url.as_deref(), Some("https://relay.example/v1"));
+    assert_eq!(route.wire_api.as_deref(), Some("chat"));
+}
+
+#[test]
+fn codex_live_import_reads_catalog_facts_and_protocol_authentication() {
+    let current = r#"
+model_provider = "relay"
+model = "vendor-codex"
+model_catalog_json = "models.json"
+
+[model_providers.relay]
+name = "Relay Display Name"
+base_url = "https://relay.example"
+wire_api = "anthropic"
+"#;
+    let catalog = r#"{
+        "models": [{
+            "slug": "vendor-codex",
+            "display_name": "Vendor Codex",
+            "description": "A catalog description",
+            "base_instructions": "Use the vendor system prompt.",
+            "supports_parallel_tool_calls": true,
+            "context_window": 256000,
+            "max_output_tokens": 8192,
+            "input_modalities": ["text", "image"],
+            "supported_reasoning_levels": ["low", "high"],
+            "default_reasoning_level": "high"
+        }]
+    }"#;
+    let source = crate::discovery::codex_import_source(
+        "C:/codex/config.toml",
+        current,
+        Some(r#"{"OPENAI_API_KEY":"live-api-key"}"#),
+        Some(catalog),
+    )
+    .expect("live Codex route should be importable");
+    let crate::discovery::CodexImportAction::ThirdParty(draft) = source.action else {
+        panic!("expected third-party draft");
+    };
+    assert_eq!(draft.name, "Relay Display Name");
+    assert_eq!(draft.api_key, "live-api-key");
+    assert_eq!(
+        draft.authentication,
+        Some(crate::contracts::AuthenticationScheme::XApiKey)
+    );
+    assert_eq!(
+        draft.catalog[0].display_name.as_deref(),
+        Some("Vendor Codex")
+    );
+    assert_eq!(
+        draft.catalog[0].base_instructions.as_deref(),
+        Some("Use the vendor system prompt.")
+    );
+    assert_eq!(draft.catalog[0].supports_parallel_tool_calls, Some(true));
+    assert_eq!(draft.catalog[0].images, true);
+}
+
+#[test]
+fn codex_live_import_warns_on_oauth_only_auth_without_importing_it() {
+    let current = r#"
+model_provider = "relay"
+model = "vendor-codex"
+
+[model_providers.relay]
+name = "Relay"
+base_url = "https://relay.example/v1"
+wire_api = "responses"
+"#;
+    let source = crate::discovery::codex_import_source(
+        "C:/codex/config.toml",
+        current,
+        Some(r#"{"tokens":{"access_token":"oauth-secret"}}"#),
+        None,
+    )
+    .expect("OAuth-only route remains inspectable");
+    let debug = format!("{source:?}");
+    let crate::discovery::CodexImportAction::ThirdParty(ref draft) = source.action else {
+        panic!("expected third-party draft");
+    };
+    assert!(draft.api_key.is_empty());
+    assert_eq!(
+        draft.authentication,
+        Some(crate::contracts::AuthenticationScheme::Bearer)
+    );
+    assert!(source
+        .proposal
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("OAuth")));
+    assert!(!debug.contains("oauth-secret"));
+}
+
+#[test]
+fn codex_custom_provider_diagnostics_are_added_to_discovery() {
+    let report = discover(
+        &DiscoveryPaths {
+            codex: "c".into(),
+            codex_auth: "a".into(),
+            claude: "s".into(),
+        },
+        |path| {
+            match path {
+            "c" => Ok(Some(
+                "model_provider = \"relay\"\n[model_providers.relay]\nbase_url = \"https://relay.example\"\nwire_api = \"responses\"\n".into(),
+            )),
+            _ => Ok(None),
+        }
+        },
+    );
+    let DiscoveredState::Ok {
+        importable,
+        warnings,
+        ..
+    } = report.codex.state
+    else {
+        panic!("should parse");
+    };
+    assert!(!importable);
+    assert!(warnings.iter().any(|warning| warning.contains("主模型")));
+    assert!(report.codex_import_proposals.is_empty());
+}
+
+#[test]
+fn official_codex_proposal_does_not_expose_custom_model() {
+    let report = discover(
+        &DiscoveryPaths {
+            codex: "c".into(),
+            codex_auth: "a".into(),
+            claude: "s".into(),
+        },
+        |path| match path {
+            "c" => Ok(Some(
+                "model_provider = \"openai\"\nmodel = \"gpt-custom\"\n".into(),
+            )),
+            _ => Ok(None),
+        },
+    );
+    let proposal = report.codex_import_proposals.first().expect("proposal");
+    assert!(proposal.official);
+    assert!(proposal.model.is_none());
+    assert!(proposal.upstream.is_none());
 }
 
 #[test]
@@ -156,6 +328,7 @@ fn read_errors_are_distinct_from_missing_files() {
     let report = discover(
         &DiscoveryPaths {
             codex: "c".into(),
+            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |path| {

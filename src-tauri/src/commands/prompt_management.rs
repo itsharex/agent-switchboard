@@ -11,7 +11,7 @@ use asb_switch::{
     read_global_prompt_document, write_global_prompt_document, FsIo, GlobalPromptDocumentRequest,
     RecoveryOutcome, SwitchError,
 };
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 fn prompt_error(error: SwitchError) -> CommandError {
     match error {
@@ -71,7 +71,12 @@ pub async fn save_global_prompt_document(
     observe(RuntimeLogAction::GlobalPromptDocumentSaved, async move {
         require_write_confirmation(confirm_write, "保存全局提示词文档")?;
         let state = state(&app)?;
+        let gate = app.state::<super::ConfigWriteGate>().inner().clone();
         blocking(move || {
+            let _guard = gate.lock().map_err(|error| CommandError::new("prompt-write-gate-unavailable", error))?;
+            if target == AppKind::Codex {
+                crate::codex_prompts::ensure_ready(state.root()).map_err(|error| CommandError::new("codex-prompt-recovery-required", error))?;
+            }
             let target_path = state
                 .global_prompt_target(target)
                 .map_err(|error| CommandError::new("prompt-document-path-unavailable", error))?;

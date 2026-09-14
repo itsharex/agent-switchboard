@@ -55,13 +55,13 @@ function TargetPreview({ target, label }: { target: PlannedTargetView; label: st
           </ul>
         </div>
       )}
-      {target.writesSensitiveConnectionData && (
-        <p className="asb-warn-text">该目标会写入已脱敏的连接地址、参数或凭据值</p>
-      )}
     </div>
   );
 }
 
+/** The only resident confirmation for extension writes: shown when a
+ * prepared plan would write sensitive connection data. Every other write
+ * applies immediately through the shared pipeline. */
 export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, onConfirm, onCancel }: Props) {
   const operation =
     view.operations.find((entry) => entry.operation === "install" || entry.operation === "remove")
@@ -70,7 +70,7 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
     "update";
   return (
     <ExtensionDialog
-      title={`${OPERATION_LABELS[operation]}预览`}
+      title={`确认${OPERATION_LABELS[operation]}（写入敏感数据）`}
       busy={busy}
       onClose={onCancel}
       wide
@@ -84,13 +84,13 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
             disabled={busy}
             onClick={onConfirm}
           >
-            确认应用
+            确认写入
           </Button>
         </>
       }
     >
       <p className="asb-scope-note">
-        应用前会再次校验目标文件未被外部改动；预览中的凭据值已脱敏。
+        本次变更会向客户端配置写入连接地址、参数或凭据值；预览中的值已脱敏。
         {view.operations.length > 1 && " 本预览包含多个资源，确认后将在同一事务中一起应用或一起回滚。"}
       </p>
       {view.operations.map((entry, index) => (
@@ -112,18 +112,18 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
   );
 }
 
+/** One confirmation for the whole deletion: bindings are removed first (each
+ * restorable from the transaction history), then the definition is deleted. */
 export function ExtensionRemoveSheet({
   item,
   busy,
   onConfirm,
   onCancel,
-  onManage,
 }: {
   item: ExtensionListItem;
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-  onManage: () => void;
 }) {
   const bound = item.bindings.length > 0;
   return (
@@ -136,21 +136,17 @@ export function ExtensionRemoveSheet({
           <Button variant="secondary" autoFocus disabled={busy} onClick={onCancel}>
             取消
           </Button>
-          {bound ? (
-            <Button variant="primary" disabled={busy} onClick={onManage}>
-              管理安装
-            </Button>
-          ) : (
-            <Button variant="danger" disabled={busy} onClick={onConfirm}>
-              确认删除
-            </Button>
-          )}
+          <Button variant="danger" disabled={busy} onClick={onConfirm}>
+            {bound ? "删除并撤销部署" : "确认删除"}
+          </Button>
         </>
       }
     >
       <p>将「{item.name}」从扩展库删除。</p>
       {bound ? (
-        <p>该扩展仍有 {item.bindings.length} 个客户端安装。请先在管理详情中移除这些安装，再删除扩展。</p>
+        <p>
+          该扩展仍有 {item.bindings.length} 个客户端安装，将先一并撤销；客户端配置会恢复到部署前的内容，也可随时在操作历史中恢复。
+        </p>
       ) : (
         <p>此操作不改动任何客户端配置文件。</p>
       )}
@@ -182,7 +178,7 @@ export function SkillDisableScopeSheet({
             取消
           </Button>
           <Button variant="primary" disabled={busy || sharedSettings === null} onClick={onConfirm}>
-            生成停用预览
+            执行停用
           </Button>
         </>
       }

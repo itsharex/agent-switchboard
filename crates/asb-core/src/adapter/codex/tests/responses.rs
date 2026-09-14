@@ -30,7 +30,8 @@ fn third_party_projection_uses_builtin_openai_without_credentials() {
 
 #[test]
 fn unprojected_third_party_cannot_render_or_preview() {
-    let plan = plan_b();
+    let mut plan = plan_b();
+    plan.profile.upstream_protocol = Some(UpstreamProtocol::ChatCompletions);
     let direct = SwitchPlan::direct(plan.profile, plan.client_settings);
     assert!(render("", &direct).is_err());
     assert!(preview("", &direct, "/backup").is_err());

@@ -49,6 +49,7 @@ export function clientDeploymentOperations(
 export function needsDisableScope(operation: PlanRequestOperation, items: ExtensionListItem[]) {
   return (
     operation.operation === "disable" &&
+    operation.sharedSettings == null &&
     items.some(
       (item) =>
         item.kind === "skill" &&

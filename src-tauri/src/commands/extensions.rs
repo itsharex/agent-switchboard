@@ -5,11 +5,13 @@
 
 mod actions;
 mod apply;
+mod catalog;
 mod checks;
 mod definitions;
 mod planner;
 mod portable;
 mod repair;
+mod skill_backups;
 mod skills;
 mod sources;
 mod support;
@@ -21,6 +23,16 @@ pub use apply::{
     __tauri_command_name_apply_extension_plan, __tauri_command_name_get_extension_operation,
     __tauri_command_name_prepare_extension_restore, apply_extension_plan, get_extension_operation,
     prepare_extension_restore,
+};
+pub use catalog::{
+    __cmd__list_skill_repositories, __cmd__remove_skill_repository, __cmd__resolve_directory_skill,
+    __cmd__save_skill_repository, __cmd__scan_skill_repositories, __cmd__search_skill_directory,
+    __tauri_command_name_list_skill_repositories, __tauri_command_name_remove_skill_repository,
+    __tauri_command_name_resolve_directory_skill, __tauri_command_name_save_skill_repository,
+    __tauri_command_name_scan_skill_repositories, __tauri_command_name_search_skill_directory,
+    list_skill_repositories, remove_skill_repository, resolve_directory_skill,
+    save_skill_repository, scan_skill_repositories, search_skill_directory, SkillDirectoryEntry,
+    SkillRepositoryInput,
 };
 pub use checks::{
     __cmd__cancel_mcp_check, __cmd__check_mcp_connection, __cmd__get_mcp_check,
@@ -56,6 +68,12 @@ pub use repair::{
     __cmd__prepare_extension_repair, __tauri_command_name_prepare_extension_repair,
     prepare_extension_repair,
 };
+pub use skill_backups::{
+    __cmd__delete_skill_backup, __cmd__list_skill_backups, __cmd__restore_skill_backup,
+    __tauri_command_name_delete_skill_backup, __tauri_command_name_list_skill_backups,
+    __tauri_command_name_restore_skill_backup, delete_skill_backup, list_skill_backups,
+    restore_skill_backup,
+};
 pub use skills::{
     __cmd__check_skill_updates, __cmd__create_local_skill, __cmd__fork_local_skill,
     __cmd__get_skill_editor, __cmd__list_skill_versions, __cmd__update_skill_definition,
@@ -69,16 +87,15 @@ pub use skills::{
 };
 pub use sources::{
     __cmd__import_discovered_mcp, __cmd__import_discovered_skill, __cmd__import_skill_candidate,
-    __cmd__resolve_skill_source, __cmd__scan_local_skill_source,
+    __cmd__resolve_skill_source, __cmd__scan_local_skill_source, __cmd__scan_skill_zip,
     __tauri_command_name_import_discovered_mcp, __tauri_command_name_import_discovered_skill,
     __tauri_command_name_import_skill_candidate, __tauri_command_name_resolve_skill_source,
-    __tauri_command_name_scan_local_skill_source, import_discovered_mcp, import_discovered_skill,
-    import_skill_candidate, resolve_skill_source, scan_local_skill_source,
+    __tauri_command_name_scan_local_skill_source, __tauri_command_name_scan_skill_zip,
+    import_discovered_mcp, import_discovered_skill, import_skill_candidate, resolve_skill_source,
+    scan_local_skill_source, scan_skill_zip,
 };
 pub use takeover::{
-    __cmd__preview_discovered_takeover, __cmd__takeover_discovered_extension,
-    __tauri_command_name_preview_discovered_takeover,
-    __tauri_command_name_takeover_discovered_extension, preview_discovered_takeover,
+    __cmd__takeover_discovered_extension, __tauri_command_name_takeover_discovered_extension,
     takeover_discovered_extension,
 };
 pub use workspace::{

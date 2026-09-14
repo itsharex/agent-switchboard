@@ -71,19 +71,22 @@ fn unsupported_cross_protocol_field_is_rejected_not_dropped() {
 }
 
 #[test]
-fn remote_image_url_is_refused_for_anthropic_conversion() {
+fn remote_image_url_uses_anthropic_url_source() {
     let input = br#"{
           "model":"m","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://image.example/a.png"}}]}],"max_tokens":1
         }"#;
-    let error = convert(
+    let converted = convert(
         UpstreamProtocol::ChatCompletions,
         UpstreamProtocol::AnthropicMessages,
         input,
         None,
     )
-    .err()
-    .expect("remote image must fail");
-    assert!(error.0.contains("远程图片"));
+    .expect("Anthropic supports URL image sources");
+    let body: Value = serde_json::from_slice(&converted.body).unwrap();
+    assert_eq!(
+        body["messages"][0]["content"][0]["source"],
+        serde_json::json!({"type":"url", "url":"https://image.example/a.png"})
+    );
 }
 
 #[test]
@@ -412,10 +415,10 @@ fn current_claude_adaptive_request_maps_to_nvidia_chat_fields() {
 }
 
 #[test]
-fn anthropic_effort_without_a_chat_equivalent_is_rejected() {
+fn unknown_anthropic_effort_is_rejected() {
     let input = br#"{
           "model":"m","messages":[{"role":"user","content":"hello"}],
-          "output_config":{"effort":"medium"}
+          "output_config":{"effort":"turbo"}
         }"#;
     let error = match convert(
         UpstreamProtocol::AnthropicMessages,
@@ -424,9 +427,9 @@ fn anthropic_effort_without_a_chat_equivalent_is_rejected() {
         None,
     ) {
         Err(error) => error,
-        Ok(_) => panic!("medium has no NVIDIA Chat reasoning_effort equivalent"),
+        Ok(_) => panic!("unknown effort must not be silently accepted"),
     };
-    assert!(error.0.contains("output_config.effort=medium"));
+    assert!(error.0.contains("output_config.effort=turbo"));
 }
 
 #[test]

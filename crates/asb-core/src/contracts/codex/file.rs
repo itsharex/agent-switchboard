@@ -1,6 +1,6 @@
 use super::{
     codex_model_catalog_document, CodexProviderDraft, CodexProviderFile, CodexProviderProfile,
-    CodexProviderRecord, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION,
+    CodexProviderRecord, CodexRouteMode, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION,
 };
 use crate::contracts::{
     CodexModelSettings, ExplicitMaxOutputTokens, ModelOptions, ProviderFile, ResponsesOptions,
@@ -15,8 +15,15 @@ impl CodexProviderDraft {
             profile: CodexProviderProfile {
                 id,
                 name: self.name,
+                route_mode: CodexRouteMode::for_connection(
+                    self.upstream,
+                    &self.connection,
+                    self.authentication,
+                ),
                 endpoint: self.endpoint,
                 api_key: self.api_key,
+                authentication: self.authentication,
+                connection: self.connection,
                 upstream: self.upstream,
                 request_mode: self.request_mode,
                 default_model: self.default_model,
@@ -24,6 +31,28 @@ impl CodexProviderDraft {
                 model_routes: self.model_routes,
                 capabilities: self.capabilities,
             },
+            parameters: self.parameters,
+            notes: self.notes,
+            website_url: self.website_url,
+            usage_query: self.usage_query,
+        }
+    }
+}
+
+impl CodexProviderRecord {
+    pub fn into_draft(self) -> CodexProviderDraft {
+        CodexProviderDraft {
+            name: self.profile.name,
+            endpoint: self.profile.endpoint,
+            api_key: self.profile.api_key,
+            authentication: self.profile.authentication,
+            connection: self.profile.connection,
+            upstream: self.profile.upstream,
+            request_mode: self.profile.request_mode,
+            default_model: self.profile.default_model,
+            catalog: self.profile.catalog,
+            model_routes: self.profile.model_routes,
+            capabilities: self.profile.capabilities,
             parameters: self.parameters,
             notes: self.notes,
             website_url: self.website_url,
@@ -75,6 +104,7 @@ impl CodexProviderFile {
             .find(|entry| entry.id == self.profile.default_model)
             .expect("validated Codex profile always contains its default model");
         ProviderFile {
+            authentication: self.profile.authentication,
             id: self.profile.id.clone(),
             name: self.profile.name.clone(),
             position: self.position,
@@ -91,6 +121,7 @@ impl CodexProviderFile {
                     .then_some(default.max_output_tokens),
             ),
             base_url: Some(self.profile.endpoint.0.clone()),
+            connection: self.profile.connection.clone(),
             model: Some(self.profile.default_model.clone()),
             model_options: Some(ModelOptions::Codex(CodexModelSettings {
                 context_window: Some(default.context_window),

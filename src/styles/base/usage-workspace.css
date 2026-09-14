@@ -7,8 +7,9 @@
   min-height: 100%;
 }
 
+/* Provider context beside the mode tabs in the header's primary row. */
 .asb-usage-provider {
-  margin: var(--asb-space-hairline) 0 0;
+  margin: 0;
   overflow: hidden;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);

@@ -5,6 +5,8 @@ import { Tooltip } from "../../components/Tooltip";
 import { ClientToggleGroup } from "../../components/extensions/ClientToggleGroup";
 import { TRANSPORT_LABELS } from "../../components/extensions/labels";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
+import { MANAGEMENT_CLIENTS } from "../../components/extensions/client-presentation";
+import { pendingDeployment } from "./pending-deployment";
 
 function rowDescription(item: ExtensionListItem) {
   if (item.kind === "skill") return item.manifest.description ?? "";
@@ -25,7 +27,7 @@ function RowActions({
 }) {
   const editLabel = item.kind === "mcp" ? `编辑定义 ${item.name}` : `编辑内容 ${item.name}`;
   return (
-    <div className="asb-ext-row-actions">
+    <div className={`asb-ext-row-actions${report ? " has-update" : ""}`}>
       {report && (
         <Tooltip label={`更新 ${item.name}`}>
           <Button
@@ -69,7 +71,7 @@ function ExtensionRow({ item, workspace }: { item: ExtensionListItem; workspace:
   const report = workspace.updates.reportMap.get(item.id);
   const updatable = workspace.updates.updatable.find((entry) => entry.definitionId === item.id);
   const description = rowDescription(item);
-  const meta = item.kind === "mcp" ? TRANSPORT_LABELS[item.transport] : item.source ? "来源已关联" : "本地";
+  const meta = item.kind === "mcp" ? TRANSPORT_LABELS[item.transport] : item.source?.resolvedCommit ? "GitHub" : "本地";
   return (
     <li className="asb-ext-row">
       <Button
@@ -97,6 +99,7 @@ function ExtensionRow({ item, workspace }: { item: ExtensionListItem; workspace:
       <ClientToggleGroup
         item={item}
         busy={workspace.writeBlocked}
+        pendingClients={MANAGEMENT_CLIENTS.filter((client) => pendingDeployment(workspace.applies.pendingOperations, item, client))}
         onToggle={(client) => void workspace.toggleClient(item, client)}
       />
       <RowActions item={item} report={updatable} workspace={workspace} />

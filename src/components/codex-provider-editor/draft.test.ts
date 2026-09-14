@@ -42,6 +42,7 @@ function record(): CodexProviderRecord {
       endpoint: draft.endpoint,
       apiKey: draft.apiKey,
       upstream: draft.upstream,
+      routeMode: "direct",
       requestMode: draft.requestMode,
       defaultModel: draft.defaultModel,
       catalog: draft.catalog.map((entry) => ({
@@ -84,7 +85,7 @@ describe("validateCodexDraft", () => {
     expect(validateCodexDraft(validDraft())).toEqual([]);
   });
 
-  it("requires identity, key, and an explicit API root for OpenAI-compatible upstreams", () => {
+  it("requires identity and a key without inventing a vendor API prefix", () => {
     const draft = validDraft();
     draft.name = " ";
     draft.apiKey = " ";
@@ -92,12 +93,12 @@ describe("validateCodexDraft", () => {
     const problems = validateCodexDraft(draft);
     expect(problems).toContain("供应商名称不能为空");
     expect(problems).toContain("API 密钥不能为空");
-    expect(problems).toContain("OpenAI 兼容服务地址必须包含显式 API 根路径（如 /v1）");
+    expect(problems).toHaveLength(2);
   });
 
-  it("allows a bare service root for an Anthropic upstream", () => {
+  it.each(["responses", "chatCompletions", "anthropicMessages"] as const)("allows a declared service root for %s", (upstream) => {
     const draft = validDraft();
-    draft.upstream = "anthropicMessages";
+    draft.upstream = upstream;
     draft.endpoint = "https://relay.example";
     expect(validateCodexDraft(draft)).toEqual([]);
   });

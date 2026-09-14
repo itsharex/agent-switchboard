@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::AppKind;
-use crate::extensions::contracts::SecretValue;
+use crate::extensions::contracts::{McpMetadata, SecretValue};
 
 /// Codex-specific options for a server. They have no Claude equivalent and
 /// are never translated across clients.
@@ -21,8 +21,7 @@ pub struct CodexServerOptions {
 }
 
 /// The typed MCP server model shared by both clients. Only stdio and HTTP
-/// form the commonly editable core; the Claude-only transports are managed
-/// read-mostly and never projected to Codex.
+/// form the shared core; Claude-only transports are never projected to Codex.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "transport",
@@ -135,6 +134,9 @@ pub struct McpEditRequest {
     /// New native server key; absent keeps the current one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_key: Option<String>,
+    /// Library-only metadata; absent keeps it, delete clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_metadata: Option<FieldEdit<McpMetadata>>,
     /// Fully specified replacement transport (a switch cannot carry fields
     /// over, so it must be complete); absent keeps the current transport and
     /// applies `fields` to it.

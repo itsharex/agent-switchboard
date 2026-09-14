@@ -1,5 +1,7 @@
 //! Active-save transaction for the current Codex-only provider contract.
-use super::plan::{build_codex_plan, execute_projection, preview_projection};
+use super::plan::{build_codex_plan, preview_projection};
+#[cfg(test)]
+use super::plan::execute_projection;
 use crate::commands::error::{
     operation_error, require_write_confirmation, store_error, CommandError,
 };
@@ -36,6 +38,11 @@ pub(super) struct PreparedCodexProfileSave {
 }
 
 impl CodexProfileSavePreparations {
+    pub(super) fn cancel(&self, id: &str) -> Result<(), CommandError> {
+        self.inner.entries.lock().map_err(|_| unavailable())?.remove(id);
+        Ok(())
+    }
+
     pub(super) fn issue(&self, prepared: PreparedCodexProfileSave) -> Result<String, CommandError> {
         let mut entries = self.inner.entries.lock().map_err(|_| unavailable())?;
         let now = Instant::now();
@@ -217,12 +224,15 @@ fn apply(
         Ok(saved) => saved,
         Err(error) => return clear_failed_save(state, error),
     };
-    if let Err(error) = execute_projection(
+    if let Err(error) = super::plan::execute_projection_with_auth(
         state,
         gateway,
         &projection,
         &preview.content_hash,
         &preview.rendered_hash,
+        preview.auth_hash.as_deref(),
+        preview.auth_existed,
+        preview.auth_rendered_hash.as_deref(),
     ) {
         if error.code == "config-recovery-required" {
             return Err(error);
@@ -314,6 +324,8 @@ mod tests {
             name: "relay".to_string(),
             endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
             api_key: "fixture-key".to_string(),
+            authentication: None,
+            connection: Default::default(),
             upstream: CodexUpstream::Responses,
             request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
             default_model: "codex".to_string(),
@@ -332,6 +344,10 @@ mod tests {
                 ],
                 images: true,
                 compact: true,
+                display_name: None,
+                description: None,
+                base_instructions: None,
+                supports_parallel_tool_calls: None,
             }],
             model_routes: vec![CodexModelRoute {
                 client_model: "codex".to_string(),

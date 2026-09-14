@@ -19,10 +19,7 @@ pub(super) fn target_in_home(
     app: AppKind,
 ) -> PathBuf {
     match app {
-        AppKind::Codex => match codex_home {
-            Some(directory) => directory.join("config.toml"),
-            None => home.join(".codex").join("config.toml"),
-        },
+        AppKind::Codex => super::codex_paths::root_in_home(home, codex_home).join("config.toml"),
         AppKind::Claude => {
             claude_credentials_path_in_home(home, claude_dir).with_file_name("settings.json")
         }
@@ -39,10 +36,7 @@ pub(super) fn global_prompt_target_in_home(
 }
 
 pub(super) fn codex_auth_path_in_home(home: &Path, codex_home: Option<&Path>) -> PathBuf {
-    match codex_home {
-        Some(directory) => directory.join("auth.json"),
-        None => home.join(".codex").join("auth.json"),
-    }
+    super::codex_paths::root_in_home(home, codex_home).join("auth.json")
 }
 
 pub(super) fn claude_credentials_path_in_home(home: &Path, config_dir: Option<&Path>) -> PathBuf {

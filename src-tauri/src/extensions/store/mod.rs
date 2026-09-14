@@ -14,6 +14,7 @@
 //! transactions/<operation-id>/  journal (owned by the switch executor)
 //! history/<operation-id>.json   redacted, displayable operation records
 //! checks/<definition-id>.json   latest check per definition
+//! skill-backups/<backup-id>.json deleted Skill definitions; content stays in library/
 //! ../backups/extensions/<operation-id>/  protected client-file backups
 //! ```
 
@@ -210,7 +211,9 @@ impl ExtensionStore {
 mod commit;
 mod content;
 mod records;
+mod skill_backups;
 #[cfg(test)]
 mod tests;
 
 pub use content::ExtensionStoreError;
+pub use skill_backups::SkillBackup;

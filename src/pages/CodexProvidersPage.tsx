@@ -1,34 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  executeSwitch,
-  previewSwitch,
-  reorderCodexProfiles,
-  type AppKind,
-  type CodexProviderDraft,
-  type CodexProviderRecord,
-  type CommandError,
-  type ConfigFileStatus,
-  type FilePreview,
-  type LockStatus,
-  type ProviderDraft,
-  type ProviderProfile,
-  type ProviderRecord,
+  executeSwitch, reorderCodexProfiles,
+  type AppKind, type CodexProviderDraft, type CodexProviderRecord, type CommandError,
+  type ConfigFileStatus, type LockStatus, type ProviderDraft, type ProviderProfile, type ProviderRecord,
 } from "../api/client";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { CodexEditorSource } from "../app/useProviders";
+import { useSwitchPreview } from "../app/useSwitchPreview";
 import { Button } from "../components/Button";
-import { CodexOfficialQuotaPanel } from "../components/CodexOfficialQuotaPanel";
+import { CodexOfficialRow, CodexProviderRow } from "../components/CodexProviderRows";
 import { CodexProviderEditor } from "../components/codex-provider-editor/CodexProviderEditor";
-import { EditIcon, EyeOffIcon, PlayIcon, PreviewIcon, UsageIcon } from "../components/icons";
-import { OfficialLoginPanel } from "../components/OfficialLoginPanel";
 import { PreviewInspector } from "../components/PreviewInspector";
-import { ProviderMoreActions } from "../components/ProviderMoreActions";
-import {
-  ProviderRowShell,
-  ProviderWorkspaceShell,
-  SortableProviderRows,
-} from "../components/ProviderWorkspaceShell";
-import { Tooltip } from "../components/Tooltip";
+import { ProviderWorkspaceShell, SortableProviderRows } from "../components/ProviderWorkspaceShell";
 
 interface Props {
   active: boolean;
@@ -66,6 +48,9 @@ interface Props {
   onSwitchClient: (app: AppKind) => void;
   /** Persists the official record's subscription-quota refresh interval. */
   onSaveOfficialQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
+  /** Why third-party switching is blocked right now, or null when the
+   * official login is ready; owned by the config snapshot refresh. */
+  loginBlocker: string | null;
   statuses: ConfigFileStatus[] | null;
   profiles: ProviderProfile[];
   locks: Partial<Record<AppKind, LockStatus>>;
@@ -73,362 +58,121 @@ interface Props {
   userConfigWarnings: string[];
 }
 
-function hostLabel(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
-}
-
-/** The fixed official-login row. It is not sortable: it is the client's
- * native route rather than a member of the ordered third-party list. */
-function CodexOfficialRow({ record, active, selected, quotaOpen, previewOpen, onSelect,
-  onPreview, onTogglePreview, onEdit, onDelete, onSaveQuotaInterval, onToggleQuota, children }: {
-  record: ProviderRecord;
-  active: boolean;
-  selected: boolean;
-  quotaOpen: boolean;
-  previewOpen: boolean;
-  onSelect: () => void;
-  onPreview: () => void;
-  onTogglePreview: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
-  onToggleQuota: () => void;
-  children?: React.ReactNode;
-}) {
-  const profile = record.profile;
-  const [reloginOpen, setReloginOpen] = useState(false);
-  const [quotaNonce, setQuotaNonce] = useState(0);
-  const quotaLabel = quotaOpen
-    ? `收起 ${profile.name} 订阅额度`
-    : `查看 ${profile.name} 订阅额度`;
-  return (
-    <ProviderRowShell
-      id={profile.id}
-      name={profile.name}
-      active={active}
-      selected={selected}
-      previewOpen={previewOpen}
-      sortable={false}
-      onSelect={onSelect}
-      meta={<span>官方登录</span>}
-      primaryAction={!active ? (
-        <Tooltip label={`启用 ${profile.name}`}>
-          <Button variant="primary" className="asb-row-activate"
-            aria-label={`启用 ${profile.name}`} onClick={onPreview}>
-            <PlayIcon size={15} />
-            启用
-          </Button>
-        </Tooltip>
-      ) : undefined}
-      secondaryAction={(
-        <Tooltip label={reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`}>
-          <Button variant="secondary"
-            className={`asb-row-activate${reloginOpen ? " is-active" : ""}`}
-            aria-label={reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`}
-            aria-expanded={reloginOpen}
-            onClick={() => setReloginOpen((open) => !open)}>
-            {reloginOpen ? "收起登录" : "重新登录"}
-          </Button>
-        </Tooltip>
-      )}
-      actions={(
-        <>
-          <Tooltip label={`编辑 ${profile.name}`}>
-            <Button variant="icon" aria-label={`编辑 ${profile.name}`} onClick={onEdit}>
-              <EditIcon />
-            </Button>
-          </Tooltip>
-          <Tooltip label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}>
-            <Button variant="icon" className={previewOpen ? "is-active" : undefined}
-              aria-label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}
-              aria-expanded={previewOpen} onClick={onTogglePreview}>
-              {previewOpen ? <EyeOffIcon /> : <PreviewIcon />}
-            </Button>
-          </Tooltip>
-          <Tooltip label={quotaLabel}>
-            <Button variant="icon" className={quotaOpen ? "is-active" : undefined}
-              aria-label={quotaLabel} aria-controls={`codex-official-quota-${profile.id}`}
-              aria-expanded={quotaOpen} onClick={onToggleQuota}>
-              <UsageIcon />
-            </Button>
-          </Tooltip>
-          <ProviderMoreActions name={profile.name} onDelete={onDelete} />
-        </>
-      )}
-    >
-      {reloginOpen && (
-        <OfficialLoginPanel app="codex"
-          onFinished={(completed) => { if (completed) setQuotaNonce((nonce) => nonce + 1); }} />
-      )}
-      {quotaOpen && (
-        <CodexOfficialQuotaPanel
-          key={`codex-official-quota-${profile.id}-${quotaNonce}`}
-          id={`codex-official-quota-${profile.id}`}
-          profileId={profile.id}
-          profileName={profile.name}
-          refreshIntervalMinutes={profile.officialQuotaRefreshIntervalMinutes ?? 0}
-          onSaveInterval={(minutes) => onSaveQuotaInterval(profile, minutes)}
-        />
-      )}
-      {children}
-    </ProviderRowShell>
-  );
-}
-
-export function CodexProvidersPage(props: Props) {
-  const [preview, setPreview] = useState<{ id: string; file: FilePreview } | null>(null);
+function useCodexProvidersState(props: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [quotaOpen, setQuotaOpen] = useState(false);
-  const previewRevision = useRef(0);
+  const switchPreview = useSwitchPreview({ busy: props.busy, setSelectedId, onError: props.onError });
+  const { retractPreview, previewProfile, preview } = switchPreview;
+  const run = useCallback(async (action: () => Promise<void>) => {
+    if (props.busy) return;
+    props.onBusy(true);
+    try { await action(); }
+    catch (caught) { props.onError(caught as CommandError); }
+    finally { props.onBusy(false); }
+  }, [props.busy, props.onBusy, props.onError]);
 
-  const run = useCallback(
-    async (action: () => Promise<void>) => {
-      if (props.busy) return;
-      props.onBusy(true);
-      try {
-        await action();
-      } catch (caught) {
-        props.onError(caught as CommandError);
-      } finally {
-        props.onBusy(false);
-      }
-    },
-    [props.busy, props.onBusy, props.onError],
-  );
-
-  const dismissPreview = useCallback(() => {
-    previewRevision.current += 1;
-    setPreview(null);
-  }, []);
-
-  const openPreview = useCallback(
-    (id: string) =>
-      void run(async () => {
-        const revision = ++previewRevision.current;
-        const file = await previewSwitch(id);
-        if (revision === previewRevision.current) {
-          setPreview({ id, file });
-        }
-      }),
-    [run],
-  );
   useEffect(() => {
-    if (!props.active || props.busy || !props.requestedPreviewId) return;
+    if (!props.active || props.editorSession) retractPreview();
+  }, [props.active, props.editorSession, retractPreview]);
+  useEffect(() => {
+    if (!props.active || props.busy || !props.requestedPreviewId || props.editorSession) return;
     props.onPreviewRequestHandled();
-    openPreview(props.requestedPreviewId);
-  }, [
-    openPreview,
-    props.active,
-    props.busy,
-    props.onPreviewRequestHandled,
-    props.requestedPreviewId,
-  ]);
-  const apply = () =>
-    preview &&
+    void previewProfile({ id: props.requestedPreviewId });
+  }, [previewProfile, props.active, props.busy, props.requestedPreviewId,
+    props.onPreviewRequestHandled, props.editorSession]);
+
+  const apply = () => {
+    if (!preview) return;
     void run(async () => {
-      await executeSwitch(
-        preview.id,
-        preview.file.contentHash,
-        preview.file.renderedHash,
-        true,
-      );
-      dismissPreview();
+      await executeSwitch(preview.profileId, preview.file.contentHash,
+        preview.file.renderedHash, true, preview.file);
+      retractPreview();
       await props.onRefresh();
     });
+  };
+  const reorder = (orderedIds: string[]) => void run(async () => {
+    await reorderCodexProfiles(orderedIds,
+      Object.fromEntries(props.records.map((record) => [record.profile.id, record.fileHash])));
+    await props.onRefresh();
+  });
+  return { ...switchPreview, selectedId, setSelectedId, quotaOpen, setQuotaOpen,
+    run, apply, reorder };
+}
 
-  const reorder = (orderedIds: string[]) =>
-    void run(async () => {
-      await reorderCodexProfiles(
-        orderedIds,
-        Object.fromEntries(
-          props.records.map((record) => [record.profile.id, record.fileHash]),
-        ),
-      );
-      await props.onRefresh();
-    });
+type PageState = ReturnType<typeof useCodexProvidersState>;
 
-  if (props.editorSession)
-    return (
-      <div hidden={!props.active}>
-        <CodexProviderEditor
-          active={props.active}
-          source={props.editorSession.source}
-          busy={props.busy}
-          userConfigModel={props.userConfigModel}
-          userConfigWarnings={props.userConfigWarnings}
-          onSave={props.onSave}
-          onSaveOfficial={props.onSaveOfficial}
-          onSwitchAccessMode={props.onSwitchAccessMode}
-          onCancel={props.onCloseEditor}
-          onSwitchClient={props.onSwitchClient}
-        />
-      </div>
-    );
-
-  if (!props.active) return null;
-
-  const ids = props.records.map((record) => record.profile.id);
+function CodexProvidersList({ props, state }: { props: Props; state: PageState }) {
+  const { preview } = state;
   const official = props.officialRecord;
   const previewSection = preview && (
     <section className="asb-preview-inline" aria-label="变更预览">
       <div className="asb-panel-heading">
         <h3 className="asb-section-title">变更预览</h3>
         <div className="asb-panel-actions">
-          <Button variant="secondary" disabled={props.busy} onClick={dismissPreview}>
+          <Button variant="secondary" disabled={props.busy} onClick={state.retractPreview}>
             取消
           </Button>
-          <Button variant="primary" disabled={props.busy} onClick={apply}>
+          <Button variant="primary" disabled={props.busy} onClick={state.apply}>
             确认切换
           </Button>
         </div>
       </div>
-      <PreviewInspector
-        filePreview={preview.file}
-        userConfigModel={props.userConfigModel}
-        userConfigWarnings={props.userConfigWarnings}
-      />
+      <PreviewInspector filePreview={preview.file}
+        userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
     </section>
   );
-
-  const officialRow = official && (
-    <CodexOfficialRow
-      record={official}
-      active={props.activeProfileId === official.profile.id}
-      selected={selectedId === official.profile.id}
-      quotaOpen={quotaOpen}
-      previewOpen={preview?.id === official.profile.id}
-      onSelect={() => setSelectedId(official.profile.id)}
-      onPreview={() => openPreview(official.profile.id)}
-      onTogglePreview={() => preview?.id === official.profile.id
-        ? dismissPreview()
-        : openPreview(official.profile.id)}
-      onEdit={() => {
-        dismissPreview();
-        props.onEditOfficial(official);
-      }}
-      onDelete={() => props.onDeleteOfficial(official)}
-      onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
-      onToggleQuota={() => setQuotaOpen((open) => !open)}
-    >
-      {preview?.id === official.profile.id && previewSection}
-    </CodexOfficialRow>
-  );
-
+  const rowProps = (profile: { id: string }) => ({
+    active: props.activeProfileId === profile.id,
+    selected: state.selectedId === profile.id,
+    previewOpen: preview?.profileId === profile.id,
+    onSelect: () => state.setSelectedId(profile.id),
+    onActivate: () => void state.activateProfile(profile),
+    onTogglePreview: () => state.togglePreviewProfile(profile),
+  });
   return (
-    <ProviderWorkspaceShell
-      ariaLabel="Codex 供应商"
-      app="codex"
-      onSelectApp={props.onSelectApp}
-      busy={props.busy}
-      statuses={props.statuses}
-      profiles={props.profiles}
-      locks={props.locks}
-      onOpenClientSettings={props.onOpenClientSettings}
-      onOpenHistory={props.onOpenHistory}
-      onImport={props.onImport}
-      onNew={() => {
-        dismissPreview();
-        props.onNew();
-      }}
-    >
-      <SortableProviderRows
-        ids={ids}
-        onReorder={reorder}
-        ariaLabel="Codex 供应商列表"
-        emptyLabel="尚无第三方供应商；官方登录已就绪"
-        leading={officialRow}
-      >
-        {props.records.map((record) => {
-          const id = record.profile.id;
-          const name = record.profile.name;
-          const active = props.activeProfileId === id;
-          const previewOpen = preview?.id === id;
-          const model = record.profile.defaultModel;
-          const websiteUrl = record.websiteUrl;
-          const host = websiteUrl ? hostLabel(websiteUrl) : null;
-          const showsMeta = Boolean(model || host);
-          return (
-            <ProviderRowShell
-              key={id}
-              id={id}
-              name={name}
-              active={active}
-              selected={selectedId === id}
-              previewOpen={previewOpen}
-              sortable
-              onSelect={() => setSelectedId(id)}
-              meta={showsMeta ? (
-                <>
-                  {model}
-                  {model && host ? " · " : ""}
-                  {host && websiteUrl ? (
-                    <a
-                      className="asb-row-host"
-                      href={websiteUrl}
-                      title={websiteUrl}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void openUrl(websiteUrl);
-                      }}
-                    >
-                      {host}
-                    </a>
-                  ) : null}
-                </>
-              ) : undefined}
-              primaryAction={!active ? (
-                <Tooltip label={`启用 ${name}`}>
-                  <Button
-                    variant="primary"
-                    className="asb-row-activate"
-                    aria-label={`启用 ${name}`}
-                    onClick={() => openPreview(id)}
-                  >
-                    <PlayIcon size={15} />
-                    启用
-                  </Button>
-                </Tooltip>
-              ) : undefined}
-              actions={
-                <>
-                  <Tooltip label={`编辑 ${name}`}>
-                    <Button
-                      variant="icon"
-                      aria-label={`编辑 ${name}`}
-                      onClick={() => {
-                        dismissPreview();
-                        props.onEdit(record);
-                      }}
-                    >
-                      <EditIcon />
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label={previewOpen ? `收起 ${name} 预览` : `预览 ${name} 变更`}>
-                    <Button
-                      variant="icon"
-                      className={previewOpen ? "is-active" : undefined}
-                      aria-label={previewOpen ? `收起 ${name} 预览` : `预览 ${name} 变更`}
-                      aria-expanded={previewOpen}
-                      onClick={() => (previewOpen ? dismissPreview() : openPreview(id))}
-                    >
-                      {previewOpen ? <EyeOffIcon /> : <PreviewIcon />}
-                    </Button>
-                  </Tooltip>
-                  {!active && (
-                    <ProviderMoreActions name={name} onDelete={() => props.onDelete(record)} />
-                  )}
-                </>
-              }
-            >
-              {previewOpen && previewSection}
-            </ProviderRowShell>
-          );
-        })}
+    <>
+      <SortableProviderRows legacyLayout ids={props.records.map((record) => record.profile.id)} onReorder={state.reorder}
+        ariaLabel="Codex 供应商列表" emptyLabel="尚无第三方供应商；官方登录已就绪"
+        leading={official && (
+          <CodexOfficialRow record={official} {...rowProps(official.profile)} quotaOpen={state.quotaOpen}
+            onEdit={() => { state.retractPreview(); props.onEditOfficial(official); }}
+            onDelete={() => props.onDeleteOfficial(official)}
+            onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
+            onToggleQuota={() => state.setQuotaOpen((open) => !open)}
+            onReloginFinished={() => void props.onRefresh()}>
+            {preview?.profileId === official.profile.id && previewSection}
+          </CodexOfficialRow>
+        )}>
+        {props.records.map((record) => (
+          <CodexProviderRow key={record.profile.id} record={record} {...rowProps(record.profile)}
+            onEdit={() => { state.retractPreview(); props.onEdit(record); }}
+            onDelete={() => props.onDelete(record)}>
+            {preview?.profileId === record.profile.id && previewSection}
+          </CodexProviderRow>
+        ))}
       </SortableProviderRows>
+    </>
+  );
+}
+
+export function CodexProvidersPage(props: Props) {
+  const state = useCodexProvidersState(props);
+  if (props.editorSession) return (
+    <div hidden={!props.active}>
+      <CodexProviderEditor active={props.active} source={props.editorSession.source} busy={props.busy}
+        userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings}
+        onSave={props.onSave} onSaveOfficial={props.onSaveOfficial}
+        onSwitchAccessMode={props.onSwitchAccessMode} onCancel={props.onCloseEditor}
+        onSwitchClient={props.onSwitchClient} />
+    </div>
+  );
+  if (!props.active) return null;
+  return (
+      <ProviderWorkspaceShell legacyLayout ariaLabel="Codex 供应商" app="codex" onSelectApp={props.onSelectApp}
+      busy={props.busy} statuses={props.statuses} profiles={props.profiles} locks={props.locks}
+      onOpenClientSettings={props.onOpenClientSettings} onOpenHistory={props.onOpenHistory}
+      onImport={props.onImport} onNew={() => { state.retractPreview(); props.onNew(); }}>
+      <CodexProvidersList props={props} state={state} />
     </ProviderWorkspaceShell>
   );
 }

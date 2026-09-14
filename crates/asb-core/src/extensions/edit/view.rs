@@ -35,7 +35,11 @@ pub struct SecretSlot {
 /// every position the write-side contract can change without ever seeing
 /// stored credential material.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(tag = "transport", rename_all = "camelCase")]
+#[serde(
+    tag = "transport",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum McpEditView {
     Stdio {
         command: String,

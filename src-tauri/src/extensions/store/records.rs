@@ -189,54 +189,6 @@ impl ExtensionStore {
         Ok(())
     }
 
-    /// Deletes a definition only when no binding references it. The binding
-    /// check and removal share the library lock with plan commits, so an
-    /// apply cannot race a definition deletion.
-    pub fn delete_definition_if_unbound(&self, id: &str) -> Result<(), ExtensionStoreError> {
-        let _guard = save_lock();
-        let path = self.path(&["definitions", &format!("{id}.json")]);
-        let current = match self.read_json::<ExtensionDefinition>(&path) {
-            Ok(definition) => definition,
-            Err(ExtensionStoreError::Unreadable(_)) if !path.exists() => {
-                return Err(ExtensionStoreError::Conflict(
-                    "扩展不存在或已被删除".to_string(),
-                ))
-            }
-            Err(error) => return Err(error),
-        };
-        validate_stored_definition(&current)?;
-        if self
-            .list_bindings()?
-            .iter()
-            .any(|binding| binding.resource_id == id)
-        {
-            return Err(ExtensionStoreError::Conflict(
-                "该扩展仍有部署绑定；请先从客户端移除".to_string(),
-            ));
-        }
-        let manifest_before = self.manifest_state_locked()?;
-        match fs::remove_file(&path) {
-            Ok(()) => {
-                if let Err(error) = self.bump_generation_locked() {
-                    return self.metadata_failure(
-                        "删除扩展定义",
-                        error,
-                        self.restore_file_and_manifest_locked(
-                            &path,
-                            Some(&current),
-                            manifest_before.as_ref(),
-                        ),
-                    );
-                }
-                Ok(())
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(
-                ExtensionStoreError::Conflict("扩展不存在或已被删除".to_string()),
-            ),
-            Err(error) => Err(ExtensionStoreError::Unreadable(error.to_string())),
-        }
-    }
-
     // ------------------------------------------------------------ bindings
 
     pub fn list_bindings(&self) -> Result<Vec<ExtensionBinding>, ExtensionStoreError> {

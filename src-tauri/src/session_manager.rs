@@ -1,9 +1,11 @@
-//! Local session discovery and controlled resume for the two clients Agent
-//! Switchboard owns.
+//! Local session discovery, controlled resume, and explicit deletion for the
+//! two clients Agent Switchboard owns.
 //!
-//! Discovery and transcript reads never index, modify, or delete client data.
-//! An explicit resume request only starts the client's fixed CLI command in a
-//! new terminal after resolving an approved local session source.
+//! Discovery and transcript reads never index or modify client data. An
+//! explicit resume request only starts the client's fixed CLI command in a
+//! new terminal after resolving an approved local session source. An
+//! explicit delete permanently removes the one local record the backend
+//! itself resolved from the approved roots.
 
 pub(crate) mod parser;
 mod resume;
@@ -106,6 +108,30 @@ pub fn resume_session(app: AppKind, session_id: &str) -> Result<SessionResume, S
     })
 }
 
+/// Permanently removes the local session record resolved from the approved
+/// roots. The renderer supplies only the supported client plus a validated
+/// session id; the resolved path never crosses the IPC boundary. Claude Code
+/// keeps an optional directory named after the transcript stem beside the
+/// record; it belongs to this session's identity and is removed with it.
+pub fn delete_session(app: AppKind, session_id: &str) -> Result<(), String> {
+    let source = resolve_session(app, session_id)?;
+    remove_session_source(app, &source.path)
+}
+
+fn remove_session_source(app: AppKind, path: &Path) -> Result<(), String> {
+    if app == AppKind::Claude {
+        if let Some(stem) = path.file_stem() {
+            let sidecar = path.with_file_name(stem);
+            if sidecar.is_dir() {
+                fs::remove_dir_all(&sidecar).map_err(|error| {
+                    format!("无法删除会话附属目录 {}: {error}", sidecar.display())
+                })?;
+            }
+        }
+    }
+    fs::remove_file(path).map_err(|error| format!("无法删除会话记录 {}: {error}", path.display()))
+}
+
 fn resolve_session(app: AppKind, session_id: &str) -> Result<SessionSource, String> {
     if !parser::valid_session_id(session_id) {
         return Err("会话 ID 无效".to_string());
@@ -129,15 +155,16 @@ fn scan_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
 /// The only approved local JSONL roots. Both session browsing and usage
 /// aggregation consume this list so neither feature accepts a renderer path.
 pub(crate) fn session_roots() -> Result<Vec<(AppKind, PathBuf)>, String> {
-    let home = crate::local_state::user_home_dir()?;
-    Ok(vec![
-        (AppKind::Codex, home.join(".codex").join("sessions")),
-        (
-            AppKind::Codex,
-            home.join(".codex").join("archived_sessions"),
-        ),
-        (AppKind::Claude, home.join(".claude").join("projects")),
-    ])
+    let codex = crate::local_state::LocalState::user_config_path(AppKind::Codex)?;
+    let claude = crate::local_state::LocalState::user_config_path(AppKind::Claude)?;
+    let codex_root = codex.parent().ok_or("Codex 配置目录无效")?;
+    let claude_root = claude.parent().ok_or("Claude 配置目录无效")?;
+    let mut roots = crate::local_state::codex_paths::session_roots(codex_root)
+        .into_iter()
+        .map(|path| (AppKind::Codex, path))
+        .collect::<Vec<_>>();
+    roots.push((AppKind::Claude, claude_root.join("projects")));
+    Ok(roots)
 }
 
 fn scan_session_roots(roots: &[(AppKind, PathBuf)]) -> SessionScan {
@@ -350,6 +377,40 @@ mod tests {
             scan.sessions.is_empty(),
             "会话 ID 在限界之后才出现时不应被收录"
         );
+    }
+
+    #[test]
+    fn removes_the_record_and_claude_sidecar_without_touching_siblings() {
+        let temp = tempdir().expect("temp");
+        let record = temp.path().join("session-1.jsonl");
+        let sidecar = temp.path().join("session-1");
+        write(&record, "{\"type\":\"user\"}\n");
+        fs::create_dir_all(sidecar.join("parts")).expect("create sidecar");
+        write(&sidecar.join("parts").join("chunk.bin"), "payload");
+        let unrelated = temp.path().join("session-2.jsonl");
+        write(&unrelated, "{\"type\":\"user\"}\n");
+
+        remove_session_source(AppKind::Claude, &record).expect("delete claude record");
+        assert!(!record.exists(), "会话记录应被删除");
+        assert!(!sidecar.exists(), "同名附属目录应随会话删除");
+        assert!(unrelated.exists(), "无关记录必须保留");
+
+        let codex_record = temp.path().join("rollout-1.jsonl");
+        let codex_sidecar = temp.path().join("rollout-1");
+        write(&codex_record, "{\"type\":\"session_meta\"}\n");
+        fs::create_dir_all(&codex_sidecar).expect("create codex sidecar");
+
+        remove_session_source(AppKind::Codex, &codex_record).expect("delete codex record");
+        assert!(!codex_record.exists(), "会话记录应被删除");
+        assert!(codex_sidecar.exists(), "Codex 不清理同名目录");
+    }
+
+    #[test]
+    fn deleting_a_missing_record_reports_failure() {
+        let temp = tempdir().expect("temp");
+        let error = remove_session_source(AppKind::Codex, &temp.path().join("gone.jsonl"))
+            .expect_err("missing record must fail");
+        assert!(error.contains("无法删除会话记录"));
     }
 
     #[test]

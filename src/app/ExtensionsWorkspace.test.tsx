@@ -111,23 +111,21 @@ it("retains each client's draft and the selected instruction section after leavi
   expect(saveGlobalPromptDocumentMock).not.toHaveBeenCalled();
 });
 
-it("preserves resource filters independently of the global instruction client", async () => {
+it("keeps the library search state independent of the global instruction client", async () => {
   const user = userEvent.setup();
   render(<WorkspaceHarness />);
   await screen.findByRole("button", { name: "管理 接口规范" });
   await user.type(screen.getByRole("searchbox", { name: "搜索扩展" }), "接口");
-  // The library's client filter is the shared segment radio group, not a
-  // tablist: filtering is not panel switching (DESIGN.md §8).
-  await user.click(screen.getByRole("radio", { name: "Codex" }));
+  // The count bar owns the library-wide client state now; the instruction
+  // page's client radio is a separate concern and neither disturbs the other.
   await user.click(screen.getByRole("tab", { name: "全局指令" }));
   await screen.findByRole("textbox", { name: "AGENTS.md 内容" });
-  await user.click(screen.getByRole("radio", { name: "Claude" }));
+  await user.click(screen.getByRole("radio", { name: /Claude/ }));
   await user.click(screen.getByRole("tab", { name: "Skills" }));
   expect(screen.getByRole("searchbox", { name: "搜索扩展" })).toHaveValue("接口");
-  expect(screen.getByRole("radio", { name: "Codex" })).toBeChecked();
   expect(screen.getByRole("button", { name: "管理 接口规范" })).toBeInTheDocument();
   await user.click(screen.getByRole("tab", { name: "全局指令" }));
-  expect(screen.getByRole("radio", { name: "Claude" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: /Claude/ })).toBeChecked();
 });
 
 it("keeps extension recovery visible and actionable while editing instructions", async () => {
@@ -142,7 +140,7 @@ it("keeps extension recovery visible and actionable while editing instructions",
   await waitFor(() => expect(recoverExtensionTransactionsMock).toHaveBeenCalledTimes(1));
 });
 
-it("navigates all three sections with the keyboard and offers only resource types in discovery", async () => {
+it("navigates all three sections with the keyboard and keeps discovery in the workspace", async () => {
   const user = userEvent.setup();
   renderPage();
   await user.click(screen.getByRole("tab", { name: "Skills" }));
@@ -156,13 +154,11 @@ it("navigates all three sections with the keyboard and offers only resource type
   await user.keyboard("{Home}");
   expect(screen.getByRole("tab", { name: "Skills" })).toHaveFocus();
   await user.click(screen.getByRole("button", { name: "从本机发现" }));
-  const dialog = screen.getByRole("dialog", { name: "从本机发现" });
-  const typeTabs = within(dialog).getByRole("tablist", { name: "扩展类型" });
-  expect(within(typeTabs).getAllByRole("tab")).toHaveLength(2);
-  expect(within(typeTabs).queryByRole("tab", { name: "全局指令" })).not.toBeInTheDocument();
-  await user.click(within(typeTabs).getByRole("tab", { name: "Skills" }));
-  await user.keyboard("{End}");
-  expect(within(typeTabs).getByRole("tab", { name: "MCP" })).toHaveFocus();
-  expect(within(dialog).getByRole("tabpanel", { name: "MCP" })).toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "从本机发现" })).not.toBeInTheDocument();
+  const discovery = screen.getByRole("region", { name: "从本机发现" });
+  expect(within(discovery).getByPlaceholderText("搜索 Skills 名称或描述")).toBeInTheDocument();
+  await user.click(screen.getByRole("tab", { name: "MCP" }));
+  expect(screen.getByRole("region", { name: "从本机发现" })).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("搜索 MCP 名称、命令或传输方式")).toBeInTheDocument();
   expect(prepareExtensionPlanMock).not.toHaveBeenCalled();
 });

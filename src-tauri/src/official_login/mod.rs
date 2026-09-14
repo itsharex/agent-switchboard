@@ -5,6 +5,7 @@
 //! reach profile storage, the renderer, logs, or error messages.
 
 pub(crate) mod claude;
+pub(crate) mod claude_credentials;
 pub(crate) mod codex;
 pub(crate) mod credentials;
 pub(crate) mod observation;

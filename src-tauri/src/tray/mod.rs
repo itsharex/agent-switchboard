@@ -177,29 +177,18 @@ pub async fn tray_switch(app: AppHandle, profile_id: String) -> Result<(), Comma
         preview.content_hash,
         preview.rendered_hash,
         true,
+        preview.auth_hash,
+        preview.auth_existed,
+        preview.auth_rendered_hash,
     )
     .await?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn tray_quit(app: AppHandle) -> Result<(), CommandError> {
-    let gateway = app.state::<crate::gateway::GatewayController>();
-    // The persisted dependency and the live client files decide, not only
-    // the in-memory routes: a failed listener with a client still pointed at
-    // the gateway must refuse to quit just the same.
-    let local = crate::local_state::LocalState::from_app(&app)
-        .map_err(|error| CommandError::new("tray-state-unavailable", error))?;
-    if gateway.has_gateway_dependency(&local) {
-        return Err(CommandError::new(
-            "gateway-route-active",
-            "当前客户端仍使用本机协议网关；请先切换到直连供应商或官方登录后再退出应用",
-        ));
-    }
-    gateway.shutdown();
+pub fn tray_quit(app: AppHandle) {
     request_explicit_exit();
     app.exit(0);
-    Ok(())
 }
 
 #[cfg(test)]

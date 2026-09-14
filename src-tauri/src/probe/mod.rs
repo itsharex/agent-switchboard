@@ -8,11 +8,17 @@
 //! to other outbound reads (model fetch, update check, quota, OAuth).
 
 mod models;
+mod claude_gemini;
 mod transport;
 
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod auth_tests;
+
 pub(crate) use models::provider_auth_headers;
 pub use models::{fetch_models, ProviderModel};
-pub use transport::{http_bytes, http_get, http_request, probe, ProbeResult};
+pub use transport::{
+    http_get, http_get_with_options, http_request, http_request_with_options, probe, ProbeResult,
+};

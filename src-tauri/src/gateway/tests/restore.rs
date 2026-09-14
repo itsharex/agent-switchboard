@@ -1,5 +1,96 @@
 use super::*;
 
+#[test]
+fn codex_restore_and_port_change_select_one_saved_revision() {
+    let _paths = crate::test_client_paths::redirect_client_paths();
+    let directory = tempfile::tempdir().unwrap();
+    let local = LocalState::from_root(directory.path().join("state"));
+    let gateway = GatewayController::start(&local);
+    let first = saved_route(&local, &gateway, AppKind::Codex);
+    let second = saved_route(&local, &gateway, AppKind::Codex);
+    assert_ne!(first, second);
+    let records = local.configuration().list_codex_providers().unwrap();
+    let first_id = records[0].profile.id.clone();
+    let second_id = records[1].profile.id.clone();
+    let target = local.target(AppKind::Codex).unwrap();
+    fs::write(&target, &first).unwrap();
+
+    assert_eq!(
+        gateway
+            .prepare_restored(&local, AppKind::Codex, &first)
+            .unwrap(),
+        first
+    );
+    gateway
+        .reconcile_restored(&local, AppKind::Codex, || Ok(()))
+        .unwrap();
+    assert_eq!(
+        gateway.active_profile_id(AppKind::Codex, &first).unwrap(),
+        Some(first_id.clone())
+    );
+    let preparations = PortChangePreparations::default();
+    let prepared = super::port_projection::prepare_available_port(&gateway, &local, &preparations);
+    assert_eq!(prepared.clients.len(), 1);
+    assert_eq!(prepared.clients[0].profile_id, first_id);
+
+    fs::write(&target, &second).unwrap();
+    gateway
+        .reconcile_restored(&local, AppKind::Codex, || Ok(()))
+        .unwrap();
+    assert_eq!(
+        gateway.active_profile_id(AppKind::Codex, &second).unwrap(),
+        Some(second_id)
+    );
+    gateway.shutdown();
+}
+
+#[test]
+fn codex_restore_rejects_changed_deleted_and_unidentified_routes() {
+    let _paths = crate::test_client_paths::redirect_client_paths();
+    let directory = tempfile::tempdir().unwrap();
+    let local = LocalState::from_root(directory.path().join("state"));
+    let gateway = GatewayController::start(&local);
+    let saved = saved_route(&local, &gateway, AppKind::Codex);
+    let record = local
+        .configuration()
+        .list_codex_providers()
+        .unwrap()
+        .remove(0);
+    let mut unidentified = saved.parse::<toml_edit::DocumentMut>().unwrap();
+    unidentified.remove("model_catalog_json");
+    assert!(gateway
+        .prepare_restored(&local, AppKind::Codex, &unidentified.to_string())
+        .is_err());
+
+    let mut changed = local
+        .configuration()
+        .find_codex_provider_file(&record.profile.id)
+        .unwrap();
+    changed.profile.api_key = "changed-upstream-key".into();
+    local
+        .configuration()
+        .overwrite_codex_provider_file(changed)
+        .unwrap();
+    assert!(gateway
+        .prepare_restored(&local, AppKind::Codex, &saved)
+        .is_err());
+
+    let changed = local
+        .configuration()
+        .list_codex_providers()
+        .unwrap()
+        .remove(0);
+    local
+        .configuration()
+        .delete_codex_provider(&changed.profile.id, &changed.file_hash)
+        .unwrap();
+    saved_route(&local, &gateway, AppKind::Codex);
+    assert!(gateway
+        .prepare_restored(&local, AppKind::Codex, &saved)
+        .is_err());
+    gateway.shutdown();
+}
+
 fn saved_route(local: &LocalState, gateway: &GatewayController, app: AppKind) -> String {
     let projection = match app {
         AppKind::Codex => {
@@ -46,8 +137,22 @@ fn restore_rebuilds_only_the_port_and_preserves_the_route_identity() {
         let rebuilt = gateway.prepare_restored(&local, app, &archived).unwrap();
         assert_eq!(rebuilt, original);
         let invalid = match app {
-            AppKind::Codex => archived.replace("asb_codex_", "asb_codex_0"),
-            AppKind::Claude => archived.replace("asb_local_", "asb_local_0"),
+            AppKind::Codex => {
+                let token = archived
+                    .split("asb_codex_")
+                    .nth(1)
+                    .and_then(|tail| tail.split('/').next())
+                    .expect("Codex route token");
+                archived.replace(token, &"0".repeat(token.len()))
+            }
+            AppKind::Claude => {
+                let token = archived
+                    .split("asb_local_")
+                    .nth(1)
+                    .and_then(|tail| tail.split('/').next())
+                    .expect("Claude route token");
+                archived.replace(token, &"0".repeat(token.len()))
+            }
         };
         assert!(gateway.prepare_restored(&local, app, &invalid).is_err());
     }
@@ -100,7 +205,7 @@ fn restore_rejects_retired_provider_and_reserved_provider_overrides() {
 }
 
 #[test]
-fn damaged_configuration_does_not_panic_during_dependency_observation() {
+fn damaged_configuration_does_not_panic_during_gateway_observation() {
     let _client_paths = crate::test_client_paths::redirect_client_paths();
     let directory = tempfile::tempdir().unwrap();
     let local = LocalState::from_root(directory.path().join("state"));
@@ -110,8 +215,6 @@ fn damaged_configuration_does_not_panic_during_dependency_observation() {
         fs::write(target, "{ invalid config [").unwrap();
     }
     let gateway = GatewayController::start(&local);
-    assert!(!points_at_gateway_files(&local));
-    assert!(!gateway.has_gateway_dependency(&local));
     assert_eq!(gateway.observe(&local).status, GatewayStatusKind::Standby);
     gateway.shutdown();
 }

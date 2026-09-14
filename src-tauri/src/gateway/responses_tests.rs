@@ -10,6 +10,8 @@ fn draft(
         name: file.profile.name.clone(),
         endpoint: file.profile.endpoint.clone(),
         api_key: file.profile.api_key.clone(),
+        authentication: file.profile.authentication,
+        connection: file.profile.connection.clone(),
         upstream: file.profile.upstream,
         request_mode: mode,
         default_model: file.profile.default_model.clone(),

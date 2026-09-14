@@ -1,9 +1,10 @@
 use super::*;
-use tiny_http::{Header, Response, StatusCode};
+use std::io::Write;
+use tiny_http::Header;
 
 pub(super) fn respond(
     request: Request,
-    span: RequestSpan,
+    mut span: RequestSpan,
     route: &ActiveRoute,
     inner: &GatewayInner,
     client: &UpstreamClient,
@@ -38,12 +39,40 @@ pub(super) fn respond(
         Ok(result) => result,
         Err(diagnostic) => {
             let status = diagnostic_status(&diagnostic);
+            span.note_codex_attempt(route, Some(status), false);
             span.finish(Some(status), 0);
             respond_diagnostic(request, UpstreamProtocol::Responses, status, &diagnostic);
             return;
         }
     };
-    let (content, mime) = if !legacy && stream == Some(true) {
+    span.note_codex_attempt(route, Some(200), false);
+    span.note_mapped_model(result.upstream_model.clone());
+    span.note_response_value(UpstreamProtocol::Responses, &result.response);
+    let (content, mime) = render_result(result, legacy, stream);
+    let size = content.len() as u64;
+    let headers = [Header::from_bytes("Content-Type", mime).expect("static header")];
+    let mut writer = match request.stream_response_with_headers(200, &headers) {
+        Ok(writer) => writer,
+        Err(_) => {
+            span.finish(None, 0);
+            return;
+        }
+    };
+    let delivered = writer
+        .write_all(content.as_bytes())
+        .and_then(|_| writer.flush())
+        .is_ok();
+    // Keep the body open until durable accounting finishes, so a sequential
+    // caller cannot outrun the in-flight slots with completed compact responses.
+    span.finish(delivered.then_some(200), size);
+}
+
+fn render_result(
+    result: crate::gateway::compaction::CompactionResult,
+    legacy: bool,
+    stream: Option<bool>,
+) -> (String, &'static str) {
+    if !legacy && stream == Some(true) {
         let events = result
             .events()
             .into_iter()
@@ -65,13 +94,7 @@ pub(super) fn respond(
             .to_string(),
             "application/json",
         )
-    };
-    let size = content.len() as u64;
-    let response = Response::from_string(content)
-        .with_status_code(StatusCode(200))
-        .with_header(Header::from_bytes("Content-Type", mime).expect("static header"));
-    let delivered = request.respond(response).is_ok();
-    span.finish(delivered.then_some(200), size);
+    }
 }
 
 fn diagnostic_status(diagnostic: &ProviderDiagnostic) -> u16 {

@@ -18,6 +18,7 @@ pub(super) fn parse(protocol: UpstreamProtocol, body: &[u8]) -> Result<Reply, St
         UpstreamProtocol::Responses => responses_text(&value),
         UpstreamProtocol::ChatCompletions => chat_text(&value),
         UpstreamProtocol::AnthropicMessages => anthropic_text(&value),
+        UpstreamProtocol::GeminiGenerateContent => super::claude::gemini_test_text(&value),
     }?;
     if text.trim().is_empty() {
         return Err("响应没有非空模型文本；仅推理或空响应不能验证请求成功".to_string());
@@ -25,7 +26,7 @@ pub(super) fn parse(protocol: UpstreamProtocol, body: &[u8]) -> Result<Reply, St
     Ok(Reply {
         text,
         model: value
-            .get("model")
+            .get(if protocol == UpstreamProtocol::GeminiGenerateContent { "modelVersion" } else { "model" })
             .and_then(Value::as_str)
             .filter(|model| !model.trim().is_empty())
             .map(str::to_string),

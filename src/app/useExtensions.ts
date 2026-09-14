@@ -6,21 +6,55 @@ import { useExtensionLibrary } from "./extensions/useExtensionLibrary";
 import { useSkillLibrary } from "./extensions/useSkillLibrary";
 import type { ExtensionsDeps } from "./extensions/extension-ops";
 
+function useExtensionOperationFrame(deps: ExtensionsDeps) {
+  const latest = useRef(deps);
+  latest.current = deps;
+  const busyRef = useRef(deps.busy);
+  busyRef.current = deps.busy;
+  const operationInFlight = useRef(false);
+  const [working, setWorking] = useState(false);
+  const isBusy = useCallback(() => busyRef.current || operationInFlight.current, []);
+  const runRead = useCallback(async <T>(action: () => Promise<T>): Promise<T | null> => {
+    try {
+      return await action();
+    } catch (caught) {
+      latest.current.onError(caught as CommandError);
+      return null;
+    }
+  }, []);
+  const runExclusive = useCallback(async <T>(action: () => Promise<T>): Promise<T | null> => {
+    if (isBusy()) return null;
+    operationInFlight.current = true;
+    busyRef.current = true;
+    setWorking(true);
+    latest.current.setBusy(true);
+    latest.current.clearError();
+    try {
+      return await runRead(action);
+    } finally {
+      operationInFlight.current = false;
+      // Release synchronously: the next awaited step may precede React's render.
+      busyRef.current = false;
+      setWorking(false);
+      latest.current.setBusy(false);
+    }
+  }, [isBusy, runRead]);
+  return { busy: deps.busy || working, isBusy, runRead, runExclusive };
+}
+
 /** Owns the extension-library workspace state and serialises every library
  * or plan mutation into the shared operation frame (busy / error gate). */
-export function useExtensions({ busy, setBusy, clearError, onError }: ExtensionsDeps) {
+export function useExtensions(deps: ExtensionsDeps) {
   const [workspace, setWorkspace] = useState<ExtensionsWorkspace | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const operationInFlight = useRef(false);
+  const frame = useExtensionOperationFrame(deps);
+  const { runRead, runExclusive } = frame;
 
   useEffect(() => {
     let current = true;
-    void listExtensions()
+    void runRead(listExtensions)
       .then((next) => {
-        if (current) setWorkspace(next);
-      })
-      .catch((caught) => {
-        if (current) onError(caught as CommandError);
+        if (current && next) setWorkspace(next);
       })
       .finally(() => {
         if (current) setLoaded(true);
@@ -28,47 +62,23 @@ export function useExtensions({ busy, setBusy, clearError, onError }: Extensions
     return () => {
       current = false;
     };
-  }, [onError]);
+  }, [runRead]);
 
   const refresh = useCallback(async (): Promise<ExtensionsWorkspace | null> => {
-    try {
-      const next = await listExtensions();
-      setWorkspace(next);
-      return next;
-    } catch (caught) {
-      onError(caught as CommandError);
-      return null;
-    }
-  }, [onError]);
+    const next = await runRead(listExtensions);
+    if (next) setWorkspace(next);
+    return next;
+  }, [runRead]);
 
-  const runExclusive = useCallback(
-    async <T>(action: () => Promise<T>): Promise<T | null> => {
-      if (busy || operationInFlight.current) return null;
-      operationInFlight.current = true;
-      setBusy(true);
-      clearError();
-      try {
-        return await action();
-      } catch (caught) {
-        onError(caught as CommandError);
-        return null;
-      } finally {
-        operationInFlight.current = false;
-        setBusy(false);
-      }
-    },
-    [busy, clearError, onError, setBusy],
-  );
-
-  const library = useExtensionLibrary({ refresh, runExclusive });
+  const library = useExtensionLibrary({ refresh, runExclusive, runRead });
   const importing = useExtensionImport({ refresh, runExclusive });
-  const skills = useSkillLibrary({ refresh, runExclusive });
+  const skills = useSkillLibrary({ refresh, runExclusive, runRead });
 
   return {
     workspace,
     loaded,
     refresh,
-    runExclusive,
+    ...frame,
     ...library,
     ...importing,
     ...skills,

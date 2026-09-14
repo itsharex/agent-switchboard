@@ -1,32 +1,29 @@
+mod catalog;
+mod completion;
+mod query;
+mod reasoning;
+mod request_options;
+use catalog::catalog_seeds;
+
 use serde_json::{Map, Value};
 use toml_edit::{DocumentMut, Item, TableLike};
 use url::Url;
 
-use crate::ccswitch::row::{
-    CcSwitchProposal, CcSwitchProviderDraft, CcSwitchRow, CodexCatalogSeed, CodexImportSeed,
-};
+use crate::ccswitch::row::{CcSwitchProposal, CcSwitchProviderDraft, CcSwitchRow, CodexImportSeed};
 use crate::ccswitch::usage::map_usage_query;
 use crate::contracts::{
-    default_model_limits, AppKind, CodexCapabilities, CodexCatalogEntry, CodexEndpoint,
-    CodexProviderDraft, CodexReasoningLevel, CodexUpstream, ProviderDraft, ResponsesRequestMode,
-    RouteMode, SettingsValues, CODEX_REASONING_LADDER, DEFAULT_CODEX_CAPABILITIES,
+    codex_official_draft, AppKind, AuthenticationScheme, CodexEndpoint, CodexUpstream,
+    ProviderConnectionOptions, ResponsesRequestMode,
 };
 
-const SOURCE_TABLE_KEYS: [&str; 6] = [
+const SOURCE_TABLE_KEYS: [&str; 7] = [
     "name",
     "base_url",
     "wire_api",
     "requires_openai_auth",
     "experimental_bearer_token",
     "supports_websockets",
-];
-
-const SOURCE_CATALOG_ENTRY_KEYS: [&str; 5] = [
-    "model",
-    "contextWindow",
-    "inputModalities",
-    "reasoningLevels",
-    "defaultReasoningLevel",
+    "query_params",
 ];
 
 /// Maps one current imported Codex row into an importable proposal: a
@@ -41,16 +38,17 @@ pub(crate) fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchPropos
     if official_route(&document) {
         return Ok(CcSwitchProposal {
             key,
-            draft: CcSwitchProviderDraft::CodexOfficial(official_codex_draft(parameters)),
+            draft: CcSwitchProviderDraft::CodexOfficial(codex_official_draft(parameters)),
             warnings,
         });
     }
     let (route, route_warnings) = selected_route(&document)?;
     warnings.extend(route_warnings);
-    let (metadata, meta_warnings) = SourceMetadata::parse(row.meta.as_deref())?;
+    let (mut metadata, meta_warnings) = SourceMetadata::parse(row.meta.as_deref())?;
     warnings.extend(meta_warnings);
     let upstream = metadata.upstream(route.upstream)?;
-    let endpoint = normalize_endpoint(&route.base_url, upstream)?;
+    let endpoint = normalize_endpoint(&route.base_url, upstream, metadata.connection.is_full_url)?;
+    let endpoint = query::apply(&document, endpoint, upstream, &mut metadata.connection)?;
     let (api_key, key_from_auth) = source_api_key(&settings.auth, &route, &document);
     if api_key.is_empty() {
         warnings.push("来源未提供可用 API 密钥；导入前请补全".to_string());
@@ -63,8 +61,11 @@ pub(crate) fn map_codex(key: String, row: &CcSwitchRow) -> Result<CcSwitchPropos
         name: row.name.clone(),
         endpoint,
         api_key,
+        authentication: metadata.authentication(upstream),
+        connection: metadata.connection,
         upstream,
         request_mode: ResponsesRequestMode::Standard,
+        chat_reasoning: metadata.chat_reasoning,
         default_model,
         catalog,
         parameters,
@@ -92,109 +93,6 @@ fn official_route(document: &DocumentMut) -> bool {
         .filter(|value| !value.is_empty())
         .unwrap_or("openai");
     provider == "openai" && item_string(document.get("openai_base_url")).is_none()
-}
-
-fn official_codex_draft(parameters: SettingsValues) -> ProviderDraft {
-    ProviderDraft {
-        app: AppKind::Codex,
-        route_mode: RouteMode::Official,
-        name: "Codex 官方登录".to_string(),
-        model: None,
-        base_url: None,
-        api_key: String::new(),
-        upstream_protocol: None,
-        responses_options: None,
-        max_output_tokens: None.into(),
-        model_options: None,
-        parameters,
-        notes: None,
-        website_url: None,
-        usage_query: None,
-        official_quota_refresh_interval_minutes: None,
-    }
-}
-
-impl CodexImportSeed {
-    /// The one completion owner behind one-click Codex import: turns the
-    /// source facts into a strict `CodexProviderDraft` with the declared
-    /// default capabilities, catalog rows narrowed by the source's explicit
-    /// facts, and materialized model limits. The result goes through the same
-    /// strict validation as an editor save.
-    pub fn completion_draft(&self) -> Result<CodexProviderDraft, String> {
-        if self.api_key.trim().is_empty() {
-            return Err("来源未提供可用 API 密钥，无法导入".to_string());
-        }
-        let capabilities = DEFAULT_CODEX_CAPABILITIES;
-        let catalog = self
-            .catalog
-            .iter()
-            .map(|seed| completed_catalog_entry(seed, &capabilities))
-            .collect::<Vec<_>>();
-        Ok(CodexProviderDraft {
-            name: self.name.trim().to_string(),
-            endpoint: self.endpoint.clone(),
-            api_key: self.api_key.trim().to_string(),
-            upstream: self.upstream,
-            request_mode: self.request_mode,
-            default_model: self.default_model.trim().to_string(),
-            catalog,
-            model_routes: Vec::new(),
-            capabilities,
-            parameters: self.parameters.clone(),
-            notes: self.notes.clone(),
-            website_url: self.website_url.clone(),
-            usage_query: self.usage_query.clone(),
-        })
-    }
-}
-
-/// Materializes one catalog row: explicit source facts win, then the
-/// officially published limits, then the generic positive defaults. Flags
-/// follow the declared capabilities; reasoning levels narrow to the source's
-/// explicit ladder or fall back to the full ladder.
-fn completed_catalog_entry(
-    seed: &CodexCatalogSeed,
-    capabilities: &CodexCapabilities,
-) -> CodexCatalogEntry {
-    let levels = match &seed.reasoning_levels {
-        Some(levels) if !levels.is_empty() => {
-            let mut narrowed = Vec::with_capacity(levels.len());
-            for level in levels {
-                if !narrowed.contains(level) {
-                    narrowed.push(*level);
-                }
-            }
-            narrowed
-        }
-        _ => CODEX_REASONING_LADDER.to_vec(),
-    };
-    let default_level = seed
-        .default_reasoning_level
-        .filter(|level| levels.contains(level))
-        .unwrap_or_else(|| {
-            levels
-                .iter()
-                .find(|level| **level == CodexReasoningLevel::Medium)
-                .copied()
-                .unwrap_or(*levels.last().expect("ladder is never empty"))
-        });
-    let (context_window, max_output_tokens) = match seed.context_window {
-        Some(value) if value > 0 => (value, default_model_limits(&seed.model).1),
-        _ => default_model_limits(&seed.model),
-    };
-    CodexCatalogEntry {
-        id: seed.model.clone(),
-        context_window,
-        max_output_tokens,
-        function_tools: capabilities.function_tools,
-        custom_tools: capabilities.custom_tools,
-        tool_search: capabilities.tool_search,
-        reasoning: capabilities.reasoning,
-        default_reasoning_level: default_level,
-        supported_reasoning_levels: levels,
-        images: seed.images.unwrap_or(false),
-        compact: capabilities.compact,
-    }
 }
 
 struct SourceSettings {
@@ -236,203 +134,6 @@ fn parse_settings(text: &str) -> Result<(SourceSettings, Vec<String>), String> {
         },
         warnings,
     ))
-}
-
-/// Turns the real source model catalog into editor seeds. Only facts the
-/// source actually states are carried; everything else keeps `None` for the
-/// editor defaults. The TOML default model is always present exactly once.
-fn catalog_seeds(
-    source: Option<&Value>,
-    default_model: &str,
-    warnings: &mut Vec<String>,
-) -> Vec<CodexCatalogSeed> {
-    let mut seeds = Vec::new();
-    if let Some(source) = source {
-        let models = source.get("models").and_then(Value::as_array);
-        match models {
-            Some(models) => {
-                for (index, entry) in models.iter().enumerate() {
-                    if let Some(seed) = catalog_seed(entry, index, &mut seeds, warnings) {
-                        seeds.push(seed);
-                    }
-                }
-            }
-            None => warnings.push("未导入: modelCatalog.models".to_string()),
-        }
-    }
-    if !seeds.iter().any(|seed| seed.model == default_model) {
-        seeds.push(CodexCatalogSeed {
-            model: default_model.to_string(),
-            context_window: None,
-            images: None,
-            default_reasoning_level: None,
-            reasoning_levels: None,
-        });
-    }
-    seeds
-}
-
-fn catalog_seed(
-    entry: &Value,
-    index: usize,
-    seeds: &[CodexCatalogSeed],
-    warnings: &mut Vec<String>,
-) -> Option<CodexCatalogSeed> {
-    let object = entry.as_object().or_else(|| {
-        warnings.push(format!("未导入: modelCatalog.models[{index}]"));
-        None
-    })?;
-    let model = object
-        .get("model")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let model = model.or_else(|| {
-        warnings.push(format!("未导入: modelCatalog.models[{index}].model"));
-        None
-    })?;
-    if seeds.iter().any(|seed| seed.model == model) {
-        warnings.push(format!(
-            "未导入: modelCatalog.models[{index}]（{model} 与先前条目重复）"
-        ));
-        return None;
-    }
-    let context_window = positive_u64_field(
-        object.get("contextWindow"),
-        index,
-        "contextWindow",
-        warnings,
-    );
-    let images = images_field(object.get("inputModalities"), index, warnings);
-    let default_reasoning_level = reasoning_level_field(
-        object.get("defaultReasoningLevel"),
-        index,
-        "defaultReasoningLevel",
-        warnings,
-    );
-    let reasoning_levels = reasoning_levels_field(object.get("reasoningLevels"), index, warnings);
-    let mut default_reasoning_level = default_reasoning_level;
-    if let (Some(default), Some(levels)) = (&default_reasoning_level, &reasoning_levels) {
-        if !levels.contains(default) {
-            warnings.push(format!(
-                "未导入: modelCatalog.models[{index}].defaultReasoningLevel 不在 reasoningLevels 内"
-            ));
-            default_reasoning_level = None;
-        }
-    }
-    for key in object.keys() {
-        if !SOURCE_CATALOG_ENTRY_KEYS.contains(&key.as_str()) {
-            warnings.push(format!("未导入: modelCatalog.models[{index}].{key}"));
-        }
-    }
-    Some(CodexCatalogSeed {
-        model: model.to_string(),
-        context_window,
-        images,
-        default_reasoning_level,
-        reasoning_levels,
-    })
-}
-
-fn positive_u64_field(
-    value: Option<&Value>,
-    index: usize,
-    field: &str,
-    warnings: &mut Vec<String>,
-) -> Option<u64> {
-    let value = value?;
-    let parsed = match value {
-        Value::Number(number) => number.as_u64().filter(|parsed| *parsed > 0),
-        Value::String(text) => text.trim().parse::<u64>().ok().filter(|parsed| *parsed > 0),
-        _ => None,
-    };
-    if parsed.is_none() {
-        warnings.push(format!(
-            "未导入: modelCatalog.models[{index}].{field} 必须是正整数"
-        ));
-    }
-    parsed
-}
-
-fn images_field(value: Option<&Value>, index: usize, warnings: &mut Vec<String>) -> Option<bool> {
-    let value = value?;
-    let Some(modalities) = value.as_array() else {
-        warnings.push(format!(
-            "未导入: modelCatalog.models[{index}].inputModalities 必须是数组"
-        ));
-        return None;
-    };
-    let mut images = false;
-    if modalities.is_empty() {
-        warnings.push(format!(
-            "未导入: modelCatalog.models[{index}].inputModalities 不能为空"
-        ));
-        return None;
-    }
-    for modality in modalities {
-        match modality.as_str() {
-            Some("text") => {}
-            Some("image") => images = true,
-            _ => {
-                warnings.push(format!(
-                    "未导入: modelCatalog.models[{index}].inputModalities 仅支持 text 或 image"
-                ));
-                return None;
-            }
-        }
-    }
-    Some(images)
-}
-
-fn reasoning_level_field(
-    value: Option<&Value>,
-    index: usize,
-    field: &str,
-    warnings: &mut Vec<String>,
-) -> Option<CodexReasoningLevel> {
-    let value = value?;
-    match serde_json::from_value::<CodexReasoningLevel>(value.clone()) {
-        Ok(level) => Some(level),
-        Err(_) => {
-            warnings.push(format!(
-                "未导入: modelCatalog.models[{index}].{field} 无法识别"
-            ));
-            None
-        }
-    }
-}
-
-fn reasoning_levels_field(
-    value: Option<&Value>,
-    index: usize,
-    warnings: &mut Vec<String>,
-) -> Option<Vec<CodexReasoningLevel>> {
-    let value = value?;
-    let Some(list) = value.as_array() else {
-        warnings.push(format!(
-            "未导入: modelCatalog.models[{index}].reasoningLevels 必须是数组"
-        ));
-        return None;
-    };
-    if list.is_empty() {
-        warnings.push(format!(
-            "未导入: modelCatalog.models[{index}].reasoningLevels 不能为空"
-        ));
-        return None;
-    }
-    let mut levels = Vec::with_capacity(list.len());
-    for item in list {
-        match serde_json::from_value::<CodexReasoningLevel>(item.clone()) {
-            Ok(level) => levels.push(level),
-            Err(_) => {
-                warnings.push(format!(
-                    "未导入: modelCatalog.models[{index}].reasoningLevels 无法识别"
-                ));
-                return None;
-            }
-        }
-    }
-    Some(levels)
 }
 
 fn parse_document(text: &str) -> Result<DocumentMut, String> {
@@ -532,15 +233,25 @@ fn required_top_level_string(
 }
 
 struct SourceMetadata {
+    chat_reasoning: crate::contracts::CodexChatReasoning,
     api_format: Option<String>,
+    connection: ProviderConnectionOptions,
 }
 
 impl SourceMetadata {
     fn parse(text: Option<&str>) -> Result<(Self, Vec<String>), String> {
         let Some(text) = text.filter(|text| !text.trim().is_empty()) else {
-            return Ok((Self { api_format: None }, Vec::new()));
+            return Ok((
+                Self {
+                    api_format: None,
+                    chat_reasoning: crate::contracts::CodexChatReasoning::Unsupported,
+                    connection: ProviderConnectionOptions::default(),
+                },
+                Vec::new(),
+            ));
         };
-        let root: Value = serde_json::from_str(text).map_err(|_| "meta 无法解析".to_string())?;
+        let mut warnings = Vec::new();
+        let root = crate::ccswitch::mapping::parse_meta(Some(text), &mut warnings)?;
         let object = root
             .as_object()
             .ok_or_else(|| "meta 必须是对象".to_string())?;
@@ -548,13 +259,18 @@ impl SourceMetadata {
             Some(value) => Some(value),
             None => optional_meta_string(object, "api_format")?,
         };
-        let mut warnings = Vec::new();
-        for key in object.keys() {
-            if !matches!(key.as_str(), "apiFormat" | "api_format" | "usage_script") {
-                warnings.push(format!("未导入: meta.{key}"));
-            }
-        }
-        Ok((Self { api_format }, warnings))
+        let mut connection = crate::ccswitch::mapping::map_connection(&root, &mut warnings);
+        connection.codex = request_options::parse(object, &mut warnings)?;
+        let chat_reasoning = reasoning::parse(object.get("codexChatReasoning"))?;
+        warnings.retain(|warning| warning != "未导入: meta.codexChatReasoning");
+        Ok((
+            Self {
+                api_format,
+                connection,
+                chat_reasoning,
+            },
+            warnings,
+        ))
     }
 
     fn upstream(&self, fallback: CodexUpstream) -> Result<CodexUpstream, String> {
@@ -566,6 +282,19 @@ impl SourceMetadata {
             }
             Some("anthropic") | Some("anthropic_messages") => Ok(CodexUpstream::AnthropicMessages),
             Some(_) => Err("meta.apiFormat 不受支持".to_string()),
+        }
+    }
+
+    fn authentication(&self, upstream: CodexUpstream) -> Option<AuthenticationScheme> {
+        match self.connection.api_key_field {
+            Some(crate::contracts::ClaudeApiKeyField::AnthropicAuthToken) => {
+                Some(AuthenticationScheme::Bearer)
+            }
+            Some(crate::contracts::ClaudeApiKeyField::AnthropicApiKey) => {
+                Some(AuthenticationScheme::XApiKey)
+            }
+            None => (upstream == CodexUpstream::AnthropicMessages)
+                .then_some(AuthenticationScheme::XApiKey),
         }
     }
 }
@@ -631,11 +360,19 @@ fn warn_ignored_auth(
     }
 }
 
-fn normalize_endpoint(source: &str, upstream: CodexUpstream) -> Result<CodexEndpoint, String> {
+fn normalize_endpoint(
+    source: &str,
+    upstream: CodexUpstream,
+    is_full_url: bool,
+) -> Result<CodexEndpoint, String> {
     if source.trim() != source {
         return Err("Codex 服务地址无效".to_string());
     }
     let mut url = Url::parse(source).map_err(|_| "Codex 服务地址无效".to_string())?;
+    if is_full_url {
+        crate::endpoint::validate_full_url(source).map_err(|_| "Codex 服务地址无效".to_string())?;
+        return Ok(CodexEndpoint(url.to_string()));
+    }
     if matches!(
         upstream,
         CodexUpstream::Responses | CodexUpstream::ChatCompletions

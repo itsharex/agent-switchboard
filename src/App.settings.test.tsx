@@ -51,9 +51,10 @@ describe("App.settings", () => {
 
     await user.click(await screen.findByRole("radio", { name: "Claude" }));
     await user.click(await screen.findByRole("button", { name: "供应商" }));
-    await user.click(await screen.findByRole("option", { name: /备用网关/ }));
+    // The preview button itself selects the row (2026-09-12: the identity
+    // bar is inert; only buttons select).
     await user.click(
-      screen.getByRole("button", { name: "预览 备用网关 变更" }),
+      await screen.findByRole("button", { name: "预览 备用网关 变更" }),
     );
     const previewPanel = await screen.findByRole("region", {
       name: "变更预览",

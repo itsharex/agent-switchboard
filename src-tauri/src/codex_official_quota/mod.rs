@@ -19,4 +19,4 @@ mod tests;
 #[cfg(test)]
 pub(crate) use baseline::BaselineRead;
 pub(crate) use baseline::{apply_read, CodexQuotaBaseline};
-pub(crate) use service::{clear, invalidate, query, query_login};
+pub(crate) use service::{clear, invalidate, query, query_login, quota_from_http_response};

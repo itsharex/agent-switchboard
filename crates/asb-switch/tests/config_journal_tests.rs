@@ -4,6 +4,8 @@ use asb_core::{test_support::CODEX_TOML, AppKind};
 use asb_switch::{FsIo, PendingConfigWrite};
 use std::{fs, panic::AssertUnwindSafe, path::Path};
 
+const AUTH: &str = r#"{"auth_mode":"chatgpt","tokens":{"id_token":"fixture-id","access_token":"account-owned-token","refresh_token":"fixture-refresh"}}"#;
+
 fn interrupted(target: &Path, backups: &Path) -> PendingConfigWrite {
     let plan = common::codex_plan("journal", "https://upstream.example/v1", "new-model", "key");
     let preview = asb_switch::read_preview(&FsIo, target, &plan, "backups").unwrap();
@@ -32,7 +34,7 @@ fn interrupted(target: &Path, backups: &Path) -> PendingConfigWrite {
 fn interrupted_write_blocks_new_writes_and_finishes_exact_snapshot() {
     let (_dir, target, backups) = common::setup(AppKind::Codex, CODEX_TOML);
     let auth = target.with_file_name("auth.json");
-    fs::write(&auth, "account-owned-token").unwrap();
+    fs::write(&auth, AUTH).unwrap();
     let pending = interrupted(&target, &backups);
     assert_eq!(
         pending.backup.content_hash,
@@ -70,7 +72,7 @@ fn interrupted_write_blocks_new_writes_and_finishes_exact_snapshot() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(fs::read_to_string(auth).unwrap(), "account-owned-token");
+    assert_eq!(fs::read_to_string(auth).unwrap(), AUTH);
 }
 
 #[test]

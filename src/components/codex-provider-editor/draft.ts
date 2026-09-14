@@ -1,3 +1,4 @@
+import { reconcileCodexRequestOptions } from "../../api/codex-request-options";
 import type {
   CodexCapabilities,
   CodexCatalogEntry,
@@ -7,6 +8,8 @@ import type {
   CodexReasoningLevel,
   CodexRequestMode,
   CodexUpstream,
+  ProviderConnectionOptions,
+  CodexAuthenticationScheme,
   ProviderModel,
   SettingsValues,
   UsageQuery,
@@ -20,6 +23,8 @@ export interface CodexEditorDraft {
   name: string;
   endpoint: string;
   apiKey: string;
+  authentication: CodexAuthenticationScheme | null;
+  connection: ProviderConnectionOptions;
   upstream: CodexUpstream;
   requestMode: CodexRequestMode;
   defaultModel: string;
@@ -98,6 +103,8 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
       name: "",
       endpoint: "",
       apiKey: "",
+      authentication: null,
+      connection: {},
       upstream: "responses",
       requestMode: "standard",
       defaultModel: "",
@@ -114,6 +121,8 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
     name: record.profile.name,
     endpoint: record.profile.endpoint,
     apiKey: record.profile.apiKey,
+    authentication: record.profile.authentication ?? null,
+    connection: record.profile.connection ? { ...record.profile.connection } : {},
     upstream: record.profile.upstream,
     requestMode: record.profile.requestMode,
     defaultModel: record.profile.defaultModel,
@@ -133,6 +142,8 @@ export function prepareCodexDraft(draft: CodexEditorDraft): CodexProviderDraft |
     name: draft.name.trim(),
     endpoint: draft.endpoint.trim(),
     apiKey: draft.apiKey.trim(),
+    authentication: draft.authentication,
+    connection: draft.connection,
     upstream: draft.upstream,
     requestMode: draft.requestMode,
     defaultModel: draft.defaultModel.trim(),
@@ -170,9 +181,8 @@ export function validateCodexDraft(draft: CodexEditorDraft): string[] {
   } else {
     try {
       const parsed = new URL(endpoint);
-      if ((draft.upstream === "responses" || draft.upstream === "chatCompletions")
-        && parsed.pathname.replace(/\/*$/, "") === "") {
-        problems.push("OpenAI 兼容服务地址必须包含显式 API 根路径（如 /v1）");
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        problems.push("服务地址必须使用 HTTP 或 HTTPS");
       }
     } catch {
       problems.push("服务地址不是有效 URL");
@@ -322,5 +332,5 @@ export function reconcileCodexUpstream(draft: CodexEditorDraft, upstream: CodexU
   const capabilities = upstream === "chatCompletions"
     ? draft.capabilities
     : { ...draft.capabilities, chatReasoning: { kind: "unsupported" as const } };
-  return { ...draft, upstream, capabilities };
+  return { ...draft, upstream, capabilities, connection: reconcileCodexRequestOptions(draft.connection, upstream) };
 }

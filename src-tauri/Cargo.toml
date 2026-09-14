@@ -90,6 +90,7 @@ tiny_http = "0.12"
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 uuid = { version = "1", features = ["v4"] }
 zstd = "0.13"
+zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2"] }
 tauri-plugin-autostart = "2"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]

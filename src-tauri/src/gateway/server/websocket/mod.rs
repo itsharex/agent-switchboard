@@ -42,11 +42,7 @@ pub(crate) fn handle(
         respond_diagnostic(request, UpstreamProtocol::Responses, 404, &diagnostic);
         return;
     }
-    let mut span = RequestSpan::start(
-        Arc::clone(&inner.metrics),
-        AppKind::Codex,
-        UpstreamProtocol::Responses,
-    );
+    let mut span = RequestSpan::start_codex(Arc::clone(&inner.metrics), &inner.state_root);
     let key = match websocket_key(&request) {
         Ok(key) => key,
         Err(message) => {
@@ -56,7 +52,7 @@ pub(crate) fn handle(
         }
     };
     let Some((token, route)) = request_capability(&request, UpstreamProtocol::Responses)
-        .and_then(|token| active_route(&inner, &token, None).map(|route| (token, route)))
+        .and_then(|token| active_route(&inner, &token).map(|route| (token, route)))
     else {
         span.finish(Some(403), 0);
         respond_error(
@@ -82,6 +78,28 @@ pub(crate) fn handle(
         );
         return;
     };
+    upgrade_and_serve(
+        request,
+        inner,
+        client,
+        token,
+        key,
+        ConversationContext::for_route(&route.fingerprint),
+        stop,
+        span,
+    );
+}
+
+fn upgrade_and_serve(
+    request: Request,
+    inner: Arc<GatewayInner>,
+    client: Arc<UpstreamClient>,
+    token: String,
+    key: String,
+    context: ConversationContext,
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    span: RequestSpan,
+) {
     let response = Response::empty(StatusCode(101)).with_header(
         Header::from_bytes(
             &b"Sec-WebSocket-Accept"[..],
@@ -93,7 +111,6 @@ pub(crate) fn handle(
     // The HTTP request is consumed by the upgrade. Keep the handshake facts
     // that a native Responses upstream may need for this connection.
     let request_headers = request.headers().to_vec();
-    let route_revision = route.fingerprint.clone();
     let stream = match request.upgrade("websocket", response) {
         Ok(stream) => stream,
         Err(_) => {
@@ -116,7 +133,7 @@ pub(crate) fn handle(
         inner,
         client,
         token,
-        route_revision,
+        context,
         request_url,
         request_headers,
         stop,
@@ -128,14 +145,13 @@ fn serve_connection<S>(
     inner: Arc<GatewayInner>,
     client: Arc<UpstreamClient>,
     token: String,
-    route_revision: String,
+    mut context: ConversationContext,
     request_url: String,
     request_headers: Vec<Header>,
     stop: Arc<std::sync::atomic::AtomicBool>,
 ) where
     S: Read + Write,
 {
-    let mut context = ConversationContext::default();
     while !inner.stopping.load(Ordering::Acquire) && !stop.load(Ordering::Acquire) {
         let message = match socket.read() {
             Ok(message) => message,
@@ -152,17 +168,13 @@ fn serve_connection<S>(
                     );
                     break;
                 };
-                let mut span = RequestSpan::start(
-                    Arc::clone(&inner.metrics),
-                    AppKind::Codex,
-                    UpstreamProtocol::Responses,
-                );
+                let mut span =
+                    RequestSpan::start_codex(Arc::clone(&inner.metrics), &inner.state_root);
                 let outcome = serve_message(
                     &mut socket,
                     &client,
                     &inner,
                     &token,
-                    &route_revision,
                     &request_url,
                     &request_headers,
                     &mut context,
@@ -223,7 +235,6 @@ fn serve_message<S>(
     client: &UpstreamClient,
     inner: &GatewayInner,
     token: &str,
-    route_revision: &str,
     request_url: &str,
     request_headers: &[Header],
     context: &mut ConversationContext,
@@ -233,15 +244,10 @@ fn serve_message<S>(
 where
     S: Read + Write,
 {
-    if text.len() as u64 > MAX_REQUEST_BYTES {
-        return if send_failed(socket, "request_too_large", "请求体超过本机协议网关限制")
-        {
-            ExchangeOutcome::Rejected
-        } else {
-            ExchangeOutcome::Disconnect
-        };
+    if let Some(outcome) = reject_unavailable(socket, inner, text) {
+        return outcome;
     }
-    let Some(route) = active_route(inner, token, Some(route_revision)) else {
+    let Some(route) = active_route(inner, token) else {
         let _ = send_failed(
             socket,
             "route_inactive",
@@ -255,6 +261,10 @@ where
         route.upstream_protocol,
     );
     span.note_request_bytes(text.len() as u64);
+    span.note_request_model(crate::gateway::usage_metadata::model_from_bytes(
+        UpstreamProtocol::Responses,
+        text.as_bytes(),
+    ));
     let mode = route
         .responses_options
         .map_or(ResponsesRequestMode::Standard, |options| {
@@ -275,59 +285,110 @@ where
                 ExchangeOutcome::Disconnect
             }
         }
-        Ok(PreparedResponse::Upstream(mut request)) => {
-            match super::codex::resolve_model_and_validate(
-                &route,
-                CodexOperation::Responses,
-                request.body,
-            ) {
-                Ok(body) => request.body = body,
-                Err(message) => {
-                    let endpoint = upstream_url(&route, &inner.configured_base_url(), request_url)
-                        .unwrap_or_else(|_| route.upstream_base_url.clone());
-                    let diagnostic = ProviderDiagnostic::new(
-                        ProviderFailureKind::RequestParameters,
-                        &endpoint,
-                        &message,
-                    );
-                    return reject_context(socket, &diagnostic, "invalid_request");
-                }
-            }
-            execute_request(
-                socket,
-                client,
-                &inner.configured_base_url(),
-                &route,
-                context,
-                request,
-                request_url,
-                request_headers,
-            )
-        }
+        Ok(PreparedResponse::Upstream(request)) => execute_prepared_request(
+            socket,
+            client,
+            inner,
+            &route,
+            context,
+            request,
+            request_url,
+            request_headers,
+            span,
+        ),
         Err(error) => {
-            let endpoint = upstream_url(&route, &inner.configured_base_url(), request_url)
-                .unwrap_or_else(|_| route.upstream_base_url.clone());
-            let diagnostic = ProviderDiagnostic::new(
-                ProviderFailureKind::RequestParameters,
-                &endpoint,
-                &error.message,
-            );
+            let diagnostic = request_diagnostic(inner, &route, request_url, &error.message);
             reject_context(socket, &diagnostic, error.code)
         }
     }
 }
-fn active_route(
+
+fn reject_unavailable<S: Read + Write>(
+    socket: &mut WebSocket<S>,
     inner: &GatewayInner,
-    token: &str,
-    route_revision: Option<&str>,
-) -> Option<ActiveRoute> {
+    text: &str,
+) -> Option<ExchangeOutcome> {
+    if text.len() as u64 > MAX_REQUEST_BYTES {
+        return Some(
+            if send_failed(socket, "request_too_large", "请求体超过本机协议网关限制") {
+                ExchangeOutcome::Rejected
+            } else {
+                ExchangeOutcome::Disconnect
+            },
+        );
+    }
+    if crate::gateway::codex::policy::pending_path(&inner.state_root).exists() {
+        return Some(
+            if send_failed(
+                socket,
+                "codex_policy_recovery_required",
+                "Codex 网关策略事务尚未完成，请先恢复",
+            ) {
+                ExchangeOutcome::Rejected
+            } else {
+                ExchangeOutcome::Disconnect
+            },
+        );
+    }
+    None
+}
+
+fn execute_prepared_request<S: Read + Write>(
+    socket: &mut WebSocket<S>,
+    client: &UpstreamClient,
+    inner: &GatewayInner,
+    route: &ActiveRoute,
+    context: &mut ConversationContext,
+    mut request: PendingRequest,
+    request_url: &str,
+    request_headers: &[Header],
+    span: &mut RequestSpan,
+) -> ExchangeOutcome {
+    match super::codex::resolve_model_and_validate(route, CodexOperation::Responses, request.body) {
+        Ok(body) => request.body = body,
+        Err(message) => {
+            let diagnostic = request_diagnostic(inner, route, request_url, &message);
+            return reject_context(socket, &diagnostic, "invalid_request");
+        }
+    }
+    if let Err((_, message)) = span.admit_codex_route(route, true) {
+        return if send_failed(socket, "codex_budget_unavailable", &message) {
+            ExchangeOutcome::Rejected
+        } else {
+            ExchangeOutcome::Disconnect
+        };
+    }
+    execute_request(
+        socket,
+        client,
+        &inner.configured_base_url(),
+        route,
+        context,
+        request,
+        request_url,
+        request_headers,
+        span,
+    )
+}
+
+fn request_diagnostic(
+    inner: &GatewayInner,
+    route: &ActiveRoute,
+    request_url: &str,
+    message: &str,
+) -> ProviderDiagnostic {
+    let endpoint = upstream_url(route, &inner.configured_base_url(), request_url)
+        .unwrap_or_else(|_| route.upstream_base_url.clone());
+    ProviderDiagnostic::new(ProviderFailureKind::RequestParameters, &endpoint, message)
+}
+
+fn active_route(inner: &GatewayInner, token: &str) -> Option<ActiveRoute> {
     inner
         .routes
         .read()
         .ok()?
         .get(&AppKind::Codex)
         .filter(|route| constant_time_equal(route.client_token.as_bytes(), token.as_bytes()))
-        .filter(|route| route_revision.is_none_or(|revision| route.fingerprint == revision))
         .cloned()
 }
 

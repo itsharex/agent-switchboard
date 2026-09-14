@@ -3,7 +3,8 @@
 export type AppKind = "codex" | "claude";
 export type RouteMode = "official" | "custom";
 /** The provider endpoint's actual wire protocol. */
-export type UpstreamProtocol = "responses" | "chatCompletions" | "anthropicMessages";
+export type UpstreamProtocol = "responses" | "chatCompletions" | "anthropicMessages" | "geminiGenerateContent";
+export type AuthenticationScheme = "bearer" | "xApiKey" | "xGoogApiKey";
 
 export interface ResponsesOptions {
   requestMode: "standard" | "minimal";
@@ -16,11 +17,17 @@ export interface CodexModelSettings {
 export interface ClaudeModelSettings {
   primaryOneM: boolean;
   haikuModel: string | null;
+  haikuOneM?: boolean;
   sonnetModel: string | null;
   sonnetOneM: boolean;
   opusModel: string | null;
   opusOneM: boolean;
   availableModels: string[] | null;
+  fableModel?: string | null;
+  fableOneM?: boolean;
+  subagentModel?: string | null;
+  subagentOneM?: boolean;
+  displayNames?: { haiku: string | null; sonnet: string | null; opus: string | null; fable: string | null } | null;
 }
 
 export type ModelOptions =

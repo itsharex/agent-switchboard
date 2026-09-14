@@ -3,8 +3,8 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { clickButton, fill, navigate, openExtensionSection, openSettingsSection, readSandbox, restartDesktop, waitForText } from "../support/ui.mjs";
 import {
-  backupRecords, clientFile, clientSnapshot, confirmProviderSwitch, createProvider, ensureSandboxPath,
-  jsonFile, radio, readOptional, selectClient, switchProvider, waitForFile,
+  activateProvider, backupRecords, clientFile, clientSnapshot, confirmProviderSwitch, createProvider, ensureSandboxPath,
+  jsonFile, providerRow, radio, readOptional, selectClient, switchProvider, waitForFile,
 } from "../support/provider-ui.mjs";
 
 function clientSettingsFile(app) {
@@ -93,6 +93,7 @@ async function saveClaudeClientSettingsAndApply() {
 }
 
 async function previewAndApplySavedPreferences() {
+  const providerName = "E2E clientSettings codex";
   await openClientSettings("codex");
   const before = await clientSnapshot("codex");
   await radio("批准策略", "按请求");
@@ -103,11 +104,19 @@ async function previewAndApplySavedPreferences() {
   assert.deepEqual(await clientSnapshot("codex"), before);
   assert.deepEqual((await jsonFile(clientSettingsFile("codex"))).settings.approval_policy,
     { mode: "explicit", value: "on-request" });
-  await clickButton("取消", preview);
+  await expect(preview.$("button=确认切换")).not.toExist();
+  await expect(preview.$("button=取消")).not.toExist();
+  await expect($('[role="dialog"][aria-label="确认切换"]')).not.toExist();
+  await clickButton(`收起 ${providerName} 预览`, await providerRow(providerName));
+  await preview.waitForDisplayed({ reverse: true });
   assert.deepEqual(await clientSnapshot("codex"), before);
   await openClientSettings("codex");
   await clickButton("保存并预览应用");
   await preview.waitForDisplayed();
+  await expect($('[role="dialog"][aria-label="确认切换"]')).not.toExist();
+  assert.deepEqual(await clientSnapshot("codex"), before);
+  await activateProvider(providerName);
+  assert.deepEqual(await clientSnapshot("codex"), before);
   await confirmProviderSwitch();
   await waitForFile(clientFile("codex"), (text) => /approval_policy\s*=\s*"on-request"/.test(text));
   await openClientSettings("codex");

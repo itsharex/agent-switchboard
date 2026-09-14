@@ -12,6 +12,7 @@ import {
   planView,
   renderPage,
   openMcpDetail,
+  sensitivePlanView,
 } from "../test/extensions-page";
 
 it("renders the type tabs, the row list with per-client toggles, and the history", async () => {
@@ -39,30 +40,31 @@ it("renders the type tabs, the row list with per-client toggles, and the history
   );
   expect(within(list).queryByText("docs")).not.toBeInTheDocument();
   expect(screen.getByText("共 1 项")).toBeInTheDocument();
-  expect(screen.getByRole("checkbox", { name: "停用全部扩展的 Codex 部署（当前 1 项）" })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
-  expect(screen.getByRole("checkbox", { name: "启用全部扩展的 Claude 部署（当前 0 项）" })).toHaveAttribute(
-    "aria-checked",
-    "false",
-  );
+  // The cc-switch count bar: library total on the left, per-client count
+  // chips (the bulk deploy toggles) on the right (2026-09-12 用户指令).
+  expect(screen.getByText("Skills · 1")).toBeInTheDocument();
+  expect(
+    screen.getByRole("checkbox", { name: "停用全部扩展的 Codex 部署（当前 1 项）" }),
+  ).toHaveAttribute("aria-checked", "true");
+  expect(
+    screen.getByRole("checkbox", { name: "启用全部扩展的 Claude 部署（当前 0 项）" }),
+  ).toHaveAttribute("aria-checked", "false");
 
   const user = userEvent.setup();
   await user.click(screen.getByRole("tab", { name: "MCP" }));
   const mcpList = await screen.findByRole("list", { name: "扩展列表" });
   expect(within(mcpList).getByText("docs")).toBeInTheDocument();
   expect(within(mcpList).getByRole("button", { name: "Codex：未部署" })).toBeInTheDocument();
+  expect(screen.getByText("MCP · 1")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "更多扩展操作" }));
-  await user.click(await screen.findByRole("menuitem", { name: "操作历史" }));
+  await user.click(screen.getByRole("button", { name: "操作历史" }));
   const history = screen.getByRole("region", { name: "操作历史" });
   expect(within(history).getByText("安装")).toBeInTheDocument();
   expect(within(history).getByText("Codex 用户配置：已应用")).toBeInTheDocument();
   expect(within(history).getByRole("button", { name: "恢复" })).toBeEnabled();
 });
 
-it("installs to a client from the row toggle and never applies without the plan confirm", async () => {
+it("installs to a client from the row toggle in one click", async () => {
   prepareExtensionPlanMock.mockResolvedValue(planView);
   const user = userEvent.setup();
   renderPage();
@@ -79,8 +81,9 @@ it("installs to a client from the row toggle and never applies without the plan 
       },
     ],
   });
-  expect(applyExtensionPlanMock).not.toHaveBeenCalled();
-  expect(await screen.findByRole("dialog", { name: "安装预览" })).toBeInTheDocument();
+  // The toggle applies the plan immediately; no preview dialog appears.
+  await waitFor(() => expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-1", true));
+  expect(screen.queryByRole("dialog", { name: /预览/ })).not.toBeInTheDocument();
 });
 
 it("opens a modal detail with facts, bindings, and capabilities", async () => {
@@ -102,8 +105,10 @@ it("opens a modal detail with facts, bindings, and capabilities", async () => {
   expect(screen.queryByRole("region", { name: "扩展详情 docs" })).not.toBeInTheDocument();
 });
 
-it("applies a multi-target install only after the plan sheet confirms with confirmWrite", async () => {
-  prepareExtensionPlanMock.mockResolvedValue(planView);
+it("applies a multi-target install from the detail in one click, confirming only a sensitive write", async () => {
+  // The multi-target install writes sensitive connection data, so it is the
+  // one write shape that stops for an explicit confirmation.
+  prepareExtensionPlanMock.mockResolvedValue(sensitivePlanView);
   applyExtensionPlanMock.mockResolvedValue({
     record: historyRecord,
     rejected: null,
@@ -131,16 +136,18 @@ it("applies a multi-target install only after the plan sheet confirms with confi
   });
   expect(applyExtensionPlanMock).not.toHaveBeenCalled();
 
-  const sheet = await screen.findByRole("dialog", { name: "安装预览" });
+  const sheet = await screen.findByRole("dialog", { name: "确认安装（写入敏感数据）" });
   expect(within(sheet).getByText("警告：示例警告：将新增服务条目")).toBeInTheDocument();
-  expect(within(sheet).getByText("该目标会写入已脱敏的连接地址、参数或凭据值")).toBeInTheDocument();
+  expect(within(sheet).getByText(/连接地址、参数或凭据值/)).toBeInTheDocument();
   expect(within(sheet).getByText("mcp_servers.docs")).toBeInTheDocument();
 
-  await user.click(within(sheet).getByRole("button", { name: "确认应用" }));
+  await user.click(within(sheet).getByRole("button", { name: "确认写入" }));
 
   await waitFor(() => expect(applyExtensionPlanMock).toHaveBeenCalledTimes(1));
-  expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-1", true);
-  await waitFor(() => expect(screen.queryByRole("dialog", { name: "安装预览" })).not.toBeInTheDocument());
+  expect(applyExtensionPlanMock).toHaveBeenCalledWith("plan-sensitive", true);
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "确认安装（写入敏感数据）" })).not.toBeInTheDocument(),
+  );
 });
 
 it("shows a kind-specific empty state and focused add and import entries", async () => {

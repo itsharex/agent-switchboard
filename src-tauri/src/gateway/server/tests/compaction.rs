@@ -288,6 +288,7 @@ fn summary_upstream(upstream: Server, protocol: UpstreamProtocol) {
             .get("tools")
             .is_none_or(|tools| tools.as_array().is_some_and(Vec::is_empty)));
         let response = match protocol {
+            asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
             UpstreamProtocol::Responses => {
                 json!({"id":"summary","object":"response","model":"sandbox-model","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Parser fixed; tests remain."}]}],"error":null})
             }

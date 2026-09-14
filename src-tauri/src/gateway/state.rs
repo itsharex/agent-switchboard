@@ -41,6 +41,7 @@ impl GatewayStateFile {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn has_routes(&self) -> bool {
         self.codex_route.is_some() || self.claude_route.is_some()
     }
@@ -54,42 +55,40 @@ pub(super) enum StateLoad {
     /// No state file existed; a fresh state was created and persisted.
     Created(GatewayStateFile),
     /// The state file exists but is not the current contract. Its contents are
-    /// never migrated, deleted, or overwritten.
+    /// never replaced at startup. Explicit retry preserves a diagnostic copy
+    /// before creating a new identity; it never imports the old routes.
     Unusable(String),
 }
 
 pub(super) fn read_or_create_state(path: &Path) -> StateLoad {
-    match fs::read_to_string(path) {
-        Ok(text) => {
-            let state: GatewayStateFile = match serde_json::from_str(&text) {
-                Ok(state) => state,
-                Err(_) => {
-                    return StateLoad::Unusable(
-                        "本机协议网关状态不是当前版本；旧状态不会被读取或覆盖，请重新创建并应用 Codex 档案"
-                            .to_string(),
-                    )
-                }
-            };
-            if state.version != STATE_VERSION
-                || state.identity.trim().is_empty()
-                || !valid_persisted_port(state.port)
-            {
-                return StateLoad::Unusable(
-                    "本机协议网关状态版本或内容无效；旧状态不会被读取或覆盖，请重新创建并应用 Codex 档案"
-                        .to_string(),
-                );
-            }
-            StateLoad::Ready(state)
-        }
+    match fs::read(path) {
+        Ok(bytes) => match parse_state(&bytes) {
+            Ok(state) => StateLoad::Ready(state),
+            Err(detail) => StateLoad::Unusable(detail),
+        },
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             let state = fresh_state();
             match write_state(path, &state) {
                 Ok(()) => StateLoad::Created(state),
-                Err(write_error) => StateLoad::Unusable(write_error),
+                Err(error) => StateLoad::Unusable(error),
             }
         }
         Err(error) => StateLoad::Unusable(format!("本机协议网关状态不可读：{error}")),
     }
+}
+
+pub(super) fn parse_state(bytes: &[u8]) -> Result<GatewayStateFile, String> {
+    let state: GatewayStateFile = serde_json::from_slice(bytes).map_err(|_| {
+        "本机协议网关状态不是当前版本；请在网关页重试，保留诊断副本并重建状态后再重新应用供应商"
+            .to_string()
+    })?;
+    if state.version != STATE_VERSION
+        || state.identity.trim().is_empty()
+        || !valid_persisted_port(state.port)
+    {
+        return Err("本机协议网关状态版本或内容无效；请在网关页重试，保留诊断副本并重建状态后再重新应用供应商".into());
+    }
+    Ok(state)
 }
 
 fn valid_persisted_port(port: u16) -> bool {

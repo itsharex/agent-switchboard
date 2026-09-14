@@ -207,12 +207,14 @@ fn plan(app: AppKind) -> SwitchPlan {
     };
     let plan = SwitchPlan::direct(
         ProviderProfile {
+            authentication: None,
             id: id.into(),
             app,
             route_mode: RouteMode::Custom,
             name: "Amazon Bedrock".into(),
             model: Some(model.into()),
             base_url: Some(BEDROCK_ENDPOINT.into()),
+            connection: Default::default(),
             api_key: DEMO_API_KEY.into(),
             upstream_protocol: Some(UpstreamProtocol::Responses),
             responses_options: Some(crate::contracts::ResponsesOptions {

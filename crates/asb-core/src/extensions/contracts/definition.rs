@@ -12,6 +12,22 @@ pub enum ExtensionPayload {
     Mcp(McpDefinition),
 }
 
+/// Optional MCP library presentation data, never part of a client config.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct McpMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub docs: Option<String>,
+}
+
 /// One library definition, persisted as `extensions/definitions/<id>.json`.
 /// The outer envelope cannot combine `deny_unknown_fields` with the
 /// flattened payload union; strictness lives at the payload variants, and
@@ -21,9 +37,10 @@ pub enum ExtensionPayload {
 pub struct ExtensionDefinition {
     pub schema_version: u8,
     pub id: String,
-    /// Display name; never an identity. Skill display names come from the
-    /// manifest, MCP names are free-form labels for the native key.
+    /// Skill library name or MCP native server key; never the resource id.
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_metadata: Option<McpMetadata>,
     /// Monotonic per-definition revision for optimistic concurrency.
     pub revision: u64,
     /// RFC 3339 UTC timestamps.

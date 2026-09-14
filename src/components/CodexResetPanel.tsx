@@ -9,6 +9,7 @@ import {
 import { Button } from "./Button";
 import { Time } from "./Time";
 import { UpdateIcon } from "./icons";
+import { ModuleHeader } from "./WorkspaceHeader";
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
@@ -106,28 +107,29 @@ export function CodexResetPanel() {
 
   return (
     <section className="asb-panel asb-codex-reset" aria-labelledby="codex-reset-heading">
-      <div className="asb-panel-heading">
-        <h2 id="codex-reset-heading" className="asb-panel-title">
-          Codex 重置信号
-        </h2>
-        <div className="asb-panel-actions">
-          {snapshot !== null && (
-            <span
-              className={`asb-codex-reset-read-state is-${snapshot.freshness}`}
-              aria-live="polite"
+      <ModuleHeader
+        id="codex-reset-heading"
+        title="Codex 重置信号"
+        primaryActions={
+          <>
+            {snapshot !== null && (
+              <span
+                className={`asb-codex-reset-read-state is-${snapshot.freshness}`}
+                aria-live="polite"
+              >
+                {snapshot.freshness === "cached" ? "本地缓存" : "刚刚刷新"}
+              </span>
+            )}
+            <Button
+              variant="secondary"
+              disabled={loading}
+              onClick={() => void readStatus()}
             >
-              {snapshot.freshness === "cached" ? "本地缓存" : "刚刚刷新"}
-            </span>
-          )}
-          <Button
-            variant="secondary"
-            disabled={loading}
-            onClick={() => void readStatus()}
-          >
-            {loading ? "读取中…" : "刷新重置信号"}
-          </Button>
-        </div>
-      </div>
+              {loading ? "读取中…" : "刷新重置信号"}
+            </Button>
+          </>
+        }
+      />
       {cacheLoading && status === null && <p className="asb-empty" role="status">正在读取本地缓存</p>}
       {status === null && !cacheLoading && readError === null && (
         <div className="asb-empty-state">

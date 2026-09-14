@@ -7,9 +7,11 @@
 //! material never has to cross the renderer boundary to survive an edit.
 
 mod apply;
+mod metadata;
 #[cfg(test)]
 mod tests;
 mod view;
 
 pub use apply::apply_mcp_edit;
+pub use metadata::apply_mcp_metadata;
 pub use view::{mcp_edit_view, McpEditView, SecretSlot, SecretSlotView};

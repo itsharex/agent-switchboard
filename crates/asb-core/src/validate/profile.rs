@@ -1,6 +1,7 @@
 use crate::contracts::{
-    AppKind, ClaudeModelSettings, CodexModelSettings, ModelOptions, ProviderDraft, ProviderProfile,
-    ResponsesOptions, RouteMode, UpstreamProtocol, UsageQuery,
+    AppKind, AuthenticationScheme, ClaudeModelSettings, CodexModelSettings, ModelOptions,
+    ProviderConnectionOptions, ProviderDraft, ProviderProfile, ResponsesOptions, RouteMode,
+    UpstreamProtocol, UsageQuery,
 };
 
 use crate::validate::error::{ValidationError, MAX_AUTO_REFRESH_INTERVAL_MINUTES, MAX_NOTES_LEN};
@@ -18,7 +19,9 @@ impl ProviderProfile {
             name: &self.name,
             model: self.model.as_deref(),
             base_url: self.base_url.as_deref(),
+            connection: &self.connection,
             api_key: &self.api_key,
+            authentication: self.authentication,
             upstream_protocol: self.upstream_protocol,
             responses_options: self.responses_options,
             max_output_tokens: self.max_output_tokens,
@@ -40,7 +43,9 @@ impl ProviderDraft {
             name: &self.name,
             model: self.model.as_deref(),
             base_url: self.base_url.as_deref(),
+            connection: &self.connection,
             api_key: &self.api_key,
+            authentication: self.authentication,
             upstream_protocol: self.upstream_protocol,
             responses_options: self.responses_options,
             max_output_tokens: self.max_output_tokens,
@@ -59,7 +64,9 @@ struct ProfileFields<'a> {
     name: &'a str,
     model: Option<&'a str>,
     base_url: Option<&'a str>,
+    connection: &'a ProviderConnectionOptions,
     api_key: &'a str,
+    authentication: Option<AuthenticationScheme>,
     upstream_protocol: Option<UpstreamProtocol>,
     responses_options: Option<ResponsesOptions>,
     max_output_tokens: crate::contracts::ExplicitMaxOutputTokens,
@@ -117,7 +124,9 @@ fn validate_route_fields(fields: &ProfileFields<'_>) -> Result<(), ValidationErr
     match fields.route_mode {
         RouteMode::Official => {
             if fields.base_url.is_some()
+                || !fields.connection.is_empty()
                 || !fields.api_key.trim().is_empty()
+                || fields.authentication.is_some()
                 || fields.upstream_protocol.is_some()
                 || fields.responses_options.is_some()
                 || fields.max_output_tokens.is_some()
@@ -137,8 +146,23 @@ fn validate_route_fields(fields: &ProfileFields<'_>) -> Result<(), ValidationErr
 }
 
 fn validate_custom_route(fields: &ProfileFields<'_>) -> Result<(), ValidationError> {
+    if fields.app != AppKind::Codex && fields.connection.codex.is_some() {
+        return Err(ValidationError::CodexOptionsRequireCodex);
+    }
     if fields.official_quota_refresh_interval.is_some() {
         return Err(ValidationError::QuotaIntervalRequiresOfficialCodex);
+    }
+    if let Some(native) = &fields.connection.claude_native {
+        return super::claude::validate_native(
+            fields.app,
+            native,
+            fields.base_url,
+            fields.connection,
+            fields.api_key,
+            fields.authentication,
+            fields.upstream_protocol,
+            fields.responses_options.is_some() || fields.max_output_tokens.is_some(),
+        );
     }
     let url = fields
         .base_url
@@ -146,9 +170,24 @@ fn validate_custom_route(fields: &ProfileFields<'_>) -> Result<(), ValidationErr
     let protocol = fields
         .upstream_protocol
         .ok_or(ValidationError::CustomRequiresProtocol)?;
-    crate::endpoint::validate_base_url(url, protocol).map_err(ValidationError::BadBaseUrl)?;
-    if fields.api_key.trim().is_empty() {
+    validate_connection(url, protocol, fields.connection)?;
+    let managed_auth = match fields.app {
+        AppKind::Codex => {
+            super::codex::validate_connection(fields.connection, protocol, fields.authentication)?
+        }
+        AppKind::Claude => super::claude::validate_connection(
+            fields.app,
+            fields.connection,
+            protocol,
+            fields.authentication,
+            fields.api_key,
+        )?,
+    };
+    if !managed_auth && fields.api_key.trim().is_empty() {
         return Err(ValidationError::EmptyApiKey);
+    }
+    if fields.api_key.chars().any(char::is_control) {
+        return Err(ValidationError::InvalidApiKeyCharacters);
     }
     validate_responses_options(protocol, fields.responses_options)?;
     let requires_max_output_tokens =
@@ -168,6 +207,66 @@ fn validate_custom_route(fields: &ProfileFields<'_>) -> Result<(), ValidationErr
         return Err(ValidationError::ApiKeyTooLong(4_096));
     }
     Ok(())
+}
+
+fn validate_connection(
+    base_url: &str,
+    protocol: UpstreamProtocol,
+    connection: &ProviderConnectionOptions,
+) -> Result<(), ValidationError> {
+    let validate_url = |url: &str| {
+        if connection.is_full_url {
+            crate::endpoint::validate_full_url(url).map_err(ValidationError::BadFullUrl)
+        } else {
+            crate::endpoint::validate_base_url(url, protocol).map_err(ValidationError::BadBaseUrl)
+        }
+    };
+    validate_url(base_url)?;
+    for (key, endpoint) in &connection.custom_endpoints {
+        validate_url(key)?;
+        validate_url(&endpoint.url)?;
+    }
+    if let Some(user_agent) = connection.custom_user_agent.as_deref() {
+        if user_agent.trim().is_empty() || user_agent.chars().any(char::is_control) {
+            return Err(ValidationError::InvalidCustomUserAgent);
+        }
+    }
+    if let Some(overrides) = connection.local_proxy_request_overrides.as_ref() {
+        if !overrides.body.is_null() && !overrides.body.is_object() {
+            return Err(ValidationError::InvalidConnectionBody);
+        }
+        for (name, value) in &overrides.headers {
+            if !is_valid_header_name(name) || value.chars().any(char::is_control) {
+                return Err(ValidationError::InvalidConnectionHeader(name.clone()));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_valid_header_name(name: &str) -> bool {
+    !name.trim().is_empty()
+        && name == name.trim()
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                )
+        })
 }
 
 fn validate_responses_options(
@@ -232,6 +331,33 @@ fn validate_claude_settings(
     validate_model_identifier(settings.haiku_model.as_deref(), "Haiku 档")?;
     validate_model_identifier(settings.sonnet_model.as_deref(), "Sonnet 档")?;
     validate_model_identifier(settings.opus_model.as_deref(), "Opus 档")?;
+    validate_model_identifier(settings.fable_model.as_deref(), "Fable 档")?;
+    validate_model_identifier(settings.subagent_model.as_deref(), "子 agent 模型")?;
+    validate_one_m_enabled(
+        settings.fable_one_m,
+        settings.fable_model.as_deref(),
+        "Fable 档",
+    )?;
+    validate_one_m_enabled(
+        settings.subagent_one_m,
+        settings.subagent_model.as_deref(),
+        "子 agent 模型",
+    )?;
+    if let Some(names) = &settings.display_names {
+        for value in [&names.haiku, &names.sonnet, &names.opus, &names.fable]
+            .into_iter()
+            .flatten()
+        {
+            if value.trim().is_empty() || value.chars().any(char::is_control) {
+                return Err(ValidationError::InvalidModelDisplayName);
+            }
+        }
+    }
+    validate_one_m_enabled(
+        settings.haiku_one_m,
+        settings.haiku_model.as_deref(),
+        "Haiku 档",
+    )?;
     validate_one_m_enabled(settings.primary_one_m, primary_model, "主模型")?;
     validate_one_m_enabled(
         settings.sonnet_one_m,

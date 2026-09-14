@@ -226,7 +226,7 @@ pub(super) fn resolve_skill_takeover(
             )
         })?
         .clone();
-    cache_candidates(scanned);
+    cache_candidates(scanned)?;
     let target = takeover_target(store, &observed, false)?;
     Ok((
         candidate,
@@ -237,15 +237,4 @@ pub(super) fn resolve_skill_takeover(
             entry_pointer: None,
         },
     ))
-}
-
-pub(super) fn takeover_scope_label(target: &ExtensionTarget) -> String {
-    match target {
-        ExtensionTarget::App { client } => match client {
-            AppKind::Codex => "Codex 用户级配置".to_string(),
-            AppKind::Claude => "Claude 用户级配置".to_string(),
-        },
-        ExtensionTarget::ProjectShared { .. } => "项目共享配置".to_string(),
-        ExtensionTarget::ProjectPrivate { .. } => "项目私有配置".to_string(),
-    }
 }

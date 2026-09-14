@@ -15,15 +15,20 @@ pub struct ProviderModel {
 }
 
 /// Fetches the model list beneath the same API root as model requests, with the exact
-/// protocol-derived authentication scheme. The profile API key travels only in
+/// selected authentication scheme. The profile API key travels only in
 /// the selected request header and is never logged or echoed in errors.
 /// Nothing is cached.
 pub fn fetch_models(
     base_url: &str,
     api_key: &str,
     protocol: UpstreamProtocol,
+    authentication: Option<asb_core::AuthenticationScheme>,
+    connection: &asb_core::contracts::ProviderConnectionOptions,
 ) -> Result<Vec<ProviderModel>, String> {
-    let url = asb_core::endpoint::models_endpoint(base_url, protocol)?;
+    if protocol == UpstreamProtocol::GeminiGenerateContent {
+        return super::claude_gemini::fetch(base_url, api_key, authentication, connection);
+    }
+    let url = asb_core::endpoint::models_endpoint_for_connection(base_url, protocol, connection)?;
     let client = reqwest::blocking::Client::builder()
         .user_agent("Agent Switchboard")
         .connect_timeout(Duration::from_secs(5))
@@ -31,15 +36,24 @@ pub fn fetch_models(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| "无法初始化模型列表请求".to_string())?;
-    let request = match protocol.authentication_scheme() {
+    let request = match protocol.resolve_authentication(authentication) {
         asb_core::AuthenticationScheme::Bearer => client.get(&url).bearer_auth(api_key),
-        asb_core::AuthenticationScheme::XApiKey => client
-            .get(&url)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01"),
+        asb_core::AuthenticationScheme::XApiKey => client.get(&url).header("x-api-key", api_key),
+        asb_core::AuthenticationScheme::XGoogApiKey => {
+            client.get(&url).header("x-goog-api-key", api_key)
+        }
     };
-    let response = request
-        .send()
+    let request = if protocol == UpstreamProtocol::AnthropicMessages {
+        request.header("anthropic-version", "2023-06-01")
+    } else {
+        request
+    };
+    let mut request = request
+        .build()
+        .map_err(|_| "无法构造模型列表请求".to_string())?;
+    crate::upstream_overrides::apply_header_overrides(request.headers_mut(), connection);
+    let response = client
+        .execute(request)
         .map_err(|error| network_diagnostic(&url, &error).summary())?;
     if !response.status().is_success() {
         return Err(read_http_diagnostic(response, &[api_key]).summary());
@@ -69,17 +83,36 @@ pub fn fetch_models(
 /// Builds only the credential headers selected in the provider contract.
 /// The Anthropic version header accompanies that protocol alone. The value
 /// must never be logged or echoed in diagnostics.
-pub(crate) fn provider_auth_headers(credential: &str, protocol: UpstreamProtocol) -> String {
-    let authentication = match protocol.authentication_scheme() {
+pub(crate) fn provider_auth_headers(
+    credential: &str,
+    protocol: UpstreamProtocol,
+    selected: Option<asb_core::AuthenticationScheme>,
+) -> Result<String, String> {
+    let google;
+    let (credential, selected) = if protocol == UpstreamProtocol::GeminiGenerateContent {
+        google = asb_core::claude_gemini::credential(credential, selected)?;
+        (google.1.as_str(), Some(google.0))
+    } else {
+        (credential, selected)
+    };
+    if credential.chars().any(char::is_control)
+        || reqwest::header::HeaderValue::from_str(credential).is_err()
+    {
+        return Err("API 密钥包含无效的请求头字符".into());
+    }
+    let authentication = match protocol.resolve_authentication(selected) {
         asb_core::AuthenticationScheme::Bearer => format!("Authorization: Bearer {credential}"),
         asb_core::AuthenticationScheme::XApiKey => format!("x-api-key: {credential}"),
+        asb_core::AuthenticationScheme::XGoogApiKey => format!("x-goog-api-key: {credential}"),
     };
-    match protocol {
+    Ok(match protocol {
         UpstreamProtocol::AnthropicMessages => {
             format!("{authentication}\r\nanthropic-version: 2023-06-01")
         }
-        UpstreamProtocol::Responses | UpstreamProtocol::ChatCompletions => authentication,
-    }
+        UpstreamProtocol::Responses
+        | UpstreamProtocol::ChatCompletions
+        | UpstreamProtocol::GeminiGenerateContent => authentication,
+    })
 }
 
 /// Extracts `data[].id` plus the optional `data[].owned_by` vendor from an

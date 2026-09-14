@@ -14,6 +14,12 @@ pub(crate) fn matches_provider_credentials(
     plan: &SwitchPlan,
 ) -> Result<bool, AdapterError> {
     let profile = &plan.profile;
+    if !super::native::matches(current, plan)? {
+        return Ok(false);
+    }
+    if profile.connection.claude_native.is_some() {
+        return Ok(true);
+    }
     let root = parse(current)?;
     let token = get(&root, "env.ANTHROPIC_AUTH_TOKEN").and_then(Json::as_str);
     let api_key = get(&root, "env.ANTHROPIC_API_KEY").and_then(Json::as_str);
@@ -30,7 +36,7 @@ pub(crate) fn matches_provider_credentials(
                     && api_key == Some(plan.client_api_key())
                     && token.is_none_or(str::is_empty)
             }
-            None => false,
+            Some(AuthenticationScheme::XGoogApiKey) | None => false,
         },
     })
 }
@@ -40,6 +46,7 @@ fn collect_owned_scalars(
     value: &Json,
     prefix: &str,
     out: &mut std::collections::BTreeMap<String, String>,
+    native: &std::collections::BTreeSet<String>,
 ) {
     let Json::Object(map) = value else {
         return;
@@ -51,31 +58,43 @@ fn collect_owned_scalars(
             format!("{prefix}.{key}")
         };
         if let Some(repr) = scalar_repr(child) {
-            if is_owned(AppKind::Claude, &path) {
+            if is_owned(AppKind::Claude, &path) || native.contains(&path) {
                 out.insert(path.clone(), repr);
             }
         }
-        collect_owned_scalars(child, &path, out);
+        collect_owned_scalars(child, &path, out, native);
     }
 }
 
 /// Owned-key diff between the live text and a previous copy.
 pub(crate) fn owned_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>, AdapterError> {
+    let mut native = super::native::owned_paths(&parse(current)?)?;
+    native.extend(super::native::owned_paths(&parse(previous)?)?);
     let mut current_values = std::collections::BTreeMap::new();
-    collect_owned_scalars(&parse(current)?, "", &mut current_values);
+    collect_owned_scalars(&parse(current)?, "", &mut current_values, &native);
     let mut previous_values = std::collections::BTreeMap::new();
-    collect_owned_scalars(&parse(previous)?, "", &mut previous_values);
-    Ok(crate::adapter::diff_owned_maps(
-        &current_values,
-        &previous_values,
-    ))
+    collect_owned_scalars(&parse(previous)?, "", &mut previous_values, &native);
+    let mut changes = crate::adapter::diff_owned_maps(&current_values, &previous_values);
+    changes.extend(
+        crate::claude_common::diff_documents(current, previous).map_err(|message| {
+            AdapterError {
+                message,
+                line: None,
+            }
+        })?,
+    );
+    Ok(changes)
 }
 
 /// Reads the active routing facts from Claude settings text.
 pub fn route_state(text: &str) -> RouteState {
     let root = parse(text).expect("caller validates syntax first");
     let string_at = |path: &str| get(&root, path).and_then(|v| v.as_str().map(str::to_string));
-    let base_url = string_at("env.ANTHROPIC_BASE_URL");
+    let native = crate::claude_native::from_config(&root).ok().flatten();
+    let base_url = native
+        .as_ref()
+        .and_then(|(_, base)| base.clone())
+        .or_else(|| string_at("env.ANTHROPIC_BASE_URL"));
     // env.ANTHROPIC_MODEL overrides the top-level `model` when present, so it
     // is the model that actually takes effect.
     let model = string_at(ENV_MODEL_KEY).or_else(|| string_at("model"));
@@ -93,7 +112,7 @@ pub fn route_state(text: &str) -> RouteState {
     });
     RouteState {
         app: AppKind::Claude,
-        route_mode: if base_url.is_some() {
+        route_mode: if native.is_some() || base_url.is_some() {
             RouteMode::Custom
         } else {
             RouteMode::Official

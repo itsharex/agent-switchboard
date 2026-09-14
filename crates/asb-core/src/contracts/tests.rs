@@ -161,14 +161,105 @@ fn usage_query_auto_refresh_interval_is_required_and_round_trips() {
 }
 
 #[test]
+fn provider_endpoint_candidates_keep_primary_first_and_sort_custom_targets_stably() {
+    let mut custom_endpoints = std::collections::BTreeMap::new();
+    custom_endpoints.insert(
+        "https://added-later.example".to_string(),
+        ProviderEndpoint {
+            url: "https://added-later.example".to_string(),
+            added_at: 30,
+            last_used: None,
+        },
+    );
+    custom_endpoints.insert(
+        "https://recent.example".to_string(),
+        ProviderEndpoint {
+            url: "https://recent.example".to_string(),
+            added_at: 1,
+            last_used: Some(100),
+        },
+    );
+    custom_endpoints.insert(
+        "https://older-used.example".to_string(),
+        ProviderEndpoint {
+            url: "https://older-used.example".to_string(),
+            added_at: 90,
+            last_used: Some(50),
+        },
+    );
+    custom_endpoints.insert(
+        "https://primary.example".to_string(),
+        ProviderEndpoint {
+            url: "https://primary.example".to_string(),
+            added_at: 999,
+            last_used: Some(999),
+        },
+    );
+    let connection = ProviderConnectionOptions {
+        custom_endpoints,
+        ..Default::default()
+    };
+
+    assert_eq!(
+        connection.endpoint_candidates("https://primary.example"),
+        vec![
+            "https://primary.example",
+            "https://recent.example",
+            "https://older-used.example",
+            "https://added-later.example",
+        ]
+    );
+    assert_eq!(
+        (ProviderConnectionOptions {
+            endpoint_auto_select: Some(false),
+            ..connection
+        })
+        .endpoint_candidates("https://primary.example"),
+        vec!["https://primary.example"]
+    );
+}
+
+#[test]
+fn provider_endpoint_routing_identity_excludes_usage_metadata_and_normalizes_urls() {
+    let mut connection = ProviderConnectionOptions::default();
+    connection.custom_endpoints.insert(
+        " https://relay.example/v1/ ".to_string(),
+        ProviderEndpoint {
+            url: "https://relay.example/v1/".to_string(),
+            added_at: 10,
+            last_used: Some(20),
+        },
+    );
+    let first = connection.routing_identity();
+
+    connection
+        .custom_endpoints
+        .get_mut(" https://relay.example/v1/ ")
+        .unwrap()
+        .added_at = 99;
+    connection
+        .custom_endpoints
+        .get_mut(" https://relay.example/v1/ ")
+        .unwrap()
+        .last_used = Some(100);
+    assert_eq!(connection.routing_identity(), first);
+    assert_eq!(
+        connection.endpoint_candidates("https://relay.example/v1/"),
+        vec!["https://relay.example/v1"]
+    );
+}
+
+#[test]
 fn provider_files_carry_no_client_field_and_round_trip_through_profiles() {
     let profile = ProviderProfile {
+        authentication: None,
         id: "0b91a2f4-6c85-4a12-9f0d-2f4a1b3c5d6e".into(),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "中继".into(),
         model: Some("claude-opus-4".into()),
         base_url: Some("https://relay.example".into()),
+        connection: Default::default(),
         api_key: "test-api-key".into(),
         upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
         responses_options: None,
@@ -262,10 +353,12 @@ fn settings_store_automatic_or_explicit_values_only() {
 
 fn classification_draft() -> ProviderDraft {
     ProviderDraft {
+        authentication: None,
         app: AppKind::Codex,
         route_mode: RouteMode::Custom,
         name: "中转".to_string(),
         base_url: Some("https://relay.example/v1".to_string()),
+        connection: Default::default(),
         api_key: "sk-test".to_string(),
         upstream_protocol: Some(UpstreamProtocol::ChatCompletions),
         responses_options: None,

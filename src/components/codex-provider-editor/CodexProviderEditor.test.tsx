@@ -19,6 +19,7 @@ function record(): CodexProviderRecord {
       endpoint: "https://relay.example/v1",
       apiKey: "sk-test",
       upstream: "responses",
+      routeMode: "direct",
       requestMode: "standard",
       defaultModel: "relay-pro",
       catalog: [{
@@ -125,7 +126,9 @@ describe("CodexProviderEditor", () => {
     mount({ onSave });
     await fillIdentity(user);
     await user.click(screen.getByRole("button", { name: "获取模型" }));
-    expect(fetchModels).toHaveBeenCalledWith("https://relay.example/v1", "sk-new", "responses");
+    expect(fetchModels).toHaveBeenCalledWith(
+      "codex", "https://relay.example/v1", "sk-new", "responses", undefined, undefined,
+    );
     expect(screen.getByLabelText("模型标识 1")).toHaveValue("relay-pro");
     expect(screen.getByLabelText("模型标识 2")).toHaveValue("relay-mini");
 
@@ -229,14 +232,17 @@ describe("CodexProviderEditor", () => {
     expect(screen.getByText("模型目录不能为空；请获取模型或手动添加")).toBeInTheDocument();
   });
 
-  it("explains the always-on gateway route and the search loss on translated protocols", async () => {
+  it("explains direct Responses routing and the gateway route for translated protocols", async () => {
     const user = userEvent.setup();
     mount();
-    expect(await screen.findByText(/本机协议网关 http:\/\/127\.0\.0\.1:51234/)).toHaveTextContent("openai");
+    expect(screen.getByText("与 Codex 原生协议一致，切换后客户端直连所填服务地址。"))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/本机协议网关 http:\/\/127\.0\.0\.1:51234/)).not.toBeInTheDocument();
     expect(screen.queryByText(/网页搜索会关闭/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox", { name: "API 格式" }));
     await user.click(await screen.findByRole("option", { name: "Anthropic Messages (/v1/messages)" }));
+    expect(await screen.findByText(/本机协议网关 http:\/\/127\.0\.0\.1:51234/)).toHaveTextContent("openai");
     expect(screen.getByText(/网页搜索会关闭/)).toBeInTheDocument();
   });
 
@@ -252,7 +258,9 @@ describe("CodexProviderEditor", () => {
     const modelMode = screen.getByRole("radiogroup", { name: "默认子 agent 模型配置方式" });
     await user.click(within(modelMode).getByRole("radio", { name: "指定" }));
     await user.click(screen.getByRole("button", { name: "获取模型" }));
-    expect(fetchModels).toHaveBeenCalledWith("https://relay.example/v1", "sk-test", "responses");
+    expect(fetchModels).toHaveBeenCalledWith(
+      "codex", "https://relay.example/v1", "sk-test", "responses", undefined, undefined,
+    );
     const picker = await screen.findByRole("button", { name: "选择默认子 agent 模型" });
     await user.click(picker);
     await user.click(screen.getByRole("option", { name: "relay-coder" }));
@@ -324,8 +332,10 @@ describe("CodexProviderEditor", () => {
       { target: {
         kind: "draft",
         connection: {
+          app: "codex",
           baseUrl: "https://relay.example/v1",
           apiKey: "sk-test",
+          connection: {},
           upstreamProtocol: "responses",
           responsesOptions: { requestMode: "standard" },
           defaultModel: "relay-pro",

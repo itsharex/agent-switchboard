@@ -10,11 +10,13 @@ pub(super) const TEST_KEY: &str = "isolated-verification-secret";
 
 pub(super) fn draft(protocol: UpstreamProtocol, base: &str) -> ProviderDraft {
     ProviderDraft {
+        authentication: None,
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "Isolated provider".to_string(),
         model: Some("configured-model".to_string()),
         base_url: Some(base.to_string()),
+        connection: Default::default(),
         api_key: TEST_KEY.to_string(),
         upstream_protocol: Some(protocol),
         responses_options: (Some(protocol)
@@ -48,6 +50,7 @@ pub(super) fn record(protocol: UpstreamProtocol) -> ProviderRecord {
 
 pub(super) fn success_body(protocol: UpstreamProtocol, text: &str) -> Value {
     match protocol {
+        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
         UpstreamProtocol::Responses => json!({
             "object": "response", "status": "completed", "model": "actual-model",
             "output": [{"type":"message", "role":"assistant", "status":"completed",

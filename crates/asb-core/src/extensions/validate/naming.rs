@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::extensions::contracts::{McpDefinition, SecretValue};
 use crate::redact::is_secret_value;
 
@@ -56,8 +58,8 @@ pub(crate) fn validate_mcp_definition(mcp: &McpDefinition) -> Result<(), Extensi
             }
             if let Some(options) = codex_options {
                 if let Some(cwd) = &options.cwd {
-                    if cwd.trim().is_empty() {
-                        return reject("codexOptions", "Codex 工作目录不能为空");
+                    if cwd.trim().is_empty() || cwd.contains('\0') {
+                        return reject("codexOptions", "Codex 工作目录不能为空或包含空字符");
                     }
                 }
             }
@@ -69,32 +71,28 @@ pub(crate) fn validate_mcp_definition(mcp: &McpDefinition) -> Result<(), Extensi
             bearer,
         } => {
             validate_remote_url(url, &["http", "https"])?;
-            for (name, value) in headers {
-                validate_header_name(name)?;
-                validate_secret_value(value, "headers")?;
-            }
+            validate_headers(headers)?;
             if let Some(bearer) = bearer {
+                if headers
+                    .keys()
+                    .any(|name| name.eq_ignore_ascii_case("authorization"))
+                {
+                    return reject("bearer", "Bearer 与 Authorization 请求头不能同时设置");
+                }
                 validate_secret_value(bearer, "bearer")?;
+                validate_header_value(bearer, "bearer")?;
             }
             Ok(())
         }
         McpDefinition::ClaudeSse { url, headers } => {
             validate_remote_url(url, &["http", "https"])?;
-            for (name, value) in headers {
-                validate_header_name(name)?;
-                validate_secret_value(value, "headers")?;
-            }
-            Ok(())
+            validate_headers(headers)
         }
         McpDefinition::ClaudeWs { url, headers } => {
             // Native Claude ws entries may carry websocket or plain http
             // scheme URLs; both survive import, so both must validate.
             validate_remote_url(url, &["ws", "wss", "http", "https"])?;
-            for (name, value) in headers {
-                validate_header_name(name)?;
-                validate_secret_value(value, "headers")?;
-            }
-            Ok(())
+            validate_headers(headers)
         }
     }
 }
@@ -126,8 +124,37 @@ pub fn validate_env_name(name: &str) -> Result<(), ExtensionValidationError> {
 }
 
 fn validate_header_name(name: &str) -> Result<(), ExtensionValidationError> {
-    if name.trim().is_empty() || name.contains(['\r', '\n', ':', '\0']) {
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+    {
         return reject("headers", format!("请求头名称 {name} 不合法"));
+    }
+    Ok(())
+}
+
+fn validate_headers(
+    headers: &BTreeMap<String, SecretValue>,
+) -> Result<(), ExtensionValidationError> {
+    let mut seen = BTreeSet::new();
+    for (name, value) in headers {
+        validate_header_name(name)?;
+        if !seen.insert(name.to_ascii_lowercase()) {
+            return reject("headers", format!("请求头 {name} 重复（名称不区分大小写）"));
+        }
+        validate_secret_value(value, "headers")?;
+        validate_header_value(value, "headers")?;
+    }
+    Ok(())
+}
+
+fn validate_header_value(
+    value: &SecretValue,
+    field: &'static str,
+) -> Result<(), ExtensionValidationError> {
+    if matches!(value, SecretValue::Plain { value } if value.contains(['\r', '\n'])) {
+        return reject(field, "请求头值不能包含换行");
     }
     Ok(())
 }

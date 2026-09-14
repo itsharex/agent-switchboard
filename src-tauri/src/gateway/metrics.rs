@@ -5,10 +5,19 @@
 
 use asb_core::contracts::{AppKind, UpstreamProtocol};
 use serde::Serialize;
+use serde_json::Value;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+use super::request_ledger::{
+    ClaudeFailoverAttempt, ClaudeFailoverOutcome, ClaudeRequestLedger, ClaudeRequestRecord,
+};
+
+use super::usage_metadata::{metadata_from_value, TokenUsage};
+mod claude;
+mod codex;
 
 /// Bounded recent-request buffer. Older samples are dropped once full; the
 /// cumulative counters remain exact so totals never silently lag the chart.
@@ -113,12 +122,25 @@ impl GatewayMetrics {
 /// without attributing it to any profile.
 pub(crate) struct RequestSpan {
     metrics: Arc<GatewayMetrics>,
+    ledger: Option<Arc<ClaudeRequestLedger>>,
+    codex: Option<codex::CodexRecording>,
     app: AppKind,
     client_protocol: UpstreamProtocol,
     profile_id: Option<String>,
     route_revision: Option<String>,
     upstream_protocol: Option<UpstreamProtocol>,
+    request_model: Option<String>,
+    mapped_model: Option<String>,
+    usage: TokenUsage,
+    first_byte_at: Option<Instant>,
+    first_token_at: Option<Instant>,
+    response_model: Option<String>,
+    billing: asb_core::contracts::ClaudeBilling,
+    prices: Option<Result<super::claude_pricing::ClaudePriceBook, String>>,
+    failover_attempts: Vec<ClaudeFailoverAttempt>,
     request_bytes: u64,
+    completion: Option<Arc<std::sync::atomic::AtomicU16>>,
+    secrets: Vec<String>,
     started: Instant,
 }
 
@@ -130,14 +152,38 @@ impl RequestSpan {
     ) -> Self {
         Self {
             metrics,
+            ledger: None,
+            codex: None,
             app,
             client_protocol,
             profile_id: None,
             route_revision: None,
             upstream_protocol: None,
+            request_model: None,
+            mapped_model: None,
+            usage: TokenUsage::default(),
+            first_byte_at: None,
+            first_token_at: None,
+            response_model: None,
+            billing: Default::default(),
+            prices: None,
+            failover_attempts: Vec::new(),
             request_bytes: 0,
+            completion: None,
+            secrets: Vec::new(),
             started: Instant::now(),
         }
+    }
+
+    pub(crate) fn start_with_ledger(
+        metrics: Arc<GatewayMetrics>,
+        ledger: Arc<ClaudeRequestLedger>,
+        app: AppKind,
+        client_protocol: UpstreamProtocol,
+    ) -> Self {
+        let mut span = Self::start(metrics, app, client_protocol);
+        span.ledger = Some(ledger);
+        span
     }
 
     /// Binds one request to the exact route snapshot that admitted it. The
@@ -158,21 +204,108 @@ impl RequestSpan {
         self.request_bytes = bytes;
     }
 
+    pub(crate) fn note_request_model(&mut self, model: Option<String>) {
+        if model.is_some() {
+            self.request_model = model;
+        }
+    }
+
+    pub(crate) fn note_mapped_model(&mut self, model: Option<String>) {
+        if model.is_some() {
+            self.mapped_model = model;
+        }
+    }
+
+    pub(crate) fn note_response_value(&mut self, protocol: UpstreamProtocol, value: &Value) {
+        let (model, usage) = metadata_from_value(protocol, value);
+        self.note_response_model(model);
+        self.note_usage(usage);
+    }
+
+    pub(crate) fn note_response_model(&mut self, model: Option<String>) {
+        if model.is_some() {
+            self.response_model = model;
+        }
+    }
+
+    pub(crate) fn note_first_token(&mut self) {
+        self.first_token_at.get_or_insert_with(Instant::now);
+    }
+
+    pub(crate) fn protect_secrets(&mut self, secrets: &[&str]) {
+        for secret in secrets.iter().filter(|secret| !secret.is_empty()) {
+            if !self.secrets.iter().any(|existing| existing == secret) {
+                self.secrets.push((*secret).into());
+            }
+        }
+    }
+
+    pub(crate) fn bind_claude_billing(
+        &mut self,
+        root: &std::path::Path,
+        billing: Option<&asb_core::contracts::ClaudeBilling>,
+    ) {
+        self.billing = billing.cloned().unwrap_or_default();
+        self.prices
+            .get_or_insert_with(|| super::claude_pricing::ClaudePriceBook::load(root));
+    }
+
+    pub(crate) fn note_usage(&mut self, usage: TokenUsage) {
+        self.usage.merge_from(&usage);
+    }
+
+    pub(crate) fn note_first_byte(&mut self) {
+        if self.first_byte_at.is_none() {
+            self.first_byte_at = Some(Instant::now());
+        }
+    }
+
+    pub(crate) fn note_failover_attempt(&mut self, attempt: ClaudeFailoverAttempt) {
+        if self.failover_attempts.len() < 32 {
+            self.failover_attempts.push(attempt);
+        }
+    }
+
     /// `status` is `None` only when no HTTP status applies to the failure, as
     /// with a WebSocket exchange that died before an answer was delivered.
-    pub(crate) fn finish(self, status: Option<u16>, response_bytes: u64) {
+    pub(crate) fn observe_completion(&mut self) -> Arc<std::sync::atomic::AtomicU16> {
+        let completion = Arc::new(std::sync::atomic::AtomicU16::new(0));
+        self.completion = Some(completion.clone());
+        completion
+    }
+
+    pub(crate) fn finish(mut self, status: Option<u16>, response_bytes: u64) {
+        if let Some(completion) = &self.completion {
+            completion.store(status.unwrap_or(0), std::sync::atomic::Ordering::Release);
+        }
+        if let Some(attempt) = self.failover_attempts.last_mut() {
+            if attempt.outcome == ClaudeFailoverOutcome::Success
+                && !status.is_some_and(|s| (200..300).contains(&s))
+            {
+                attempt.status = status;
+                attempt.outcome = ClaudeFailoverOutcome::Failure;
+            }
+        }
+        let duration_ms = self.started.elapsed().as_millis() as u64;
+        let first_byte_latency_ms = self
+            .first_byte_at
+            .map(|at| at.duration_since(self.started).as_millis() as u64);
         self.metrics.record(GatewaySample {
             at_ms: unix_now_ms(),
             app: self.app,
-            profile_id: self.profile_id,
-            route_revision: self.route_revision,
+            profile_id: self.profile_id.clone(),
+            route_revision: self.route_revision.clone(),
             client_protocol: self.client_protocol,
             upstream_protocol: self.upstream_protocol,
             status,
-            duration_ms: self.started.elapsed().as_millis() as u64,
+            duration_ms,
             request_bytes: self.request_bytes,
             response_bytes,
         });
+        match self.app {
+            AppKind::Codex => self.finish_codex(status, duration_ms, first_byte_latency_ms),
+            AppKind::Claude => self.finish_claude(status, duration_ms, first_byte_latency_ms),
+        }
     }
 }
 
@@ -184,77 +317,5 @@ fn unix_now_ms() -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn span(metrics: &Arc<GatewayMetrics>) -> RequestSpan {
-        RequestSpan::start(
-            Arc::clone(metrics),
-            AppKind::Codex,
-            UpstreamProtocol::Responses,
-        )
-    }
-
-    #[test]
-    fn counts_totals_and_failures_while_keeping_recent_samples_only() {
-        let metrics = Arc::new(GatewayMetrics::new());
-        span(&metrics).finish(Some(200), 10);
-        let mut rejected = span(&metrics);
-        rejected.bind_route("p1", "revision-p1", UpstreamProtocol::ChatCompletions);
-        rejected.finish(Some(401), 0);
-        span(&metrics).finish(None, 0);
-
-        let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.total_requests, 3);
-        assert_eq!(snapshot.failed_requests, 2);
-        assert_eq!(snapshot.samples.len(), 3);
-        let unbound = &snapshot.samples[2];
-        assert_eq!(unbound.profile_id, None);
-        assert_eq!(unbound.route_revision, None);
-        assert_eq!(unbound.upstream_protocol, None);
-        let sample = &snapshot.samples[1];
-        assert_eq!(sample.profile_id.as_deref(), Some("p1"));
-        assert_eq!(sample.route_revision.as_deref(), Some("revision-p1"));
-        assert_eq!(
-            sample.upstream_protocol,
-            Some(UpstreamProtocol::ChatCompletions)
-        );
-        assert_eq!(sample.status, Some(401));
-        assert!(sample.failed());
-
-        let rendered = serde_json::to_value(sample).expect("serialize metric sample");
-        assert_eq!(rendered["routeRevision"], "revision-p1");
-    }
-
-    #[test]
-    fn snapshot_evicts_oldest_samples_but_keeps_cumulative_counts() {
-        let metrics = Arc::new(GatewayMetrics::new());
-        for _ in 0..(SAMPLE_CAPACITY + 10) {
-            span(&metrics).finish(Some(200), 0);
-        }
-        let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.samples.len(), SAMPLE_CAPACITY);
-        assert_eq!(snapshot.total_requests, (SAMPLE_CAPACITY + 10) as u64);
-        assert_eq!(snapshot.failed_requests, 0);
-    }
-
-    #[test]
-    fn keeps_each_accepted_requests_bound_route_revision() {
-        let metrics = Arc::new(GatewayMetrics::new());
-        let mut before_switch = span(&metrics);
-        before_switch.bind_route("p1", "revision-a", UpstreamProtocol::Responses);
-        before_switch.finish(Some(200), 0);
-
-        let mut after_switch = span(&metrics);
-        after_switch.bind_route("p1", "revision-b", UpstreamProtocol::Responses);
-        after_switch.finish(Some(200), 0);
-
-        let snapshot = metrics.snapshot();
-        let revisions: Vec<_> = snapshot
-            .samples
-            .iter()
-            .map(|sample| sample.route_revision.as_deref())
-            .collect();
-        assert_eq!(revisions, [Some("revision-a"), Some("revision-b")]);
-    }
-}
+#[path = "metrics/tests.rs"]
+mod tests;

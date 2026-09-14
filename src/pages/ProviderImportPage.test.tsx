@@ -11,6 +11,7 @@ const discovery: DiscoveryReport = {
     state: { kind: "ok", route: statuses[0].route!, managed: true, importable: false, warnings: [] } },
   claude: { app: "claude", path: "test/claude.json", exists: true,
     state: { kind: "ok", route: statuses[1].route!, managed: false, importable: true, warnings: [] } },
+  codexImportProposals: [],
   claudeImportProposals: [{ basis: "由当前 Claude 配置生成",
     draft: { app: "claude", name: "导入 Claude", routeMode: "official", model: null, baseUrl: null,
       apiKey: "", upstreamProtocol: null, responsesOptions: null, maxOutputTokens: null,
@@ -88,12 +89,41 @@ describe("ProviderImportPage CC Switch source", () => {
     const onImportCc = vi.fn(async () => true);
     const user = userEvent.setup();
     renderPage({ appFilter: "codex", ccScan, ccSelected: { "codex:a": true }, onImportCc });
-    expect(screen.queryByRole("radiogroup", { name: "导入来源" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("radio", { name: "本机配置" })).not.toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "导入来源" })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "CC Switch" }));
     expect(screen.getByRole("checkbox", { name: "导入 Codex" })).toBeChecked();
     expect(screen.getByText("Codex · gpt-5 · https://provider.example/v1")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "导入所选 1 项" }));
     expect(onImportCc).toHaveBeenCalledOnce();
+  });
+
+  it("offers local Codex import when the discovery report has a proposal", async () => {
+    const onImportLocal = vi.fn(async () => true);
+    const onBack = vi.fn();
+    renderPage({
+      appFilter: "codex",
+      discovery: {
+        ...discovery,
+        codexImportProposals: [{
+          name: "Relay",
+          providerName: "relay",
+          model: "gpt-5",
+          upstream: "responses",
+          catalogModelCount: 1,
+          apiKeyAvailable: true,
+          official: false,
+          basis: "由当前 Codex 配置生成",
+          warnings: [],
+        }],
+      },
+      onImportLocal,
+      onBack,
+    });
+    expect(screen.getByRole("radio", { name: "本机配置" })).toBeChecked();
+    expect(screen.getByLabelText("Codex 扫描结果")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "导入供应商" }));
+    expect(onImportLocal).toHaveBeenCalledOnce();
+    expect(onBack).toHaveBeenCalledOnce();
   });
 
   it("keeps partial import diagnostics available when the operation is not completed", async () => {

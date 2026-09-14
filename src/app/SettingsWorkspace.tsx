@@ -20,6 +20,7 @@ function ClientPreferences({ model }: { model: SwitchboardModel }) {
       onResetGroup={settings.resetGroupToDefaults} onSave={(target) => void settings.saveSettings(target)}
       onSaveAndPreview={(target) => void model.saveClientSettingsAndPreview(target)}
       onOpenProviders={model.returnToProviders} onRetryLoad={settings.retryLoad} onPreview={settings.previewSettings}
+      onPreviewContentChange={settings.changePreviewContent}
       subagentSettings={app === "codex" ? (
         <CodexSubagentSettingsPanel
           editorState={codexSubagentSettings.editorState}

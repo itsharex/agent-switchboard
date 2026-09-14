@@ -92,9 +92,13 @@ pub(super) async fn send(
             "供应商响应超过 64 KiB，已停止读取；请检查服务地址是否为模型 API".into();
         return Ok(ProviderRequestResult::diagnosed(diagnostic, started));
     }
+    let bytes = match super::claude::response_body(&profile, body.bytes) {
+        Ok(bytes) => bytes,
+        Err(message) => { diagnostic.message = message; return Ok(ProviderRequestResult::diagnosed(diagnostic, started)); }
+    };
     Ok(parse_reply(
         protocol,
-        &body.bytes,
+        &bytes,
         &profile.api_key,
         status,
         started,
@@ -135,33 +139,46 @@ fn build_request(
     protocol: UpstreamProtocol,
     model: &str,
 ) -> Result<reqwest::Request, CommandError> {
+    let mut body = payload(
+        protocol,
+        model,
+        profile
+            .responses_options
+            .map(|options| options.request_mode),
+    )
+    .to_string()
+    .into_bytes();
+    crate::upstream_overrides::apply_body_override(&mut body, &profile.connection)
+        .map_err(|_| CommandError::new("provider-request-invalid", "请求 body 覆盖无效"))?;
+    if let Some(account) = &profile.claude_account {
+        crate::claude_auth::request::body(account, protocol, &mut body)
+            .map_err(|message| CommandError::new("provider-request-invalid", message))?;
+    }
     let mut request = client
         .post(endpoint)
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
-        .body(
-            payload(
-                protocol,
-                model,
-                profile
-                    .responses_options
-                    .map(|options| options.request_mode),
-            )
-            .to_string(),
-        );
-    request = match protocol.authentication_scheme() {
+        .body(body);
+    request = match protocol.resolve_authentication(profile.authentication) {
         AuthenticationScheme::Bearer => request.bearer_auth(&profile.api_key),
         AuthenticationScheme::XApiKey => request.header("x-api-key", &profile.api_key),
+        AuthenticationScheme::XGoogApiKey => request.header("x-goog-api-key", &profile.api_key),
     };
     if protocol == UpstreamProtocol::AnthropicMessages {
         request = request.header("anthropic-version", "2023-06-01");
     }
-    request.build().map_err(|_| {
+    let mut request = request.build().map_err(|_| {
         CommandError::new(
             "provider-request-invalid",
             "无法构造请求，请检查供应商服务地址与 API 密钥格式",
         )
-    })
+    })?;
+    if let Some(account) = &profile.claude_account {
+        let body = request.body().and_then(reqwest::Body::as_bytes).unwrap_or_default().to_vec();
+        crate::claude_auth::request::request_headers(account, request.headers_mut(), &body);
+    }
+    crate::upstream_overrides::apply_header_overrides(request.headers_mut(), &profile.connection);
+    Ok(request)
 }
 
 fn payload(protocol: UpstreamProtocol, model: &str, mode: Option<ResponsesRequestMode>) -> Value {
@@ -175,6 +192,7 @@ fn payload(protocol: UpstreamProtocol, model: &str, mode: Option<ResponsesReques
             "model": model, "stream": false, "max_completion_tokens": MAX_OUTPUT_TOKENS,
             "messages": [{"role": "user", "content": REQUEST_PROMPT}],
         }),
+        UpstreamProtocol::GeminiGenerateContent => super::claude::gemini_test_payload(REQUEST_PROMPT, MAX_OUTPUT_TOKENS),
         UpstreamProtocol::AnthropicMessages => json!({
             "model": model, "stream": false, "max_tokens": MAX_OUTPUT_TOKENS,
             "messages": [{"role": "user", "content": REQUEST_PROMPT}],
@@ -229,3 +247,6 @@ mod tests;
 mod diagnostics_tests;
 #[cfg(test)]
 mod draft_tests;
+
+#[cfg(test)]
+mod auth_tests;

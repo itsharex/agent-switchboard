@@ -1,9 +1,8 @@
-use super::http::{argument, as_json, InvokeRequest};
+use super::http::{argument, as_json, optional_argument, InvokeRequest};
 use crate::commands::{self, error::CommandError};
 use crate::local_state::{AppSettings, CloudBackupSettings};
 use asb_core::contracts::{
-    AppKind, CodexSubagentSettings, ModelUsageRequest, ProviderDraft, SettingsValues,
-    SubagentSettingsPlan, UsageHistoryRequest,
+    AppKind, ModelUsageRequest, ProviderDraft, SettingsValues, UsageHistoryRequest,
 };
 use asb_core::extensions::contracts::ExtensionTarget;
 use serde_json::Value;
@@ -11,6 +10,12 @@ use tauri::AppHandle;
 
 pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandError> {
     tauri::async_runtime::block_on(async {
+        if let Some(result) = super::codex_dispatch::dispatch(app, &request).await? {
+            return Ok(result);
+        }
+        if let Some(result) = super::claude_dispatch::dispatch(app, &request).await? {
+            return Ok(result);
+        }
         macro_rules! command {
             ($future:expr) => {
                 as_json($future.await)
@@ -24,8 +29,19 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             "pick_directory" => {
                 command!(commands::window::pick_directory(app.clone()))
             }
+            "pick_skill_zip" => command!(commands::window::pick_skill_zip(app.clone())),
             "config_status" => command!(commands::status::config_status(app.clone())),
             "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
+            "preview_claude_gateway_stop" => command!(
+                commands::switching::claude_gateway::preview_claude_gateway_stop(app.clone())
+            ),
+            "stop_claude_gateway" => {
+                command!(commands::switching::claude_gateway::stop_claude_gateway(
+                    app.clone(),
+                    argument(&request.args, "preview")?,
+                    argument(&request.args, "confirmWrite")?
+                ))
+            }
             "gateway_status" => command!(commands::gateway::gateway_status(app.clone())),
             "gateway_retry_bind" => {
                 command!(commands::gateway::gateway_retry_bind(app.clone()))
@@ -55,22 +71,75 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                     argument(&request.args, "confirmWrite")?,
                 ))
             }
-            "list_profiles" => command!(commands::list_profiles(app.clone())),
-            "list_codex_profiles" => command!(commands::list_codex_profiles(app.clone())),
-            "create_codex_profile" => command!(commands::create_codex_profile(
+            "reset_claude_provider_health" => {
+                command!(commands::failover::reset_claude_provider_health(
+                    app.clone(),
+                    argument(&request.args, "providerId")?,
+                    argument(&request.args, "confirmWrite")?
+                ))
+            }
+            "get_claude_failover" => {
+                command!(commands::failover::get_claude_failover(app.clone(),))
+            }
+            "set_claude_failover_policy" => {
+                command!(commands::failover::set_claude_failover_policy(
+                    app.clone(),
+                    argument(&request.args, "policy")?,
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
+            "set_claude_failover_enabled" => {
+                command!(commands::failover::set_claude_failover_enabled(
+                    app.clone(),
+                    argument(&request.args, "enabled")?,
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
+            "add_claude_failover_provider" => {
+                command!(commands::failover::add_claude_failover_provider(
+                    app.clone(),
+                    argument(&request.args, "providerId")?,
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
+            "remove_claude_failover_provider" => {
+                command!(commands::failover::remove_claude_failover_provider(
+                    app.clone(),
+                    argument(&request.args, "providerId")?,
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
+            "reorder_claude_failover_providers" => {
+                command!(commands::failover::reorder_claude_failover_providers(
+                    app.clone(),
+                    argument(&request.args, "orderedIds")?,
+                    argument(&request.args, "confirmWrite")?,
+                ))
+            }
+            "get_claude_price_book" => {
+                command!(commands::claude_pricing::get_claude_price_book(app.clone()))
+            }
+            "set_claude_price_book" => command!(commands::claude_pricing::set_claude_price_book(
                 app.clone(),
-                argument(&request.args, "draft")?,
-            )),
-            "delete_codex_profile" => command!(commands::delete_codex_profile(
-                app.clone(),
-                argument(&request.args, "profileId")?,
+                argument(&request.args, "book")?,
                 argument(&request.args, "expectedFileHash")?,
+                argument(&request.args, "confirmWrite")?
             )),
-            "reorder_codex_profiles" => command!(commands::reorder_codex_profiles(
-                app.clone(),
-                argument(&request.args, "orderedIds")?,
-                argument(&request.args, "expectedFileHashes")?,
-            )),
+            "get_claude_request_ledger" => {
+                command!(commands::claude_ledger::get_claude_request_ledger(
+                    app.clone(),
+                    argument(&request.args, "offset")?,
+                    argument(&request.args, "limit")?,
+                    optional_argument(&request.args, "filter")?,
+                ))
+            }
+            "get_claude_request_ledger_summary" => {
+                command!(commands::claude_ledger::get_claude_request_ledger_summary(
+                    app.clone(),
+                    optional_argument(&request.args, "filter")?
+                ))
+            }
+            "list_profiles" => command!(commands::list_profiles(app.clone())),
             "reset_profile_store" => command!(commands::reset_profile_store(
                 app.clone(),
                 argument(&request.args, "confirmWrite")?,
@@ -86,21 +155,6 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument::<String>(&request.args, "preparationId")?,
                 argument::<bool>(&request.args, "confirmWrite")?,
             )),
-            "prepare_codex_profile_save" => {
-                command!(commands::switching::prepare_codex_profile_save(
-                    app.clone(),
-                    argument(&request.args, "profileId")?,
-                    argument(&request.args, "draft")?,
-                    argument(&request.args, "expectedFileHash")?,
-                ))
-            }
-            "commit_codex_profile_save" => {
-                command!(commands::switching::commit_codex_profile_save(
-                    app.clone(),
-                    argument(&request.args, "preparationId")?,
-                    argument(&request.args, "confirmWrite")?,
-                ))
-            }
             "delete_profile" => command!(commands::delete_profile(
                 app.clone(),
                 argument(&request.args, "profileId")?,
@@ -146,25 +200,10 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                     argument::<SettingsValues>(&request.args, "settings")?,
                 ))
             }
-            "get_codex_subagent_settings" => {
-                command!(commands::subagent_settings::get_codex_subagent_settings(
-                    app.clone(),
-                ))
-            }
-            "preview_codex_subagent_settings_command" => {
-                command!(
-                    commands::subagent_settings::preview_codex_subagent_settings_command(
-                        app.clone(),
-                        argument::<CodexSubagentSettings>(&request.args, "settings")?,
-                        argument::<String>(&request.args, "expectedHash")?,
-                    )
-                )
-            }
-            "apply_codex_subagent_settings" => {
-                command!(commands::subagent_settings::apply_codex_subagent_settings(
-                    app.clone(),
-                    argument::<SubagentSettingsPlan>(&request.args, "plan")?,
-                    argument::<bool>(&request.args, "confirmWrite")?,
+            "parse_client_settings" => {
+                command!(commands::client_settings::parse_client_settings(
+                    argument::<AppKind>(&request.args, "target")?,
+                    argument::<String>(&request.args, "content")?,
                 ))
             }
             "get_global_prompt_document" => {
@@ -230,6 +269,9 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument(&request.args, "expectedHash")?,
                 argument(&request.args, "expectedRenderedHash")?,
                 argument(&request.args, "confirmWrite")?,
+                optional_argument(&request.args, "authHash")?,
+                optional_argument(&request.args, "authExisted")?,
+                optional_argument(&request.args, "authRenderedHash")?,
             )),
             "list_backups" => command!(commands::switching::list_backups(app.clone())),
             "list_runtime_logs" => command!(commands::runtime_log::list_runtime_logs(app.clone())),
@@ -257,7 +299,7 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             "resolve_provider_endpoints" => as_json(commands::resolve_provider_endpoints(
                 argument(&request.args, "request")?,
             )),
-            "fetch_provider_models" => command!(commands::fetch_provider_models(argument(
+            "fetch_provider_models" => command!(commands::fetch_provider_models(app.clone(), argument(
                 &request.args,
                 "request",
             )?)),
@@ -297,16 +339,6 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 app.clone(),
                 argument(&request.args, "profileId")?,
             )),
-            "query_codex_official_quota" => command!(commands::query_codex_official_quota(
-                app.clone(),
-                argument(&request.args, "profileId")?,
-            )),
-            "get_cached_codex_official_reset" => {
-                command!(commands::get_cached_codex_official_reset(app.clone()))
-            }
-            "refresh_codex_official_reset" => {
-                command!(commands::refresh_codex_official_reset(app.clone()))
-            }
             "official_login_start" => {
                 command!(commands::official_login::official_login_start(argument::<
                     AppKind,
@@ -331,10 +363,6 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                     "target"
                 )?,))
             }
-            "get_cached_codex_reset_status" => {
-                command!(commands::get_cached_codex_reset_status(app.clone()))
-            }
-            "check_codex_reset_status" => command!(commands::check_codex_reset_status(app.clone())),
             "lock_status" => command!(commands::status::lock_status(
                 app.clone(),
                 argument::<AppKind>(&request.args, "target")?,
@@ -361,6 +389,10 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument(&request.args, "sessionId")?,
             )),
             "resume_session" => command!(commands::resume_session(
+                argument::<AppKind>(&request.args, "app")?,
+                argument(&request.args, "sessionId")?,
+            )),
+            "delete_session" => command!(commands::delete_session(
                 argument::<AppKind>(&request.args, "app")?,
                 argument(&request.args, "sessionId")?,
             )),
@@ -404,6 +436,36 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument(&request.args, "subpath")?,
                 argument::<Option<String>>(&request.args, "refName")?,
             )),
+            "list_skill_repositories" => {
+                command!(commands::extensions::list_skill_repositories(app.clone()))
+            }
+            "save_skill_repository" => command!(commands::extensions::save_skill_repository(
+                app.clone(),
+                argument::<commands::extensions::SkillRepositoryInput>(&request.args, "input")?,
+            )),
+            "remove_skill_repository" => command!(commands::extensions::remove_skill_repository(
+                app.clone(),
+                argument(&request.args, "id")?,
+            )),
+            "scan_skill_repositories" => {
+                command!(commands::extensions::scan_skill_repositories(app.clone()))
+            }
+            "search_skill_directory" => command!(commands::extensions::search_skill_directory(
+                argument(&request.args, "query")?,
+                argument::<Option<usize>>(&request.args, "offset")?,
+            )),
+            "resolve_directory_skill" => {
+                command!(commands::extensions::resolve_directory_skill(argument::<
+                    commands::extensions::SkillDirectoryEntry,
+                >(
+                    &request.args,
+                    "entry"
+                )?,))
+            }
+            "scan_skill_zip" => command!(commands::extensions::scan_skill_zip(argument(
+                &request.args,
+                "path"
+            )?,)),
             "import_skill_candidate" => command!(commands::extensions::import_skill_candidate(
                 app.clone(),
                 argument(&request.args, "digest")?,
@@ -418,12 +480,6 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 app.clone(),
                 argument(&request.args, "observationId")?,
             )),
-            "preview_discovered_takeover" => {
-                command!(commands::extensions::preview_discovered_takeover(
-                    app.clone(),
-                    argument(&request.args, "observationId")?,
-                ))
-            }
             "takeover_discovered_extension" => {
                 command!(commands::extensions::takeover_discovered_extension(
                     app.clone(),
@@ -482,6 +538,19 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                     argument(&request.args, "update")?,
                 ))
             }
+            "list_skill_backups" => {
+                command!(commands::extensions::list_skill_backups(app.clone()))
+            }
+            "restore_skill_backup" => command!(commands::extensions::restore_skill_backup(
+                app.clone(),
+                argument(&request.args, "backupId")?,
+                argument(&request.args, "confirmWrite")?,
+            )),
+            "delete_skill_backup" => command!(commands::extensions::delete_skill_backup(
+                app.clone(),
+                argument(&request.args, "backupId")?,
+                argument(&request.args, "confirmWrite")?,
+            )),
             "put_extension_secret" => command!(commands::extensions::put_extension_secret(
                 argument(&request.args, "value")?,
                 argument(&request.args, "purpose")?,

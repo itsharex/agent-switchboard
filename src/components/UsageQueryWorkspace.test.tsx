@@ -16,6 +16,10 @@ function renderWorkspace(initial: UsageQuery | null = null, onSave = vi.fn(async
       providerName="测试中转"
       value={initial}
       apiKey="sk-live"
+      connection={{
+        customUserAgent: "Usage Fixture",
+        localProxyRequestOverrides: { headers: { "X-Usage": "fixture" }, body: null },
+      }}
       baseUrl="https://relay.example/v1"
       upstreamProtocol="responses"
       busy={false}
@@ -76,6 +80,10 @@ describe("UsageQueryWorkspace", () => {
         apiKey: "sk-live",
         baseUrl: "https://relay.example/v1",
         upstreamProtocol: "responses",
+        connection: {
+          customUserAgent: "Usage Fixture",
+          localProxyRequestOverrides: { headers: { "X-Usage": "fixture" }, body: null },
+        },
       },
     });
     expect(await screen.findByRole("region", { name: "本次用量结果" })).toHaveTextContent(

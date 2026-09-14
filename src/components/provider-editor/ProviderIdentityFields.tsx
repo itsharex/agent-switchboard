@@ -40,6 +40,7 @@ function AccessMode({ editor, busy, officialTakenApps, onOpenOfficial }: Props) 
               ...current, routeMode: "official",
               name: current.name.trim() || `${clientName(current.app)} 官方登录`,
               model: null, baseUrl: null, apiKey: "", upstreamProtocol: null,
+              authentication: null,
               responsesOptions: null,
               maxOutputTokens: null, modelOptions: null, usageQuery: null,
               officialQuotaRefreshIntervalMinutes: null,

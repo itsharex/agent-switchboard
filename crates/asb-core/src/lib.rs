@@ -6,7 +6,13 @@
 
 pub mod adapter;
 pub mod ccswitch;
+pub mod claude_auth;
+pub mod claude_gemini;
+pub mod claude_native;
+pub mod claude_common;
+pub mod claude_presets;
 mod claude_model;
+pub mod codex_presets;
 pub mod contracts;
 pub mod discovery;
 pub mod endpoint;
@@ -25,15 +31,15 @@ pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchProviderDraft, CcSwitchRow
 
 pub use adapter::{preview, render, route_state, validate_syntax, AdapterError};
 pub use contracts::{
-    AppKind, AuthenticationScheme, BackupRecord, ChangeKind, ClaudeModelSettings,
-    ClientSettingsPreview, ClientSettingsSnapshot, CodexCapabilities, CodexCatalogEntry,
-    CodexEndpoint, CodexModelRoute, CodexModelSettings, CodexOperation, CodexProviderDraft,
-    CodexProviderFile, CodexProviderProfile, CodexProviderRecord, CodexRouteSnapshot,
-    CodexSubagentKey, CodexSubagentSettings, CodexSubagentSettingsPreview,
-    CodexSubagentSettingsSnapshot, CodexUpstream, ConfigValue, ConfigWriteRecord,
-    ExplicitMaxOutputTokens, GlobalPromptDocument, KeyChange, MatchStatus, ModelOptions,
-    ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord, RouteMode, RouteState,
-    SettingValue, SettingsValues, SubagentSettingsPlan, SwitchPlan, SwitchPreview,
+    codex_official_draft, AppKind, AuthenticationScheme, BackupRecord, ChangeKind,
+    ClaudeModelSettings, ClientSettingsPreview, ClientSettingsSnapshot, CodexCapabilities,
+    CodexCatalogEntry, CodexEndpoint, CodexModelRoute, CodexModelSettings, CodexOperation,
+    CodexProviderDraft, CodexProviderFile, CodexProviderProfile, CodexProviderRecord,
+    CodexRouteMode, CodexRouteSnapshot, CodexSubagentKey, CodexSubagentSettings,
+    CodexSubagentSettingsPreview, CodexSubagentSettingsSnapshot, CodexUpstream, ConfigValue,
+    ConfigWriteRecord, ExplicitMaxOutputTokens, GlobalPromptDocument, KeyChange, MatchStatus,
+    ModelOptions, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord, RouteMode,
+    RouteState, SettingValue, SettingsValues, SubagentSettingsPlan, SwitchPlan, SwitchPreview,
     UpstreamProtocol, WriteOperation, CODEX_PROVIDER_SCHEMA_VERSION,
 };
 pub use lock::{classify_lock, LockFileData, LockHolder, LockStatus, PidLiveness};

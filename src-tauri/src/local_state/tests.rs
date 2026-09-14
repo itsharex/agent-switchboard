@@ -335,6 +335,7 @@ fn discovery_cache_persists_display_facts_and_never_credentials() {
     let report = asb_core::discovery::discover(
         &asb_core::discovery::DiscoveryPaths {
             codex: "missing-codex.toml".into(),
+            codex_auth: "missing-auth.json".into(),
             claude: "claude.json".into(),
         },
         |path| {
@@ -375,6 +376,7 @@ fn clear_discovery_cache_removes_the_stored_snapshot() {
     let report = asb_core::discovery::discover(
         &asb_core::discovery::DiscoveryPaths {
             codex: "c".into(),
+            codex_auth: "a".into(),
             claude: "s".into(),
         },
         |_| Ok(Some(String::new())),

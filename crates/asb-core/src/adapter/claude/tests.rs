@@ -9,17 +9,25 @@ use serde_json::Value as Json;
 fn plan_b() -> SwitchPlan {
     SwitchPlan::direct(
         ProviderProfile {
+            authentication: None,
             id: "c2".into(),
             app: AppKind::Claude,
             route_mode: crate::contracts::RouteMode::Custom,
             name: "Relay C".into(),
             model: Some("claude-opus-4".into()),
             base_url: Some("https://relay-c.internal".into()),
+            connection: Default::default(),
             api_key: "test-api-key".into(),
             upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
             responses_options: None,
             max_output_tokens: None.into(),
             model_options: Some(ModelOptions::Claude(ClaudeModelSettings {
+                haiku_one_m: false,
+                fable_model: None,
+                fable_one_m: false,
+                subagent_model: None,
+                subagent_one_m: false,
+                display_names: None,
                 primary_one_m: false,
                 haiku_model: Some("claude-haiku-4".into()),
                 sonnet_model: None,
@@ -114,6 +122,12 @@ fn cross_protocol_provider_disables_experimental_betas_and_native_provider_remov
 fn undeclared_tiers_are_removed_and_undeclared_lists_go_away() {
     let mut plan = plan_b();
     plan.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: false,
         haiku_model: None,
         sonnet_model: Some("claude-sonnet-4".into()),
@@ -317,6 +331,12 @@ fn render_writes_canonical_one_m_markers_for_supported_model_slots() {
     let mut plan = plan_b();
     plan.profile.model = Some("claude-opus-4-7".into());
     plan.profile.model_options = Some(ModelOptions::Claude(ClaudeModelSettings {
+        haiku_one_m: false,
+        fable_model: None,
+        fable_one_m: false,
+        subagent_model: None,
+        subagent_one_m: false,
+        display_names: None,
         primary_one_m: true,
         haiku_model: Some("claude-haiku-4".into()),
         sonnet_model: Some("claude-sonnet-4-6".into()),

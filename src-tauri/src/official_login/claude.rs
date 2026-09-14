@@ -4,6 +4,7 @@
 //! everything else (authorize URL, token exchange, credential write) follows
 //! the same request shapes as the CLI's public client.
 
+use super::claude_credentials::ClaudeTokens;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
@@ -11,9 +12,7 @@ use std::time::Instant;
 use serde::Deserialize;
 use tiny_http::{Header, Response, Server};
 
-use crate::official_login::credentials::{
-    code_challenge, random_state, random_verifier, ClaudeTokens,
-};
+use crate::official_login::credentials::{code_challenge, random_state, random_verifier};
 use crate::official_login::{percent_decode, percent_encode, SESSION_EXPIRY, USER_AGENT};
 use crate::probe::http_request;
 

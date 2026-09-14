@@ -113,6 +113,7 @@ fn protocol_requests_use_their_only_authentication_and_fixed_payload() {
         assert_eq!(body["stream"], false);
         assert!(body.to_string().contains(REQUEST_PROMPT));
         let cap = match protocol {
+            asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
             UpstreamProtocol::Responses => "max_output_tokens",
             UpstreamProtocol::ChatCompletions => "max_completion_tokens",
             UpstreamProtocol::AnthropicMessages => "max_tokens",

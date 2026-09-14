@@ -18,12 +18,14 @@ fn provider() -> ProviderProfile {
     ProviderProfile::from_draft(
         "provider-1".to_string(),
         ProviderDraft {
+            authentication: None,
             parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
             app: AppKind::Claude,
             route_mode: RouteMode::Custom,
             name: "示例中转".to_string(),
             model: None,
             base_url: Some("https://relay.example".to_string()),
+            connection: Default::default(),
             api_key: "test-api-key".to_string(),
             upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
             responses_options: None,

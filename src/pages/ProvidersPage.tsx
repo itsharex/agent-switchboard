@@ -8,12 +8,12 @@ import type {
   UsageQuery,
 } from "../api/client";
 import type { ProviderView } from "../app/navigation";
-import { Button } from "../components/Button";
 import { PreviewInspector } from "../components/PreviewInspector";
 import { ProviderEditor } from "../components/ProviderEditor";
 import { ProviderList } from "../components/ProviderList";
 import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
 import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
+import { ModuleHeader } from "../components/WorkspaceHeader";
 import type { ProviderEditorSession } from "../app/useProviders";
 
 interface ProvidersPageProps {
@@ -63,8 +63,6 @@ interface ProvidersPageProps {
   onTogglePreview: (profile: ProviderProfile) => void;
   onEdit: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
-  onRequestSwitch: () => void;
-  onCancelPreview: () => void;
 }
 
 function ProviderEditView(props: ProvidersPageProps) {
@@ -101,27 +99,11 @@ function ProviderEditView(props: ProvidersPageProps) {
 
 function ProviderPreview(props: ProvidersPageProps) {
   if (!props.preview) return null;
+  // Read-only what-if (2026-09-12 user directive): the preview shows what a
+  // switch would write; the write itself is confirmed in the 启用 sheet.
   return (
     <section className="asb-preview-inline" aria-label="变更预览">
-      <div className="asb-panel-heading">
-        <h3 className="asb-section-title">变更预览</h3>
-        <div className="asb-panel-actions">
-          <Button
-            variant="secondary"
-            disabled={props.busy}
-            onClick={props.onCancelPreview}
-          >
-            取消
-          </Button>
-          <Button
-            variant="primary"
-            disabled={props.busy}
-            onClick={props.onRequestSwitch}
-          >
-            确认切换
-          </Button>
-        </div>
-      </div>
+      <ModuleHeader title="变更预览" />
       <PreviewInspector
         filePreview={props.preview.file}
         userConfigModel={props.userConfigModel}
@@ -186,6 +168,8 @@ export function ProvidersPage(props: ProvidersPageProps) {
             providerName={usageProfile.name}
             value={usageProfile.usageQuery ?? null}
             apiKey={usageProfile.apiKey}
+            authentication={usageProfile.authentication}
+            connection={usageProfile.connection}
             baseUrl={usageProfile.baseUrl}
             upstreamProtocol={usageProfile.upstreamProtocol}
             busy={props.busy}

@@ -77,6 +77,8 @@ pub enum UpstreamProtocol {
     ChatCompletions,
     /// Anthropic Messages (`/v1/messages`).
     AnthropicMessages,
+    /// Google generateContent, available only through the Claude bridge.
+    GeminiGenerateContent,
 }
 
 impl UpstreamProtocol {
@@ -89,13 +91,20 @@ impl UpstreamProtocol {
         }
     }
 
-    /// The authorization header format required by this upstream protocol.
-    /// This is the only owner of provider credential delivery.
+    /// Default credential delivery when a provider does not select an override.
     pub fn authentication_scheme(self) -> AuthenticationScheme {
         match self {
             Self::AnthropicMessages => AuthenticationScheme::XApiKey,
+            Self::GeminiGenerateContent => AuthenticationScheme::XGoogApiKey,
             Self::Responses | Self::ChatCompletions => AuthenticationScheme::Bearer,
         }
+    }
+
+    pub fn resolve_authentication(
+        self,
+        selected: Option<AuthenticationScheme>,
+    ) -> AuthenticationScheme {
+        selected.unwrap_or_else(|| self.authentication_scheme())
     }
 
     pub fn label(self) -> &'static str {
@@ -103,18 +112,20 @@ impl UpstreamProtocol {
             Self::Responses => "OpenAI Responses",
             Self::ChatCompletions => "Chat Completions",
             Self::AnthropicMessages => "Anthropic Messages",
+            Self::GeminiGenerateContent => "Gemini Native",
         }
     }
 }
 
-/// The authorization header format required by an upstream protocol.
-///
-/// This is derived at execution time and is never a provider-profile field.
-/// The local gateway has its own fixed Bearer capability-token contract.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Upstream credential delivery, independent from the body protocol.
+/// The local gateway keeps its separate Bearer capability-token contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum AuthenticationScheme {
     /// `Authorization: Bearer <key>`.
     Bearer,
     /// `x-api-key: <key>`.
     XApiKey,
+    /// `x-goog-api-key: <key>`.
+    XGoogApiKey,
 }

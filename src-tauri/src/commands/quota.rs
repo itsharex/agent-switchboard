@@ -26,6 +26,15 @@ pub async fn query_codex_official_quota(
         }
         let auth_path = LocalState::codex_auth_path()
             .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
+        let selection = crate::codex_auth::binding(state.root(), &profile.id)
+            .map_err(|error| CommandError::new("codex-account-binding-invalid", error))?;
+        if selection != crate::codex_auth::contracts::AccountSelection::Native {
+            let id = match &selection { crate::codex_auth::contracts::AccountSelection::Account { id } => Some(id.as_str()), _ => None };
+            let managed = crate::codex_auth::quota(state.root(), id, &auth_path)
+                .map_err(|error| CommandError::new("codex-account-quota-unavailable", error))?;
+            if let Some(warning) = managed.warning { log::warn!("{warning}"); }
+            return Ok(managed.quota);
+        }
         let (mut quota, marker) = crate::codex_official_quota::query(&profile.id, &auth_path);
         if quota.status == asb_core::contracts::CodexOfficialQuotaStatus::Available {
             quota.last_reset = record_official_reset_read(&state, marker, &quota);

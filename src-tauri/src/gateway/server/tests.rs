@@ -1,13 +1,19 @@
 mod claude_cli;
+mod claude_accounts;
+mod claude_failover;
 mod codex_cli;
 mod codex_compact_cli;
+mod codex_failover;
+mod codex_metering;
 mod compaction;
 mod lifecycle;
+mod model_budgets;
 mod native_compaction;
 mod operations;
 mod protocol_pairs;
 mod provider_failures;
 mod query;
+mod request_overrides;
 mod route_revisions;
 mod streaming;
 mod transport_encoding;
@@ -20,8 +26,8 @@ use crate::local_state::LocalState;
 use asb_core::contracts::{
     AppKind, AuthenticationScheme, CodexCapabilities, CodexCatalogEntry, CodexChatEffortMode,
     CodexChatEffortParameter, CodexChatReasoning, CodexChatThinkingParameter, CodexEndpoint,
-    CodexModelRoute, CodexProviderDraft, CodexProviderFile, CodexUpstream, ConfigValue,
-    ProviderDraft, RouteMode, SettingValue, SwitchPlan, UpstreamProtocol,
+    CodexModelRoute, CodexProviderDraft, CodexProviderFile, CodexRouteMode, CodexUpstream,
+    ConfigValue, ProviderDraft, RouteMode, SettingValue, SwitchPlan, UpstreamProtocol,
 };
 use asb_core::ownership::default_client_settings;
 use asb_switch::io::FsIo;
@@ -74,6 +80,8 @@ pub(crate) fn sandbox_codex_file(
             name: name.to_string(),
             endpoint: CodexEndpoint(endpoint),
             api_key,
+            authentication: None,
+            connection: Default::default(),
             upstream,
             request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
             default_model: "sandbox-model".to_string(),
@@ -92,6 +100,10 @@ pub(crate) fn sandbox_codex_file(
                 ],
                 images: true,
                 compact: true,
+                display_name: None,
+                description: None,
+                base_instructions: None,
+                supports_parallel_tool_calls: None,
             }],
             model_routes: vec![CodexModelRoute {
                 client_model: "sandbox-model".to_string(),
@@ -117,14 +129,25 @@ pub(crate) fn sandbox_codex_file(
             usage_query: None,
         })
         .expect("create Codex provider");
-    state
+    let mut file = state
         .configuration()
         .find_codex_provider_file(&record.profile.id)
-        .expect("load Codex provider")
+        .expect("load Codex provider");
+    // These server fixtures exercise the loopback gateway. Production-created
+    // Responses profiles default to direct activation, so the test intent is
+    // explicit here rather than inherited from the production default.
+    file.profile.connection.custom_user_agent = Some("ASB gateway fixture".to_string());
+    file.profile.route_mode = CodexRouteMode::Gateway;
+    state
+        .configuration()
+        .update_codex_provider_file(file.clone(), &record.file_hash)
+        .expect("persist Codex gateway fixture");
+    file
 }
 
 fn codex_upstream(protocol: UpstreamProtocol) -> CodexUpstream {
     match protocol {
+        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
         UpstreamProtocol::Responses => CodexUpstream::Responses,
         UpstreamProtocol::ChatCompletions => CodexUpstream::ChatCompletions,
         UpstreamProtocol::AnthropicMessages => CodexUpstream::AnthropicMessages,
@@ -142,6 +165,7 @@ fn sandbox_profile(
     state
         .configuration()
         .create_provider(ProviderDraft {
+            authentication: None,
             parameters: asb_core::ownership::default_provider_parameters(app),
             app,
             route_mode: RouteMode::Custom,
@@ -153,6 +177,7 @@ fn sandbox_profile(
                     format!("{upstream_url}/v1")
                 },
             ),
+            connection: Default::default(),
             api_key,
             upstream_protocol: Some(upstream_protocol),
             responses_options: (Some(upstream_protocol)
@@ -244,3 +269,5 @@ fn codex_endpoint(projection: &crate::gateway::GatewayProjection) -> String {
             .expect("Codex gateway endpoint")
     )
 }
+
+mod claude_switching;

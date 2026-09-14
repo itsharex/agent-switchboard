@@ -18,12 +18,12 @@ pub(super) fn open_read_only(path: &Path) -> Result<Connection, String> {
     if !path.is_file() {
         return Err("未找到 CC Switch 数据库(需要 CC Switch 3.x 已创建数据)".to_string());
     }
-    let uri = format!(
-        "file:{}?mode=ro&immutable=1",
-        path.to_string_lossy().replace('\\', "/")
-    );
-    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI;
-    Connection::open_with_flags(&uri, flags).map_err(|error| format!("无法打开数据库: {error}"))
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| format!("无法以只读方式打开数据库: {error}"))?;
+    connection
+        .busy_timeout(std::time::Duration::from_secs(2))
+        .map_err(|error| format!("无法配置数据库只读等待: {error}"))?;
+    Ok(connection)
 }
 
 /// Reads every provider row in stable `rowid` order. The source schema owns
@@ -53,10 +53,15 @@ fn read_rows(connection: &Connection) -> Result<Vec<CcSwitchRow>, String> {
 }
 
 pub(super) fn scan_db(path: &Path) -> Result<RawScan, String> {
-    let connection = open_read_only(path)?;
+    let mut connection = open_read_only(path)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("无法读取来源快照: {error}"))?;
+    let mut rows = read_rows(&transaction)?;
+    super::claude_order::reorder(&transaction, &mut rows)?;
     let mut proposals = Vec::new();
     let mut skipped = Vec::new();
-    for row in read_rows(&connection)? {
+    for row in rows {
         match ccswitch::map_row(&row) {
             Ok(mut proposal) => {
                 if has_invalid_usage_query(&proposal) {

@@ -19,6 +19,7 @@
 //! the only writer of real client files.
 
 pub mod client_settings;
+mod codex_management;
 mod codex_providers;
 pub mod history;
 pub mod migration;
@@ -106,6 +107,8 @@ pub struct PendingProfileSave {
 }
 
 impl ConfigStore {
+    pub(crate) fn state_root(&self) -> &Path { &self.state_root }
+
     pub fn new(state_root: PathBuf) -> Self {
         Self { state_root }
     }
@@ -196,8 +199,9 @@ impl ConfigStore {
         Ok(())
     }
 
-    /// Removes every persisted provider, client setting, and history record.
-    /// The reset is the recovery path for unreadable legacy data.
+    /// Removes every persisted provider, client setting, history record, and
+    /// retired layout marker, leaving [`Self::ensure_layout`] clean. The reset
+    /// is the recovery path for store states the typed readers reject.
     pub fn reset(&self) -> Result<(), String> {
         if let Err(error) = fs::remove_dir_all(self.configuration_dir()) {
             if error.kind() != std::io::ErrorKind::NotFound {
@@ -207,6 +211,11 @@ impl ConfigStore {
         if let Err(error) = fs::remove_file(self.legacy_store_path()) {
             if error.kind() != std::io::ErrorKind::NotFound {
                 return Err("无法删除旧版配置数据".to_string());
+            }
+        }
+        if let Err(error) = fs::remove_file(migration::journal_path(self)) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                return Err("无法删除旧版迁移记录".to_string());
             }
         }
         Ok(())
@@ -287,6 +296,31 @@ mod tests {
         let bytes = b"model_reasoning_effort: high";
         assert_eq!(content_revision(bytes), content_revision(bytes));
         assert_ne!(content_revision(bytes), content_revision(b"other"));
+    }
+
+    #[test]
+    fn reset_clears_every_layout_rejection_marker() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let store = ConfigStore::new(directory.path().join("state"));
+        fs::create_dir_all(store.configuration_dir().join("common")).expect("legacy common dir");
+        fs::write(
+            store.configuration_dir().join("client-settings"),
+            b"not a directory",
+        )
+        .expect("corrupt client-settings file");
+        fs::write(migration::journal_path(&store), b"{}").expect("retired migration journal");
+        fs::write(store.legacy_store_path(), b"{}").expect("legacy store file");
+
+        assert_eq!(
+            store
+                .ensure_layout()
+                .expect_err("markers reject the layout"),
+            ProfileStoreError::Unsupported
+        );
+
+        store.reset().expect("reset");
+
+        store.ensure_layout().expect("layout is clean after reset");
     }
 
     #[test]

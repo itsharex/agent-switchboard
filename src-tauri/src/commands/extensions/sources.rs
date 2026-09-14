@@ -7,7 +7,7 @@ use std::fs;
 use asb_core::contracts::AppKind;
 use asb_core::extensions::contracts::{
     ExtensionDefinition, ExtensionKind, ExtensionPayload, ObservedOrigin, SkillDefinition,
-    SourceRef, EXTENSIONS_SCHEMA_VERSION,
+    SkillManifest, SourceRef, EXTENSIONS_SCHEMA_VERSION,
 };
 use asb_core::extensions::mcp::{
     import_claude_project_private_server, import_claude_server, import_codex_server,
@@ -26,7 +26,7 @@ use crate::extensions::store::ExtensionStore;
 #[serde(rename_all = "camelCase")]
 pub struct SkillCandidateDto {
     digest: String,
-    name: String,
+    pub(super) name: String,
     description: Option<String>,
     file_count: usize,
     diagnostics: Vec<String>,
@@ -37,16 +37,49 @@ pub(super) fn candidate_dto(candidate: &SkillCandidate) -> SkillCandidateDto {
         digest: candidate.content_digest.clone(),
         name: candidate.name.clone(),
         description: candidate.description.clone(),
-        file_count: candidate.entries.len(),
+        file_count: candidate
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == asb_core::extensions::validate::ContentEntryKind::File)
+            .count(),
         diagnostics: candidate.diagnostics.clone(),
     }
 }
 
-pub(super) fn cache_candidates(list: Vec<SkillCandidate>) {
+/// A digest cannot select between two origins. Reject ambiguous source
+/// scans before inserting anything, and never replace a cached provenance.
+pub(super) fn cache_candidates(list: Vec<SkillCandidate>) -> Result<(), CommandError> {
     let mut cache = candidates().lock().expect("candidates");
+    let mut staged = std::collections::BTreeMap::<String, SkillCandidate>::new();
     for candidate in list {
-        cache.insert(candidate.content_digest.clone(), candidate);
+        if let Some(previous) = cache
+            .get(&candidate.content_digest)
+            .or_else(|| staged.get(&candidate.content_digest))
+        {
+            if previous.source_identity != candidate.source_identity
+                || previous.subpath != candidate.subpath
+                || previous.ref_name != candidate.ref_name
+            {
+                return Err(CommandError::new("candidate-source-conflict",
+                    "Identical content is already cached from another source; the existing source was retained. Import that candidate or restart the app before choosing a different source."));
+            }
+        }
+        staged
+            .entry(candidate.content_digest.clone())
+            .or_insert(candidate);
     }
+    for (digest, candidate) in staged {
+        cache.entry(digest).or_insert(candidate);
+    }
+    Ok(())
+}
+
+pub(super) fn detailed_source_error(error: sources::SourceError) -> CommandError {
+    let code = match &error {
+        sources::SourceError::Unreachable(_) => "source-unreachable",
+        sources::SourceError::Rejected(_) => "source-rejected",
+    };
+    CommandError::new(code, error.to_string())
 }
 
 #[tauri::command]
@@ -59,7 +92,7 @@ pub async fn scan_local_skill_source(
         let scanned =
             sources::scan_local_source(std::path::Path::new(&root), None).map_err(source_error)?;
         let dtos: Vec<SkillCandidateDto> = scanned.iter().map(candidate_dto).collect();
-        cache_candidates(scanned);
+        cache_candidates(scanned)?;
         Ok(dtos)
     })
     .await
@@ -73,13 +106,22 @@ pub async fn resolve_skill_source(
 ) -> Result<Vec<SkillCandidateDto>, CommandError> {
     blocking(move || {
         let fetch: sources::HttpFetch = &sources::http_fetch;
-        let commit =
-            sources::resolve_github_commit(&repo, ref_name.as_deref().unwrap_or("HEAD"), &fetch)
-                .map_err(source_error)?;
-        let candidate = sources::fetch_github_subtree(&repo, &commit, &subpath, &fetch)
+        let scanned = sources::resolve_github_source(&repo, &subpath, ref_name.as_deref(), fetch)
             .map_err(source_error)?;
-        let dtos: Vec<SkillCandidateDto> = std::iter::once(&candidate).map(candidate_dto).collect();
-        cache_candidates(vec![candidate]);
+        let dtos: Vec<SkillCandidateDto> = scanned.iter().map(candidate_dto).collect();
+        cache_candidates(scanned)?;
+        Ok(dtos)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn scan_skill_zip(path: String) -> Result<Vec<SkillCandidateDto>, CommandError> {
+    blocking(move || {
+        let scanned =
+            sources::scan_zip_source(std::path::Path::new(&path)).map_err(detailed_source_error)?;
+        let dtos = scanned.iter().map(candidate_dto).collect();
+        cache_candidates(scanned)?;
         Ok(dtos)
     })
     .await
@@ -99,23 +141,30 @@ pub(super) fn import_cached_skill_candidate(
         .get(digest)
         .cloned()
         .ok_or_else(|| CommandError::new("candidate-expired", "候选内容已过期；请重新扫描来源"))?;
-    let manifest_text = candidate
-        .entries
-        .iter()
-        .find(|entry| entry.relative_path == "SKILL.md")
-        .map(|entry| String::from_utf8_lossy(&entry.bytes).to_string())
-        .unwrap_or_default();
-    let manifest = match asb_core::extensions::skill::extract_manifest(&manifest_text) {
-        asb_core::extensions::skill::ManifestExtraction::Parsed(manifest) => manifest,
-        _ => {
-            return Err(CommandError::new(
-                "source-rejected",
-                "候选内容缺少可解析的 SKILL.md frontmatter",
-            ))
-        }
-    };
+    import_candidate_content(store, &candidate, name, host_scoped)
+}
+
+fn import_candidate_content(
+    store: &ExtensionStore,
+    candidate: &SkillCandidate,
+    name: String,
+    host_scoped: Option<AppKind>,
+) -> Result<ExtensionMutationDto, CommandError> {
+    let manifest = candidate_manifest(candidate)?;
     let compatibility = asb_core::extensions::skill::claude_compatibility_notes(&manifest);
+    if let Some(existing) = store
+        .list_definitions()
+        .map_err(store_error)?
+        .into_iter()
+        .find(|definition| {
+            matches!(&definition.payload, ExtensionPayload::Skill(skill)
+                if skill.content_digest == candidate.content_digest && skill.host_scoped == host_scoped)
+        })
+    {
+        return Ok(extension_mutation(&existing));
+    }
     let definition = ExtensionDefinition {
+        mcp_metadata: None,
         schema_version: EXTENSIONS_SCHEMA_VERSION,
         id: new_id("ext"),
         name,
@@ -128,7 +177,7 @@ pub(super) fn import_cached_skill_candidate(
             source: Some(SourceRef {
                 source_id: candidate.source_identity.clone(),
                 subpath: candidate.subpath.clone(),
-                ref_name: None,
+                ref_name: candidate.ref_name.clone(),
                 resolved_commit: candidate.resolved_commit.clone(),
             }),
             host_scoped,
@@ -147,6 +196,30 @@ pub(super) fn import_cached_skill_candidate(
         .map_err(store_error)?;
     store.create_definition(&definition).map_err(store_error)?;
     Ok(extension_mutation(&definition))
+}
+
+fn candidate_manifest(candidate: &SkillCandidate) -> Result<SkillManifest, CommandError> {
+    if !candidate.diagnostics.is_empty() {
+        return Err(CommandError::new(
+            "source-rejected",
+            candidate.diagnostics.join("；"),
+        ));
+    }
+    let text = candidate
+        .entries
+        .iter()
+        .find(|entry| entry.relative_path == "SKILL.md")
+        .and_then(|entry| std::str::from_utf8(&entry.bytes).ok())
+        .ok_or_else(|| {
+            CommandError::new("source-rejected", "候选内容缺少 UTF-8 格式的 SKILL.md")
+        })?;
+    match asb_core::extensions::skill::extract_manifest(text) {
+        asb_core::extensions::skill::ManifestExtraction::Parsed(manifest) => Ok(manifest),
+        _ => Err(CommandError::new(
+            "source-rejected",
+            "候选内容缺少可解析的 SKILL.md frontmatter",
+        )),
+    }
 }
 
 #[tauri::command]
@@ -212,15 +285,9 @@ pub async fn import_discovered_skill(
                 )
             })?
             .clone();
-        cache_candidates(scanned);
         let state = state(&app)?;
         let store = extension_store(&state);
-        import_cached_skill_candidate(
-            &store,
-            &candidate.content_digest,
-            observed.name,
-            Some(observed.client),
-        )
+        import_candidate_content(&store, &candidate, observed.name, Some(observed.client))
     })
     .await
 }
@@ -256,22 +323,8 @@ pub async fn import_discovered_mcp(
                 "该 MCP 服务已由扩展库管理，无需再次导入",
             ));
         }
-        let document = fs::read(&observed.path).map_err(|_| {
-            CommandError::new(
-                "observation-stale",
-                "发现到的 MCP 配置已无法读取；请重新扫描并确认",
-            )
-        })?;
-        let document_digest = sha_hex(&document);
-        if cached.document_digest.as_deref() != Some(document_digest.as_str()) {
-            return Err(CommandError::new(
-                "observation-stale",
-                "该 MCP 配置已在扫描后变化；请重新扫描并确认",
-            ));
-        }
-        let document = String::from_utf8(document).map_err(|_| {
-            CommandError::new("source-rejected", "MCP 配置不是有效文本，不能安全导入")
-        })?;
+        let document =
+            read_unchanged_mcp_document(&observed.path, cached.document_digest.as_deref())?;
         let discovery_paths = DiscoveredPaths::from_env()
             .map_err(|error| CommandError::new("app-state-unavailable", error))?;
         let claude_user_document = crate::extensions::paths::claude_user_json_path(
@@ -303,6 +356,7 @@ pub async fn import_discovered_mcp(
             return Ok(extension_mutation(&existing));
         }
         let definition = ExtensionDefinition {
+            mcp_metadata: None,
             schema_version: EXTENSIONS_SCHEMA_VERSION,
             id: new_id("ext"),
             name: observed.name,
@@ -318,3 +372,81 @@ pub async fn import_discovered_mcp(
     })
     .await
 }
+
+fn read_unchanged_mcp_document(
+    path: &str,
+    expected_digest: Option<&str>,
+) -> Result<String, CommandError> {
+    let document = fs::read(path).map_err(|_| {
+        CommandError::new(
+            "observation-stale",
+            "发现到的 MCP 配置已无法读取；请重新扫描并确认",
+        )
+    })?;
+    let digest = sha_hex(&document);
+    if expected_digest != Some(digest.as_str()) {
+        return Err(CommandError::new(
+            "observation-stale",
+            "该 MCP 配置已在扫描后变化；请重新扫描并确认",
+        ));
+    }
+    String::from_utf8(document)
+        .map_err(|_| CommandError::new("source-rejected", "MCP 配置不是有效文本，不能安全导入"))
+}
+
+#[cfg(test)]
+mod source_tests {
+    use super::*;
+
+    #[test]
+    fn candidate_import_preserves_source_ref_and_reuses_immutable_library_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("source");
+        fs::create_dir(&root).unwrap();
+        let name = format!("source-{}", uuid::Uuid::new_v4());
+        let bytes = format!("---\nname: {name}\ndescription: Source import test\n---\n");
+        fs::write(root.join("SKILL.md"), &bytes).unwrap();
+        let mut candidate = sources::scan_local_source(&root, None).unwrap().remove(0);
+        candidate.source_identity = "org/repo".into();
+        candidate.subpath = "skills/helper".into();
+        candidate.ref_name = Some("feature/skills".into());
+        candidate.resolved_commit = Some("0123456789abcdef0123456789abcdef01234567".into());
+        let digest = candidate.content_digest.clone();
+        cache_candidates(vec![candidate.clone()]).unwrap();
+        fs::write(root.join("SKILL.md"), "changed after scan").unwrap();
+        let store = ExtensionStore::from_root(temp.path().join("library"));
+        let first = import_cached_skill_candidate(&store, &digest, name.clone(), None).unwrap();
+        let second = import_cached_skill_candidate(&store, &digest, name, None).unwrap();
+        assert_eq!(first.id, second.id);
+        let definitions = store.list_definitions().unwrap();
+        assert_eq!(definitions.len(), 1);
+        let ExtensionPayload::Skill(skill) = &definitions[0].payload else {
+            panic!("not a Skill")
+        };
+        let source = skill.source.as_ref().unwrap();
+        assert_eq!(source.source_id, "org/repo");
+        assert_eq!(source.subpath, "skills/helper");
+        assert_eq!(source.ref_name.as_deref(), Some("feature/skills"));
+        assert_eq!(source.resolved_commit, candidate.resolved_commit);
+        let stored = store.load_skill_version(&first.id, &digest).unwrap();
+        assert_eq!(stored, candidate.entries);
+    }
+
+    #[test]
+    fn malformed_candidate_cannot_be_imported_through_the_command_boundary() {
+        let temp = tempfile::tempdir().unwrap();
+        let content = format!("---\ndescription: {}\n---\n", uuid::Uuid::new_v4());
+        fs::write(temp.path().join("SKILL.md"), content).unwrap();
+        let candidate = sources::scan_local_source(temp.path(), None)
+            .unwrap()
+            .remove(0);
+        let digest = candidate.content_digest.clone();
+        cache_candidates(vec![candidate]).unwrap();
+        let store = ExtensionStore::from_root(temp.path().join("library"));
+        assert!(import_cached_skill_candidate(&store, &digest, "invalid".into(), None).is_err());
+        assert!(!temp.path().join("library").exists());
+    }
+}
+
+#[cfg(test)]
+mod cache_tests;

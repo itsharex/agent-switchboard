@@ -2,6 +2,7 @@ import type { CcSwitchImportOutcome, CcSwitchScan, CcSwitchScanItem } from "../.
 import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { Table, type TableColumn } from "../../components/Table";
+import { ModuleHeader } from "../../components/WorkspaceHeader";
 import { SearchIcon } from "../../components/icons";
 import { clientName } from "../../lib/client-name";
 
@@ -92,10 +93,12 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
   const selectedCount = rows.filter(({ item }) => item && !item.existing && props.selected[item.key]).length;
   return (
     <section className="asb-panel" aria-label="从 CC Switch 导入">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">CC Switch</h2>
-        <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>扫描 CC Switch（只读）</Button>
-      </div>
+      <ModuleHeader
+        title="CC Switch"
+        primaryActions={
+          <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>扫描 CC Switch（只读）</Button>
+        }
+      />
       {props.scan ? <div className="asb-ccscan">
         {rows.length === 0 ? (
           <div className="asb-empty-state">

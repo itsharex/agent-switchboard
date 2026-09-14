@@ -1,9 +1,16 @@
 mod app_paths;
 mod ccswitch_source;
 mod cloud_backup;
+mod claude_auth;
+mod claude_prompts;
 mod codex_official_quota;
+mod codex_auth;
+mod codex_prompts;
+mod codex_common;
+mod codex_metering;
 mod codex_reset;
 mod commands;
+mod command_registry;
 mod config_store;
 #[cfg(debug_assertions)]
 mod dev_api;
@@ -23,6 +30,7 @@ mod session_manager;
 #[cfg(test)]
 mod test_client_paths;
 mod tray;
+mod upstream_overrides;
 mod usage_cache;
 mod usage_history;
 mod usage_query;
@@ -140,14 +148,22 @@ pub fn run() {
             // The gateway controller always exists; a failed port bind or an
             // unusable state file becomes a visible runtime state instead of
             // refusing the window.
-            app.manage(gateway::GatewayController::start(&local));
+            app.manage(gateway::GatewayController::start_with_write_lock(
+                &local,
+                write_gate.shared(),
+            ));
             app.manage(gateway::PortChangePreparations::default());
             app.manage(commands::switching::ProfileSavePreparations::default());
             app.manage(commands::switching::CodexProfileSavePreparations::default());
+            app.manage(commands::switching::CodexPolicyPreparations::default());
             app.manage(provider_request::ProviderRequests::default());
             if configuration_ready {
                 commands::switching::recover_pending_profile_save(app.handle())
                     .map_err(std::io::Error::other)?;
+            }
+            if let Err(error) = commands::switching::codex_policy::recover_on_startup(
+                &local, app.state::<gateway::GatewayController>().inner()) {
+                log::error!("Codex 网关策略需要恢复，已保留原始事务：{error}");
             }
             // A malformed settings file is rejected by the typed settings
             // surface, but must never prevent the tray/window recovery shell
@@ -195,21 +211,6 @@ pub fn run() {
                 return;
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window
-                    .app_handle()
-                    .try_state::<gateway::GatewayController>()
-                    .map(|gateway| {
-                        gateway.has_gateway_dependency(
-                            &local_state::LocalState::from_app(window.app_handle())
-                                .expect("startup resolved the state directory"),
-                        )
-                    })
-                    .unwrap_or(false)
-                {
-                    api.prevent_close();
-                    let _ = window.hide();
-                    return;
-                }
                 if tray::should_absorb(window.app_handle()) {
                     api.prevent_close();
                     // A tray has already been built successfully, so hide is
@@ -224,137 +225,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            tray::tray_snapshot,
-            tray::tray_ready,
-            tray::tray_resize,
-            tray::tray_hide,
-            tray::tray_open_main,
-            tray::tray_switch,
-            tray::tray_quit,
-            commands::status::config_status,
-            commands::status::runtime_overview,
-            commands::gateway::gateway_status,
-            commands::gateway::gateway_retry_bind,
-            commands::gateway::gateway_prepare_port_change,
-            commands::gateway::gateway_commit_port_change,
-            commands::gateway::gateway_cancel_port_change,
-            commands::gateway::gateway_discard_port_change,
-            commands::list_profiles,
-            commands::list_codex_profiles,
-            commands::create_codex_profile,
-            commands::delete_codex_profile,
-            commands::reorder_codex_profiles,
-            commands::reset_profile_store,
-            commands::switching::prepare_profile_save,
-            commands::switching::commit_profile_save,
-            commands::switching::prepare_codex_profile_save,
-            commands::switching::commit_codex_profile_save,
-            commands::delete_profile,
-            commands::reorder_profiles,
-            commands::import_discovered_claude_profile,
-            commands::client_settings::get_provider_parameters_catalog,
-            commands::client_settings::get_client_settings_editor,
-            commands::client_settings::save_client_settings,
-            commands::client_settings::preview_client_settings,
-            commands::prompt_management::get_global_prompt_document,
-            commands::prompt_management::save_global_prompt_document,
-            commands::subagent_settings::get_codex_subagent_settings,
-            commands::subagent_settings::preview_codex_subagent_settings_command,
-            commands::subagent_settings::apply_codex_subagent_settings,
-            commands::switching::preview_switch,
-            commands::switching::execute_switch,
-            commands::switching::list_backups,
-            commands::runtime_log::list_runtime_logs,
-            commands::runtime_log::open_runtime_log_dir,
-            commands::switching::restore_backup,
-            commands::switching::undo_last_switch,
-            commands::switching::backup_diff,
-            commands::switching::open_backup_dir,
-            commands::cloud_backup::get_cloud_backup_settings,
-            commands::cloud_backup::set_cloud_backup_settings,
-            commands::cloud_backup::cloud_backup_setup_sql,
-            commands::cloud_backup::test_cloud_backup_connection,
-            commands::cloud_backup::upload_cloud_backup,
-            commands::cloud_backup::restore_cloud_backup,
-            commands::probe_endpoint,
-            commands::resolve_provider_endpoints,
-            commands::test_usage_query,
-            commands::query_profile_usage,
-            commands::read_profile_usage,
-            commands::query_codex_official_quota,
-            commands::get_cached_codex_official_reset,
-            commands::refresh_codex_official_reset,
-            commands::official_login::official_login_start,
-            commands::official_login::official_login_poll,
-            commands::official_login::official_login_cancel,
-            commands::fetch_provider_models,
-            commands::provider_request::prepare_provider_request,
-            commands::provider_request::execute_provider_request,
-            commands::provider_request::cancel_provider_request,
-            commands::provider_request::fetch_provider_request_models,
-            commands::get_cached_codex_reset_status,
-            commands::check_codex_reset_status,
-            commands::status::lock_status,
-            commands::status::recover_stale_lock,
-            commands::discover_local,
-            commands::discover_cached,
-            commands::model_usage::get_model_usage_report,
-            commands::usage_history::get_usage_history,
-            commands::list_sessions,
-            commands::get_session_messages,
-            commands::resume_session,
-            commands::scan_ccswitch,
-            commands::import_ccswitch_claude_profiles,
-            commands::window::window_minimize,
-            commands::window::window_toggle_maximize,
-            commands::window::window_is_maximized,
-            commands::window::window_close,
-            commands::window::restart_application,
-            commands::window::pick_directory,
-            distribution::update_channel,
-            commands::get_app_settings,
-            commands::set_app_settings,
-            commands::repair_app_settings,
-            commands::list_system_fonts,
-            commands::extensions::list_extensions,
-            commands::extensions::recover_extension_transactions,
-            commands::extensions::discover_extensions,
-            commands::extensions::save_extension,
-            commands::extensions::get_mcp_edit_view,
-            commands::extensions::update_mcp_definition,
-            commands::extensions::delete_extension,
-            commands::extensions::set_binding_lock,
-            commands::extensions::register_project,
-            commands::extensions::scan_local_skill_source,
-            commands::extensions::resolve_skill_source,
-            commands::extensions::import_skill_candidate,
-            commands::extensions::import_discovered_skill,
-            commands::extensions::import_discovered_mcp,
-            commands::extensions::preview_discovered_takeover,
-            commands::extensions::takeover_discovered_extension,
-            commands::extensions::export_extension_portable,
-            commands::extensions::import_extension_portable,
-            commands::extensions::check_skill_updates,
-            commands::extensions::update_skill_definition,
-            commands::extensions::create_local_skill,
-            commands::extensions::fork_local_skill,
-            commands::extensions::get_skill_editor,
-            commands::extensions::update_skill_files,
-            commands::extensions::list_skill_versions,
-            commands::extensions::update_skill_dependencies,
-            commands::extensions::put_extension_secret,
-            commands::extensions::prepare_extension_plan,
-            commands::extensions::prepare_extension_repair,
-            commands::extensions::apply_extension_plan,
-            commands::extensions::get_extension_operation,
-            commands::extensions::prepare_extension_restore,
-            commands::extensions::check_mcp_connection,
-            commands::extensions::get_mcp_check,
-            commands::extensions::cancel_mcp_check,
-            #[cfg(debug_assertions)]
-            commands::window::toggle_devtools,
-        ])
+        .invoke_handler(crate::command_registry::handler!())
         .build(context)
         .expect("Agent Switchboard 启动失败")
         .run(|app, event| {
@@ -365,28 +236,24 @@ pub fn run() {
                 if code == Some(tauri::RESTART_EXIT_CODE) {
                     return;
                 }
-                if app
-                    .try_state::<gateway::GatewayController>()
-                    .map(|gateway| {
-                        gateway.has_gateway_dependency(
-                            &local_state::LocalState::from_app(&app)
-                                .expect("startup resolved the state directory"),
-                        )
-                    })
-                    .unwrap_or(false)
-                {
-                    api.prevent_exit();
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.hide();
-                    }
-                    return;
-                }
                 // Explicit quit and the configured close-to-exit action end
                 // the process; implicit exits remain recoverable via the tray.
                 if !tray::take_explicit_exit() && tray::should_absorb(app) {
                     api.prevent_exit();
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.hide();
+                    }
+                } else if let Some(gateway) = app.try_state::<gateway::GatewayController>() {
+                    if let Err(error) = commands::switching::claude_gateway::restore_on_exit(app) {
+                        api.prevent_exit();
+                        log::error!("Claude 接管恢复失败，已取消退出：{error}");
+                        tray::recover_main(app, "Claude 接管恢复失败");
+                        use tauri_plugin_dialog::DialogExt;
+                        app.dialog().message(format!("Claude 接管恢复失败，已取消退出。{error}\n请在切换历史中处理恢复后再退出。"))
+                            .title("Agent Switchboard")
+                            .kind(tauri_plugin_dialog::MessageDialogKind::Error).show(|_| {});
+                    } else {
+                        gateway.shutdown();
                     }
                 }
             }

@@ -183,7 +183,7 @@ fn base64_length(length: usize) -> Result<usize, TransformError> {
 fn target_limit(protocol: UpstreamProtocol) -> usize {
     match protocol {
         // Chat Completions has the smallest portable function-name bound.
-        UpstreamProtocol::ChatCompletions => 64,
+        UpstreamProtocol::ChatCompletions | UpstreamProtocol::GeminiGenerateContent => 64,
         UpstreamProtocol::Responses | UpstreamProtocol::AnthropicMessages => 128,
     }
 }

@@ -5,6 +5,7 @@ import { PROTOCOL_NOTES } from "./draft";
 
 interface Props {
   baseUrl: string | null;
+  required?: boolean;
   protocol: UpstreamProtocol | null;
   endpoints: ProviderEndpoints | null;
   endpointError: string | null;
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export function ProviderEndpointField({
-  baseUrl, protocol, endpoints, endpointError, resolvingEndpoint, busy, onChange,
+  baseUrl, protocol, endpoints, endpointError, resolvingEndpoint, busy, onChange, required = true,
 }: Props) {
   const urlId = useId();
   const helpId = `${urlId}-help`;
@@ -22,7 +23,7 @@ export function ProviderEndpointField({
   return (
     <div className="asb-field asb-provider-endpoint">
       <label htmlFor={urlId}>服务地址</label>
-      <Input id={urlId} code type="url" required value={baseUrl ?? ""}
+      <Input id={urlId} code type="url" required={required} value={baseUrl ?? ""}
         disabled={busy} aria-describedby={`${helpId} ${resultId}`}
         aria-invalid={endpointError ? true : undefined}
         onChange={(event) => onChange(event.target.value)} />

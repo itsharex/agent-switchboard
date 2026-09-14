@@ -8,17 +8,20 @@ import {
   applyExtensionPlan,
   checkMcpConnection,
   checkSkillUpdates,
+  deleteExtension,
   discoverExtensions,
   exportExtensionPortable,
   getGlobalPromptDocument,
   getMcpCheck,
   getMcpEditView,
   importExtensionPortable,
+  importDiscoveredMcp,
+  importDiscoveredSkill,
   listExtensions,
   prepareExtensionPlan,
   prepareExtensionRepair,
-  previewDiscoveredTakeover,
   recoverExtensionTransactions,
+  saveExtension,
   saveGlobalPromptDocument,
   setBindingLock,
   takeoverDiscoveredExtension,
@@ -48,11 +51,14 @@ vi.mock("../api/client", async (importOriginal) => {
     getMcpEditView: vi.fn(),
     updateMcpDefinition: vi.fn(),
     setBindingLock: vi.fn(),
+    deleteExtension: vi.fn(),
+    saveExtension: vi.fn(),
     discoverExtensions: vi.fn(),
-    previewDiscoveredTakeover: vi.fn(),
     takeoverDiscoveredExtension: vi.fn(),
     exportExtensionPortable: vi.fn(),
     importExtensionPortable: vi.fn(),
+    importDiscoveredMcp: vi.fn(),
+    importDiscoveredSkill: vi.fn(),
     getGlobalPromptDocument: vi.fn(),
     saveGlobalPromptDocument: vi.fn(),
   };
@@ -70,11 +76,14 @@ export const updateSkillDefinitionMock = vi.mocked(updateSkillDefinition);
 export const getMcpEditViewMock = vi.mocked(getMcpEditView);
 export const updateMcpDefinitionMock = vi.mocked(updateMcpDefinition);
 export const setBindingLockMock = vi.mocked(setBindingLock);
+export const deleteExtensionMock = vi.mocked(deleteExtension);
+export const saveExtensionMock = vi.mocked(saveExtension);
 export const discoverExtensionsMock = vi.mocked(discoverExtensions);
-export const previewDiscoveredTakeoverMock = vi.mocked(previewDiscoveredTakeover);
 export const takeoverDiscoveredExtensionMock = vi.mocked(takeoverDiscoveredExtension);
 export const exportExtensionPortableMock = vi.mocked(exportExtensionPortable);
 export const importExtensionPortableMock = vi.mocked(importExtensionPortable);
+export const importDiscoveredMcpMock = vi.mocked(importDiscoveredMcp);
+export const importDiscoveredSkillMock = vi.mocked(importDiscoveredSkill);
 export const getGlobalPromptDocumentMock = vi.mocked(getGlobalPromptDocument);
 export const saveGlobalPromptDocumentMock = vi.mocked(saveGlobalPromptDocument);
 
@@ -194,6 +203,24 @@ export const planView: ExtensionPlanView = {
           warnings: ["示例警告：将新增服务条目"],
           changes: [{ pointer: "mcp_servers.docs", before: null, after: '{"command":"npx"}' }],
           files: [],
+          writesSensitiveConnectionData: false,
+        },
+      ],
+    },
+  ],
+};
+
+/** A plan that writes sensitive connection data — the one write shape that
+ * still stops for an explicit confirmation before anything is applied. */
+export const sensitivePlanView: ExtensionPlanView = {
+  ...planView,
+  planId: "plan-sensitive",
+  operations: [
+    {
+      ...planView.operations[0],
+      targets: [
+        {
+          ...planView.operations[0].targets[0],
           writesSensitiveConnectionData: true,
         },
       ],
@@ -240,7 +267,19 @@ beforeEach(() => {
   getMcpEditViewMock.mockReset();
   updateMcpDefinitionMock.mockReset();
   setBindingLockMock.mockReset();
+  deleteExtensionMock.mockReset();
+  saveExtensionMock.mockReset();
+  discoverExtensionsMock.mockReset();
+  prepareExtensionRepairMock.mockReset();
+  takeoverDiscoveredExtensionMock.mockReset();
+  importDiscoveredMcpMock.mockReset();
+  importDiscoveredSkillMock.mockReset();
+  discoverExtensionsMock.mockResolvedValue({ scanId: "scan-empty", scannedAt: "2026-09-12T00:00:00Z", observations: [], diagnostics: [] });
   getGlobalPromptDocumentMock.mockReset();
   saveGlobalPromptDocumentMock.mockReset();
   listExtensionsMock.mockResolvedValue(workspace);
+  // The immediate-apply pipeline prepares and applies back-to-back; a plain
+  // success outcome is the default for every write test.
+  applyExtensionPlanMock.mockResolvedValue({ record: null, rejected: null, rolledBack: false });
+  deleteExtensionMock.mockResolvedValue(undefined);
 });

@@ -1,10 +1,11 @@
-import type { ClaudeImportProposal, DiscoveredFile, DiscoveryReport } from "../../api/client";
+import type { AppKind, ClaudeImportProposal, CodexImportProposal, DiscoveredFile, DiscoveryReport } from "../../api/client";
 import { Button } from "../../components/Button";
+import { ModuleHeader } from "../../components/WorkspaceHeader";
 import { SearchIcon } from "../../components/icons";
 import { clientName } from "../../lib/client-name";
 
 interface LocalConfigImportProps {
-  app: "claude";
+  app: AppKind;
   discovery: DiscoveryReport | null;
   busy: boolean;
   onScan: () => void;
@@ -44,7 +45,7 @@ function LocalRouteFacts({ file }: { file: DiscoveredFile }) {
 
 function LocalConfigCard({ file, proposal, busy, onImport }: {
   file: DiscoveredFile;
-  proposal: ClaudeImportProposal | undefined;
+  proposal: ClaudeImportProposal | CodexImportProposal | undefined;
   busy: boolean;
   onImport: () => void;
 }) {
@@ -77,12 +78,14 @@ function LocalConfigCard({ file, proposal, busy, onImport }: {
 export function LocalConfigImport({ app, discovery, busy, onScan, onImport }: LocalConfigImportProps) {
   return (
     <section className="asb-panel" aria-label="从本机配置导入">
-      <div className="asb-panel-heading">
-        <h2 className="asb-panel-title">本机配置</h2>
-        <Button variant="secondary" disabled={busy} onClick={onScan}>{discovery ? "刷新配置" : "扫描配置"}</Button>
-      </div>
+      <ModuleHeader
+        title="本机配置"
+        primaryActions={
+          <Button variant="secondary" disabled={busy} onClick={onScan}>{discovery ? "刷新配置" : "扫描配置"}</Button>
+        }
+      />
       {discovery ? <LocalConfigCard file={discovery[app]} busy={busy} onImport={onImport}
-        proposal={app === "claude" ? discovery.claudeImportProposals[0] : undefined} />
+        proposal={app === "claude" ? discovery.claudeImportProposals[0] : discovery.codexImportProposals[0]} />
         : (
           <div className="asb-empty-state">
             <span className="asb-empty-state-icon" aria-hidden="true">

@@ -9,6 +9,7 @@ const PROTOCOL_TONES: Record<UpstreamProtocol, number> = {
   responses: 1,
   chatCompletions: 2,
   anthropicMessages: 3,
+  geminiGenerateContent: 4,
 };
 
 export function GatewayTelemetry({

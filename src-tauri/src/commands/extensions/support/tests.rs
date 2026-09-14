@@ -10,6 +10,7 @@ use asb_core::extensions::edit::McpEditView;
 fn definition(payload: ExtensionPayload) -> ExtensionDefinition {
     ExtensionDefinition {
         schema_version: EXTENSIONS_SCHEMA_VERSION,
+        mcp_metadata: None,
         id: "ext-view".to_string(),
         name: "view".to_string(),
         revision: 1,

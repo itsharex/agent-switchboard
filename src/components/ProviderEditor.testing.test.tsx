@@ -43,7 +43,7 @@ it("tests an unnamed unsaved draft using its current connection without saving",
   await user.click(screen.getByRole("radio", { name: "真实请求" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "发送请求" })).toBeEnabled());
   expect(commands("prepare_provider_request")).toEqual([["prepare_provider_request", { target: {
-    kind: "draft", connection: { baseUrl: "https://draft.example/v1", apiKey: "draft-test-key",
+    kind: "draft", connection: { app: "claude", baseUrl: "https://draft.example/v1", apiKey: "draft-test-key", connection: {},
       upstreamProtocol: "responses", responsesOptions: { requestMode: "standard" }, defaultModel: "draft-model" },
   } }]]);
   expect(commands("execute_provider_request")).toHaveLength(0);

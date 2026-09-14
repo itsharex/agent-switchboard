@@ -10,6 +10,7 @@ import { Button } from "./Button";
 import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
+import { ModuleHeader } from "./WorkspaceHeader";
 import { useUsageHistory } from "./use-usage-history";
 import { UsageIcon } from "./icons";
 
@@ -102,28 +103,29 @@ export function CodexOfficialResetPanel() {
 
   return (
     <section className="asb-panel asb-official-reset" aria-labelledby="codex-official-reset-heading">
-      <div className="asb-panel-heading">
-        <h2 id="codex-official-reset-heading" className="asb-panel-title">
-          Codex 官方额度重置
-        </h2>
-        <div className="asb-panel-actions">
-          {quota !== null && (
-            <span
-              className={`asb-codex-reset-read-state is-${freshness}`}
-              aria-live="polite"
+      <ModuleHeader
+        id="codex-official-reset-heading"
+        title="Codex 官方额度重置"
+        primaryActions={
+          <>
+            {quota !== null && (
+              <span
+                className={`asb-codex-reset-read-state is-${freshness}`}
+                aria-live="polite"
+              >
+                {freshness === "cached" ? "本地缓存" : "刚刚刷新"}
+              </span>
+            )}
+            <Button
+              variant="secondary"
+              disabled={loading}
+              onClick={() => void readStatus()}
             >
-              {freshness === "cached" ? "本地缓存" : "刚刚刷新"}
-            </span>
-          )}
-          <Button
-            variant="secondary"
-            disabled={loading}
-            onClick={() => void readStatus()}
-          >
-            {loading ? "读取中…" : "刷新官方额度"}
-          </Button>
-        </div>
-      </div>
+              {loading ? "读取中…" : "刷新官方额度"}
+            </Button>
+          </>
+        }
+      />
       {cacheLoading && quota === null && (
         <p className="asb-empty" role="status">正在读取本地缓存</p>
       )}

@@ -1,3 +1,4 @@
+import { usesClaudeManagedAuth } from "../../api/claude-accounts";
 import type { UpstreamProtocol } from "../../api/client";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
@@ -18,11 +19,15 @@ function ProtocolField({ editor, busy }: Props) {
           { value: "anthropicMessages", label: "Anthropic Messages (/v1/messages)" },
           { value: "chatCompletions", label: "Chat Completions (/chat/completions)" },
           { value: "responses", label: "Responses (/responses)" },
+          { value: "geminiGenerateContent", label: "Gemini Native (generateContent)" },
         ]}
         onChange={(value) => {
           const upstreamProtocol = value as UpstreamProtocol;
           setDraft((current) => ({
             ...current, upstreamProtocol,
+            authentication: upstreamProtocol === "geminiGenerateContent" && current.authentication === "xApiKey"
+              || upstreamProtocol !== "geminiGenerateContent" && current.authentication === "xGoogApiKey"
+              ? null : current.authentication,
             responsesOptions: upstreamProtocol === "responses"
               ? { requestMode: "standard" } : null,
           }));
@@ -35,7 +40,7 @@ function RouteNotice({ editor }: Pick<Props, "editor">) {
   const { draft, connection } = editor;
   return (
     <div className="asb-provider-route-note">
-      {requiresGateway(draft)
+      {draft.connection?.claudeNative ? <p className="asb-scope-note">使用 Claude 原生 {draft.connection.claudeNative.kind} SDK；认证在“Claude 本地功能”中配置，不经过本机 HTTP 网关。</p> : requiresGateway(draft)
         ? <p className="asb-scope-note asb-warn-text">{connection.gatewayRouteWarning}</p>
         : <p className="asb-scope-note">{`与 ${clientName(draft.app)} 原生协议一致，切换后客户端直连所填服务地址。`}</p>}
     </div>
@@ -49,14 +54,16 @@ export function ProviderConnectionFields({ editor, busy }: Props) {
       <h3 className="asb-section-title">连接配置</h3>
       <div className="asb-provider-section-fields">
         <div className="asb-provider-connection-choice">
-          <ProtocolField editor={editor} busy={busy} />
+          <ProtocolField editor={editor} busy={busy || !!draft.connection?.claudeNative} />
         </div>
-        <ProviderEndpointField busy={busy} baseUrl={draft.baseUrl} protocol={draft.upstreamProtocol}
+        <ProviderEndpointField busy={busy} required={!draft.connection?.claudeNative} baseUrl={draft.baseUrl} protocol={draft.upstreamProtocol}
           endpoints={connection.endpoints} endpointError={connection.endpointError}
           resolvingEndpoint={connection.resolvingEndpoint}
           onChange={(value) => setDraft((current) => ({ ...current, baseUrl: value }))} />
         <ProviderCredentialField key={`credential-${draft.app}`} busy={busy}
           value={draft.apiKey} protocol={draft.upstreamProtocol}
+          authentication={draft.authentication}
+          required={!usesClaudeManagedAuth(draft.connection) && !draft.connection?.claudeNative}
           onChange={(value) => setDraft((current) => ({ ...current, apiKey: value }))} />
         <RouteNotice editor={editor} />
       </div>

@@ -23,6 +23,8 @@ export type SettingValue =
 
 /** Complete values for one backend-owned settings catalog. */
 export interface SettingsValues {
+  /** Claude-only supplemental fields; visual preferences keep their existing owner. */
+  claudeExtra?: Record<string, unknown>;
   settings: Record<string, SettingValue>;
 }
 
@@ -93,7 +95,7 @@ export function getProviderParametersCatalog(app: AppKind): Promise<ProviderPara
   return invoke<ProviderParametersCatalog>("get_provider_parameters_catalog", { target: app });
 }
 
-/** Read-only rendering of the current draft's shared settings only. */
+/** An editable rendering of the current draft's shared settings only. */
 export interface ClientSettingsPreview {
   app: AppKind;
   target: string;
@@ -129,6 +131,18 @@ export function previewClientSettings(
   return invoke<ClientSettingsPreview>("preview_client_settings", {
     target: app,
     settings,
+  });
+}
+
+/** Parses a manually edited client fragment without reading or writing a real
+ * client file. Missing keys become automatic settings. */
+export function parseClientSettings(
+  app: AppKind,
+  content: string,
+): Promise<SettingsValues> {
+  return invoke<SettingsValues>("parse_client_settings", {
+    target: app,
+    content,
   });
 }
 

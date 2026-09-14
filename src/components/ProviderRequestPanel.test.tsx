@@ -87,7 +87,8 @@ it("opens the backend-resolved target beside connectivity and only sends on expl
   expect(screen.queryByText(/设计演示|演示结果|示例/)).not.toBeInTheDocument();
   expect(screen.queryByText(profile.apiKey)).not.toBeInTheDocument();
   expect(invokeMock.mock.calls).toEqual([["prepare_provider_request", { target: { kind: "saved", profileId: profile.id } }]]);
-  expect(select).not.toHaveBeenCalled();
+  // The test icon selects the row so its highlight follows the action (2026-09-12).
+  expect(select).toHaveBeenCalledWith("request-provider");
 
   await user.click(screen.getByRole("button", { name: "收起供应商测试" }));
   expect(trigger).toHaveFocus();
@@ -167,8 +168,10 @@ it("uses only an opaque token when listing models for an unsaved draft", async (
   const target: ProviderRequestTarget = {
     kind: "draft",
     connection: {
+      app: "claude",
       baseUrl: "https://draft-provider.example/v1",
       apiKey: "draft-only-private-key",
+      connection: {},
       upstreamProtocol: "responses",
       responsesOptions: { requestMode: "standard" },
       defaultModel: "draft-model",
@@ -182,7 +185,10 @@ it("uses only an opaque token when listing models for an unsaved draft", async (
 
   const listing = callsFor("fetch_provider_request_models");
   expect(listing).toEqual([["fetch_provider_request_models", { requestId: "request-1" }]]);
-  expect(JSON.stringify(listing)).not.toContain(target.connection.apiKey);
+  expect(target.kind).toBe("draft");
+  if (target.kind === "draft") {
+    expect(JSON.stringify(listing)).not.toContain(target.connection.apiKey);
+  }
 });
 
 it("locks the model controls while a listing is in flight and replaces the stale list only when it lands", async () => {

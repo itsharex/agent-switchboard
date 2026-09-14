@@ -14,7 +14,7 @@ mod script;
 #[cfg(test)]
 mod tests;
 
-use asb_core::contracts::{UpstreamProtocol, UsageQuery, UsageSummary};
+use asb_core::contracts::{ProviderConnectionOptions, UpstreamProtocol, UsageQuery, UsageSummary};
 use declarative::run_declarative_query;
 use script::{run_script_query, ScriptProgram};
 
@@ -33,13 +33,41 @@ pub(crate) fn validate_persisted(query: &UsageQuery) -> Result<(), String> {
 /// only in the declarative mode's selected auth header, or into the script's
 /// explicit `request` input. It is never echoed in errors or the returned
 /// summary.
+#[cfg(test)]
 pub fn run_usage_query(
     query: &UsageQuery,
     api_key: &str,
     base_url: Option<&str>,
     upstream_protocol: UpstreamProtocol,
+    authentication: Option<asb_core::AuthenticationScheme>,
 ) -> Result<UsageSummary, String> {
+    run_usage_query_with_connection(
+        query,
+        api_key,
+        base_url,
+        upstream_protocol,
+        authentication,
+        &ProviderConnectionOptions::default(),
+    )
+}
+
+/// Runs one usage query with the complete provider connection contract. The
+/// query remains metadata-owned, while endpoint, auth and request overrides
+/// follow the same rules as model discovery and gateway forwarding.
+pub fn run_usage_query_with_connection(
+    query: &UsageQuery,
+    api_key: &str,
+    base_url: Option<&str>,
+    upstream_protocol: UpstreamProtocol,
+    authentication: Option<asb_core::AuthenticationScheme>,
+    connection: &ProviderConnectionOptions,
+) -> Result<UsageSummary, String> {
+    if api_key.chars().any(char::is_control) {
+        return Err("API 密钥包含无效的请求头字符".into());
+    }
     asb_core::validate::validate_usage_query(query).map_err(|error| error.to_string())?;
+    let selected_base_url =
+        base_url.and_then(|base| connection.endpoint_candidates(base).into_iter().next());
     match query {
         UsageQuery::Declarative {
             url,
@@ -55,9 +83,13 @@ pub fn run_usage_query(
             total_path.as_deref(),
             unit.clone(),
             api_key,
-            base_url,
+            selected_base_url.as_deref(),
             upstream_protocol,
+            authentication,
+            connection,
         ),
-        UsageQuery::Script { source, .. } => run_script_query(source, api_key, base_url),
+        UsageQuery::Script { source, .. } => {
+            run_script_query(source, api_key, selected_base_url.as_deref(), connection)
+        }
     }
 }
