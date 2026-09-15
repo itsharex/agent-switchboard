@@ -17,7 +17,9 @@ fn client_request(app: AppKind) -> Value {
 
 fn upstream_response(protocol: UpstreamProtocol) -> Value {
     match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::Responses => json!({
             "id": "resp_sandbox",
             "object": "response",
@@ -60,7 +62,9 @@ fn upstream_response(protocol: UpstreamProtocol) -> Value {
 
 fn assert_upstream_request(protocol: UpstreamProtocol, body: &Value) {
     match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::Responses => {
             if let Some(input) = body["input"].as_str() {
                 assert_eq!(input, "hello through the gateway");
@@ -170,14 +174,18 @@ fn run_cross_protocol_case(
         .recv_timeout(Duration::from_secs(5))
         .expect("one upstream request");
     let expected_path = match upstream_protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::Responses => "/v1/responses",
         UpstreamProtocol::ChatCompletions => "/v1/chat/completions",
         UpstreamProtocol::AnthropicMessages => "/v1/messages",
     };
     assert_eq!(path, expected_path);
     match upstream_protocol.authentication_scheme() {
-        asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+        asb_core::AuthenticationScheme::XGoogApiKey => {
+            panic!("Google native has a separate Claude fixture")
+        }
         AuthenticationScheme::Bearer => {
             assert_eq!(authorization, Some(format!("Bearer {upstream_key}")));
             assert!(x_api_key.is_none());

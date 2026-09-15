@@ -90,6 +90,8 @@ impl RequestSpan {
         }
         let mut record = CodexRequestRecord {
             id: recorder.id,
+            origin: crate::codex_metering::CodexUsageOrigin::Proxy,
+            thread_id: None,
             at_ms: recorder.at_ms,
             billable: recorder.billable,
             profile_id: self.profile_id,

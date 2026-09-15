@@ -1,16 +1,23 @@
 mod app_paths;
 mod ccswitch_source;
-mod cloud_backup;
 mod claude_auth;
+mod claude_env_conflicts;
+mod claude_integration;
+mod claude_mcp_source;
+mod claude_native_quota;
 mod claude_prompts;
-mod codex_official_quota;
+mod claude_session_usage;
+mod claude_snippets;
+mod cloud_backup;
 mod codex_auth;
-mod codex_prompts;
 mod codex_common;
+mod codex_env_conflicts;
 mod codex_metering;
+mod codex_official_quota;
+mod codex_prompts;
 mod codex_reset;
-mod commands;
 mod command_registry;
+mod commands;
 mod config_store;
 #[cfg(debug_assertions)]
 mod dev_api;
@@ -22,6 +29,7 @@ mod local_state;
 mod model_usage;
 mod model_usage_cache;
 mod official_login;
+mod outbound_proxy;
 mod probe;
 mod provider_diagnostics;
 mod provider_request;
@@ -125,6 +133,12 @@ pub fn run() {
                 .map_err(std::io::Error::other)?;
             let local =
                 local_state::LocalState::from_app(app.handle()).map_err(std::io::Error::other)?;
+            // Outbound proxy settings gate every gateway-side HTTP client;
+            // load them before any client is built. A malformed file defaults
+            // to direct egress instead of blocking startup.
+            if let Err(error) = outbound_proxy::load(local.root()) {
+                log::warn!("出站代理设置不可用，按直连处理：{error}");
+            }
             app.manage(commands::ConfigWriteGate::default());
             let write_gate = app.state::<commands::ConfigWriteGate>().inner().clone();
             // Startup can replay a pending port change before the controller

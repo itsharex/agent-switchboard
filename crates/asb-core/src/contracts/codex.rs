@@ -485,6 +485,43 @@ impl CodexRouteSnapshot {
         })
     }
 
+    /// The official ChatGPT Codex backend as a takeover route source. Its
+    /// model names never belong to an ASB catalog: admission keeps the
+    /// client's model identity and the backend remains the capability
+    /// authority. Credentials stay in the managed-account store, never here.
+    pub fn official(provider_id: &str, endpoint: &str, revision: String) -> Result<Self, String> {
+        required(provider_id, "供应商标识")?;
+        required(endpoint, "官方端点")?;
+        required(&revision, "路由修订")?;
+        Ok(Self {
+            revision,
+            provider_id: provider_id.to_string(),
+            endpoint: CodexEndpoint(endpoint.to_string()),
+            api_key: String::new(),
+            authentication: Some(AuthenticationScheme::Bearer),
+            connection: ProviderConnectionOptions::default(),
+            upstream: CodexUpstream::Responses,
+            request_mode: ResponsesRequestMode::Standard,
+            default_model: String::new(),
+            catalog: Vec::new(),
+            model_routes: Vec::new(),
+            capabilities: CodexCapabilities {
+                responses: true,
+                compact: true,
+                models: true,
+                chat_completions: false,
+                alpha_search: true,
+                image_generation: true,
+                image_edit: true,
+                function_tools: true,
+                custom_tools: true,
+                tool_search: true,
+                reasoning: true,
+                chat_reasoning: CodexChatReasoning::Unsupported,
+            },
+        })
+    }
+
     pub fn resolve_model(&self, requested: &str) -> Result<String, String> {
         resolve_catalog_model(&self.catalog, &self.model_routes, requested)
     }

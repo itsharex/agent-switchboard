@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 
 pub use directory::{resolve_directory_skill, search_directory};
 pub use repositories::SkillRepositoryCatalog;
-pub use scan::{scan_repositories, CatalogScan};
 #[cfg(test)]
 pub use scan::RepositoryScan;
+pub use scan::{scan_repositories, CatalogScan};
 
 pub const DIRECTORY_PAGE_SIZE: usize = 20;
 pub const MAX_DIRECTORY_RESULTS: usize = 1000;

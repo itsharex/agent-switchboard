@@ -86,12 +86,6 @@
   flex: none;
 }
 
-/* The Codex provider page preserves its original action cadence and menu
-   affordance while the shared Claude workspace can use the newer spacing. */
-.asb-provider-workspace-legacy .asb-iconcluster {
-  gap: 0;
-}
-
 .asb-provider-usage {
   display: flex;
   flex-direction: column;
@@ -385,35 +379,12 @@
   transition: opacity var(--asb-motion-press) var(--asb-easing);
 }
 
-.asb-provider-workspace-legacy .asb-row-item .asb-row-activate {
-  visibility: hidden;
-  transition:
-    opacity var(--asb-motion-press) var(--asb-easing),
-    visibility 0s linear var(--asb-motion-press);
-}
-
 .asb-row-item:hover .asb-row-activate,
 :root[data-focus-source="key"] .asb-row-item:focus-within .asb-row-activate {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
   transition-delay: 0s;
-}
-
-.asb-provider-workspace-legacy .asb-row-item:hover .asb-row-activate {
-  visibility: visible;
-  transition-delay: 0s;
-}
-
-.asb-provider-workspace-legacy .asb-row-line .asb-btn-primary,
-.asb-provider-workspace-legacy .asb-row-line .asb-btn-secondary,
-.asb-provider-workspace-legacy .asb-row-line .asb-btn-icon {
-  min-height: initial;
-}
-
-.asb-provider-workspace-legacy .asb-row-line .asb-btn-icon {
-  width: var(--asb-touch-target);
-  height: var(--asb-touch-target);
 }
 
 .asb-row-item .asb-iconcluster {

@@ -53,7 +53,9 @@ pub(super) fn reply(
     };
     let body = if stream {
         match protocol {
-            asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+            asb_core::UpstreamProtocol::GeminiGenerateContent => {
+                panic!("Google native has a separate Claude fixture")
+            }
             UpstreamProtocol::ChatCompletions => chat_stream(&turn),
             UpstreamProtocol::Responses => responses_stream(&turn),
             UpstreamProtocol::AnthropicMessages => anthropic_stream(&turn),
@@ -71,7 +73,9 @@ pub(super) fn reply(
 
 fn json_body(protocol: UpstreamProtocol, turn: &Turn<'_>) -> Value {
     match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::ChatCompletions => {
             let message = if turn.tool {
                 json!({"role":"assistant","content":null,"tool_calls":[{"id":turn.id("call"),"type":"function","function":{"name":"Read","arguments":turn.args.to_string()}}]})

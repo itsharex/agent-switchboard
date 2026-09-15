@@ -180,13 +180,16 @@ fn restore_rejects_a_temporary_file_that_fails_its_readback_verification() {
 
     let error = restore(&failing, &switched.backup, &target).unwrap_err();
 
+    // The restore transaction wraps every replacement-stage failure (the
+    // corrupted temp readback included) and rolls the pre-restore snapshot
+    // back through the config journal, so the live file stays untouched.
     assert!(matches!(
         error,
         SwitchError::CommitFailed {
-            stage: "restore-temp-verify",
-            recovery: RecoveryOutcome::NotNeeded,
-            ..
-        }
+            stage: "restore-write",
+            message,
+            recovery: RecoveryOutcome::Restored { .. },
+        } if message.contains("回读校验恢复临时文件")
     ));
     assert_eq!(fs::read_to_string(&target).unwrap(), switched_content);
     assert!(!lockfile::lock_path_for(&target).exists());

@@ -94,6 +94,10 @@ pub enum ValidationError {
     OfficialQuotaRefreshIntervalOutOfRange(u32),
     #[error("{0}")]
     ClaudeCommonOptions(String),
+    #[error("{0}")]
+    ClaudeFragmentInvalid(String),
+    #[error("附加配置片段只适用于 Claude 档案")]
+    ClaudeFragmentRequiresClaude,
     #[error("子 agent 的{field}必须是{allowed}，当前值为 {value:?}")]
     SubagentBadValue {
         field: &'static str,

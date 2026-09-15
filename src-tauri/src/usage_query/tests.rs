@@ -150,6 +150,7 @@ fn imported_ccswitch_script_uses_profile_inputs_and_keeps_each_plan() {
             .to_string(),
             website_url: None,
             notes: None,
+            display: None,
             meta: Some(
                 serde_json::json!({
                     "usage_script": {
@@ -302,6 +303,7 @@ fn imported_template_scripts_run_in_the_script_engine() {
         settings_config: r#"{"env":{"ANTHROPIC_BASE_URL":"https://api.deepseek.com","ANTHROPIC_AUTH_TOKEN":"token","ANTHROPIC_MODEL":"deepseek-chat"}}"#.to_string(),
         website_url: None,
         notes: None,
+        display: None,
         meta: Some(
             r#"{"usage_script":{"enabled":true,"language":"javascript","code":"","templateType":"balance"}}"#.to_string(),
         ),
@@ -362,6 +364,7 @@ fn imported_kimi_token_plan_script_runs_in_the_script_engine() {
         .to_string(),
         website_url: None,
         notes: None,
+        display: None,
         meta: Some(
             r#"{"usage_script":{"enabled":true,"language":"javascript","code":"","templateType":"token_plan","codingPlanProvider":"kimi"}}"#
                 .to_string(),

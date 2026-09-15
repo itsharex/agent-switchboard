@@ -75,3 +75,56 @@ fn stale_common_preview_never_overwrites_external_edits() {
         r#"{"env":{"EXTERNAL":"keep"}}"#
     );
 }
+
+#[test]
+fn profile_fragment_applies_with_the_switch_and_switches_away_cleanly() {
+    let initial = json!({"env":{"HOST":"keep"},"statusLine":{"command":"host"}}).to_string();
+    let (_dir, target, backups) = setup(AppKind::Claude, &initial);
+    let mut first = claude_plan("first", "https://first.invalid", "first-model");
+    first.profile.claude_fragment = json!({
+        "statusLine": {"command": "first"},
+        "env": {"CLAUDE_CODE_MAX_CONTEXT_TOKENS": "372000"}
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    let preview = read_preview(&FsIo, &target, &first, &backups.to_string_lossy()).unwrap();
+    assert!(preview
+        .preview
+        .changes
+        .iter()
+        .any(|change| change.key == "/env/CLAUDE_CODE_MAX_CONTEXT_TOKENS"));
+    execute(
+        &FsIo,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &first,
+            backup_dir: &backups,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+    let after_first = fs::read_to_string(&target).unwrap();
+    let value: Value = serde_json::from_str(&after_first).unwrap();
+    assert_eq!(value["statusLine"]["command"], "first");
+    assert_eq!(value["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "372000");
+    assert_eq!(value["env"]["HOST"], "keep");
+    let second = claude_plan("second", "https://second.invalid", "second-model");
+    let preview = read_preview(&FsIo, &target, &second, &backups.to_string_lossy()).unwrap();
+    execute(
+        &FsIo,
+        &asb_switch::SwitchRequest {
+            target: &target,
+            plan: &second,
+            backup_dir: &backups,
+            expected_hash: &preview.content_hash,
+            expected_rendered_hash: &preview.rendered_hash,
+        },
+    )
+    .unwrap();
+    let value: Value = serde_json::from_str(&fs::read_to_string(&target).unwrap()).unwrap();
+    assert!(value.get("statusLine").is_none());
+    assert!(value["env"].get("CLAUDE_CODE_MAX_CONTEXT_TOKENS").is_none());
+    assert_eq!(value["env"]["HOST"], "keep");
+}

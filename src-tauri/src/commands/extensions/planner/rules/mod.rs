@@ -13,7 +13,7 @@ use asb_core::extensions::contracts::{
 use asb_core::extensions::mcp::{
     apply_claude_project_disabled_members, apply_claude_project_private_server_patches,
     apply_claude_skill_override_restore, apply_codex_skill_rule_restore,
-    claude_project_disabled_member_present, render_claude,
+    claude_project_disabled_member_present, render_claude, ClaudeHost,
 };
 use asb_core::extensions::plan::PlanStep;
 
@@ -217,7 +217,8 @@ impl Planner<'_> {
             .native_key
             .as_deref()
             .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
-        let render = render_claude(mcp, self.secrets).map_err(projection_error)?;
+        let render =
+            render_claude(mcp, self.secrets, ClaudeHost::current()).map_err(projection_error)?;
         let (after_server, mut changes) = apply_claude_project_private_server_patches(
             &text,
             &project_path,

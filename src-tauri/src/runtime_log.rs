@@ -74,6 +74,7 @@ static ACTIVE_LOG_LEVEL: AtomicU8 = AtomicU8::new(RuntimeLogLevel::Info.as_code(
 pub enum RuntimeLogAction {
     AppStarted,
     AppSettingsSaved,
+    OutboundProxySaved,
     AppSettingsRepaired,
     ProfileStoreReset,
     ProfileCreated,

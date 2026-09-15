@@ -14,14 +14,12 @@ export const MCP_PRESET_OPTIONS = [
   ...PRESETS.map(({ value, label }) => ({ value, label })),
 ];
 
-export function presetServer(id: string, windows = /Windows|Win32|Win64/.test(navigator.userAgent + navigator.platform)): CreateServer {
+/** Presets stay in their portable form; the backend Claude render wraps
+ * shell-shim launchers as `cmd /c …` on Windows and unwraps on import. */
+export function presetServer(id: string): CreateServer {
   const preset = PRESETS.find(({ value }) => value === id);
   if (!preset) throw new Error("未知 MCP 预设");
-  const wrapNpx = windows && preset.command === "npx";
-  return {
-    type: "stdio", command: wrapNpx ? "cmd" : preset.command,
-    args: wrapNpx ? ["/c", "npx", ...preset.args] : [...preset.args], env: {},
-  };
+  return { type: "stdio", command: preset.command, args: [...preset.args], env: {} };
 }
 
 export function presetMetadata(id: string): McpMetadata {

@@ -6,8 +6,11 @@
 //! facts and field names only, and both Claude and Codex rows are imported
 //! entirely inside the backend through the batch command.
 
-mod db;
+mod claude_endpoints;
+pub(crate) mod claude_failover;
 mod claude_order;
+pub(crate) mod codex_failover;
+mod db;
 
 #[cfg(test)]
 mod tests;
@@ -39,6 +42,10 @@ pub struct CcSwitchScanItem {
     /// A routing-identical local profile has no query yet, so this import
     /// enriches that profile instead of creating a duplicate.
     pub usage_script_updates_existing: bool,
+    /// Endpoint candidates carried on import. For Claude rows the source's
+    /// endpoint table replaces meta-derived entries, mirroring the source's
+    /// own read path.
+    pub endpoint_candidates: usize,
     pub warnings: Vec<String>,
     /// An exactly equal profile already exists; importing is a no-op.
     pub existing: bool,
@@ -59,6 +66,7 @@ pub struct CcSwitchScan {
 pub struct CcSwitchImportOutcome {
     pub imported_count: usize,
     pub usage_script_imported_count: usize,
+    pub endpoint_candidates_imported: usize,
     pub skipped_existing: Vec<String>,
     pub not_imported: Vec<ccswitch::CcSwitchSkip>,
 }
@@ -118,6 +126,7 @@ pub fn import_at(
     let mut outcome = CcSwitchImportOutcome {
         imported_count: 0,
         usage_script_imported_count: 0,
+        endpoint_candidates_imported: 0,
         skipped_existing: Vec::new(),
         not_imported: Vec::new(),
     };
@@ -140,8 +149,20 @@ pub fn import_at(
             continue;
         };
         match draft {
-            ccswitch::CcSwitchProviderDraft::Claude(draft)
-            | ccswitch::CcSwitchProviderDraft::CodexOfficial(draft) => {
+            ccswitch::CcSwitchProviderDraft::Claude(draft) => {
+                if state.configuration().provider_exists(draft) {
+                    outcome.skipped_existing.push(draft.name.clone());
+                    continue;
+                }
+                let endpoint_candidates = draft.connection.custom_endpoints.len();
+                state.configuration().import_provider(draft.clone())?;
+                outcome.endpoint_candidates_imported += endpoint_candidates;
+                if draft.usage_query.is_some() {
+                    outcome.usage_script_imported_count += 1;
+                }
+                outcome.imported_count += 1;
+            }
+            ccswitch::CcSwitchProviderDraft::CodexOfficial(draft) => {
                 if state.configuration().provider_exists(draft) {
                     outcome.skipped_existing.push(draft.name.clone());
                     continue;
@@ -221,6 +242,7 @@ fn scan_item(state: &LocalState, proposal: ccswitch::CcSwitchProposal) -> CcSwit
                 base_url: draft.base_url,
                 usage_script_importable: draft.usage_query.is_some(),
                 usage_script_updates_existing,
+                endpoint_candidates: draft.connection.custom_endpoints.len(),
                 warnings,
                 existing,
             }
@@ -247,6 +269,7 @@ fn scan_item(state: &LocalState, proposal: ccswitch::CcSwitchProposal) -> CcSwit
                 usage_script_updates_existing: seed.usage_query.is_some()
                     && route_exists
                     && !route_has_query,
+                endpoint_candidates: seed.connection.custom_endpoints.len(),
                 warnings: seed.warnings,
                 existing: route_exists && (seed.usage_query.is_none() || route_has_query),
             }
@@ -262,6 +285,7 @@ fn scan_item(state: &LocalState, proposal: ccswitch::CcSwitchProposal) -> CcSwit
                 base_url: None,
                 usage_script_importable: false,
                 usage_script_updates_existing: false,
+                endpoint_candidates: 0,
                 warnings,
                 existing,
             }

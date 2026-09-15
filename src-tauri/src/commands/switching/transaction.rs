@@ -12,8 +12,8 @@ use asb_core::{AppKind, ConfigWriteRecord, WriteOperation};
 use asb_switch::{FsIo, PendingConfigWrite, SwitchIo};
 #[cfg(test)]
 pub(super) use catalog::apply_catalog_artifact;
-pub(super) use catalog::{stage_catalog, CatalogArtifact};
 use catalog::{restore_catalog, validate_catalog_target, verify_catalog_after};
+pub(super) use catalog::{stage_catalog, CatalogArtifact};
 use journal::{clear, error, load, path, read_target};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

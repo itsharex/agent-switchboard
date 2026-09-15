@@ -1,7 +1,7 @@
 use asb_core::contracts::ProviderConnectionOptions;
 use serde::Serialize;
 use std::error::Error as _;
-use std::sync::OnceLock;
+
 use std::time::{Duration, Instant};
 
 /// Outcome grade of one manual probe: any HTTP answer proves reachability, latency above the threshold
@@ -79,10 +79,9 @@ pub(super) fn failure_message(kind: FailureKind) -> &'static str {
 /// The process-wide transport. The connect budget mirrors the native stack;
 /// the per-attempt and per-request total budgets are applied where the calls
 /// are made (see [`probe`] and [`http_request`]).
-fn client() -> &'static reqwest::blocking::Client {
-    static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| {
-        reqwest::blocking::Client::builder()
+fn client() -> reqwest::blocking::Client {
+    crate::outbound_proxy::cached_blocking_client("probe", |builder| {
+        builder
             .user_agent("Agent Switchboard")
             .connect_timeout(Duration::from_secs(5))
             .build()
@@ -243,7 +242,7 @@ fn request_url(parsed: &ParsedUrl) -> String {
 /// model request and carries no credential, so it never validates
 /// authentication or model configuration. The response body is never read.
 pub fn probe(url: &str) -> Result<ProbeResult, String> {
-    probe_with_client(url, client())
+    probe_with_client(url, &client())
 }
 
 pub(super) fn probe_with_client(

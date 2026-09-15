@@ -149,6 +149,8 @@ describe("ProviderEditor.models", () => {
       usageQuery: null,
       officialQuotaRefreshIntervalMinutes: null,
       parameters: providerParameters("claude"),
+      claudeFragment: undefined,
+      display: null,
       modelOptions: null,
     });
   });
@@ -191,6 +193,8 @@ describe("ProviderEditor.models", () => {
       usageQuery: null,
       officialQuotaRefreshIntervalMinutes: null,
       parameters: providerParameters("claude"),
+      claudeFragment: undefined,
+      display: null,
       modelOptions: {
         kind: "claude",
         primaryOneM: false,
@@ -398,6 +402,8 @@ describe("ProviderEditor.models", () => {
       usageQuery: null,
       officialQuotaRefreshIntervalMinutes: null,
       parameters: providerParameters("claude"),
+      claudeFragment: undefined,
+      display: null,
       modelOptions: {
         kind: "claude",
         primaryOneM: false,

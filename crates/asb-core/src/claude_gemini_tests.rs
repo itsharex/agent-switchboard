@@ -88,3 +88,51 @@ fn structured_oauth_is_never_sent_as_a_bearer_json_blob() {
     }
     assert!(credential("key", Some(AuthenticationScheme::XApiKey)).is_err());
 }
+
+#[test]
+fn gemini_native_preset_prepares_as_a_google_native_profile() {
+    let draft = crate::claude_presets::prepare(
+        "claude-preset-46",
+        "google-api-key-fixture",
+        &Default::default(),
+        None,
+    )
+    .unwrap()
+    .draft;
+    assert_eq!(
+        draft.upstream_protocol,
+        Some(UpstreamProtocol::GeminiGenerateContent)
+    );
+    assert_eq!(
+        draft.authentication,
+        Some(AuthenticationScheme::XGoogApiKey)
+    );
+    assert_eq!(draft.api_key, "google-api-key-fixture");
+    assert_eq!(
+        draft.base_url.as_deref(),
+        Some("https://generativelanguage.googleapis.com")
+    );
+    assert!(draft.connection.claude_native.is_none());
+    let display = draft.display.as_ref().expect("preset carries its category");
+    assert_eq!(display.category.as_deref(), Some("third_party"));
+    assert!(display.icon.is_none() && display.created_at.is_none());
+    assert!(draft
+        .model
+        .as_ref()
+        .is_some_and(|model| model.starts_with("gemini-")));
+    // The CLI cannot deliver an x-goog-api-key from settings.json, so this
+    // profile always routes through the local conversion gateway.
+    let profile = crate::contracts::ProviderProfile::from_draft("gemini-fixture".into(), draft);
+    assert!(profile.requires_gateway());
+    let plan = crate::contracts::SwitchPlan::through_gateway(
+        profile,
+        crate::ownership::default_client_settings(crate::contracts::AppKind::Claude),
+        "http://127.0.0.1:47821".into(),
+        "asb-claude-capability".into(),
+    );
+    let rendered = crate::adapter::render("{}", &plan).unwrap();
+    assert!(rendered.contains(r#""ANTHROPIC_BASE_URL": "http://127.0.0.1:47821""#));
+    assert!(rendered.contains(r#""ANTHROPIC_AUTH_TOKEN": "asb-claude-capability""#));
+    assert!(!rendered.contains("google-api-key-fixture"));
+    assert!(!rendered.contains("generativelanguage"));
+}

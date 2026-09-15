@@ -10,7 +10,7 @@ use asb_core::extensions::contracts::{
 use asb_core::extensions::mcp::{
     apply_claude_project_disabled_members, apply_claude_project_private_server_patches,
     apply_claude_user_server_patches, apply_codex_server_patches,
-    claude_project_disabled_member_present, render_claude, render_codex,
+    claude_project_disabled_member_present, render_claude, render_codex, ClaudeHost,
 };
 use asb_core::extensions::plan::{PlanStep, PlannedOperation, PlannedTarget};
 
@@ -211,7 +211,7 @@ impl Planner<'_> {
             }
             McpScope::ClaudeUserServers => {
                 let render = enabled
-                    .then(|| render_claude(mcp, self.secrets))
+                    .then(|| render_claude(mcp, self.secrets, ClaudeHost::current()))
                     .transpose()
                     .map_err(projection_error)?;
                 apply_claude_user_server_patches(
@@ -222,7 +222,7 @@ impl Planner<'_> {
             }
             McpScope::ClaudeProjectPrivate { project_path } => {
                 let render = enabled
-                    .then(|| render_claude(mcp, self.secrets))
+                    .then(|| render_claude(mcp, self.secrets, ClaudeHost::current()))
                     .transpose()
                     .map_err(projection_error)?;
                 let (after_servers, mut server_changes) =

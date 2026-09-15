@@ -95,7 +95,8 @@ export const configurationAssembly = {
           "low",
           "medium",
           "high",
-          "xhigh"
+          "xhigh",
+          "max"
         ]
       }
     ],

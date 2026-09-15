@@ -2,8 +2,9 @@
 use super::error::{blocking, require_write_confirmation, state, CommandError};
 use crate::codex_metering::{
     self, CodexLedgerFilter, CodexLedgerPage, CodexLedgerSummary, CodexMeteringSettings,
-    CodexMeteringSnapshot, CodexRequestLedger,
+    CodexMeteringSnapshot, CodexRequestLedger, CodexSessionSyncReport,
 };
+use serde::Serialize;
 use tauri::{AppHandle, Manager};
 fn failure(error: String) -> CommandError {
     CommandError::new("codex-metering-unavailable", error)
@@ -65,8 +66,48 @@ pub(crate) async fn get_codex_request_summary(
 ) -> Result<CodexLedgerSummary, CommandError> {
     let local = state(&app)?;
     blocking(move || {
+        // Session usage syncs incrementally ahead of every summary so the
+        // totals stay current without a separate refresh flow; per-file
+        // problems are reported by the dedicated sync command.
+        let report = codex_metering::sync_codex_session_usage(local.root());
+        for error in &report.errors {
+            log::warn!("Codex 会话用量同步：{error}");
+        }
         CodexRequestLedger::new(local.root())
             .summary(&filter.unwrap_or_default())
+            .map_err(failure)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn sync_codex_session_usage(
+    app: AppHandle,
+) -> Result<CodexSessionSyncReport, CommandError> {
+    let local = state(&app)?;
+    blocking(move || Ok(codex_metering::sync_codex_session_usage(local.root()))).await
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexSessionRebuildOutcome {
+    pub backup_path: Option<std::path::PathBuf>,
+    pub report: CodexSessionSyncReport,
+}
+
+#[tauri::command]
+pub(crate) async fn rebuild_codex_session_usage(
+    app: AppHandle,
+    confirm_write: bool,
+) -> Result<CodexSessionRebuildOutcome, CommandError> {
+    require_write_confirmation(confirm_write, "重建 Codex 会话用量账本")?;
+    let local = state(&app)?;
+    blocking(move || {
+        codex_metering::rebuild_codex_session_usage(local.root())
+            .map(|(backup_path, report)| CodexSessionRebuildOutcome {
+                backup_path,
+                report,
+            })
             .map_err(failure)
     })
     .await

@@ -5,13 +5,14 @@
 mod admission;
 mod claude;
 mod codex;
+mod codex_account;
 mod codex_forward;
 mod codex_reasoning;
 mod compact;
 mod diagnostics;
 mod respond;
 mod route;
-mod transport;
+pub(crate) mod transport;
 pub(crate) mod websocket;
 
 use super::http::Request;
@@ -34,8 +35,7 @@ use diagnostics::respond_diagnostic;
 use route::{json_content_type, request_header};
 
 pub(super) use respond::{
-    prepare_non_stream_response, read_upstream_diagnostic, respond_error,
-    respond_upstream,
+    prepare_non_stream_response, read_upstream_diagnostic, respond_error, respond_upstream,
 };
 pub(super) use route::{
     client_protocol, codex_request, request_capability, upstream_codex_operation_url,
@@ -110,6 +110,20 @@ pub(crate) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Ups
         respond_error(request, Some(protocol), 403, "本机协议网关凭据无效");
         return;
     };
+    // Official-takeover Codex routes resolve their bound managed account per
+    // request; every other route passes through unchanged.
+    let route = if app == AppKind::Codex {
+        match codex_account::resolve(&route, &inner, Some(request.headers())) {
+            Ok(route) => route,
+            Err((status, message)) => {
+                span.finish(Some(status), 0);
+                respond_error(request, Some(protocol), status, &message);
+                return;
+            }
+        }
+    } else {
+        route
+    };
     span.bind_route(
         &route.profile_id,
         &route.fingerprint,
@@ -122,7 +136,7 @@ pub(crate) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Ups
             return;
         }
         if operation == CodexOperation::Models {
-            codex::respond_models(request, span, &route);
+            codex::respond_models(request, span, &route, &inner);
             return;
         }
     }

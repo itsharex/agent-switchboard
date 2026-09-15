@@ -107,7 +107,9 @@ fn events_of<'a>(events: &'a [Value], kind: &str) -> Vec<&'a Value> {
 
 fn call_start<'a>(events: &'a [Value], target: UpstreamProtocol, id: &str) -> (u64, &'a Value) {
     let (kind, item_field, id_field, index_field) = match target {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::AnthropicMessages => {
             ("content_block_start", "content_block", "id", "index")
         }
@@ -161,7 +163,9 @@ fn assert_function_call(
     assert_eq!(start["name"], name);
     assert_eq!(argument_deltas(events, target, index).concat(), args);
     match target {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::AnthropicMessages => {
             assert_eq!(start["type"], "tool_use");
             assert_eq!(start["input"], json!({}));
@@ -202,7 +206,9 @@ fn assert_function_call(
 
 fn assert_completed(events: &[Value], target: UpstreamProtocol) {
     let (start, terminal) = match target {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::AnthropicMessages => {
             assert_eq!(events_of(events, "message_delta").len(), 1);
             ("message_start", "message_stop")

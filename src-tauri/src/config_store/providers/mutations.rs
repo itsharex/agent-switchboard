@@ -413,6 +413,27 @@ impl ConfigStore {
         }
     }
 
+    /// The stored provider with the same routing identity as an import draft.
+    /// The failover import uses this to map source queue rows onto local ids;
+    /// the identity rule stays owned by this store, never reimplemented.
+    pub fn find_routing_match(&self, draft: &ProviderDraft) -> Option<ProviderRecord> {
+        match load_all(self) {
+            Ok((codex, claude)) => {
+                let existing = match draft.app {
+                    AppKind::Codex => codex,
+                    AppKind::Claude => claude,
+                };
+                existing
+                    .into_iter()
+                    .find(|loaded| {
+                        same_provider_routing(&loaded.file.clone().into_profile(draft.app), draft)
+                    })
+                    .map(|loaded| record_of(draft.app, &loaded))
+            }
+            Err(_) => None,
+        }
+    }
+
     /// Whether a selected source import will enrich its otherwise matching
     /// local provider with a currently absent usage query.
     pub fn provider_will_receive_usage_query(&self, draft: &ProviderDraft) -> bool {

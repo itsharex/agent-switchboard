@@ -305,6 +305,10 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
                 value: "xhigh",
                 label: "极高",
             },
+            ChoiceOption {
+                value: "max",
+                label: "满载",
+            },
         ],
     },
     ChoiceSpec {

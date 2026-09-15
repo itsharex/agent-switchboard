@@ -121,3 +121,37 @@ export interface ClaudeProviderHealth {
 }
 export const resetClaudeProviderHealth = (providerId: string, confirmWrite: boolean): Promise<ClaudeFailoverView> =>
   invoke("reset_claude_provider_health", { providerId, confirmWrite });
+
+export interface ClaudeFailoverQueueMember {
+  sourceName: string;
+  baseUrl: string | null;
+  model: string | null;
+  matchedProfileId: string | null;
+  matchedProfileName: string | null;
+}
+
+export interface ClaudeFailoverSourceScan {
+  found: boolean;
+  sourceRevision: string;
+  policyRevision: string;
+  members: ClaudeFailoverQueueMember[];
+  proposal: ClaudeFailoverPolicy;
+  warnings: string[];
+}
+
+export const scanClaudeFailoverSource = (sourcePath: string): Promise<ClaudeFailoverSourceScan> =>
+  invoke("scan_claude_failover_source", { sourcePath });
+
+export interface ClaudeFailoverImportOutcome {
+  view: ClaudeFailoverView;
+  queued: number;
+  warnings: string[];
+}
+
+export const importClaudeFailoverSource = (
+  sourcePath: string,
+  sourceRevision: string,
+  expectedPolicyHash: string,
+  confirmWrite: boolean,
+): Promise<ClaudeFailoverImportOutcome> =>
+  invoke("import_claude_failover_source", { sourcePath, sourceRevision, expectedPolicyHash, confirmWrite });

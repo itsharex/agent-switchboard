@@ -1,6 +1,28 @@
 use super::policy::CodexGatewayPolicy;
-use crate::gateway::{ActiveRoute, GatewayController};
+use crate::gateway::{ActiveRoute, GatewayController, GatewayInner};
 use asb_core::contracts::{AppKind, CodexProviderFile};
+
+impl GatewayInner {
+    /// Records a successful Codex custom endpoint and moves it to the front
+    /// of its provider's candidates. Metadata only: the client configuration
+    /// and the route identity are untouched, and the shared endpoint lock
+    /// keeps the write from racing a confirmed provider save.
+    pub(crate) fn record_codex_endpoint_success(&self, route: &ActiveRoute) {
+        if route.app != AppKind::Codex {
+            return;
+        }
+        let Ok(_guard) = self.endpoint_write_lock.lock() else {
+            log::warn!("Codex 供应商端点使用记录锁不可用");
+            return;
+        };
+        let store = crate::config_store::ConfigStore::new(self.state_root.clone());
+        match store.mark_codex_endpoint_used(&route.profile_id, &route.upstream_base_url) {
+            Ok(true) => self.prioritize_endpoint(route),
+            Ok(false) => {}
+            Err(error) => log::warn!("无法记录 Codex 供应商端点使用时间: {error}"),
+        }
+    }
+}
 
 impl GatewayController {
     pub(crate) fn codex_candidate_routes(

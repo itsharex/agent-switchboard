@@ -15,7 +15,7 @@ export function PriceEditor({ snapshot, operations: op, onSaved }: {
     const models = { ...snapshot.book.models }; const name = model.trim();
     if (!name) throw new Error("请填写计价模型 ID");
     if (remove) delete models[name]; else models[name] = price;
-    onSaved(await api.setClaudePriceBook({ version: 1, models }, snapshot.fileHash, true));
+    onSaved(await api.setClaudePriceBook({ version: snapshot.book.version, models }, snapshot.fileHash, true));
     choose("new"); op.changed("Claude 价格表已保存；仅用于新记账请求，不改写已记录费用。");
   });
   return <section aria-label="Claude 模型价格表" className="asb-provider-section-fields">

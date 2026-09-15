@@ -47,13 +47,8 @@ pub(super) fn serve(
             return;
         }
     };
-    let client = match UpstreamClient::new(runtime.handle().clone()) {
-        Ok(client) => Arc::new(client),
-        Err(error) => {
-            let _ = ready.send(Err(format!("无法初始化网关 HTTP 客户端：{error}")));
-            return;
-        }
-    };
+    crate::outbound_proxy::note_gateway_port(listener.port());
+    let client = Arc::new(UpstreamClient::new(runtime.handle().clone()));
     runtime.block_on(async {
         let socket = match listener
             .take_socket()

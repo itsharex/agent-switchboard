@@ -17,6 +17,18 @@ const connections = protocols.flatMap((protocol) =>
   authenticationCases.map((authentication) => ({ protocol, authentication })),
 );
 
+it("preserves a profile-owned Claude settings fragment through the editor round-trip", () => {
+  const source = profileFor("anthropicMessages", "bearer");
+  source.claudeFragment = {
+    includeCoAuthoredBy: false,
+    env: { CLAUDE_CODE_MAX_CONTEXT_TOKENS: "372000" },
+  };
+  const draft = draftFrom(source, "claude");
+  expect(draft.claudeFragment).toStrictEqual(source.claudeFragment);
+  const saved = savedDraft(draft);
+  expect(saved.claudeFragment).toStrictEqual(source.claudeFragment);
+});
+
 it("normalizes omitted backend option fields without changing the form contract", () => {
   const source = profileFor("anthropicMessages", "bearer");
   delete (source as Partial<ProviderProfile>).responsesOptions;

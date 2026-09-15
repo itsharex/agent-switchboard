@@ -8,13 +8,14 @@
 //! itself resolved from the approved roots.
 
 pub(crate) mod parser;
+mod codex_titles;
 mod resume;
 
 use asb_core::contracts::AppKind;
 use parser::{parse_session, read_messages};
 use resume::{launch_terminal, resume_arguments, resume_command};
-use serde::Serialize;
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -63,6 +64,24 @@ pub struct SessionResume {
     pub used_project_dir: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDeleteRequest {
+    pub app: AppKind,
+    pub session_id: String,
+}
+
+/// One line of a batch deletion: the record either went away or the reason
+/// it stayed, never a silent skip.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDeleteOutcome {
+    pub app: AppKind,
+    pub session_id: String,
+    pub deleted: bool,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct SessionSource {
     meta: SessionMeta,
@@ -70,8 +89,8 @@ struct SessionSource {
 }
 
 pub fn scan_sessions() -> SessionScan {
-    let roots = match session_roots() {
-        Ok(roots) => roots,
+    let (roots, titles) = match session_roots().and_then(|roots| Ok((roots, codex_titles()?))) {
+        Ok(found) => found,
         Err(message) => {
             return SessionScan {
                 sessions: Vec::new(),
@@ -82,7 +101,7 @@ pub fn scan_sessions() -> SessionScan {
             }
         }
     };
-    scan_session_roots(&roots)
+    scan_session_roots(&roots, &titles)
 }
 
 pub fn load_messages(app: AppKind, session_id: &str) -> Result<Vec<SessionMessage>, String> {
@@ -118,6 +137,37 @@ pub fn delete_session(app: AppKind, session_id: &str) -> Result<(), String> {
     remove_session_source(app, &source.path)
 }
 
+/// Deletes several records against one scan. Each request resolves and
+/// fails on its own line; a repeated (client, id) pair is answered once.
+/// Only an unreadable root set aborts the batch before anything is removed.
+pub fn delete_sessions(requests: &[SessionDeleteRequest]) -> Result<Vec<SessionDeleteOutcome>, String> {
+    let (sources, issues) = scan_sources()?;
+    Ok(delete_resolved(&sources, &issues, requests))
+}
+
+fn delete_resolved(
+    sources: &[SessionSource],
+    issues: &[SessionIssue],
+    requests: &[SessionDeleteRequest],
+) -> Vec<SessionDeleteOutcome> {
+    let mut seen = HashSet::new();
+    let mut outcomes = Vec::with_capacity(requests.len());
+    for request in requests {
+        if !seen.insert((request.app, request.session_id.clone())) {
+            continue;
+        }
+        let result = locate(sources, issues, request.app, &request.session_id)
+            .and_then(|source| remove_session_source(request.app, &source.path));
+        outcomes.push(SessionDeleteOutcome {
+            app: request.app,
+            session_id: request.session_id.clone(),
+            deleted: result.is_ok(),
+            error: result.err(),
+        });
+    }
+    outcomes
+}
+
 fn remove_session_source(app: AppKind, path: &Path) -> Result<(), String> {
     if app == AppKind::Claude {
         if let Some(stem) = path.file_stem() {
@@ -133,12 +183,21 @@ fn remove_session_source(app: AppKind, path: &Path) -> Result<(), String> {
 }
 
 fn resolve_session(app: AppKind, session_id: &str) -> Result<SessionSource, String> {
+    let (sources, issues) = scan_sources()?;
+    locate(&sources, &issues, app, session_id).cloned()
+}
+
+fn locate<'a>(
+    sources: &'a [SessionSource],
+    issues: &[SessionIssue],
+    app: AppKind,
+    session_id: &str,
+) -> Result<&'a SessionSource, String> {
     if !parser::valid_session_id(session_id) {
         return Err("会话 ID 无效".to_string());
     }
-    let (sources, issues) = scan_sources()?;
     sources
-        .into_iter()
+        .iter()
         .find(|source| source.meta.app == app && source.meta.session_id == session_id)
         .ok_or_else(|| {
             issues
@@ -149,17 +208,34 @@ fn resolve_session(app: AppKind, session_id: &str) -> Result<SessionSource, Stri
 }
 
 fn scan_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
-    Ok(scan_session_source_roots(&session_roots()?))
+    Ok(scan_session_source_roots(
+        &session_roots()?,
+        &HashMap::new(),
+    ))
+}
+
+/// The Codex root every Codex-owned sidecar (sessions, rename index, state
+/// database) hangs off; honours the same `CODEX_HOME` as the config file.
+fn codex_root() -> Result<PathBuf, String> {
+    let codex = crate::local_state::LocalState::user_config_path(AppKind::Codex)?;
+    codex
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "Codex 配置目录无效".to_string())
+}
+
+/// Thread renames are display data only; identity resolution never needs
+/// them, so only the list scan pays for reading the index and database.
+fn codex_titles() -> Result<HashMap<String, String>, String> {
+    Ok(codex_titles::load(&codex_root()?))
 }
 
 /// The only approved local JSONL roots. Both session browsing and usage
 /// aggregation consume this list so neither feature accepts a renderer path.
 pub(crate) fn session_roots() -> Result<Vec<(AppKind, PathBuf)>, String> {
-    let codex = crate::local_state::LocalState::user_config_path(AppKind::Codex)?;
     let claude = crate::local_state::LocalState::user_config_path(AppKind::Claude)?;
-    let codex_root = codex.parent().ok_or("Codex 配置目录无效")?;
     let claude_root = claude.parent().ok_or("Claude 配置目录无效")?;
-    let mut roots = crate::local_state::codex_paths::session_roots(codex_root)
+    let mut roots = crate::local_state::codex_paths::session_roots(&codex_root()?)
         .into_iter()
         .map(|path| (AppKind::Codex, path))
         .collect::<Vec<_>>();
@@ -167,8 +243,11 @@ pub(crate) fn session_roots() -> Result<Vec<(AppKind, PathBuf)>, String> {
     Ok(roots)
 }
 
-fn scan_session_roots(roots: &[(AppKind, PathBuf)]) -> SessionScan {
-    let (mut sources, issues) = scan_session_source_roots(roots);
+fn scan_session_roots(
+    roots: &[(AppKind, PathBuf)],
+    codex_titles: &HashMap<String, String>,
+) -> SessionScan {
+    let (mut sources, issues) = scan_session_source_roots(roots, codex_titles);
     sources.sort_by(|left, right| {
         right
             .meta
@@ -185,6 +264,7 @@ fn scan_session_roots(roots: &[(AppKind, PathBuf)]) -> SessionScan {
 
 fn scan_session_source_roots(
     roots: &[(AppKind, PathBuf)],
+    codex_titles: &HashMap<String, String>,
 ) -> (Vec<SessionSource>, Vec<SessionIssue>) {
     let mut sources = Vec::new();
     let mut issues = Vec::new();
@@ -194,7 +274,15 @@ fn scan_session_source_roots(
         match collect_session_jsonl_files(root) {
             Ok(paths) => {
                 for path in paths {
-                    if let Ok(meta) = parse_session(*app, &path) {
+                    if let Ok(mut meta) = parse_session(*app, &path) {
+                        // A Codex rename lives beside the transcript, not in
+                        // it; it replaces the derived title but never the
+                        // summary, which stays the first real prompt.
+                        if *app == AppKind::Codex {
+                            if let Some(title) = codex_titles.get(&meta.session_id) {
+                                meta.title = parser::clamp_title(title);
+                            }
+                        }
                         // Roots are deliberately ordered: a live Codex
                         // session owns its identity ahead of an archived
                         // copy. The same identity cannot appear twice in a
@@ -277,10 +365,13 @@ mod tests {
             ),
         );
 
-        let scan = scan_session_roots(&[
-            (AppKind::Codex, temp.path().join("codex")),
-            (AppKind::Claude, temp.path().join("claude")),
-        ]);
+        let scan = scan_session_roots(
+            &[
+                (AppKind::Codex, temp.path().join("codex")),
+                (AppKind::Claude, temp.path().join("claude")),
+            ],
+            &HashMap::new(),
+        );
 
         assert!(scan.issues.is_empty());
         assert_eq!(scan.sessions.len(), 2);
@@ -319,14 +410,29 @@ mod tests {
             ),
         );
 
-        let scan = scan_session_roots(&[
-            (AppKind::Codex, active_root),
-            (AppKind::Codex, archived_root),
-        ]);
+        let scan = scan_session_roots(
+            &[
+                (AppKind::Codex, active_root.clone()),
+                (AppKind::Codex, archived_root),
+            ],
+            &HashMap::new(),
+        );
 
         assert_eq!(scan.sessions.len(), 1);
         assert_eq!(scan.sessions[0].session_id, "codex-duplicate");
         assert_eq!(scan.sessions[0].title, "活动会话");
+
+        // A rename recorded beside the transcript replaces the derived title
+        // for the Codex record only; the summary keeps the first prompt.
+        let renamed = scan_session_roots(
+            &[(AppKind::Codex, active_root)],
+            &HashMap::from([(
+                "codex-duplicate".to_string(),
+                "  部署线程（已重命名）  ".to_string(),
+            )]),
+        );
+        assert_eq!(renamed.sessions[0].title, "部署线程（已重命名）");
+        assert_eq!(renamed.sessions[0].summary, "活动会话");
     }
 
     #[test]
@@ -372,7 +478,10 @@ mod tests {
         );
         write(&temp.path().join("late.jsonl"), &content);
 
-        let scan = scan_session_roots(&[(AppKind::Claude, temp.path().to_path_buf())]);
+        let scan = scan_session_roots(
+            &[(AppKind::Claude, temp.path().to_path_buf())],
+            &HashMap::new(),
+        );
         assert!(
             scan.sessions.is_empty(),
             "会话 ID 在限界之后才出现时不应被收录"
@@ -411,6 +520,50 @@ mod tests {
         let error = remove_session_source(AppKind::Codex, &temp.path().join("gone.jsonl"))
             .expect_err("missing record must fail");
         assert!(error.contains("无法删除会话记录"));
+    }
+
+    #[test]
+    fn batch_deletion_reports_each_request_and_removes_only_resolved_records() {
+        let temp = tempdir().expect("temp");
+        let root = temp.path().join("codex").join("sessions");
+        for (file, id) in [("one.jsonl", "codex-one"), ("two.jsonl", "codex-two")] {
+            write(
+                &root.join(file),
+                &format!(
+                    "{{\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"cwd\":\"C:/work\",\"timestamp\":\"2026-08-01T10:00:00Z\"}}}}\n\
+                     {{\"type\":\"response_item\",\"payload\":{{\"type\":\"message\",\"role\":\"user\",\"content\":\"问题\"}}}}\n"
+                ),
+            );
+        }
+        let (sources, issues) =
+            scan_session_source_roots(&[(AppKind::Codex, root.clone())], &HashMap::new());
+        let request = |app, id: &str| SessionDeleteRequest {
+            app,
+            session_id: id.to_string(),
+        };
+        let outcomes = delete_resolved(
+            &sources,
+            &issues,
+            &[
+                request(AppKind::Codex, "codex-one"),
+                request(AppKind::Codex, "codex-one"),
+                request(AppKind::Codex, "codex-missing"),
+                request(AppKind::Claude, "codex-two"),
+                request(AppKind::Codex, "bad id;"),
+            ],
+        );
+
+        assert_eq!(outcomes.len(), 4, "重复请求只回答一次");
+        assert!(outcomes[0].deleted && outcomes[0].error.is_none());
+        assert!(!outcomes[1].deleted);
+        assert!(outcomes[1].error.as_deref().unwrap().contains("找不到指定会话"));
+        assert!(
+            !outcomes[2].deleted,
+            "同一 ID 属于另一客户端时不得跨客户端删除"
+        );
+        assert_eq!(outcomes[3].error.as_deref(), Some("会话 ID 无效"));
+        assert!(!root.join("one.jsonl").exists());
+        assert!(root.join("two.jsonl").exists(), "未解析到的请求不得影响其他记录");
     }
 
     #[test]

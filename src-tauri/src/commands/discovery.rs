@@ -139,6 +139,24 @@ pub async fn delete_session(app: AppKind, session_id: String) -> Result<(), Comm
     .await
 }
 
+/// Batch counterpart of `delete_session`: one scan resolves every requested
+/// record and each item reports its own outcome, so an unresolved or
+/// undeletable id never blocks the rest. Only an unreadable root set fails
+/// the whole call.
+#[tauri::command]
+pub async fn delete_sessions(
+    requests: Vec<crate::session_manager::SessionDeleteRequest>,
+) -> Result<Vec<crate::session_manager::SessionDeleteOutcome>, CommandError> {
+    observe(RuntimeLogAction::SessionDeleted, async move {
+        blocking(move || {
+            crate::session_manager::delete_sessions(&requests)
+                .map_err(|message| CommandError::new("session-delete-failed", message))
+        })
+        .await
+    })
+    .await
+}
+
 /// Read-only scan of the local external database. Secrets never cross this
 /// boundary: the returned items carry routing facts only.
 #[tauri::command]

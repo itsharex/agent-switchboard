@@ -289,7 +289,11 @@ fn claude_retries_unparseable_json_before_publishing_a_success_status() {
 #[test]
 fn claude_upstream_authentication_failures_try_only_the_explicit_fallback_queue() {
     for status in [401, 403] {
-        let (first, first_worker) = one_response(status, br#"{"error":{"message":"upstream credentials unavailable"}}"#, "application/json");
+        let (first, first_worker) = one_response(
+            status,
+            br#"{"error":{"message":"upstream credentials unavailable"}}"#,
+            "application/json",
+        );
         let (second, second_worker) = one_response(200,
             br#"{"id":"chat_auth_fallback","object":"chat.completion","model":"sandbox-model","choices":[{"index":0,"message":{"role":"assistant","content":"explicit fallback"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}"#,
             "application/json");
@@ -297,6 +301,7 @@ fn claude_upstream_authentication_failures_try_only_the_explicit_fallback_queue(
         let response = send_message(&fixture, false);
         assert_eq!(response.status().as_u16(), 200);
         assert!(response.text().unwrap().contains("explicit fallback"));
-        assert!(first_worker.join().unwrap()); assert!(second_worker.join().unwrap());
+        assert!(first_worker.join().unwrap());
+        assert!(second_worker.join().unwrap());
     }
 }

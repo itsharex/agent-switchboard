@@ -33,7 +33,8 @@ pub use lockfile::{
     RecoveryEntry,
 };
 pub use prompt_documents::{
-    read_global_prompt_document, write_global_prompt_document, write_global_prompt_document_with_commit, GlobalPromptDocumentOutcome,
+    read_global_prompt_document, write_global_prompt_document,
+    write_global_prompt_document_with_commit, GlobalPromptDocumentOutcome,
     GlobalPromptDocumentRequest,
 };
 pub use restore::list_backups;

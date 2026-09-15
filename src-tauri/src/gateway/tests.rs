@@ -8,12 +8,14 @@ fn profile(app: AppKind, protocol: UpstreamProtocol) -> ProviderProfile {
         ProviderDraft {
             authentication: None,
             parameters: asb_core::ownership::default_provider_parameters(app),
+            claude_fragment: Default::default(),
             app,
             route_mode: RouteMode::Custom,
             name: "Sandbox relay".to_string(),
             base_url: Some("http://127.0.0.1:18080".to_string()),
             connection: Default::default(),
             api_key: "sandbox-upstream-key".to_string(),
+            display: None,
             upstream_protocol: Some(protocol),
             responses_options: (Some(protocol)
                 == Some(asb_core::contracts::UpstreamProtocol::Responses))
@@ -103,6 +105,7 @@ fn rehydrate_keeps_metadata_edited_routes_and_drops_rekeyed_ones() {
     let draft = |api_key: &str| ProviderDraft {
         authentication: None,
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "中转".to_string(),
@@ -118,6 +121,7 @@ fn rehydrate_keeps_metadata_edited_routes_and_drops_rekeyed_ones() {
         website_url: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
+        display: None,
     };
     let record = local
         .configuration()
@@ -349,6 +353,7 @@ fn claude_gateway_draft(api_key: &str) -> asb_core::contracts::ProviderDraft {
     asb_core::contracts::ProviderDraft {
         authentication: None,
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "中转".to_string(),
@@ -364,5 +369,6 @@ fn claude_gateway_draft(api_key: &str) -> asb_core::contracts::ProviderDraft {
         website_url: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
+        display: None,
     }
 }

@@ -138,8 +138,13 @@ fn prepare_body(
     )
     .and_then(|request| crate::gateway::transform::minimal::apply(request, route.responses_options))
     .map_err(|error| invalid(&format!("无法转换 Codex WebSocket 请求：{error}")))?;
-    let beta = crate::gateway::codex::request::prepare(route, &request.body, &mut converted.body, Some(incoming))
-        .map_err(|error| invalid(&error))?;
+    let beta = crate::gateway::codex::request::prepare(
+        route,
+        &request.body,
+        &mut converted.body,
+        Some(incoming),
+    )
+    .map_err(|error| invalid(&error))?;
 
     if converted.body.len() as u64 > MAX_REQUEST_BYTES {
         return Err(invalid("转换后的请求体超过本机协议网关限制"));

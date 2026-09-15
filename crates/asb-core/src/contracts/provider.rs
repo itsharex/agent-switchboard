@@ -6,6 +6,28 @@ use crate::contracts::{
     UpstreamProtocol, UsageQuery,
 };
 
+/// Application-side display metadata. It is carried over from a source row or
+/// the offline presets, round-trips through the profile store, never reaches
+/// any client configuration, and never participates in routing identity. The
+/// structural official/custom owner stays `route_mode`; `category` is only the
+/// source's grouping label.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderDisplay {
+    /// Source icon glyph name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Source icon color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_color: Option<String>,
+    /// Source grouping label such as `official` or `third_party`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// Source creation timestamp in milliseconds, when declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<i64>,
+}
+
 /// A provider profile. It is a small overlay, never a full copy of a user's
 /// configuration file. `route_mode` is the one routing owner: custom profiles
 /// own an endpoint and API key; official profiles represent the client's
@@ -39,11 +61,19 @@ pub struct ProviderProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
     pub parameters: SettingsValues,
+    /// Claude-only additional settings.json fragment owned by this profile.
+    /// It applies while the profile is active and is removed on switch-away
+    /// through the profile ownership manifest. Codex profiles never carry it.
+    #[serde(default, skip_serializing_if = "crate::claude_common::Extra::is_empty")]
+    pub claude_fragment: crate::claude_common::Extra,
     /// Local-only note; never written into any client configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     /// Provider homepage, used for navigation only.
     pub website_url: Option<String>,
+    /// Source display columns; application-side metadata only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ProviderDisplay>,
     /// Optional usage-balance query; application-side metadata that is never
     /// written into any client configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,9 +109,13 @@ pub struct ProviderDraft {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
     pub parameters: SettingsValues,
+    #[serde(default, skip_serializing_if = "crate::claude_common::Extra::is_empty")]
+    pub claude_fragment: crate::claude_common::Extra,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     pub website_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ProviderDisplay>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_query: Option<UsageQuery>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -105,8 +139,10 @@ impl std::fmt::Debug for ProviderProfile {
             .field("max_output_tokens", &self.max_output_tokens)
             .field("model_options", &self.model_options)
             .field("parameters", &self.parameters)
+            .field("claude_fragment", &self.claude_fragment)
             .field("notes", &self.notes)
             .field("website_url", &self.website_url)
+            .field("display", &self.display)
             .field("usage_query", &self.usage_query)
             .field(
                 "official_quota_refresh_interval_minutes",
@@ -132,8 +168,10 @@ impl std::fmt::Debug for ProviderDraft {
             .field("model", &self.model)
             .field("model_options", &self.model_options)
             .field("parameters", &self.parameters)
+            .field("claude_fragment", &self.claude_fragment)
             .field("notes", &self.notes)
             .field("website_url", &self.website_url)
+            .field("display", &self.display)
             .field("usage_query", &self.usage_query)
             .field(
                 "official_quota_refresh_interval_minutes",
@@ -160,8 +198,10 @@ impl ProviderProfile {
             max_output_tokens: draft.max_output_tokens,
             model_options: draft.model_options,
             parameters: draft.parameters,
+            claude_fragment: draft.claude_fragment,
             notes: draft.notes,
             website_url: draft.website_url,
+            display: draft.display,
             usage_query: draft.usage_query,
             official_quota_refresh_interval_minutes: draft.official_quota_refresh_interval_minutes,
         }
@@ -212,6 +252,7 @@ impl ProviderProfile {
             || self.max_output_tokens != draft.max_output_tokens
             || self.model_options != draft.model_options
             || self.parameters != draft.parameters
+            || self.claude_fragment != draft.claude_fragment
     }
 }
 
@@ -284,9 +325,13 @@ pub struct ProviderFile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_options: Option<ModelOptions>,
     pub parameters: SettingsValues,
+    #[serde(default, skip_serializing_if = "crate::claude_common::Extra::is_empty")]
+    pub claude_fragment: crate::claude_common::Extra,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     pub website_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ProviderDisplay>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_query: Option<UsageQuery>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -312,8 +357,10 @@ pub fn codex_official_draft(parameters: SettingsValues) -> ProviderDraft {
         model: None,
         model_options: None,
         parameters,
+        claude_fragment: Default::default(),
         notes: None,
         website_url: None,
+        display: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
     }
@@ -337,8 +384,10 @@ impl ProviderFile {
             max_output_tokens: self.max_output_tokens,
             model_options: self.model_options,
             parameters: self.parameters,
+            claude_fragment: self.claude_fragment,
             notes: self.notes,
             website_url: self.website_url,
+            display: self.display,
             usage_query: self.usage_query,
             official_quota_refresh_interval_minutes: self.official_quota_refresh_interval_minutes,
         }
@@ -361,8 +410,10 @@ impl ProviderFile {
             max_output_tokens: profile.max_output_tokens,
             model_options: profile.model_options.clone(),
             parameters: profile.parameters.clone(),
+            claude_fragment: profile.claude_fragment.clone(),
             notes: profile.notes.clone(),
             website_url: profile.website_url.clone(),
+            display: profile.display.clone(),
             usage_query: profile.usage_query.clone(),
             official_quota_refresh_interval_minutes: profile
                 .official_quota_refresh_interval_minutes,

@@ -69,7 +69,8 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
       onActivate={switchPreview.activateProfile} onTogglePreview={switchPreview.togglePreviewProfile}
       onEdit={providers.openEditor}
-      onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })} />
+      onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })}
+      onRefresh={async () => { await snapshot.refresh(); }} />
     </>
   );
 }

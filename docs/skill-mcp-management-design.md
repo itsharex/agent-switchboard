@@ -97,6 +97,7 @@ Skills 服务维护中心目录、客户端安装状态、内容摘要、更新�
 4. **同名规则不统一。** Codex 可能同时列出同名 Skill；Claude 的 Skill 覆盖顺序与 MCP 的 local/project/user 优先级不是同一套。显示来源和被覆盖关系，不能用一个通用“项目优先”算法。[Codex 同名行为](https://developers.openai.com/codex/skills#where-codex-loads-local-skills)、[Claude Skill 来源](https://code.claude.com/docs/en/skills#where-skills-live)。
 5. **MCP 两端只把 stdio/HTTP 作为共同可编辑核心。** SSE 与 WebSocket 可作为 Claude 专用类型管理，并明确不支持投影到 Codex；跨客户端操作在预览前阻止不支持的目标。导入未知传输仍可只读展示，不能静默转换成 HTTP。
 6. **配置路径覆盖要逐资源解析。** Claude 的 `settings.json`、用户 MCP 状态文件、凭据文件不是同一文件。自定义 `CLAUDE_CONFIG_DIR` 下的 MCP 状态位置必须经该发行版的隔离夹具核实，未核实只读并给出原因，不硬编码为相邻文件，也不回退误写默认家目录。[环境变量规范](https://code.claude.com/docs/en/env-vars)。
+7. **Windows 上 Claude 的 stdio 启动器要包成 `cmd /c`。** 原生 Windows 的 Claude Code 直接 spawn `command`，`npx`/`npm`/`yarn`/`pnpm`/`node`/`bun`/`deno` 这类 `.cmd` 垫片无法启动。扩展库只保存可移植形态（`npx …`）；`asb_core::extensions::mcp::claude_launcher` 是唯一所有者：Windows 主机的 Claude 投影（用户级与项目私有）写成 `cmd /c <launcher> …`，从 `~/.claude.json` 导入/接管时按同一规则还原为可移植形态，连接检测在 Windows 也用同样包装启动进程。Codex 投影与非 Windows 主机不受影响；已是 `cmd`/`cmd.exe` 或非垫片命令原样写入。[Claude Windows 说明](https://code.claude.com/docs/en/mcp#windows-setup)。
 
 发布时维护一张小型 `ClientCapabilities` 表，记录实际测试过的客户端版本、资源路径规则、传输、启停字段和验证日期。未知版本可发现和预览；有已知不支持项时禁止相应写入。不要维护历史路径自动双写，不读客户端 SQLite 来猜测能力。
 

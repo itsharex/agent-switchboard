@@ -31,8 +31,10 @@ fn profile(app: AppKind, mode: RouteMode) -> ProviderProfile {
         max_output_tokens: None.into(),
         model_options: None,
         parameters: crate::ownership::default_provider_parameters(app),
+        claude_fragment: Default::default(),
         notes: None,
         website_url: None,
+        display: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
     }

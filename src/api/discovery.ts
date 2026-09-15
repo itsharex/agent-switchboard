@@ -63,6 +63,7 @@ export interface CcSwitchScanItem {
   baseUrl: string | null;
   usageScriptImportable: boolean;
   usageScriptUpdatesExisting: boolean;
+  endpointCandidates: number;
   warnings: string[];
   existing: boolean;
 }
@@ -76,6 +77,7 @@ export interface CcSwitchScan {
 export interface CcSwitchImportOutcome {
   importedCount: number;
   usageScriptImportedCount: number;
+  endpointCandidatesImported: number;
   skippedExisting: string[];
   notImported: CcSwitchSkip[];
 }

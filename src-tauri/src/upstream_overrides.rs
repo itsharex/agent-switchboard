@@ -70,33 +70,7 @@ fn merge_json(target: &mut Value, patch: &Value, top_level: bool) {
 }
 
 fn is_protected(name: &str) -> bool {
-    matches!(
-        name.to_ascii_lowercase().as_str(),
-        "host"
-            | "content-length"
-            | "content-type"
-            | "transfer-encoding"
-            | "connection"
-            | "accept-encoding"
-            | "authorization"
-            | "x-api-key"
-            | "x-goog-api-key"
-            | "proxy-authorization"
-            | "proxy-authenticate"
-            | "te"
-            | "trailer"
-            | "upgrade"
-            | "chatgpt-account-id"
-            | "session_id"
-            | "x-client-request-id"
-            | "x-forwarded-host"
-            | "x-forwarded-port"
-            | "x-forwarded-proto"
-            | "forwarded"
-            | "x-request-id"
-            | "x-correlation-id"
-            | "x-trace-id"
-            | "traceparent"
-            | "tracestate"
-    )
+    asb_core::contracts::PROTECTED_OVERRIDE_HEADERS
+        .iter()
+        .any(|protected| protected.eq_ignore_ascii_case(name))
 }

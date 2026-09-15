@@ -3,6 +3,10 @@ mod budget;
 mod contracts;
 mod pricing;
 mod query;
+mod session_parse;
+mod session_sync;
+#[cfg(test)]
+mod session_sync_tests;
 mod settings;
 mod store;
 #[cfg(test)]
@@ -10,6 +14,9 @@ mod tests;
 pub(crate) use contracts::*;
 pub(crate) use pricing::{estimate, CodexModelPrice};
 pub(crate) use query::{CodexLedgerFilter, CodexLedgerPage, CodexLedgerSummary};
+pub(crate) use session_sync::{
+    rebuild_codex_session_usage, sync_codex_session_usage, CodexSessionSyncReport,
+};
 pub(crate) use settings::{
     read_settings, save_settings, CodexMeteringSettings, CodexMeteringSnapshot,
 };

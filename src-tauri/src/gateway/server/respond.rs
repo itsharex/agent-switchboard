@@ -29,6 +29,7 @@ pub(crate) fn respond_upstream(
     route: &ActiveRoute,
     requested_stream: bool,
     upstream: UpstreamResponse,
+    mut history: Option<crate::gateway::codex::history::StreamRecorder>,
 ) {
     let status = upstream.status().as_u16();
     let upstream_stream = upstream
@@ -64,10 +65,26 @@ pub(crate) fn respond_upstream(
         return;
     }
     if requested_stream {
-        respond_sse(request, span, client_protocol, route, upstream, diagnostic);
+        respond_sse(
+            request,
+            span,
+            client_protocol,
+            route,
+            upstream,
+            diagnostic,
+            history.as_mut(),
+        );
         return;
     }
-    respond_json(request, span, client_protocol, route, upstream, diagnostic);
+    respond_json(
+        request,
+        span,
+        client_protocol,
+        route,
+        upstream,
+        diagnostic,
+        history.as_mut(),
+    );
 }
 
 /// Buffers one non-streaming success before conversion so a provider that
@@ -115,6 +132,7 @@ fn respond_json(
     route: &ActiveRoute,
     mut upstream: UpstreamResponse,
     mut diagnostic: ProviderDiagnostic,
+    history: Option<&mut crate::gateway::codex::history::StreamRecorder>,
 ) {
     let status = upstream.status().as_u16();
     let headers = upstream.headers().clone();
@@ -153,6 +171,11 @@ fn respond_json(
     let output = convert_safe_json(body, native, client_protocol, route);
     match output {
         Ok(body) => {
+            // Bridge responses are indexed for later Codex continuations;
+            // recording never affects the bytes already rendered.
+            if let Some(recorder) = history {
+                recorder.record_json(&body);
+            }
             let client_status = native.then_some(status).unwrap_or(200);
             span.finish(Some(client_status), body.len() as u64);
             respond_bytes_with_headers(
@@ -180,11 +203,14 @@ fn convert_safe_json(
     client_protocol: UpstreamProtocol,
     route: &ActiveRoute,
 ) -> Result<Vec<u8>, String> {
-    let body = if native {
+    let mut body = if native {
         redact_native_body(&body, &[&route.api_key, &route.client_token])?
     } else {
         body
     };
+    if native {
+        super::super::transform::restore_native_json(route, &mut body);
+    }
     let transport = ReasoningTransport::from_continuation_key(route.continuation_key);
     convert_response(
         route.upstream_protocol,
@@ -202,6 +228,7 @@ fn respond_sse(
     route: &ActiveRoute,
     upstream: UpstreamResponse,
     mut diagnostic: ProviderDiagnostic,
+    history: Option<&mut crate::gateway::codex::history::StreamRecorder>,
 ) {
     diagnostic.kind = ProviderFailureKind::StreamParse;
     if upstream.initial_body_received() {
@@ -226,7 +253,7 @@ fn respond_sse(
         }
     };
     match SseTranscoder::new(
-        source,
+        super::super::transform::wrap_native_sse_reader(route, source),
         route.upstream_protocol,
         client_protocol,
         MAX_RESPONSE_BYTES,
@@ -243,6 +270,7 @@ fn respond_sse(
             native
                 .then(|| allowed_response_headers(&headers, &[&route.api_key, &route.client_token]))
                 .unwrap_or_default(),
+            history,
         ),
         Err(error) => {
             span.finish(Some(502), 0);
@@ -264,6 +292,7 @@ pub(super) fn respond_stream<R>(
     mut stream: SseTranscoder<R>,
     status: u16,
     mut headers: Vec<Header>,
+    mut history: Option<&mut crate::gateway::codex::history::StreamRecorder>,
 ) where
     R: Read,
 {
@@ -289,6 +318,9 @@ pub(super) fn respond_stream<R>(
             }
         };
         span.note_first_byte();
+        if let Some(recorder) = history.as_deref_mut() {
+            recorder.feed(&buffer[..count]);
+        }
         if stream.has_token() {
             span.note_first_token();
         }

@@ -58,8 +58,10 @@ export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind):
       maxOutputTokens: profile.maxOutputTokens,
       modelOptions: profile.modelOptions ?? null,
       parameters: { settings: { ...profile.parameters.settings } },
+      claudeFragment: profile.claudeFragment ? { ...profile.claudeFragment } : {},
       notes: profile.notes ?? null,
       websiteUrl: profile.websiteUrl,
+      display: profile.display ?? null,
       usageQuery: profile.usageQuery ?? null,
       officialQuotaRefreshIntervalMinutes:
         profile.officialQuotaRefreshIntervalMinutes ?? null,
@@ -75,8 +77,10 @@ export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind):
     ...defaultConnection(initialApp),
     modelOptions: null,
     parameters: null,
+    claudeFragment: {},
     notes: null,
     websiteUrl: null,
+    display: null,
     usageQuery: null,
     officialQuotaRefreshIntervalMinutes: null,
   };
@@ -84,6 +88,7 @@ export function draftFrom(profile: ProviderProfile | null, initialApp: AppKind):
 
 export function prepareDraft(draft: ProviderEditorDraft): ProviderDraft | null {
   if (!draft.parameters || !responsesOptionsValid(draft)) return null;
+  const fragment = draft.claudeFragment ?? {};
   return {
     ...draft,
     parameters: draft.parameters,
@@ -95,6 +100,8 @@ export function prepareDraft(draft: ProviderEditorDraft): ProviderDraft | null {
     websiteUrl: optional(draft.websiteUrl ?? ""),
     modelOptions: draft.modelOptions,
     usageQuery: normalizeUsageQuery(draft.usageQuery),
+    // Match the backend wire shape: an absent fragment is the empty state.
+    claudeFragment: Object.keys(fragment).length ? fragment : undefined,
   };
 }
 

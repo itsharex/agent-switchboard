@@ -135,7 +135,11 @@ fn validate_completion(body: &[u8], protocol: UpstreamProtocol) -> Result<(), Tr
             .as_array()
             .is_some_and(|choices| choices.len() == 1 && choices[0]["finish_reason"] == "stop"),
         UpstreamProtocol::AnthropicMessages => value["stop_reason"] == "end_turn",
-        UpstreamProtocol::GeminiGenerateContent => return Err(TransformError("Codex 压缩不能使用 Claude 专用 Gemini 上游".into())),
+        UpstreamProtocol::GeminiGenerateContent => {
+            return Err(TransformError(
+                "Codex 压缩不能使用 Claude 专用 Gemini 上游".into(),
+            ))
+        }
     };
     if !complete || value.get("error").is_some_and(|v| !v.is_null()) {
         return Err(TransformError(

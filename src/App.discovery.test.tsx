@@ -173,6 +173,7 @@ describe("App.discovery", () => {
         return Promise.resolve({
           importedCount: 3,
           usageScriptImportedCount: 1,
+          endpointCandidatesImported: 0,
           skippedExisting: [],
           notImported: [],
         });
@@ -220,6 +221,7 @@ describe("App.discovery", () => {
         return Promise.resolve({
           importedCount: 2,
           usageScriptImportedCount: 0,
+          endpointCandidatesImported: 0,
           skippedExisting: [],
           notImported: [],
         });

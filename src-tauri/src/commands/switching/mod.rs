@@ -4,13 +4,13 @@
 mod backups;
 pub(crate) mod claude_gateway;
 mod codex_backfill;
-mod codex_restore_auth;
 pub(crate) mod codex_policy;
 mod codex_profile_save;
+mod codex_restore_auth;
 mod plan;
-mod projection_transaction;
 mod profile_rollback;
 mod profile_save;
+mod projection_transaction;
 mod recovery;
 #[cfg(test)]
 mod restore_tests;
@@ -52,8 +52,12 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
-pub async fn cancel_codex_profile_save(app: AppHandle, preparation_id: String) -> Result<(), CommandError> {
-    app.state::<CodexProfileSavePreparations>().cancel(&preparation_id)
+pub async fn cancel_codex_profile_save(
+    app: AppHandle,
+    preparation_id: String,
+) -> Result<(), CommandError> {
+    app.state::<CodexProfileSavePreparations>()
+        .cancel(&preparation_id)
 }
 
 /// Validates a draft and binds it to one one-shot server-side preparation. No
@@ -289,7 +293,7 @@ pub async fn execute_switch(
                 .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
             ensure_profile_save_recovered(&app)?;
             let projection = build_plan(&state, &gateway, &profile_id)?;
-            let outcome = plan::execute_projection_with_auth(
+            let mut outcome = plan::execute_projection_with_auth(
                 &state,
                 &gateway,
                 &projection,
@@ -299,6 +303,19 @@ pub async fn execute_switch(
                 auth_existed,
                 auth_rendered_hash.as_deref(),
             )?;
+            // The Claude plugin marker lives in a separate client file with its
+            // own lock and backups; the switch itself is already committed, so
+            // a failure here is reported, not rolled back.
+            if projection.plan.app() == AppKind::Claude {
+                if let Err(message) = crate::claude_integration::reconcile_after_switch(
+                    state.root(),
+                    projection.plan.profile.route_mode,
+                ) {
+                    outcome
+                        .warnings
+                        .push(format!("Claude 插件集成标记未同步：{message}"));
+                }
+            }
             crate::tray::refresh(&app);
             Ok(outcome)
         })

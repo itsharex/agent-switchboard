@@ -63,6 +63,14 @@ pub(crate) fn handle(
         );
         return;
     };
+    let route = match super::codex_account::resolve(&route, &inner, Some(request.headers())) {
+        Ok(route) => route,
+        Err((status, message)) => {
+            span.finish(Some(status), 0);
+            respond_error(request, Some(UpstreamProtocol::Responses), status, &message);
+            return;
+        }
+    };
     span.bind_route(
         &route.profile_id,
         &route.fingerprint,

@@ -95,6 +95,25 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                     argument(&request.args, "confirmWrite")?,
                 ))
             }
+            "scan_claude_failover_source" => {
+                command!(
+                    commands::claude_failover_import::scan_claude_failover_source(
+                        app.clone(),
+                        argument(&request.args, "sourcePath")?,
+                    )
+                )
+            }
+            "import_claude_failover_source" => {
+                command!(
+                    commands::claude_failover_import::import_claude_failover_source(
+                        app.clone(),
+                        argument(&request.args, "sourcePath")?,
+                        argument(&request.args, "sourceRevision")?,
+                        argument(&request.args, "expectedPolicyHash")?,
+                        argument(&request.args, "confirmWrite")?,
+                    )
+                )
+            }
             "add_claude_failover_provider" => {
                 command!(commands::failover::add_claude_failover_provider(
                     app.clone(),
@@ -299,10 +318,10 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             "resolve_provider_endpoints" => as_json(commands::resolve_provider_endpoints(
                 argument(&request.args, "request")?,
             )),
-            "fetch_provider_models" => command!(commands::fetch_provider_models(app.clone(), argument(
-                &request.args,
-                "request",
-            )?)),
+            "fetch_provider_models" => command!(commands::fetch_provider_models(
+                app.clone(),
+                argument(&request.args, "request",)?
+            )),
             "prepare_provider_request" => {
                 command!(commands::provider_request::prepare_provider_request(
                     app.clone(),
@@ -396,6 +415,11 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument::<AppKind>(&request.args, "app")?,
                 argument(&request.args, "sessionId")?,
             )),
+            "delete_sessions" => command!(commands::delete_sessions(argument::<
+                Vec<crate::session_manager::SessionDeleteRequest>,
+            >(
+                &request.args, "requests"
+            )?)),
             "list_extensions" => command!(commands::extensions::list_extensions(app.clone())),
             "recover_extension_transactions" => {
                 command!(commands::extensions::recover_extension_transactions(

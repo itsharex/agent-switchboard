@@ -112,9 +112,11 @@ fn plan(local: &LocalState, kind: Kind, key: bool, url: &str) -> SwitchPlan {
         max_output_tokens: None.into(),
         model_options: None,
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
         notes: None,
         website_url: None,
         usage_query: None,
+        display: None,
         official_quota_refresh_interval_minutes: None,
     };
     let profile = local

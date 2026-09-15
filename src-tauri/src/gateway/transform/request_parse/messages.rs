@@ -57,6 +57,48 @@ pub(super) fn parse_response_content(value: &Value) -> Result<Vec<Part>, Transfo
                         .ok_or_else(|| TransformError("input_image 缺少 image_url".to_string()))?,
                 )?));
             }
+            "input_file" => {
+                allowed(
+                    item,
+                    &["type", "file_id", "file_data", "file_url", "filename"],
+                    "file content",
+                )?;
+                let reference = |key: &str| {
+                    item.get(key)
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string)
+                };
+                let file = Part::File {
+                    file_id: reference("file_id"),
+                    file_data: reference("file_data"),
+                    file_url: reference("file_url"),
+                    filename: reference("filename"),
+                };
+                if let Part::File {
+                    file_id: None,
+                    file_data: None,
+                    file_url: None,
+                    ..
+                } = file
+                {
+                    return error("input_file 需要 file_id、file_data 或 file_url 之一");
+                }
+                parts.push(file);
+            }
+            "input_audio" => {
+                allowed(item, &["type", "input_audio"], "audio content")?;
+                let audio = item
+                    .get("input_audio")
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| TransformError("input_audio 缺少 audio 对象".to_string()))?;
+                allowed(audio, &["data", "format"], "input_audio")?;
+                parts.push(Part::Audio {
+                    data: string(audio.get("data"), "input_audio.data")?,
+                    format: string(audio.get("format"), "input_audio.format")?,
+                });
+            }
             other => return error(format!("Responses content.type {other} 不支持跨协议转换")),
         }
     }

@@ -28,6 +28,7 @@ interface CcSwitchImportProps {
 function providerDetail(item: CcSwitchScanItem): string {
   return [clientName(item.app), item.routeMode === "official" ? "官方登录" : null, item.model, item.baseUrl,
     item.usageScriptUpdatesExisting ? "将补充用量查询脚本" : item.usageScriptImportable ? "将导入用量查询脚本" : null,
+    item.endpointCandidates > 0 ? `测速候选 ${item.endpointCandidates}` : null,
   ].filter(Boolean).join(" · ");
 }
 
@@ -72,6 +73,7 @@ function ImportResult({ result }: { result: CcSwitchImportOutcome | null }) {
         role="status" aria-label="导入结果">
         <span>已导入 {result.importedCount} 项
           {result.usageScriptImportedCount > 0 && ` · 已导入用量脚本 ${result.usageScriptImportedCount} 项`}
+          {result.endpointCandidatesImported > 0 && ` · 已导入测速候选 ${result.endpointCandidatesImported} 项`}
           {result.skippedExisting.length > 0 && ` · 跳过已存在 ${result.skippedExisting.length} 项`}
           {result.notImported.length > 0 && ` · 未导入 ${result.notImported.length} 项`}
         </span>

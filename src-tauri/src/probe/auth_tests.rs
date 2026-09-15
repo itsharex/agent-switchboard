@@ -51,7 +51,9 @@ fn accepts_headers(
     let authorization = header_values(request, "authorization");
     let api_key = header_values(request, "x-api-key");
     let selected_only = match expected {
-        asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+        asb_core::AuthenticationScheme::XGoogApiKey => {
+            panic!("Google native has a separate Claude fixture")
+        }
         AuthenticationScheme::Bearer => {
             authorization == [format!("Bearer {KEY}")] && api_key.is_empty()
         }
@@ -107,7 +109,9 @@ fn fixture(
 
 fn with_auth(request: RequestBuilder, scheme: AuthenticationScheme) -> RequestBuilder {
     match scheme {
-        asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+        asb_core::AuthenticationScheme::XGoogApiKey => {
+            panic!("Google native has a separate Claude fixture")
+        }
         AuthenticationScheme::Bearer => request.header("authorization", format!("Bearer {KEY}")),
         AuthenticationScheme::XApiKey => request.header("x-api-key", KEY),
     }
@@ -187,7 +191,9 @@ fn model_fixture_rejects_wrong_and_dual_authentication() {
         for expected in [AuthenticationScheme::Bearer, AuthenticationScheme::XApiKey] {
             for dual in [false, true] {
                 let other = match expected {
-                    asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+                    asb_core::AuthenticationScheme::XGoogApiKey => {
+                        panic!("Google native has a separate Claude fixture")
+                    }
                     AuthenticationScheme::Bearer => AuthenticationScheme::XApiKey,
                     AuthenticationScheme::XApiKey => AuthenticationScheme::Bearer,
                 };
@@ -215,7 +221,9 @@ fn usage_header_strings_keep_auth_and_anthropic_version_independent() {
     for protocol in PROTOCOLS {
         for selected in SELECTIONS {
             let mut expected = match expected_auth(protocol, selected) {
-                asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+                asb_core::AuthenticationScheme::XGoogApiKey => {
+                    panic!("Google native has a separate Claude fixture")
+                }
                 AuthenticationScheme::Bearer => format!("Authorization: Bearer {KEY}"),
                 AuthenticationScheme::XApiKey => format!("x-api-key: {KEY}"),
             };
@@ -286,7 +294,9 @@ fn declarative_usage_rejects_crlf_keys_before_creating_another_auth_header() {
         for selected in SELECTIONS {
             let (base, stop, worker) = unexpected_request_fixture();
             let other = match expected_auth(protocol, selected) {
-                asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+                asb_core::AuthenticationScheme::XGoogApiKey => {
+                    panic!("Google native has a separate Claude fixture")
+                }
                 AuthenticationScheme::Bearer => "x-api-key",
                 AuthenticationScheme::XApiKey => "authorization",
             };

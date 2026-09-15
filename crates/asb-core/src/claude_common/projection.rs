@@ -8,28 +8,55 @@ fn parse(text: &str) -> Result<Value, String> {
     }
     Ok(value)
 }
-pub fn apply(text: &str, extra: &Extra) -> Result<String, String> {
+fn apply_with(text: &str, extra: &Extra, manifest: &str) -> Result<String, String> {
     validate(extra)?;
     let mut root = parse(text)?;
-    let previous = declared(&root)?;
+    let previous = declared(&root, manifest)?;
     let desired = leaves(&Value::Object(extra.clone()))?;
     for path in previous {
         if !desired.contains_key(&path) {
-            pointer::remove(&mut root, &pointer::decode(&path)?)?;
+            remove_pruning(&mut root, &pointer::decode(&path)?)?;
         }
     }
     for (path, value) in &desired {
         pointer::set(&mut root, &pointer::decode(path)?, value.clone())?;
     }
-    let path = vec!["env".into(), MANIFEST.into()];
+    let path = vec!["env".into(), manifest.into()];
     if desired.is_empty() {
-        pointer::remove(&mut root, &path)?;
+        remove_pruning(&mut root, &path)?;
     } else {
         let keys = serde_json::to_string(&desired.keys().collect::<Vec<_>>())
             .map_err(|_| "Claude 通用配置标记无法编码")?;
         pointer::set(&mut root, &path, Value::String(keys))?;
     }
-    serde_json::to_string_pretty(&root).map_err(|_| "Claude 通用配置无法编码".into())
+    serde_json::to_string_pretty(&root).map_err(|_| "Claude 通用配置无法编码".to_string())
+}
+
+/// Removes one leaf and every parent container it emptied, so switching a
+/// fragment away leaves no dangling empty objects behind.
+fn remove_pruning(root: &mut Value, segments: &[String]) -> Result<(), String> {
+    pointer::remove(root, segments)?;
+    for depth in (0..segments.len().saturating_sub(1)).rev() {
+        let parent = pointer::encode(&segments[..=depth]);
+        let empty = root
+            .pointer(&parent)
+            .is_some_and(|node| node.as_object().is_some_and(Map::is_empty));
+        if empty {
+            pointer::remove(root, &segments[..=depth])?;
+        } else {
+            break;
+        }
+    }
+    Ok(())
+}
+pub fn apply(text: &str, extra: &Extra) -> Result<String, String> {
+    apply_with(text, extra, MANIFEST)
+}
+/// Applies one provider profile's fragment through the profile-owned
+/// manifest, so switching profiles swaps the fragment wholesale while
+/// unowned keys stay untouched.
+pub fn apply_profile(text: &str, fragment: &Extra) -> Result<String, String> {
+    apply_with(text, fragment, PROFILE_MANIFEST)
 }
 pub fn fragment(text: &str, extra: &Extra) -> Result<String, String> {
     validate(extra)?;
@@ -37,15 +64,89 @@ pub fn fragment(text: &str, extra: &Extra) -> Result<String, String> {
     for (path, value) in leaves(&Value::Object(extra.clone()))? {
         pointer::set(&mut root, &pointer::decode(&path)?, value)?;
     }
-    serde_json::to_string_pretty(&root).map_err(|_| "Claude 通用片段无法编码".into())
+    serde_json::to_string_pretty(&root).map_err(|_| "Claude 通用片段无法编码".to_string())
+}
+
+/// Rejects one path claimed by both the client's shared extra and the active
+/// profile's fragment. Ownership would otherwise flip between the two stores
+/// on every switch.
+pub fn validate_scopes(global: &Extra, fragment: &Extra) -> Result<(), String> {
+    let shared = leaves(&Value::Object(global.clone()))?
+        .keys()
+        .map(|path| pointer::decode(path))
+        .collect::<Result<Vec<Vec<String>>, _>>()?;
+    for path in leaves(&Value::Object(fragment.clone()))?.keys() {
+        let segments = pointer::decode(path)?;
+        let overlaps =
+            |other: &Vec<String>| segments.starts_with(other) || other.starts_with(&segments);
+        if shared.iter().any(overlaps) {
+            return Err(format!("配置片段不能包含通用配置已管理的 {path}"));
+        }
+    }
+    Ok(())
+}
+
+/// Keeps only source entries that may legally live in a fragment; ownership-
+/// or shape-rejected entries are reported by name instead of silently
+/// disappearing. `env` entries filter per name, everything else per top-level
+/// key, matching how import warnings are grouped.
+pub fn import_filter(candidate: &Extra) -> (Extra, Vec<String>) {
+    let mut kept = Extra::new();
+    let mut dropped = Vec::new();
+    // Validation runs on one entry at a time so a single bad key never drops
+    // its innocent neighbours.
+    let entry = |key: &str, value: &Value| -> bool {
+        let mut clone = Extra::new();
+        clone.insert(key.to_string(), value.clone());
+        validate(&clone).is_ok()
+    };
+    for (key, value) in candidate {
+        if key == "env" {
+            let mut env = Map::new();
+            match value.as_object() {
+                Some(source) => {
+                    for (name, entry_value) in source {
+                        // Validate inside `env` so the string-value rule applies.
+                        let mut probe = Extra::new();
+                        probe.insert(
+                            "env".into(),
+                            Value::Object(
+                                [(name.clone(), entry_value.clone())].into_iter().collect(),
+                            ),
+                        );
+                        if validate(&probe).is_ok() {
+                            env.insert(name.clone(), entry_value.clone());
+                        } else {
+                            dropped.push(format!("env.{name}"));
+                        }
+                    }
+                }
+                None => dropped.push(key.clone()),
+            }
+            if !env.is_empty() {
+                kept.insert("env".into(), Value::Object(env));
+            }
+            continue;
+        }
+        if entry(key, value) {
+            kept.insert(key.clone(), value.clone());
+        } else {
+            dropped.push(key.clone());
+        }
+    }
+    (kept, dropped)
 }
 pub fn owned_paths(root: &Value) -> Result<BTreeSet<String>, String> {
-    let mut paths = declared(root)?.into_iter().collect::<BTreeSet<_>>();
+    let mut paths = declared(root, MANIFEST)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    paths.extend(declared(root, PROFILE_MANIFEST)?);
     paths.insert(format!("/env/{MANIFEST}"));
+    paths.insert(format!("/env/{PROFILE_MANIFEST}"));
     Ok(paths)
 }
-pub fn changes(before: &str, extra: &Extra) -> Result<Vec<KeyChange>, String> {
-    let after = parse(&apply(before, extra)?)?;
+fn changes_with(before: &str, extra: &Extra, manifest: &str) -> Result<Vec<KeyChange>, String> {
+    let after = parse(&apply_with(before, extra, manifest)?)?;
     let before = parse(before)?;
     let mut paths = owned_paths(&before)?;
     paths.extend(owned_paths(&after)?);
@@ -69,6 +170,14 @@ pub fn changes(before: &str, extra: &Extra) -> Result<Vec<KeyChange>, String> {
             })
         })
         .collect())
+}
+pub fn changes(before: &str, extra: &Extra) -> Result<Vec<KeyChange>, String> {
+    changes_with(before, extra, MANIFEST)
+}
+/// Preview-time diff for one provider profile's fragment; only profile-owned
+/// manifest paths can appear.
+pub fn changes_profile(before: &str, fragment: &Extra) -> Result<Vec<KeyChange>, String> {
+    changes_with(before, fragment, PROFILE_MANIFEST)
 }
 pub fn display(path: &str, value: &Value) -> String {
     redacted(path, value).to_string()

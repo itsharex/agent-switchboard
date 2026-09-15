@@ -25,10 +25,12 @@ pub(super) fn profile(app: AppKind) -> ProviderProfile {
         max_output_tokens: None.into(),
         model_options: None,
         parameters: crate::ownership::default_provider_parameters(app),
+        claude_fragment: Default::default(),
         notes: None,
         website_url: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
+        display: None,
     }
 }
 
@@ -37,6 +39,38 @@ fn rejects_empty_names() {
     let mut p = profile(AppKind::Codex);
     p.name = "  ".into();
     assert_eq!(p.validate(), Err(ValidationError::EmptyName));
+}
+
+#[test]
+fn claude_fragment_is_claude_only_and_rejects_directory_owned_keys() {
+    let mut codex = profile(AppKind::Codex);
+    codex.claude_fragment = serde_json::json!({"includeCoAuthoredBy": false})
+        .as_object()
+        .unwrap()
+        .clone();
+    assert_eq!(
+        codex.validate(),
+        Err(ValidationError::ClaudeFragmentRequiresClaude)
+    );
+
+    let mut claude = profile(AppKind::Claude);
+    claude.claude_fragment = serde_json::json!({"effortLevel": "max"})
+        .as_object()
+        .unwrap()
+        .clone();
+    assert!(matches!(
+        claude.validate(),
+        Err(ValidationError::ClaudeFragmentInvalid(_))
+    ));
+
+    claude.claude_fragment = serde_json::json!({
+        "env": {"CLAUDE_CODE_MAX_CONTEXT_TOKENS": "372000"},
+        "includeCoAuthoredBy": false
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    assert!(claude.validate().is_ok());
 }
 
 #[test]

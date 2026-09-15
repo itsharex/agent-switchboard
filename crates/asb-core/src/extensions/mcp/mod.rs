@@ -8,6 +8,7 @@
 //! cross clients; anything else is refused with a reason instead of being
 //! silently dropped. All functions are pure text transforms.
 
+mod claude_launcher;
 mod claude_patch;
 mod codex_patch;
 mod import;
@@ -18,6 +19,9 @@ mod skill_rules;
 #[cfg(test)]
 mod tests;
 
+pub use claude_launcher::{
+    unwrap_windows_launcher, wrap_windows_launcher, ClaudeHost, WINDOWS_SHELL_LAUNCHERS,
+};
 pub use claude_patch::{
     apply_claude_entry_restore, apply_claude_project_disabled_members,
     apply_claude_project_private_server_patches, apply_claude_project_server_patches,

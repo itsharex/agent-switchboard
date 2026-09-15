@@ -84,7 +84,7 @@ export function CodexProviderRow({ record, ...props }: RowProps & { record: Code
   const { id, name } = record.profile;
   const select = (action: () => void) => { props.onSelect(); action(); };
   return (
-    <ProviderRowShell legacyLayout onSelect={props.onSelect} id={id} name={name} active={props.active} selected={props.selected}
+    <ProviderRowShell id={id} name={name} active={props.active} selected={props.selected}
       previewOpen={props.previewOpen} sortable
       meta={record.profile.defaultModel || record.websiteUrl ? <ProviderMeta record={record} /> : undefined}
       primaryAction={!props.active ? <ActivateButton name={name} onActivate={() => select(props.onActivate)} /> : undefined}
@@ -126,7 +126,7 @@ export function CodexOfficialRow(props: OfficialRowProps) {
   const select = (action: () => void) => { props.onSelect(); action(); };
   const loginLabel = reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`;
   return (
-    <ProviderRowShell legacyLayout onSelect={props.onSelect} id={profile.id} name={profile.name} active={props.active} selected={props.selected}
+    <ProviderRowShell id={profile.id} name={profile.name} active={props.active} selected={props.selected}
       previewOpen={props.previewOpen} sortable={false} meta={<span>官方登录</span>}
       primaryAction={!props.active ? <ActivateButton name={profile.name} onActivate={() => select(props.onActivate)} /> : undefined}
       secondaryAction={

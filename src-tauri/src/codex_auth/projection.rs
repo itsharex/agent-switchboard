@@ -20,6 +20,33 @@ pub(crate) fn official_plan(
     Ok(plan.with_codex_managed_auth(for_account(&account)?))
 }
 
+/// Fresh managed credentials for one bound account, resolved at request time
+/// by the official-takeover route. Refreshing (possibly over the network)
+/// and the identity check reuse the exact switching-time path.
+pub(crate) fn resolved_managed_auth(
+    root: &Path,
+    managed_id: &str,
+    auth_path: &Path,
+) -> Result<CodexManagedAuth, String> {
+    let account = super::manager::valid_account(root, Some(managed_id), auth_path)?;
+    for_account(&account)
+}
+
+/// The ChatGPT account claim of a native OAuth bearer token, when it is one.
+/// The official-takeover admission uses this to reject a local CLI login
+/// that does not belong to the bound managed account.
+pub(crate) fn token_account_id(token: &str) -> Option<String> {
+    let claims = crate::official_login::credentials::jwt_payload(token)?;
+    let auth = claims
+        .get("https://api.openai.com/auth")
+        .or_else(|| claims.get("auth"));
+    auth.and_then(|a| a.get("chatgpt_account_id").or_else(|| a.get("account_id")))
+        .or_else(|| claims.get("chatgpt_account_id"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
 pub(super) fn for_account(account: &super::contracts::Account) -> Result<CodexManagedAuth, String> {
     let last_refresh = chrono::DateTime::from_timestamp_millis(account.updated_at)
         .ok_or("Codex 账号刷新时间无效")?

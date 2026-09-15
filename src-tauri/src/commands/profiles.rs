@@ -147,7 +147,9 @@ pub async fn reset_profile_store(
             .clone();
         let gate = app.state::<super::ConfigWriteGate>().inner().clone();
         blocking(move || {
-            let _guard = gate.lock().map_err(|e| CommandError::new("config-write-gate-unavailable", e))?;
+            let _guard = gate
+                .lock()
+                .map_err(|e| CommandError::new("config-write-gate-unavailable", e))?;
             // Reset is itself the recovery path for store states the typed
             // readers reject, so recovery before the wipe is best effort: it
             // may still reconcile real client files, but no recovery failure
@@ -166,8 +168,12 @@ pub async fn reset_profile_store(
                 .configuration()
                 .reset()
                 .map_err(|error| CommandError::new("profile-store-reset-failed", error))?;
-            crate::codex_auth::clear_bindings(state.root())
-                .map_err(|error| CommandError::new("codex-bindings-reset-failed", format!("供应商已重置，但账号绑定清理失败：{error}")))
+            crate::codex_auth::clear_bindings(state.root()).map_err(|error| {
+                CommandError::new(
+                    "codex-bindings-reset-failed",
+                    format!("供应商已重置，但账号绑定清理失败：{error}"),
+                )
+            })
         })
         .await
     })
@@ -203,7 +209,9 @@ pub async fn delete_profile(
             .clone();
         let gate = app.state::<super::ConfigWriteGate>().inner().clone();
         blocking(move || {
-            let _guard = gate.lock().map_err(|e| CommandError::new("config-write-gate-unavailable", e))?;
+            let _guard = gate
+                .lock()
+                .map_err(|e| CommandError::new("config-write-gate-unavailable", e))?;
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.uses_profile(&profile_id) {
                 return Err(CommandError::new(

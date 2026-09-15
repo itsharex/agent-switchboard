@@ -6,8 +6,8 @@
 //! environment.
 
 mod document;
-mod native;
 mod gateway;
+mod native;
 mod takeover;
 pub use takeover::restore_gateway_overlay;
 mod overlay;

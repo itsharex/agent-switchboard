@@ -1,7 +1,7 @@
 //! Explicit, single-use requests against a saved provider or an in-memory draft.
 
-mod connection;
 mod claude;
+mod connection;
 mod contracts;
 mod registry;
 mod response;
@@ -106,8 +106,12 @@ pub(crate) async fn fetch_models(
         let connection = resolve_prepared(&store, prepared.source)?;
         let connection = claude::resolve(&store, connection, prepared.claude_account.as_ref())?;
         if let Some(account) = &connection.claude_account {
-            return crate::claude_auth::models::fetch_for_provider(account, connection.upstream_protocol, &connection.connection)
-                .map_err(|message| CommandError::new("models-fetch-failed", message));
+            return crate::claude_auth::models::fetch_for_provider(
+                account,
+                connection.upstream_protocol,
+                &connection.connection,
+            )
+            .map_err(|message| CommandError::new("models-fetch-failed", message));
         }
         crate::probe::fetch_models(
             &connection.base_url,
@@ -151,7 +155,8 @@ async fn execute_with_client(
         let connection = blocking(move || {
             let connection = resolve_prepared(&store, prepared.source)?;
             claude::resolve(&store, connection, prepared.claude_account.as_ref())
-        }).await?;
+        })
+        .await?;
         let endpoint = connection.endpoint(Some(&model))?;
         transport::send(client, connection, endpoint, model, started).await
     })?;

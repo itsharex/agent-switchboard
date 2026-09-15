@@ -160,9 +160,17 @@ impl Operation {
                 return;
             }
         };
-        let generated_beta = match crate::gateway::codex::request::prepare(&self.route, &body, &mut converted.body, Some(self.request.headers())) {
+        let generated_beta = match crate::gateway::codex::request::prepare(
+            &self.route,
+            &body,
+            &mut converted.body,
+            Some(self.request.headers()),
+        ) {
             Ok(beta) => beta,
-            Err(message) => { self.reject(422, &message); return; }
+            Err(message) => {
+                self.reject(422, &message);
+                return;
+            }
         };
         self.span
             .note_mapped_model(crate::gateway::usage_metadata::model_from_bytes(
@@ -176,7 +184,9 @@ impl Operation {
         self.span.note_codex_attempt(&self.route, None, false);
         let version = request_header(&self.request, "anthropic-version");
         let beta = crate::gateway::codex::request::combine_beta(
-            request_header(&self.request, "anthropic-beta"), generated_beta);
+            request_header(&self.request, "anthropic-beta"),
+            generated_beta,
+        );
         match send_upstream_request(
             &self.client,
             &self.route,
@@ -194,15 +204,23 @@ impl Operation {
                 &self.route,
                 converted.stream,
                 upstream,
+                None,
             ),
             Err(diagnostic) => self.fail(diagnostic),
         }
     }
     fn send_operation(mut self, operation: CodexOperation, mut body: Vec<u8>) {
-        if let Err(message) = crate::upstream_overrides::apply_body_override(&mut body, &self.route.connection) {
-            self.reject(422, &message); return;
+        if let Err(message) =
+            crate::upstream_overrides::apply_body_override(&mut body, &self.route.connection)
+        {
+            self.reject(422, &message);
+            return;
         }
-        self.span.note_mapped_model(crate::gateway::usage_metadata::model_from_bytes(self.route.upstream_protocol, &body));
+        self.span
+            .note_mapped_model(crate::gateway::usage_metadata::model_from_bytes(
+                self.route.upstream_protocol,
+                &body,
+            ));
         if operation != CodexOperation::Models {
             self.span.note_codex_attempt(&self.route, None, false);
         }

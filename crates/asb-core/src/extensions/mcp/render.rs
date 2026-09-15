@@ -161,10 +161,13 @@ pub fn render_codex(
 
 /// Projects one definition to the Claude shape. Environment references render
 /// as the native `${NAME}` expression; stored secrets render as literals and
-/// every target that receives one is reported by the plan preview.
+/// every target that receives one is reported by the plan preview. On a
+/// Windows host, shell-shim launchers are wrapped as `cmd /c …` because Claude
+/// Code cannot spawn them directly there.
 pub fn render_claude(
     definition: &McpDefinition,
     resolve: SecretResolve,
+    host: super::ClaudeHost,
 ) -> Result<ClaudeServerRender, ProjectionError> {
     let render_headers = |headers: &BTreeMap<String, SecretValue>,
                           bearer: Option<&SecretValue>|
@@ -193,9 +196,14 @@ pub fn render_claude(
                     rendered_env.insert(name.clone(), resolved);
                 }
             }
+            let (command, args) = match host {
+                super::ClaudeHost::Windows => super::wrap_windows_launcher(command, args)
+                    .unwrap_or_else(|| (command.clone(), args.clone())),
+                super::ClaudeHost::Unix => (command.clone(), args.clone()),
+            };
             Ok(ClaudeServerRender::Stdio {
-                command: command.clone(),
-                args: args.clone(),
+                command,
+                args,
                 env: rendered_env,
             })
         }

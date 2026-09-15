@@ -18,6 +18,7 @@ pub(super) fn draft(protocol: UpstreamProtocol, base: &str) -> ProviderDraft {
         base_url: Some(base.to_string()),
         connection: Default::default(),
         api_key: TEST_KEY.to_string(),
+        display: None,
         upstream_protocol: Some(protocol),
         responses_options: (Some(protocol)
             == Some(asb_core::contracts::UpstreamProtocol::Responses))
@@ -31,6 +32,7 @@ pub(super) fn draft(protocol: UpstreamProtocol, base: &str) -> ProviderDraft {
         },
         model_options: None,
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
         notes: None,
         website_url: None,
         usage_query: None,
@@ -50,7 +52,9 @@ pub(super) fn record(protocol: UpstreamProtocol) -> ProviderRecord {
 
 pub(super) fn success_body(protocol: UpstreamProtocol, text: &str) -> Value {
     match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::Responses => json!({
             "object": "response", "status": "completed", "model": "actual-model",
             "output": [{"type":"message", "role":"assistant", "status":"completed",

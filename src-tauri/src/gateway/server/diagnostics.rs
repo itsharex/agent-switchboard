@@ -67,7 +67,9 @@ pub(super) fn respond_diagnostic(
             json!({"type":"error", "error":error})
         }
         UpstreamProtocol::Responses => json!({"object":"error", "status":status, "error":error}),
-        UpstreamProtocol::ChatCompletions | UpstreamProtocol::GeminiGenerateContent => json!({"error":error}),
+        UpstreamProtocol::ChatCompletions | UpstreamProtocol::GeminiGenerateContent => {
+            json!({"error":error})
+        }
     };
     let mut response = Response::from_data(envelope.to_string().into_bytes())
         .with_status_code(StatusCode(status))

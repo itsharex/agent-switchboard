@@ -136,6 +136,12 @@ impl SourcePreset {
             settings_config: config.to_string(),
             website_url: Some(self.website_url.clone()),
             notes: None,
+            display: Some(crate::contracts::ProviderDisplay {
+                icon: None,
+                icon_color: None,
+                category: self.category.clone(),
+                created_at: None,
+            }),
             meta: Some(meta.to_string()),
         })
     }

@@ -1,6 +1,4 @@
-use super::websocket_roundtrip::{
-    read_websocket_text, send_websocket_text, websocket_connect,
-};
+use super::websocket_roundtrip::{read_websocket_text, send_websocket_text, websocket_connect};
 use super::*;
 use crate::codex_metering::{
     self, CodexBilling, CodexLedgerFilter, CodexMeteringSettings, CodexModelPrice,
@@ -298,8 +296,10 @@ fn stream_answer(protocol: CodexUpstream) -> String {
 fn completed(socket: &mut TcpStream, protocol: CodexUpstream) {
     for _ in 0..32 {
         let value: Value = serde_json::from_str(&read_websocket_text(socket)).unwrap();
-        assert_ne!(value["type"],"response.failed","{protocol:?}: {value}");
-        if value["type"] == "response.completed" { return; }
+        assert_ne!(value["type"], "response.failed", "{protocol:?}: {value}");
+        if value["type"] == "response.completed" {
+            return;
+        }
     }
     panic!("missing completion for {protocol:?}");
 }

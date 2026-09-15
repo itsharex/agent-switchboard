@@ -9,6 +9,7 @@ import { Input } from "../Input";
 import { Select } from "../Select";
 import { Table } from "../Table";
 import { PriceEditor } from "./PriceEditor";
+import { SessionUsage } from "./SessionUsage";
 import type { ClaudeOperations } from "./operations";
 function Filters({ value, change, busy }: { value: api.ClaudeLedgerFilter; change: (filter: api.ClaudeLedgerFilter) => void; busy: boolean }) {
   return <div className="asb-provider-field-grid">
@@ -67,5 +68,6 @@ export function MeteringPane({ operations: op }: { operations: ClaudeOperations 
     </>}
     {detail && <CodePreview target="Claude 请求详情（含映射模型、Failover 尝试与计价来源）" content={JSON.stringify(detail, null, 2)} />}
     {book && <PriceEditor snapshot={book} operations={op} onSaved={setBook} />}
+    <SessionUsage operations={op} />
   </div>;
 }

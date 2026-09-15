@@ -64,11 +64,38 @@ pub(crate) struct CodexRequestAttempt {
     pub retryable: bool,
 }
 
+/// Gateway-recorded requests versus usage recovered from local session files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum CodexUsageOrigin {
+    #[default]
+    Proxy,
+    Session,
+}
+impl CodexUsageOrigin {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Proxy => "proxy",
+            Self::Session => "session",
+        }
+    }
+}
+
+/// `codex-session-v1:<thread uuid>:<event index>`; the owner of session row identity.
+pub(crate) const CODEX_SESSION_ID_PREFIX: &str = "codex-session-v1";
+
+pub(crate) fn session_request_id(thread_id: &str, event_index: u32) -> String {
+    format!("{CODEX_SESSION_ID_PREFIX}:{thread_id}:{event_index}")
+}
+
 /// Only allowlisted accounting metadata is persisted. No request body, URL or headers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CodexRequestRecord {
     pub id: String,
+    pub origin: CodexUsageOrigin,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
     pub at_ms: u64,
     pub billable: bool,
     pub profile_id: Option<String>,
@@ -93,8 +120,58 @@ pub(crate) struct CodexRequestRecord {
 }
 impl CodexRequestRecord {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if uuid::Uuid::parse_str(&self.id).is_err() || self.attempts.len() > 32 {
-            return Err("Codex 请求记录标识或尝试次数无效".into());
+        match self.origin {
+            CodexUsageOrigin::Proxy => {
+                if uuid::Uuid::parse_str(&self.id).is_err() || self.attempts.len() > 32 {
+                    return Err("Codex 请求记录标识或尝试次数无效".into());
+                }
+            }
+            CodexUsageOrigin::Session => {
+                let rest = self
+                    .id
+                    .strip_prefix(CODEX_SESSION_ID_PREFIX)
+                    .and_then(|rest| rest.strip_prefix(':'))
+                    .ok_or_else(|| "Codex 会话记录标识前缀无效".to_string())?;
+                let mut parts = rest.splitn(2, ':');
+                let thread = parts.next().unwrap_or_default();
+                let index = parts.next().unwrap_or_default();
+                if uuid::Uuid::parse_str(thread).is_err()
+                    || index.is_empty()
+                    || !index.bytes().all(|byte| byte.is_ascii_digit())
+                    || index.parse::<u32>().is_err()
+                {
+                    return Err("Codex 会话记录标识或事件序号无效".into());
+                }
+                // The id's thread segment is the trailing rollout UUID while
+                // `thread_id` is the logical thread from the root meta; the two
+                // legitimately differ for revert/resume replacement rollouts.
+                if self
+                    .thread_id
+                    .as_deref()
+                    .is_some_and(|id| uuid::Uuid::parse_str(id).is_err())
+                {
+                    return Err("Codex 会话记录线程标识无效".into());
+                }
+                if !self.attempts.is_empty()
+                    || self.duration_ms != 0
+                    || self.status != Some(200)
+                    || self.profile_id.is_some()
+                    || self.route_revision.is_some()
+                    || self.upstream_protocol.is_some()
+                    || self.request_model.is_some()
+                    || self.response_model.is_some()
+                    || self.first_byte_latency_ms.is_some()
+                    || self.first_token_latency_ms.is_some()
+                {
+                    return Err("Codex 会话记录不得携带网关请求字段".into());
+                }
+                if self.input_tokens.is_none()
+                    || self.output_tokens.is_none()
+                    || self.cache_read_tokens.is_none()
+                {
+                    return Err("Codex 会话记录缺少 token 总量".into());
+                }
+            }
         }
         self.billing.validate()?;
         for value in [
@@ -121,6 +198,7 @@ impl CodexRequestRecord {
         for value in [
             &self.profile_id,
             &self.route_revision,
+            &self.thread_id,
             &self.request_model,
             &self.mapped_model,
             &self.response_model,

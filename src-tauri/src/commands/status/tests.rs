@@ -10,6 +10,7 @@ fn profile() -> ProviderProfile {
         authentication: None,
         id: "p1".to_string(),
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
+        claude_fragment: Default::default(),
         app: AppKind::Codex,
         route_mode: asb_core::RouteMode::Custom,
         name: "当前档案".to_string(),
@@ -17,6 +18,7 @@ fn profile() -> ProviderProfile {
         base_url: Some("https://gateway.example/v1".to_string()),
         connection: Default::default(),
         api_key: "test-api-key".into(),
+        display: None,
         upstream_protocol: Some(asb_core::UpstreamProtocol::Responses),
         responses_options: Some(asb_core::contracts::ResponsesOptions {
             request_mode: asb_core::contracts::ResponsesRequestMode::Standard,

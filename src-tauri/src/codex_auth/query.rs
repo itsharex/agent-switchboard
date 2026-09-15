@@ -37,7 +37,10 @@ pub(crate) fn models(
     let account = manager::valid_account(root, id, auth_path)?;
     let (status, body) = get(
         &account,
-        "https://chatgpt.com/backend-api/codex/models?client_version=0.152.1",
+        &format!(
+            "{}/models?client_version=0.152.1",
+            super::OFFICIAL_CODEX_BASE
+        ),
     )?;
     if status != 200 {
         return Err(format!("Codex 账号模型查询失败（HTTP {status}）"));
@@ -76,6 +79,28 @@ pub(crate) fn models(
         warning: account.native_sync_error,
     })
 }
+/// The raw official `/models` document for one managed account. The gateway
+/// serves it verbatim to a taken-over official client because official model
+/// identity belongs to the backend, not to any ASB catalog.
+pub(crate) fn official_models_document(
+    root: &Path,
+    managed_id: &str,
+    auth_path: &Path,
+) -> Result<String, String> {
+    let account = manager::valid_account(root, Some(managed_id), auth_path)?;
+    let (status, body) = get(
+        &account,
+        &format!(
+            "{}/models?client_version=0.152.1",
+            super::OFFICIAL_CODEX_BASE
+        ),
+    )?;
+    if status != 200 {
+        return Err(format!("Codex 官方模型查询失败（HTTP {status}）"));
+    }
+    Ok(body)
+}
+
 pub(crate) fn quota(
     root: &Path,
     id: Option<&str>,

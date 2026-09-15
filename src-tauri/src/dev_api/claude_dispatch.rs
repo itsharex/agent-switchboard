@@ -1,5 +1,6 @@
 //! Claude IPC stays separate from Codex and uses the same desktop command implementations.
 mod accounts_api;
+mod integration_api;
 mod prompts_api;
 mod providers_api;
 use super::http::{argument, as_json, InvokeRequest};
@@ -12,6 +13,9 @@ pub(super) async fn dispatch(
     request: &InvokeRequest,
 ) -> Result<Option<Value>, CommandError> {
     if let Some(value) = accounts_api::dispatch(app, request).await? {
+        return Ok(Some(value));
+    }
+    if let Some(value) = integration_api::dispatch(app, request).await? {
         return Ok(Some(value));
     }
     if let Some(value) = prompts_api::dispatch(app, request).await? {

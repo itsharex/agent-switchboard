@@ -121,6 +121,7 @@ mod tests {
             ProviderDraft {
                 authentication: None,
                 parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+                claude_fragment: Default::default(),
                 app: AppKind::Claude,
                 route_mode: RouteMode::Custom,
                 name: "供应商".into(),
@@ -136,6 +137,7 @@ mod tests {
                 website_url: None,
                 usage_query: None,
                 official_quota_refresh_interval_minutes: None,
+                display: None,
             },
         );
         let value = serde_json::to_value(project(&profile, &[], None)).unwrap();

@@ -113,6 +113,7 @@ impl PresetSource {
             .to_string(),
             website_url: Some(untracked_url(&self.website_url)),
             notes: None,
+            display: None,
             meta: Some(meta.to_string()),
         })
     }

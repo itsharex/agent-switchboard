@@ -134,4 +134,6 @@ pub enum ModelOptions {
     Claude(ClaudeModelSettings),
 }
 
-fn is_false(value: &bool) -> bool { !*value }
+fn is_false(value: &bool) -> bool {
+    !*value
+}

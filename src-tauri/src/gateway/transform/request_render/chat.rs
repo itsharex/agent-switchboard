@@ -49,9 +49,12 @@ fn render_user_turn(messages: &mut Vec<Value>, turn: &[&Message]) -> Result<(), 
                     messages.push(result);
                     media.extend(images);
                 }
-                Part::Text(_) | Part::Image(_) | Part::Document(_) | Part::ToolReference(_) => {
-                    ordinary.push(part.clone())
-                }
+                Part::Text(_)
+                | Part::Image(_)
+                | Part::Document(_)
+                | Part::File { .. }
+                | Part::Audio { .. }
+                | Part::ToolReference(_) => ordinary.push(part.clone()),
                 _ => return error("Chat user messages cannot contain reasoning or tool calls"),
             }
         }
@@ -107,7 +110,7 @@ fn render_assistant(parts: &[Part]) -> Result<Value, TransformError> {
                 )?);
             }
             Part::ToolResult { .. } => return error("assistant 消息不能包含 tool_result"),
-            Part::Document(_) | Part::ToolReference(_) => {
+            Part::Document(_) | Part::File { .. } | Part::Audio { .. } | Part::ToolReference(_) => {
                 return error("Chat Completions 暂不支持该内容类型")
             }
         }

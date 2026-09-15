@@ -90,6 +90,7 @@ dependencies = [
  "toml_edit 0.22.27",
  "tungstenite",
  "uuid",
+ "winreg 0.55.0",
  "zbus",
  "zip",
  "zstd",

@@ -18,6 +18,17 @@ function Quota({ quota }: { quota: api.ClaudeAccountQuota }) {
         { key: "remaining", header: "剩余", render: (w) => w.remaining ?? "未知" }, { key: "reset", header: "重置时间", render: (w) => w.resetsAtMs === null ? "未知" : new Date(w.resetsAtMs).toLocaleString() }]} />
   </section>;
 }
+/** The Claude CLI's own subscription; read from its login cache, never refreshed here. */
+function NativeQuota({ quota }: { quota: api.ClaudeNativeQuota }) {
+  const extra = quota.extraUsage;
+  return <section aria-label="Claude 官方登录订阅额度">
+    <p>{quota.credentialExpired ? "缓存凭据已过期（接口仍返回了用量）" : "官方登录凭据有效"} · {new Date(quota.checkedAtMs).toLocaleString()}</p>
+    <Table ariaLabel="Claude 官方订阅窗口" rows={quota.windows} rowKey={(w) => w.id}
+      columns={[{ key: "name", header: "窗口", render: (w) => w.label }, { key: "used", header: "已用", render: (w) => w.usedPercent + "%" },
+        { key: "reset", header: "重置时间", render: (w) => w.resetsAtMs === null ? "未知" : new Date(w.resetsAtMs).toLocaleString() }]} />
+    {extra && <p className="asb-scope-note">超额用量{extra.enabled ? "已启用" : "未启用"}{extra.usedCredits !== null && extra.monthlyLimit !== null ? ` · ${extra.usedCredits}/${extra.monthlyLimit} ${extra.currency ?? ""}` : ""}</p>}
+  </section>;
+}
 export function AccountsPane({ operations: op }: { operations: ClaudeOperations }) {
   const [view, setView] = useState<api.ClaudeAccountsView | null>(null);
   const [provider, setProvider] = useState<api.ClaudeAuthProvider>("github_copilot");
@@ -26,6 +37,7 @@ export function AccountsPane({ operations: op }: { operations: ClaudeOperations 
   const [makeDefault, setMakeDefault] = useState(true);
   const [deleting, setDeleting] = useState<api.ClaudeAccountView | null>(null);
   const [detail, setDetail] = useState<{ label: string; quota?: api.ClaudeAccountQuota; models?: ProviderModel[] } | null>(null);
+  const [native, setNative] = useState<api.ClaudeNativeQuota | null>(null);
   const login = useClaudeLogin(op, setView);
   const { run, busy, changed } = op;
   useEffect(() => { void run(async () => setView(await api.getClaudeAccounts())); }, [run]);
@@ -63,5 +75,9 @@ export function AccountsPane({ operations: op }: { operations: ClaudeOperations 
     {detail && <section aria-label="Claude 账号查询结果"><h3 className="asb-section-title">{detail.label}</h3>{detail.quota && <Quota quota={detail.quota} />}
       {detail.models && <Table ariaLabel="Claude 账号模型" rows={detail.models} rowKey={(m) => m.id} columns={[{ key: "id", header: "模型 ID", render: (m) => m.id }]} />}</section>}
     <Button variant="secondary" disabled={busy} onClick={() => void run(async () => setView(await api.getClaudeAccounts()))}>重新读取 Claude 账号</Button>
+    <div className="asb-form-actions">
+      <Button variant="secondary" disabled={busy} onClick={() => void run(async () => setNative(await api.getClaudeNativeQuota()))}>查询官方登录订阅额度</Button>
+    </div>
+    {native && <NativeQuota quota={native} />}
   </div>;
 }

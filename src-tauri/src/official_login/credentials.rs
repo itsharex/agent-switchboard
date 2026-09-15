@@ -75,9 +75,12 @@ pub(crate) fn account_id_from_jwt(payload: &Value) -> Option<String> {
         .get("https://api.openai.com/auth")
         .and_then(|auth| auth.get("chatgpt_account_id"))
         .and_then(Value::as_str)
-        .or_else(|| payload.get("auth")
-        .and_then(|auth| auth.get("account_id"))
-        .and_then(Value::as_str))
+        .or_else(|| {
+            payload
+                .get("auth")
+                .and_then(|auth| auth.get("account_id"))
+                .and_then(Value::as_str)
+        })
         .or_else(|| payload.get("chatgpt_account_id").and_then(Value::as_str))
         .map(str::to_string)
 }

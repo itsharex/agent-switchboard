@@ -16,10 +16,20 @@ pub(super) async fn dispatch(
     request: &InvokeRequest,
 ) -> Result<Option<Value>, CommandError> {
     match request.command.as_str() {
-        "get_codex_common_config" => command!(commands::codex_common::get_codex_common_config(app.clone())),
-        "extract_codex_common_config" => command!(commands::codex_common::extract_codex_common_config(app.clone())),
-        "set_codex_common_config_enabled" => command!(commands::codex_common::set_codex_common_config_enabled(
-            app.clone(), argument(&request.args, "profileId")?, argument(&request.args, "enabled")?, argument(&request.args, "expectedRevision")?)),
+        "get_codex_common_config" => {
+            command!(commands::codex_common::get_codex_common_config(app.clone()))
+        }
+        "extract_codex_common_config" => command!(
+            commands::codex_common::extract_codex_common_config(app.clone())
+        ),
+        "set_codex_common_config_enabled" => {
+            command!(commands::codex_common::set_codex_common_config_enabled(
+                app.clone(),
+                argument(&request.args, "profileId")?,
+                argument(&request.args, "enabled")?,
+                argument(&request.args, "expectedRevision")?
+            ))
+        }
         "get_codex_subagent_settings" => {
             command!(commands::subagent_settings::get_codex_subagent_settings(
                 app.clone(),

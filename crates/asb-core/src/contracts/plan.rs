@@ -143,7 +143,9 @@ impl SwitchPlan {
         matches!(self.client_route, ClientRoute::Gateway { .. })
     }
     pub fn client_base_url(&self) -> Option<&str> {
-        if self.profile.route_mode == RouteMode::Official {
+        // Official logins stay on the built-in provider unless the plan is an
+        // official gateway takeover, which installs the loopback entry.
+        if self.profile.route_mode == RouteMode::Official && !self.is_gateway() {
             return None;
         }
         match &self.client_route {

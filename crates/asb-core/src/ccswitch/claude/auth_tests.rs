@@ -1,6 +1,6 @@
 use super::*;
-use crate::contracts::AuthenticationScheme;
 use crate::ccswitch::mapping::map_row;
+use crate::contracts::AuthenticationScheme;
 use serde_json::json;
 
 fn row(meta: Value, env: Value) -> CcSwitchRow {
@@ -12,6 +12,7 @@ fn row(meta: Value, env: Value) -> CcSwitchRow {
         website_url: None,
         notes: None,
         meta: Some(meta.to_string()),
+        display: None,
     }
 }
 

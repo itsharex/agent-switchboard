@@ -12,31 +12,34 @@ use asb_core::contracts::{ResponsesRequestMode, UpstreamProtocol};
 use asb_core::AuthenticationScheme;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde_json::{json, Value};
-use std::sync::OnceLock;
+
 use std::time::{Duration, Instant};
 
 pub(super) const MAX_RESPONSE_BYTES: usize = 64 * 1_024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 
 pub(super) fn client() -> Result<reqwest::Client, CommandError> {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    if let Some(client) = CLIENT.get() {
-        return Ok(client.clone());
-    }
-    let client = client_builder().build().map_err(|_| {
-        CommandError::new("provider-request-transport", "无法初始化真实请求网络传输")
-    })?;
-    let _ = CLIENT.set(client.clone());
-    Ok(client)
+    Ok(crate::outbound_proxy::cached_client(
+        "provider-request",
+        |builder| {
+            client_builder(builder)
+                .build()
+                .expect("先前已验证的请求客户端配置不会失效")
+        },
+    ))
 }
 
-fn client_builder() -> reqwest::ClientBuilder {
-    reqwest::Client::builder()
+fn client_builder(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    builder
         .user_agent("Agent Switchboard")
         .connect_timeout(Duration::from_secs(5))
         .timeout(REQUEST_TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
         .retry(reqwest::retry::never())
+}
+#[cfg(test)]
+fn fresh_client_builder() -> reqwest::ClientBuilder {
+    client_builder(reqwest::Client::builder())
 }
 
 pub(super) async fn send(
@@ -94,7 +97,10 @@ pub(super) async fn send(
     }
     let bytes = match super::claude::response_body(&profile, body.bytes) {
         Ok(bytes) => bytes,
-        Err(message) => { diagnostic.message = message; return Ok(ProviderRequestResult::diagnosed(diagnostic, started)); }
+        Err(message) => {
+            diagnostic.message = message;
+            return Ok(ProviderRequestResult::diagnosed(diagnostic, started));
+        }
     };
     Ok(parse_reply(
         protocol,
@@ -160,7 +166,16 @@ fn build_request(
         .header(ACCEPT, "application/json")
         .body(body);
     request = match protocol.resolve_authentication(profile.authentication) {
-        AuthenticationScheme::Bearer => request.bearer_auth(&profile.api_key),
+        AuthenticationScheme::Bearer => {
+            // Google OAuth callers identify the CLI client; plain API keys
+            // never send this marker.
+            let request = if protocol == UpstreamProtocol::GeminiGenerateContent {
+                request.header("x-goog-api-client", "GeminiCLI/1.0")
+            } else {
+                request
+            };
+            request.bearer_auth(&profile.api_key)
+        }
         AuthenticationScheme::XApiKey => request.header("x-api-key", &profile.api_key),
         AuthenticationScheme::XGoogApiKey => request.header("x-goog-api-key", &profile.api_key),
     };
@@ -174,7 +189,11 @@ fn build_request(
         )
     })?;
     if let Some(account) = &profile.claude_account {
-        let body = request.body().and_then(reqwest::Body::as_bytes).unwrap_or_default().to_vec();
+        let body = request
+            .body()
+            .and_then(reqwest::Body::as_bytes)
+            .unwrap_or_default()
+            .to_vec();
         crate::claude_auth::request::request_headers(account, request.headers_mut(), &body);
     }
     crate::upstream_overrides::apply_header_overrides(request.headers_mut(), &profile.connection);
@@ -192,7 +211,9 @@ fn payload(protocol: UpstreamProtocol, model: &str, mode: Option<ResponsesReques
             "model": model, "stream": false, "max_completion_tokens": MAX_OUTPUT_TOKENS,
             "messages": [{"role": "user", "content": REQUEST_PROMPT}],
         }),
-        UpstreamProtocol::GeminiGenerateContent => super::claude::gemini_test_payload(REQUEST_PROMPT, MAX_OUTPUT_TOKENS),
+        UpstreamProtocol::GeminiGenerateContent => {
+            super::claude::gemini_test_payload(REQUEST_PROMPT, MAX_OUTPUT_TOKENS)
+        }
         UpstreamProtocol::AnthropicMessages => json!({
             "model": model, "stream": false, "max_tokens": MAX_OUTPUT_TOKENS,
             "messages": [{"role": "user", "content": REQUEST_PROMPT}],

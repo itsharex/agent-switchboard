@@ -54,6 +54,13 @@ pub(super) fn build_plan_for_profile(
     if plan.app() == AppKind::Codex && plan.profile.route_mode == asb_core::RouteMode::Official {
         plan = crate::codex_auth::projection::official_plan(state, plan)
             .map_err(|error| CommandError::new("codex-official-login-required", error))?;
+        let (policy, _) = crate::gateway::codex::policy::load(state.root())
+            .map_err(|error| CommandError::new("codex-policy-invalid", error))?;
+        if policy.takeover && plan.codex_managed_auth().is_some() {
+            return gateway
+                .project_codex_official_takeover(plan, &policy)
+                .map_err(|error| CommandError::new("gateway-projection-invalid", error));
+        }
     }
     asb_core::validate_plan(&plan.profile, &plan.client_settings)
         .map_err(|error| CommandError::new("invalid-plan", error.to_string()))?;

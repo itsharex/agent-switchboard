@@ -15,7 +15,10 @@ pub(super) async fn dispatch(
     request: &InvokeRequest,
 ) -> Result<Option<Value>, CommandError> {
     match request.command.as_str() {
-        "cancel_codex_profile_save" => command!(commands::switching::cancel_codex_profile_save(app.clone(), argument(&request.args, "preparationId")?)),
+        "cancel_codex_profile_save" => command!(commands::switching::cancel_codex_profile_save(
+            app.clone(),
+            argument(&request.args, "preparationId")?
+        )),
         "list_codex_presets" => command!(commands::codex_management::list_codex_presets()),
         "prepare_codex_preset" => command!(commands::codex_management::prepare_codex_preset(
             argument(&request.args, "presetId")?,
@@ -66,6 +69,27 @@ pub(super) async fn dispatch(
         "import_discovered_codex_profile" => {
             command!(commands::import_discovered_codex_profile(app.clone()))
         }
+        "list_codex_endpoints" => command!(commands::codex_endpoints::list_codex_endpoints(
+            app.clone(),
+            argument(&request.args, "providerId")?
+        )),
+        "add_codex_endpoint" => command!(commands::codex_endpoints::add_codex_endpoint(
+            app.clone(),
+            argument(&request.args, "providerId")?,
+            argument(&request.args, "url")?,
+            argument(&request.args, "expectedFileHash")?,
+            argument(&request.args, "confirmWrite")?
+        )),
+        "remove_codex_endpoint" => command!(commands::codex_endpoints::remove_codex_endpoint(
+            app.clone(),
+            argument(&request.args, "providerId")?,
+            argument(&request.args, "url")?,
+            argument(&request.args, "expectedFileHash")?,
+            argument(&request.args, "confirmWrite")?
+        )),
+        "test_codex_endpoints" => command!(commands::codex_endpoints::test_codex_endpoints(
+            argument(&request.args, "urls")?
+        )),
         _ => Ok(None),
     }
 }

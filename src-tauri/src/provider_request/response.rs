@@ -26,7 +26,11 @@ pub(super) fn parse(protocol: UpstreamProtocol, body: &[u8]) -> Result<Reply, St
     Ok(Reply {
         text,
         model: value
-            .get(if protocol == UpstreamProtocol::GeminiGenerateContent { "modelVersion" } else { "model" })
+            .get(if protocol == UpstreamProtocol::GeminiGenerateContent {
+                "modelVersion"
+            } else {
+                "model"
+            })
             .and_then(Value::as_str)
             .filter(|model| !model.trim().is_empty())
             .map(str::to_string),

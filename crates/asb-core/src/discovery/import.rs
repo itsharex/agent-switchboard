@@ -52,8 +52,10 @@ fn official_proposal(parameters: SettingsValues) -> ClaudeImportProposal {
             max_output_tokens: None.into(),
             model_options: None,
             parameters,
+            claude_fragment: Default::default(),
             notes: None,
             website_url: None,
+            display: None,
             usage_query: None,
             official_quota_refresh_interval_minutes: None,
         },
@@ -68,12 +70,17 @@ fn claude_proposal(
 ) -> Option<ClaudeImportProposal> {
     let root: serde_json::Value = serde_json::from_str(text).ok()?;
     if let Some((native, base_url)) = crate::claude_native::from_config(&root).ok()? {
-        let (model, model_options) = crate::claude_model::import_models(&root, crate::claude_model::ModelSource::Client).ok()?;
+        let (model, model_options) =
+            crate::claude_model::import_models(&root, crate::claude_model::ModelSource::Client)
+                .ok()?;
         let mut proposal = official_proposal(parameters);
-        proposal.draft.route_mode = RouteMode::Custom; proposal.draft.name = "当前 Claude 原生云配置".into();
+        proposal.draft.route_mode = RouteMode::Custom;
+        proposal.draft.name = "当前 Claude 原生云配置".into();
         proposal.draft.upstream_protocol = Some(UpstreamProtocol::AnthropicMessages);
-        proposal.draft.connection.claude_native = Some(native); proposal.draft.base_url = base_url;
-        proposal.draft.model = model; proposal.draft.model_options = model_options;
+        proposal.draft.connection.claude_native = Some(native);
+        proposal.draft.base_url = base_url;
+        proposal.draft.model = model;
+        proposal.draft.model_options = model_options;
         proposal.basis = "由当前 Claude 原生云 SDK 配置生成，不读取云凭据缓存".into();
         return Some(proposal);
     }
@@ -89,6 +96,7 @@ fn claude_proposal(
         })?;
     let (model, model_options) =
         crate::claude_model::import_models(&root, crate::claude_model::ModelSource::Client).ok()?;
+    let (fragment, _) = crate::claude_common::import_fragment(&root, &parameters, &[]);
     Some(ClaudeImportProposal {
         draft: ProviderDraft {
             authentication: Some(authentication),
@@ -104,8 +112,10 @@ fn claude_proposal(
             max_output_tokens: None.into(),
             model_options,
             parameters,
+            claude_fragment: fragment,
             notes: None,
             website_url: None,
+            display: None,
             usage_query: None,
             official_quota_refresh_interval_minutes: None,
         },

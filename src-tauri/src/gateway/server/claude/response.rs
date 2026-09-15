@@ -71,9 +71,10 @@ impl Prepared {
                 route,
                 false,
                 upstream,
+                None,
             ),
             Self::Stream(stream) => {
-                super::super::respond::respond_stream(request, span, stream, 200, Vec::new())
+                super::super::respond::respond_stream(request, span, stream, 200, Vec::new(), None)
             }
         }
     }

@@ -44,7 +44,7 @@ fn write_gate(app: &AppHandle) -> Result<ConfigWriteGate, CommandError> {
         .ok_or_else(|| CommandError::new("claude-failover-gate-unavailable", "写入闸门尚未初始化"))
 }
 
-fn read_policy(
+pub(super) fn read_policy(
     state: &crate::local_state::LocalState,
 ) -> Result<ClaudeFailoverPolicy, CommandError> {
     failover::load(state.root())
@@ -69,7 +69,7 @@ fn claude_providers(
         .map_err(store_error)
 }
 
-fn validate_policy(
+pub(super) fn validate_policy(
     state: &crate::local_state::LocalState,
     policy: &ClaudeFailoverPolicy,
 ) -> Result<ClaudeFailoverPolicy, CommandError> {
@@ -104,7 +104,7 @@ fn validate_policy(
     Ok(normalized)
 }
 
-fn view(
+pub(super) fn view(
     state: &crate::local_state::LocalState,
     gateway: &GatewayController,
 ) -> Result<ClaudeFailoverView, CommandError> {
@@ -148,7 +148,7 @@ fn view(
     })
 }
 
-fn save_and_refresh(
+pub(super) fn save_and_refresh(
     state: &crate::local_state::LocalState,
     gateway: &GatewayController,
     previous: &ClaudeFailoverPolicy,

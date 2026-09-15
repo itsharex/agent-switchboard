@@ -33,6 +33,23 @@ pub(super) fn run_with_model(
     proxy: &str,
     model: Option<&str>,
 ) -> Output {
+    run_with_deadline(config, work, home, prompt, tools, proxy, model, 75, true)
+}
+
+/// Like `run_with_model`, but a run that outlives its deadline is killed and
+/// reported as a non-success output instead of panicking. Used where the
+/// client is *expected* to be unable to complete (a dead gateway).
+pub(super) fn run_with_deadline(
+    config: &Path,
+    work: &Path,
+    home: &Path,
+    prompt: &str,
+    tools: &str,
+    proxy: &str,
+    model: Option<&str>,
+    deadline_secs: u64,
+    panic_on_timeout: bool,
+) -> Output {
     let mut command = Command::new(binary());
     if let Some(model) = model {
         command.args(["--model", model]);
@@ -73,21 +90,29 @@ pub(super) fn run_with_model(
         .expect("installed pinned Claude CLI");
     let stdout = capture(child.stdout.take().unwrap());
     let stderr = capture(child.stderr.take().unwrap());
-    let deadline = Instant::now() + Duration::from_secs(75);
+    let deadline = Instant::now() + Duration::from_secs(deadline_secs);
     let status = loop {
         if let Some(status) = child.try_wait().expect("poll isolated Claude") {
             break status;
         }
         if Instant::now() >= deadline {
             let _ = child.kill();
-            let _ = child.wait();
             let out = stdout.join().unwrap();
             let err = stderr.join().unwrap();
-            panic!(
-                "isolated Claude CLI timed out; stdout={}; stderr={}",
-                String::from_utf8_lossy(&out),
-                String::from_utf8_lossy(&err)
-            );
+            if panic_on_timeout {
+                let _ = child.wait();
+                panic!(
+                    "isolated Claude CLI timed out; stdout={}; stderr={}",
+                    String::from_utf8_lossy(&out),
+                    String::from_utf8_lossy(&err)
+                );
+            }
+            let status = child.wait().expect("reap killed isolated Claude");
+            return Output {
+                status,
+                stdout: out,
+                stderr: err,
+            };
         }
         thread::sleep(Duration::from_millis(25));
     };

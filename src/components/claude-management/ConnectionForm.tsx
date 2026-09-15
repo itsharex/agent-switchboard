@@ -45,6 +45,7 @@ export function ConnectionForm({ record, accounts, operations: op, onSaved }: {
   const [draft, setDraft] = useState(() => draftOf(record));
   const [headers, setHeaders] = useState(() => JSON.stringify(record.profile.connection?.localProxyRequestOverrides?.headers ?? {}, null, 2));
   const [body, setBody] = useState(() => JSON.stringify(record.profile.connection?.localProxyRequestOverrides?.body ?? {}, null, 2));
+  const [fragment, setFragment] = useState(() => JSON.stringify(record.profile.claudeFragment ?? {}, null, 2));
   const [preparation, setPreparation] = useState<ProfileSavePreparation | null>(null);
   const busy = op.busy || !!preparation;
   if (draft.routeMode === "official") return <p className="asb-scope-note">官方 Claude 登录由 Claude Code 自己管理。本功能不会读写其原生凭据缓存。</p>;
@@ -53,14 +54,15 @@ export function ConnectionForm({ record, accounts, operations: op, onSaved }: {
     setDraft(next);
   };
   const prepare = () => void op.run(async () => {
-    if (draft.connection?.claudeNative) { setPreparation(await prepareProfileSave(record.profile.id, draft, record.fileHash)); return; }
+    const parsedFragment = object(fragment, "附加配置片段");
+    const next = { ...draft, claudeFragment: parsedFragment };
+    if (draft.connection?.claudeNative) { setPreparation(await prepareProfileSave(record.profile.id, next, record.fileHash)); return; }
     const parsedHeaders = object(headers, "请求头");
     if (Object.values(parsedHeaders).some((value) => typeof value !== "string")) throw new Error("请求头的所有值必须是字符串");
     const parsedBody = object(body, "请求体覆盖");
-    const next = { ...draft, connection: { ...draft.connection, localProxyRequestOverrides: {
+    setPreparation(await prepareProfileSave(record.profile.id, { ...next, connection: { ...next.connection, localProxyRequestOverrides: {
       headers: parsedHeaders as Record<string, string>, body: Object.keys(parsedBody).length ? parsedBody : null,
-    } } };
-    setPreparation(await prepareProfileSave(record.profile.id, next, record.fileHash));
+    } } }, record.fileHash));
   });
   return <div className="asb-provider-section-fields">
     <NativeFields draft={draft} change={changeNative} disabled={busy} />
@@ -69,10 +71,12 @@ export function ConnectionForm({ record, accounts, operations: op, onSaved }: {
     {!usesClaudeManagedAuth(draft.connection) && <label className="asb-field"><span>HTTP API 密钥</span><Input type="password" value={draft.apiKey} disabled={busy} onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })} /></label>}
     <ConnectionFields draft={draft} change={setDraft} busy={busy} accounts={accounts} />
     <BillingFields value={draft.connection?.claudeBilling ?? null} disabled={busy} onChange={(claudeBilling) => setDraft({ ...draft, connection: { ...draft.connection, claudeBilling } })} />
-    <label className="asb-field"><span>请求头覆盖（JSON）</span><Textarea code value={headers} disabled={busy} onChange={(e) => setHeaders(e.target.value)} /></label>
-    <label className="asb-field"><span>请求体覆盖（JSON）</span><Textarea code value={body} disabled={busy} onChange={(e) => setBody(e.target.value)} /></label>
-    <p className="asb-scope-note">覆盖只属于此 Claude 供应商，不进入通用配置。认证头受保护；托管账号的服务端点不能被覆盖。</p>
-    </>}
+      <label className="asb-field"><span>请求头覆盖（JSON）</span><Textarea code value={headers} disabled={busy} onChange={(e) => setHeaders(e.target.value)} /></label>
+      <label className="asb-field"><span>请求体覆盖（JSON）</span><Textarea code value={body} disabled={busy} onChange={(e) => setBody(e.target.value)} /></label>
+      <p className="asb-scope-note">覆盖只属于此 Claude 供应商，不进入通用配置。认证头受保护；托管账号的服务端点不能被覆盖。</p>
+      </>}
+    <label className="asb-field"><span>Claude 设置附加片段（JSON）</span><Textarea code value={fragment} disabled={busy} onChange={(e) => setFragment(e.target.value)} /></label>
+    <p className="asb-scope-note">片段只属于此档案：启用时叠加进 Claude 全局设置，切换或停用该档案时自动整段撤下；可视化参数、客户端偏好与扩展管理的键不能放进片段。</p>
     <Button variant="primary" disabled={busy} onClick={prepare}>预览保存 Claude 连接设置</Button>
     {preparation && <ProfileSave preparation={preparation} busy={op.busy} onCancel={() => setPreparation(null)} onConfirm={() => void op.run(async () => {
       await commitProfileSave(preparation.preparationId, true); setPreparation(null); await onSaved();

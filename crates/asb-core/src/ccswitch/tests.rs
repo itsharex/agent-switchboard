@@ -26,6 +26,7 @@ fn row(app_type: &str, id: &str, name: &str, settings_config: &str) -> CcSwitchR
         website_url: None,
         notes: None,
         meta: None,
+        display: None,
     }
 }
 
@@ -66,13 +67,114 @@ fn claude_custom_imports_its_api_key_and_routing() {
         claude_draft(&outcome).base_url.as_deref(),
         Some("https://relay.internal")
     );
-    assert!(outcome
+    assert_eq!(
+        claude_draft(&outcome).claude_fragment,
+        serde_json::json!({"permissions": {"defaultMode": "auto"}})
+            .as_object()
+            .unwrap()
+            .clone()
+    );
+    assert!(!outcome
         .warnings
-        .contains(&"未导入: permissions".to_string()));
+        .iter()
+        .any(|warning| warning.contains("permissions")));
     assert!(!outcome
         .warnings
         .iter()
         .any(|warning| warning.contains("ANTHROPIC_AUTH_TOKEN")));
+}
+
+#[test]
+fn unmapped_source_settings_become_the_profile_fragment_with_named_losses() {
+    let config = serde_json::json!({
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://relay.internal",
+            "ANTHROPIC_AUTH_TOKEN": TOKEN,
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 1,
+            "ASB_CLAUDE_COMMON_KEYS": "[]"
+        },
+        "permissions": {"allow": ["Read"]},
+        "statusLine": {"command": "relay"},
+        "includeCoAuthoredBy": false,
+        "enabledPlugins": {"marketplace": true}
+    })
+    .to_string();
+    let outcome = map_row(&row("claude", "id-frag", "片段中继", &config)).unwrap();
+    let fragment = &claude_draft(&outcome).claude_fragment;
+    assert_eq!(
+        fragment["env"]["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"],
+        serde_json::json!("1")
+    );
+    assert_eq!(
+        fragment["permissions"],
+        serde_json::json!({"allow": ["Read"]})
+    );
+    assert_eq!(
+        fragment["statusLine"],
+        serde_json::json!({"command": "relay"})
+    );
+    assert_eq!(fragment["includeCoAuthoredBy"], serde_json::json!(false));
+    assert!(!fragment.contains_key("enabledPlugins"));
+    assert!(outcome
+        .warnings
+        .contains(&"未导入: enabledPlugins".to_string()));
+    assert!(outcome
+        .warnings
+        .contains(&"未导入: env.ASB_CLAUDE_COMMON_KEYS".to_string()));
+    assert!(!outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("permissions")));
+}
+
+#[test]
+fn route_calibrated_context_defaults_fill_kimi_and_gpt56_codex_oauth_routes() {
+    let kimi = serde_json::json!({
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://api.kimi.com/coding",
+            "ANTHROPIC_AUTH_TOKEN": TOKEN,
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "100000"
+        }
+    })
+    .to_string();
+    let outcome = map_row(&row("claude", "kimi", "Kimi", &kimi)).unwrap();
+    let fragment = &claude_draft(&outcome).claude_fragment;
+    assert_eq!(
+        fragment["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+        serde_json::json!("100000")
+    );
+    assert_eq!(
+        fragment["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"],
+        serde_json::json!("262144")
+    );
+
+    let gpt56 = serde_json::json!({
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://chatgpt.com/backend-api/codex",
+            "ANTHROPIC_MODEL": "gpt-5.6-codex"
+        }
+    })
+    .to_string();
+    let outcome = map_row(&row("claude", "chatgpt", "ChatGPT", &gpt56)).unwrap();
+    let fragment = &claude_draft(&outcome).claude_fragment;
+    assert_eq!(
+        fragment["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"],
+        serde_json::json!("372000")
+    );
+    assert_eq!(
+        fragment["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"],
+        serde_json::json!("372000")
+    );
+
+    let gpt55 = serde_json::json!({
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://chatgpt.com/backend-api/codex",
+            "ANTHROPIC_MODEL": "gpt-5.5-codex"
+        }
+    })
+    .to_string();
+    let outcome = map_row(&row("claude", "chatgpt-old", "ChatGPT 旧模型", &gpt55)).unwrap();
+    assert!(claude_draft(&outcome).claude_fragment.get("env").is_none());
 }
 
 #[test]
@@ -522,4 +624,33 @@ fn claude_openai_chat_meta_selects_the_upstream_protocol_and_keeps_a_bare_domain
         draft.base_url.as_deref(),
         Some("https://integrate.api.nvidia.com")
     );
+}
+
+#[test]
+fn claude_display_columns_are_carried_into_the_draft() {
+    let mut source = row(
+        "claude",
+        "id-display",
+        "展示列",
+        r#"{"env":{"ANTHROPIC_BASE_URL":"https://relay.example/v1","ANTHROPIC_AUTH_TOKEN":"tok"}}"#,
+    );
+    source.display = Some(crate::contracts::ProviderDisplay {
+        icon: Some("robot".into()),
+        icon_color: Some("#1122ff".into()),
+        category: Some("third_party".into()),
+        created_at: Some(1_730_000_000_000),
+    });
+    let outcome = map_row(&source).unwrap();
+    let draft = claude_draft(&outcome);
+    let display = draft.display.as_ref().expect("display carried over");
+    assert_eq!(display.icon.as_deref(), Some("robot"));
+    assert_eq!(display.icon_color.as_deref(), Some("#1122ff"));
+    assert_eq!(display.category.as_deref(), Some("third_party"));
+    assert_eq!(display.created_at, Some(1_730_000_000_000));
+    // Display metadata never qualifies as live configuration: two drafts that
+    // differ only in display are the same routing identity.
+    let mut twin = draft.clone();
+    twin.display = None;
+    let profile = crate::contracts::ProviderProfile::from_draft("display-test".into(), twin);
+    assert!(!profile.draft_touches_live_configuration(&draft));
 }

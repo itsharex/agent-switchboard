@@ -13,18 +13,22 @@ use tiny_http::{Header, Method};
 const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) struct UpstreamClient {
-    pub(super) client: reqwest::Client,
     pub(super) runtime: tokio::runtime::Handle,
 }
 
 impl UpstreamClient {
-    pub(crate) fn new(runtime: tokio::runtime::Handle) -> Result<Self, reqwest::Error> {
-        Ok(Self {
-            client: reqwest::Client::builder()
+    /// The outbound proxy policy owns egress; the revision-cached registry
+    /// rebuilds this client exactly when the saved proxy settings change.
+    pub(crate) fn new(runtime: tokio::runtime::Handle) -> Self {
+        Self { runtime }
+    }
+    pub(super) fn client(&self) -> reqwest::Client {
+        crate::outbound_proxy::cached_client("gateway-upstream", |builder| {
+            builder
                 .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(UPSTREAM_CONNECT_TIMEOUT)
-                .build()?,
-            runtime,
+                .build()
+                .expect("先前已验证的网关客户端配置不会失效")
         })
     }
 }
@@ -103,6 +107,14 @@ pub(super) fn upstream_headers(
         asb_core::AuthenticationScheme::Bearer => {
             if let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", route.api_key)) {
                 headers.insert(AUTHORIZATION, value);
+            }
+            // Google OAuth callers identify the CLI client; plain API keys
+            // never send this marker.
+            if route.upstream_protocol == UpstreamProtocol::GeminiGenerateContent {
+                headers.insert(
+                    HeaderName::from_static("x-goog-api-client"),
+                    HeaderValue::from_static("GeminiCLI/1.0"),
+                );
             }
         }
         asb_core::AuthenticationScheme::XGoogApiKey => {

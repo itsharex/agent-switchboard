@@ -92,3 +92,22 @@ export interface ClaudePriceBookSnapshot { book: ClaudePriceBook; fileHash: stri
 export const getClaudePriceBook = (): Promise<ClaudePriceBookSnapshot> => invoke("get_claude_price_book");
 export const setClaudePriceBook = (book: ClaudePriceBook, expectedFileHash: string, confirmWrite: boolean): Promise<ClaudePriceBookSnapshot> =>
   invoke("set_claude_price_book", { book, expectedFileHash, confirmWrite });
+
+/** Claude CLI session usage: a separate ledger from gateway requests; a
+ * gateway-matched entry already counts in the request ledger. */
+export interface ClaudeSessionSyncReport {
+  filesScanned: number; imported: number; updated: number; gatewayMatched: number; pinnedRewrites: number; errors: string[];
+}
+export interface ClaudeSessionModelTotals {
+  model: string; requests: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number;
+  pricedRequests: number; estimatedCostUsd: string;
+}
+export interface ClaudeSessionUsageSummary {
+  requests: number; gatewayMatched: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number;
+  pricedRequests: number; estimatedCostUsd: string; byModel: ClaudeSessionModelTotals[]; earliestAt: string | null; latestAt: string | null;
+}
+export interface ClaudeSessionUsageView { report: ClaudeSessionSyncReport; summary: ClaudeSessionUsageSummary }
+export interface ClaudeSessionRebuildOutcome extends ClaudeSessionUsageView { backupFile: string | null }
+export const getClaudeSessionUsage = (): Promise<ClaudeSessionUsageView> => invoke("get_claude_session_usage");
+export const rebuildClaudeSessionUsage = (confirmWrite: boolean): Promise<ClaudeSessionRebuildOutcome> =>
+  invoke("rebuild_claude_session_usage", { confirmWrite });

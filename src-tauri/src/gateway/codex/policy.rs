@@ -1,9 +1,14 @@
+use crate::gateway::server::transport::Timeouts;
 use crate::gateway::ProviderHealthConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;
 
+/// Codex upstream timing and circuit thresholds. Streaming requests are
+/// bounded per phase (headers, first byte, idle gap, total); a non-streaming
+/// request has no meaningful first-byte or idle phase, so its whole response
+/// is bounded by one deadline instead. Zero means unlimited for every timeout.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CodexTrafficSettings {
@@ -11,6 +16,8 @@ pub(crate) struct CodexTrafficSettings {
     pub first_byte_timeout_seconds: u32,
     pub idle_timeout_seconds: u32,
     pub total_timeout_seconds: u32,
+    #[serde(default = "default_non_streaming_timeout_seconds")]
+    pub non_streaming_timeout_seconds: u32,
     pub failure_threshold: u32,
     pub cooldown_seconds: u32,
     pub success_threshold: u32,
@@ -24,6 +31,7 @@ impl Default for CodexTrafficSettings {
             first_byte_timeout_seconds: 30,
             idle_timeout_seconds: 60,
             total_timeout_seconds: 600,
+            non_streaming_timeout_seconds: default_non_streaming_timeout_seconds(),
             failure_threshold: 3,
             cooldown_seconds: 30,
             success_threshold: 1,
@@ -32,7 +40,31 @@ impl Default for CodexTrafficSettings {
         }
     }
 }
+fn default_non_streaming_timeout_seconds() -> u32 {
+    600
+}
 impl CodexTrafficSettings {
+    /// Phase deadlines for one upstream attempt. Streaming keeps the four
+    /// configured phases; a non-streaming body is one unit, so its first
+    /// byte, idle gap and total all collapse onto the non-streaming deadline.
+    pub(crate) fn timeouts(&self, stream: bool) -> Timeouts {
+        let seconds = |value: u32| Duration::from_secs(value.into());
+        if stream {
+            return Timeouts {
+                headers: seconds(self.headers_timeout_seconds),
+                first_byte: seconds(self.first_byte_timeout_seconds),
+                idle: seconds(self.idle_timeout_seconds),
+                total: seconds(self.total_timeout_seconds),
+            };
+        }
+        let whole = seconds(self.non_streaming_timeout_seconds);
+        Timeouts {
+            headers: seconds(self.headers_timeout_seconds),
+            first_byte: whole,
+            idle: whole,
+            total: whole,
+        }
+    }
     pub(crate) fn health_config(&self) -> ProviderHealthConfig {
         ProviderHealthConfig {
             failure_threshold: self.failure_threshold,
@@ -48,6 +80,7 @@ impl CodexTrafficSettings {
             self.first_byte_timeout_seconds,
             self.idle_timeout_seconds,
             self.total_timeout_seconds,
+            self.non_streaming_timeout_seconds,
         ] {
             if value > 86_400 {
                 return Err("Codex 请求超时不能大于 86400 秒；0 表示不限制".into());
@@ -74,6 +107,14 @@ pub(crate) struct CodexGatewayPolicy {
     pub provider_ids: Vec<String>,
     pub max_retries: u32,
     pub traffic: CodexTrafficSettings,
+    /// Retry a failed attempt once with image blocks replaced by a text
+    /// marker after an upstream modality rejection.
+    #[serde(default = "default_true")]
+    pub media_fallback: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 impl Default for CodexGatewayPolicy {
     fn default() -> Self {
@@ -84,6 +125,7 @@ impl Default for CodexGatewayPolicy {
             provider_ids: Vec::new(),
             max_retries: 2,
             traffic: CodexTrafficSettings::default(),
+            media_fallback: true,
         }
     }
 }
@@ -189,5 +231,64 @@ mod tests {
         let mut policy = CodexGatewayPolicy::default();
         policy.enabled = true;
         assert!(policy.validate().is_err());
+    }
+    #[test]
+    fn non_streaming_requests_use_one_whole_response_deadline() {
+        let traffic = CodexTrafficSettings {
+            headers_timeout_seconds: 7,
+            first_byte_timeout_seconds: 11,
+            idle_timeout_seconds: 13,
+            total_timeout_seconds: 17,
+            non_streaming_timeout_seconds: 900,
+            ..CodexTrafficSettings::default()
+        };
+        let streaming = traffic.timeouts(true);
+        assert_eq!(
+            (
+                streaming.headers,
+                streaming.first_byte,
+                streaming.idle,
+                streaming.total
+            ),
+            (
+                Duration::from_secs(7),
+                Duration::from_secs(11),
+                Duration::from_secs(13),
+                Duration::from_secs(17)
+            )
+        );
+        let whole = traffic.timeouts(false);
+        assert_eq!(whole.headers, Duration::from_secs(7));
+        assert!(
+            [whole.first_byte, whole.idle, whole.total]
+                .iter()
+                .all(|phase| *phase == Duration::from_secs(900)),
+            "非流式响应只受一个整体期限约束，不套用流式首包/空闲期限"
+        );
+        let unlimited = CodexTrafficSettings {
+            non_streaming_timeout_seconds: 0,
+            ..CodexTrafficSettings::default()
+        };
+        assert!(unlimited.timeouts(false).total.is_zero());
+        assert!(unlimited.validate().is_ok());
+        assert!(CodexTrafficSettings {
+            non_streaming_timeout_seconds: 86_401,
+            ..CodexTrafficSettings::default()
+        }
+        .validate()
+        .is_err());
+    }
+    #[test]
+    fn policies_saved_before_the_non_streaming_deadline_load_with_the_default() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut saved = serde_json::to_value(CodexGatewayPolicy::default()).unwrap();
+        saved["traffic"]
+            .as_object_mut()
+            .unwrap()
+            .remove("nonStreamingTimeoutSeconds");
+        std::fs::create_dir_all(path(directory.path()).parent().unwrap()).unwrap();
+        std::fs::write(path(directory.path()), saved.to_string()).unwrap();
+        let (policy, _) = load(directory.path()).unwrap();
+        assert_eq!(policy.traffic.non_streaming_timeout_seconds, 600);
     }
 }

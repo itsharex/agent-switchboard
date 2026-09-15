@@ -73,9 +73,12 @@ pub async fn save_global_prompt_document(
         let state = state(&app)?;
         let gate = app.state::<super::ConfigWriteGate>().inner().clone();
         blocking(move || {
-            let _guard = gate.lock().map_err(|error| CommandError::new("prompt-write-gate-unavailable", error))?;
+            let _guard = gate
+                .lock()
+                .map_err(|error| CommandError::new("prompt-write-gate-unavailable", error))?;
             if target == AppKind::Codex {
-                crate::codex_prompts::ensure_ready(state.root()).map_err(|error| CommandError::new("codex-prompt-recovery-required", error))?;
+                crate::codex_prompts::ensure_ready(state.root())
+                    .map_err(|error| CommandError::new("codex-prompt-recovery-required", error))?;
             }
             let target_path = state
                 .global_prompt_target(target)

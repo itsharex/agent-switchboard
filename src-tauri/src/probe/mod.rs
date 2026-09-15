@@ -7,8 +7,8 @@
 //! native stack did. The shared [`http_get`] helper carries that same stack
 //! to other outbound reads (model fetch, update check, quota, OAuth).
 
-mod models;
 mod claude_gemini;
+mod models;
 mod transport;
 
 #[cfg(test)]

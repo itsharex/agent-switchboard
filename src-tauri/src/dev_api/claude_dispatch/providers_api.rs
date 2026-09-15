@@ -34,6 +34,50 @@ pub(super) async fn dispatch(
                 argument(&request.args, "query")?
             ))
         }
+        "scan_claude_snippet_source" => command!(
+            crate::commands::claude_management::scan_claude_snippet_source(
+                app.clone(),
+                argument(&request.args, "sourcePath")?
+            )
+        ),
+        "import_claude_snippet_source" => command!(
+            crate::commands::claude_management::import_claude_snippet_source(
+                app.clone(),
+                argument(&request.args, "sourcePath")?,
+                argument(&request.args, "sourceRevision")?,
+                argument(&request.args, "expectedSettingsHash")?,
+                argument(&request.args, "confirmWrite")?
+            )
+        ),
+        "test_claude_endpoints" => {
+            command!(crate::commands::claude_endpoints::test_claude_endpoints(
+                argument(&request.args, "urls")?
+            ))
+        }
+        "list_provider_endpoints" => command!(
+            crate::commands::provider_endpoints::list_provider_endpoints(
+                app.clone(),
+                argument(&request.args, "providerId")?
+            )
+        ),
+        "add_provider_endpoint" => {
+            command!(crate::commands::provider_endpoints::add_provider_endpoint(
+                app.clone(),
+                argument(&request.args, "providerId")?,
+                argument(&request.args, "url")?,
+                argument(&request.args, "expectedFileHash")?,
+                argument(&request.args, "confirmWrite")?
+            ))
+        }
+        "remove_provider_endpoint" => command!(
+            crate::commands::provider_endpoints::remove_provider_endpoint(
+                app.clone(),
+                argument(&request.args, "providerId")?,
+                argument(&request.args, "url")?,
+                argument(&request.args, "expectedFileHash")?,
+                argument(&request.args, "confirmWrite")?
+            )
+        ),
         _ => return Ok(None),
     };
     result.map(Some)

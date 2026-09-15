@@ -10,7 +10,7 @@ mod codex_auth;
 pub use codex_auth::CodexManagedAuth;
 mod codex_request;
 mod money;
-pub use codex_request::{CodexRequestOptions, CodexPromptCacheRouting, CodexAnthropicCacheTtl};
+pub use codex_request::{CodexAnthropicCacheTtl, CodexPromptCacheRouting, CodexRequestOptions};
 pub use money::{decimal_micros, format_usd_micros};
 mod connection;
 pub use claude_provider::{ClaudeBilling, ClaudePricingModelSource};
@@ -35,7 +35,7 @@ pub use codex::{
 };
 pub use connection::{
     ClaudeApiKeyField, LocalProxyRequestOverrides, ProviderAuthBinding, ProviderConnectionOptions,
-    ProviderEndpoint,
+    ProviderEndpoint, PROTECTED_OVERRIDE_HEADERS,
 };
 pub use kinds::{AppKind, AuthenticationScheme, GlobalPromptDocument, RouteMode, UpstreamProtocol};
 pub use model::{
@@ -47,8 +47,8 @@ pub use plan::{
     SwitchPreview, WriteOperation,
 };
 pub use provider::{
-    classify_profile_save, codex_official_draft, ProfileSaveKind, ProviderDraft, ProviderFile,
-    ProviderProfile, ProviderRecord,
+    classify_profile_save, codex_official_draft, ProfileSaveKind, ProviderDisplay, ProviderDraft,
+    ProviderFile, ProviderProfile, ProviderRecord,
 };
 pub use responses::{ResponsesOptions, ResponsesRequestMode};
 pub use settings::{

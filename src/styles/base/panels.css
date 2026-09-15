@@ -120,21 +120,6 @@
   gap: var(--asb-space-2);
 }
 
-/* The Codex provider page intentionally keeps the original client/action row
-   below the dual-route cards. Newer workspaces use WorkspaceHeader instead. */
-.asb-tabs-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-2);
-  margin-bottom: var(--asb-space-3);
-}
-
-.asb-tabs-bar .asb-tabs {
-  align-self: center;
-  margin-bottom: 0;
-}
-
 /* ---------------------------------------------------------------------------
  * Inline note — one muted line inside a surface that already has content:
  * "still reading…", "no changes", "nothing recorded for this field". It is a

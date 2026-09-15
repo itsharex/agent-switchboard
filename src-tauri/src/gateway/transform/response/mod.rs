@@ -58,7 +58,9 @@ pub(super) fn parse_response(
         UpstreamProtocol::Responses => parse_responses(value, reasoning_transport),
         UpstreamProtocol::ChatCompletions => parse_chat(value, reasoning_transport),
         UpstreamProtocol::AnthropicMessages => parse_anthropic(value, reasoning_transport),
-        UpstreamProtocol::GeminiGenerateContent => super::claude_gemini::response(value, reasoning_transport),
+        UpstreamProtocol::GeminiGenerateContent => {
+            super::claude_gemini::response(value, reasoning_transport)
+        }
     }
 }
 
@@ -88,7 +90,9 @@ pub(crate) fn convert_error(to: UpstreamProtocol, status: u16, message: &str) ->
             "status": status,
             "error": { "type": "gateway_error", "message": message },
         }),
-        UpstreamProtocol::GeminiGenerateContent => json!({"error":{"code":status,"message":message,"status":"INTERNAL"}}),
+        UpstreamProtocol::GeminiGenerateContent => {
+            json!({"error":{"code":status,"message":message,"status":"INTERNAL"}})
+        }
         UpstreamProtocol::ChatCompletions => json!({
             "error": { "message": message, "type": "gateway_error", "code": status.to_string() },
         }),

@@ -478,7 +478,9 @@ fn nvidia_reasoning_stream_is_opaque_for_both_clients() {
         assert!(!output.contains("private reasoning"));
         assert!(output.contains("visible answer"));
         match target {
-            asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+            asb_core::UpstreamProtocol::GeminiGenerateContent => {
+                panic!("Google native has a separate Claude fixture")
+            }
             UpstreamProtocol::Responses => assert!(output.contains("encrypted_content")),
             UpstreamProtocol::AnthropicMessages => {
                 assert!(output.contains("redacted_thinking"))

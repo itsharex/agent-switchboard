@@ -131,7 +131,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
   });
   return (
     <>
-      <SortableProviderRows legacyLayout ids={props.records.map((record) => record.profile.id)} onReorder={state.reorder}
+      <SortableProviderRows ids={props.records.map((record) => record.profile.id)} onReorder={state.reorder}
         ariaLabel="Codex 供应商列表" emptyLabel="尚无第三方供应商；官方登录已就绪"
         leading={official && (
           <CodexOfficialRow record={official} {...rowProps(official.profile)} quotaOpen={state.quotaOpen}
@@ -168,7 +168,7 @@ export function CodexProvidersPage(props: Props) {
   );
   if (!props.active) return null;
   return (
-      <ProviderWorkspaceShell legacyLayout ariaLabel="Codex 供应商" app="codex" onSelectApp={props.onSelectApp}
+      <ProviderWorkspaceShell ariaLabel="Codex 供应商" app="codex" onSelectApp={props.onSelectApp}
       busy={props.busy} statuses={props.statuses} profiles={props.profiles} locks={props.locks}
       onOpenClientSettings={props.onOpenClientSettings} onOpenHistory={props.onOpenHistory}
       onImport={props.onImport} onNew={() => { state.retractPreview(); props.onNew(); }}>

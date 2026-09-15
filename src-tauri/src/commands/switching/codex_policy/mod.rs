@@ -252,5 +252,22 @@ pub(crate) async fn reset_codex_provider_health(
     .await
 }
 
+/// Read-only CC Switch scan. The proposal it returns is applied only through
+/// `prepare_codex_gateway_policy` / `commit_codex_gateway_policy`, so the
+/// source import shares the one preview/confirm transaction and never gains
+/// a second write path.
+#[tauri::command]
+pub(crate) async fn scan_codex_failover_source(
+    app: AppHandle,
+    source_path: String,
+) -> Result<crate::ccswitch_source::codex_failover::CodexFailoverSourceScan, CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        crate::ccswitch_source::codex_failover::scan(std::path::Path::new(&source_path), &state)
+            .map_err(|message| CommandError::new("codex-failover-scan-failed", message))
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests;

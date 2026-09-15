@@ -57,6 +57,96 @@ pub struct LocalProxyRequestOverrides {
     pub body: Value,
 }
 
+/// Header names a provider override may never replace: HTTP framing,
+/// regenerated credentials, official account identity, and tracing hops.
+/// One owner for the save-time validator and the gateway's outbound gate.
+pub const PROTECTED_OVERRIDE_HEADERS: [&str; 26] = [
+    "host",
+    "content-length",
+    "content-type",
+    "transfer-encoding",
+    "connection",
+    "accept-encoding",
+    "authorization",
+    "x-api-key",
+    "x-goog-api-key",
+    "proxy-authorization",
+    "proxy-authenticate",
+    "te",
+    "trailer",
+    "upgrade",
+    "chatgpt-account-id",
+    "session_id",
+    "x-client-request-id",
+    "x-forwarded-host",
+    "x-forwarded-port",
+    "x-forwarded-proto",
+    "forwarded",
+    "x-request-id",
+    "x-correlation-id",
+    "x-trace-id",
+    "traceparent",
+    "tracestate",
+];
+
+fn is_header_token(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                )
+        })
+}
+
+fn is_header_value(value: &str) -> bool {
+    value.len() <= 4096
+        && value
+            .bytes()
+            .all(|byte| byte == b'\t' || (0x20..=0x7E).contains(&byte) || byte >= 0x80)
+}
+
+impl LocalProxyRequestOverrides {
+    /// Rejects overrides the outbound gate would silently drop, so invalid
+    /// input fails at save time instead.
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value) in &self.headers {
+            let name = name.trim();
+            if !is_header_token(name) {
+                return Err(format!("请求头覆盖的名字不是合法 HTTP 头名：{name}"));
+            }
+            if PROTECTED_OVERRIDE_HEADERS
+                .iter()
+                .any(|protected| protected.eq_ignore_ascii_case(name))
+            {
+                return Err(format!("请求头覆盖不能替换受保护的头：{name}"));
+            }
+            if !is_header_value(value) {
+                return Err(format!("请求头覆盖的值含有控制字符或过长：{name}"));
+            }
+        }
+        if !self.body.is_null() && !self.body.is_object() {
+            return Err("请求体覆盖必须是 JSON 对象".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderAuthBinding {
@@ -82,6 +172,28 @@ fn is_false(value: &bool) -> bool {
 impl ProviderConnectionOptions {
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// Validates the custom User-Agent and the request overrides so invalid
+    /// values fail at save/import time instead of being dropped at egress.
+    pub fn validate_request_overrides(&self) -> Result<(), String> {
+        if let Some(user_agent) = &self.custom_user_agent {
+            let user_agent = user_agent.trim();
+            if user_agent.is_empty() {
+                return Err("自定义 User-Agent 不能为空".into());
+            }
+            if user_agent.len() > 512
+                || !user_agent
+                    .bytes()
+                    .all(|byte| (0x20..=0x7E).contains(&byte) || byte >= 0x80)
+            {
+                return Err("自定义 User-Agent 含有控制字符或超过 512 字节".into());
+            }
+        }
+        if let Some(overrides) = &self.local_proxy_request_overrides {
+            overrides.validate()?;
+        }
+        Ok(())
     }
 
     pub fn requires_gateway(&self) -> bool {

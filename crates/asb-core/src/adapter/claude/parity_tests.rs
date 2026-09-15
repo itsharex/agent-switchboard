@@ -13,6 +13,7 @@ fn imported(config: Value) -> ProviderProfile {
         meta: None,
         notes: None,
         website_url: None,
+        display: None,
     })
     .unwrap();
     assert!(proposal.warnings.is_empty(), "{:?}", proposal.warnings);

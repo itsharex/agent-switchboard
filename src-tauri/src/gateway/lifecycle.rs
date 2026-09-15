@@ -60,6 +60,7 @@ impl GatewayController {
                 provider_health: RwLock::new(BTreeMap::new()),
                 health_store,
                 codex_health: Arc::new(codex::health::CodexHealthStore::new(local.root())),
+                codex_history: Arc::new(codex::history::CodexToolHistory::default()),
                 claude_request_ledger,
                 claude_auth: crate::claude_auth::ClaudeAuth::shared(local.root()),
                 activation_lock: Mutex::new(()),

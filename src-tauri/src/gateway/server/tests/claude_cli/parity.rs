@@ -106,7 +106,9 @@ fn check_result(
         "CLI exposed its fixture credential"
     );
     match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::ChatCompletions => assert_eq!(requests[0]["reasoning_effort"], "xhigh"),
         UpstreamProtocol::Responses => assert_eq!(requests[0]["reasoning"]["effort"], "xhigh"),
         UpstreamProtocol::AnthropicMessages => {
@@ -187,9 +189,11 @@ fn projection(
             model: Some("gpt-5.4".into()),
             model_options: None,
             parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+            claude_fragment: Default::default(),
             notes: None,
             website_url: None,
             usage_query: None,
+            display: None,
             official_quota_refresh_interval_minutes: None,
         })
         .unwrap();

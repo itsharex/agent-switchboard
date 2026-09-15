@@ -277,6 +277,7 @@ impl GatewayController {
             authentication: profile
                 .upstream_authentication()
                 .expect("custom route authentication"),
+            claude_fragment: profile.claude_fragment.clone(),
             claude_primary_model: (profile.app == AppKind::Claude)
                 .then(|| profile.model.clone())
                 .flatten(),
@@ -287,6 +288,7 @@ impl GatewayController {
                 _ => None,
             },
             claude_account: None,
+            codex_account: None,
             codex: None,
         })
     }
@@ -330,9 +332,11 @@ impl GatewayController {
                 .upstream
                 .protocol()
                 .resolve_authentication(file.profile.authentication),
+            claude_fragment: Default::default(),
             claude_primary_model: None,
             claude_model_options: None,
             claude_account: None,
+            codex_account: None,
             codex: Some(snapshot),
         })
     }
@@ -342,6 +346,19 @@ impl GatewayController {
         route: &ActiveRoute,
         configuration: &str,
     ) -> Result<bool, String> {
+        // Official takeover keeps the built-in `openai` provider and the
+        // gateway entry in `openai_base_url`; there is no catalog pointer,
+        // so the client endpoint itself is the route revision marker.
+        if route.app == AppKind::Codex && route.codex_account.is_some() {
+            let document = configuration
+                .parse::<toml_edit::DocumentMut>()
+                .map_err(|_| "无法验证 Codex 路由修订".to_string())?;
+            let expected = route.client_endpoint(&self.configured_base_url());
+            return Ok(document
+                .get(asb_core::ownership::CODEX_PROVIDER_BASE_URL_KEY)
+                .and_then(|value| value.as_str())
+                == Some(expected.as_str()));
+        }
         let matches =
             adapter::matches_provider_identity(configuration, &self.client_identity_plan(route))
                 .map_err(|_| "无法验证本机协议网关客户端凭据".to_string())?;
@@ -379,6 +396,7 @@ impl GatewayController {
                 route_mode: RouteMode::Custom,
                 name: "本机协议网关".to_string(),
                 model: None,
+                claude_fragment: route.claude_fragment.clone(),
                 base_url: Some(route.upstream_base_url.clone()),
                 connection: route.connection.clone(),
                 api_key: route.api_key.clone(),
@@ -388,6 +406,7 @@ impl GatewayController {
                 model_options: None,
                 notes: None,
                 website_url: None,
+                display: None,
                 usage_query: None,
                 official_quota_refresh_interval_minutes: None,
             },

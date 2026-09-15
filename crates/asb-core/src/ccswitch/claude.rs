@@ -7,30 +7,41 @@ mod connection;
 
 use super::row::{CcSwitchProposal, CcSwitchProviderDraft, CcSwitchRow};
 use super::usage::map_usage_query;
+use crate::claude_common::Extra;
 use crate::contracts::{
     AppKind, ProviderDraft, ResponsesOptions, ResponsesRequestMode, RouteMode, SettingsValues,
     UpstreamProtocol,
 };
 use serde_json::Value;
 
-/// Claude env keys a profile can represent. Either credential alias supplies
-/// the profile credential, while its delivery scheme remains independent
-/// from the selected body protocol.
-const CLAUDE_ENV_KEYS: [&str; 14] = [
-    "ANTHROPIC_BASE_URL",
+/// Top-level source keys consumed by the CC Switch structured mapping; they
+/// never reach the profile fragment.
+const RESERVED_TOP_KEYS: [&str; 6] = [
+    "base_url",
+    "baseURL",
+    "apiEndpoint",
+    "api_format",
+    "openrouter_compat_mode",
+    "auth_mode",
+];
+
+/// ChatGPT Codex catalogs gpt-5.6 at a 372K context window, far below the
+/// 1.05M API spec, so the routed Claude Code default of 200K wastes context.
+/// Kimi For Coding serves a 256K window under the same 200K default.
+const CODEX_OAUTH_CONTEXT_TOKENS: &str = "372000";
+const KIMI_FOR_CODING_CONTEXT_TOKENS: &str = "262144";
+const KIMI_FOR_CODING_BASE_URL: &str = "https://api.kimi.com/coding";
+const CONTEXT_ENV_KEYS: [&str; 2] = [
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+];
+const CODEX_OAUTH_MODEL_ENV_KEYS: [&str; 6] = [
     "ANTHROPIC_MODEL",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-    "ANTHROPIC_AUTH_TOKEN",
-    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
     "ANTHROPIC_DEFAULT_FABLE_MODEL",
     "CLAUDE_CODE_SUBAGENT_MODEL",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME",
-    "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME",
-    "ANTHROPIC_SMALL_FAST_MODEL",
 ];
 
 /// Converts explicit source metadata at the import boundary. No source
@@ -47,11 +58,18 @@ pub(super) fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchPropo
     let route = connection::route(&config, &env, &meta, &mut warnings)?;
     let (model, model_options) =
         crate::claude_model::import_models(&config, crate::claude_model::ModelSource::CcSwitch)?;
-    source_warnings(&config, &parameters, &mut warnings);
+    let mut fragment = source_fragment(&config, &parameters, &mut warnings);
+    if let Some(route) = route.as_ref() {
+        context_defaults(route, &env, &mut fragment);
+    }
     let Some(route) = route else {
         return Ok(CcSwitchProposal {
             key,
-            draft: CcSwitchProviderDraft::Claude(official_draft(parameters)),
+            draft: CcSwitchProviderDraft::Claude(official_draft(
+                parameters,
+                fragment,
+                row.display.clone(),
+            )),
             warnings,
         });
     };
@@ -80,8 +98,10 @@ pub(super) fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchPropo
             max_output_tokens: None.into(),
             model_options,
             parameters,
+            claude_fragment: fragment,
             notes: row.notes.clone(),
             website_url: row.website_url.clone(),
+            display: row.display.clone(),
             usage_query,
             official_quota_refresh_interval_minutes: None,
         }),
@@ -89,7 +109,11 @@ pub(super) fn map_claude(key: String, row: &CcSwitchRow) -> Result<CcSwitchPropo
     })
 }
 
-fn official_draft(parameters: SettingsValues) -> ProviderDraft {
+fn official_draft(
+    parameters: SettingsValues,
+    fragment: Extra,
+    display: Option<crate::contracts::ProviderDisplay>,
+) -> ProviderDraft {
     ProviderDraft {
         authentication: None,
         app: AppKind::Claude,
@@ -104,52 +128,79 @@ fn official_draft(parameters: SettingsValues) -> ProviderDraft {
         max_output_tokens: None.into(),
         model_options: None,
         parameters,
+        claude_fragment: fragment,
         notes: None,
         website_url: None,
+        display,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
     }
 }
 
-fn source_warnings(config: &Value, parameters: &SettingsValues, warnings: &mut Vec<String>) {
-    let env = config
-        .get("env")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    // Names only; values of unrecognized keys never enter the output.
-    for name in env.keys() {
-        if !CLAUDE_ENV_KEYS.contains(&name.as_str())
-            && !crate::claude_native::from_config(config)
-                .ok()
-                .flatten()
-                .is_some_and(|(native, _)| {
-                    native.kind.accepts(name)
-                        || name == native.kind.flag()
-                        || name == native.kind.base_key()
-                })
-        {
-            warnings.push(format!("未导入: env.{name}"));
+/// Collects source settings the structured profile cannot express into the
+/// profile-owned fragment. Keys rejected by fragment ownership stay in the
+/// warnings exactly as before; keys the fragment accepts stop being losses.
+fn source_fragment(
+    config: &Value,
+    parameters: &SettingsValues,
+    warnings: &mut Vec<String>,
+) -> Extra {
+    let (kept, dropped) =
+        crate::claude_common::import_fragment(config, parameters, &RESERVED_TOP_KEYS);
+    for name in dropped {
+        warnings.push(format!("未导入: {name}"));
+    }
+    kept
+}
+
+/// Route-calibrated context-window defaults, applied at the import boundary
+/// so they stay visible, profile-owned values instead of hidden render-time
+/// injections. Explicit source values always win.
+fn context_defaults(
+    route: &connection::SourceRoute,
+    env: &serde_json::Map<String, Value>,
+    fragment: &mut Extra,
+) {
+    let default =
+        if route.connection.provider_type.as_deref() == Some("codex_oauth") && targets_gpt56(env) {
+            Some(CODEX_OAUTH_CONTEXT_TOKENS)
+        } else if route.base_url.trim().trim_end_matches('/') == KIMI_FOR_CODING_BASE_URL {
+            Some(KIMI_FOR_CODING_CONTEXT_TOKENS)
+        } else {
+            None
+        };
+    let Some(default) = default else {
+        return;
+    };
+    let entry = fragment
+        .entry("env".to_string())
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    if let Some(env) = entry.as_object_mut() {
+        for key in CONTEXT_ENV_KEYS {
+            env.entry(key.to_string())
+                .or_insert_with(|| Value::String(default.to_string()));
         }
     }
-    for name in config.as_object().map(|o| o.keys()).into_iter().flatten() {
-        if ![
-            "env",
-            "model",
-            "availableModels",
-            "base_url",
-            "baseURL",
-            "apiEndpoint",
-            "api_format",
-            "openrouter_compat_mode",
-            "auth_mode",
-        ]
-        .contains(&name.as_str())
-            && !parameters.settings.contains_key(name)
-        {
-            warnings.push(format!("未导入: {name}"));
+}
+
+/// The gpt-5.6 family is the only Codex-OAuth model set calibrated for the
+/// injected window; any other model family keeps its own catalog defaults.
+fn targets_gpt56(env: &serde_json::Map<String, Value>) -> bool {
+    let mut saw_model = false;
+    for key in CODEX_OAUTH_MODEL_ENV_KEYS {
+        let Some(Value::String(model)) = env.get(key) else {
+            continue;
+        };
+        let model = model.trim();
+        if model.is_empty() {
+            continue;
+        }
+        saw_model = true;
+        if !model.to_ascii_lowercase().starts_with("gpt-5.6") {
+            return false;
         }
     }
+    saw_model
 }
 
 fn source_env(config: &Value) -> Result<serde_json::Map<String, Value>, String> {

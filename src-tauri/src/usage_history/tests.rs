@@ -20,6 +20,7 @@ fn provider() -> ProviderProfile {
         ProviderDraft {
             authentication: None,
             parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+            claude_fragment: Default::default(),
             app: AppKind::Claude,
             route_mode: RouteMode::Custom,
             name: "示例中转".to_string(),
@@ -33,6 +34,7 @@ fn provider() -> ProviderProfile {
             model_options: None,
             notes: None,
             website_url: None,
+            display: None,
             usage_query: Some(UsageQuery::Script {
                 source: "({ request() {}, extract() {} })".to_string(),
                 refresh_interval_minutes: 0,

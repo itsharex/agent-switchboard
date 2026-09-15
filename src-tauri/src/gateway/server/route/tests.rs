@@ -35,6 +35,25 @@ fn codex_paths_are_a_closed_typed_operation_set() {
 }
 
 #[test]
+fn gemini_oauth_egress_identifies_the_cli_client_but_api_keys_do_not() {
+    let mut route = test_route(
+        "https://generativelanguage.googleapis.com",
+        false,
+        UpstreamProtocol::GeminiGenerateContent,
+    );
+    route.app = asb_core::contracts::AppKind::Claude;
+    let oauth = upstream_headers(&route, None, None, None);
+    assert_eq!(oauth["authorization"], "Bearer fixture-key");
+    assert_eq!(oauth["x-goog-api-client"], "GeminiCLI/1.0");
+    assert!(oauth.get("x-goog-api-key").is_none());
+    route.authentication = asb_core::AuthenticationScheme::XGoogApiKey;
+    let api_key = upstream_headers(&route, None, None, None);
+    assert_eq!(api_key["x-goog-api-key"], "fixture-key");
+    assert!(api_key.get("x-goog-api-client").is_none());
+    assert!(api_key.get("authorization").is_none());
+}
+
+#[test]
 fn native_responses_headers_keep_protocol_facts_and_drop_credentials() {
     let incoming = [
         Header::from_bytes("openai-beta", "responses=v1").unwrap(),
@@ -224,6 +243,8 @@ fn test_route(
         claude_primary_model: None,
         claude_model_options: None,
         claude_account: None,
+        codex_account: None,
+        claude_fragment: Default::default(),
         codex: None,
     }
 }

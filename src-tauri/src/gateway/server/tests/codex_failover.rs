@@ -125,14 +125,21 @@ fn codex_failover_uses_queue_order_and_each_candidates_key_and_model() {
     assert_eq!(a["model"], "sandbox-model");
     assert_eq!(b["model"], "backup-wire-model");
     let ledger = crate::codex_metering::CodexRequestLedger::new(fixture.state.root());
-    let record = ledger.page(&Default::default(),0,10).unwrap().records.remove(0);
-    assert_eq!(record.profile_id.as_deref(),Some(fixture.backup.profile.id.as_str()));
-    assert_eq!(record.request_model.as_deref(),Some("sandbox-model"));
-    assert_eq!(record.mapped_model.as_deref(),Some("backup-wire-model"));
-    assert_eq!(record.input_tokens,Some(10));
-    assert_eq!(record.attempts.len(),2);
-    assert_eq!(record.attempts[0].status,Some(429));
-    assert_eq!(record.attempts[1].status,Some(200));
+    let record = ledger
+        .page(&Default::default(), 0, 10)
+        .unwrap()
+        .records
+        .remove(0);
+    assert_eq!(
+        record.profile_id.as_deref(),
+        Some(fixture.backup.profile.id.as_str())
+    );
+    assert_eq!(record.request_model.as_deref(), Some("sandbox-model"));
+    assert_eq!(record.mapped_model.as_deref(), Some("backup-wire-model"));
+    assert_eq!(record.input_tokens, Some(10));
+    assert_eq!(record.attempts.len(), 2);
+    assert_eq!(record.attempts[0].status, Some(429));
+    assert_eq!(record.attempts[1].status, Some(200));
     let snapshot = fixture.gateway.observe(&fixture.state);
     assert_eq!(
         snapshot
@@ -194,6 +201,114 @@ fn codex_failover_does_not_retry_client_parameter_errors() {
             .unwrap(),
     );
     assert_eq!(health.consecutive_failures(), 0);
+}
+
+fn reply_script(
+    server: std::sync::Arc<Server>,
+    script: Vec<(u16, Value)>,
+) -> std::thread::JoinHandle<Vec<Value>> {
+    thread::spawn(move || {
+        let mut requests = Vec::new();
+        for (status, body) in script {
+            let mut request = server
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .expect("upstream request");
+            let mut text = String::new();
+            request.as_reader().read_to_string(&mut text).unwrap();
+            request
+                .respond(
+                    Response::from_string(body.to_string())
+                        .with_status_code(StatusCode(status))
+                        .with_header(content_type("application/json")),
+                )
+                .unwrap();
+            requests.push(serde_json::from_str(&text).unwrap());
+        }
+        requests
+    })
+}
+
+fn image_request_body() -> String {
+    json!({"model":"sandbox-model", "stream":false, "input":[{"role":"user","content":[
+        {"type":"input_text","text":"what is this"},
+        {"type":"input_image","image_url":"https://example.test/picture.png"}
+    ]}]})
+    .to_string()
+}
+
+#[test]
+fn codex_media_downgrade_retries_once_with_a_text_marker_after_image_rejection() {
+    let primary = std::sync::Arc::new(Server::http(("127.0.0.1", 0)).unwrap());
+    let fixture = Fixture::new(&endpoint(&primary), "https://backup.invalid", false);
+    let upstream = reply_script(
+        primary,
+        vec![
+            (
+                400,
+                json!({"error":{"message":"This model does not support image input"}}),
+            ),
+            (200, success()),
+        ],
+    );
+    let response = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap()
+        .post(&fixture.url)
+        .header(CONTENT_TYPE, "application/json")
+        .body(image_request_body())
+        .send()
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    let requests = upstream.join().unwrap();
+    assert_eq!(requests.len(), 2, "one rejection then the sanitized retry");
+    assert!(
+        requests[0].to_string().contains("picture.png"),
+        "first attempt carried the image"
+    );
+    let retried = requests[1].to_string();
+    assert!(
+        !retried.contains("picture.png"),
+        "retry must be sanitized: {retried}"
+    );
+    assert!(
+        retried.contains("[Unsupported Image]"),
+        "retry carries the marker: {retried}"
+    );
+}
+
+#[test]
+fn codex_media_downgrade_honours_the_policy_toggle() {
+    let primary = std::sync::Arc::new(Server::http(("127.0.0.1", 0)).unwrap());
+    let fixture = Fixture::new(&endpoint(&primary), "https://backup.invalid", false);
+    let mut policy = fixture.policy.clone();
+    policy.media_fallback = false;
+    policy::save(fixture.state.root(), &policy).unwrap();
+    let upstream = reply_script(
+        primary,
+        vec![(
+            400,
+            json!({"error":{"message":"This model does not support image input"}}),
+        )],
+    );
+    let response = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap()
+        .post(&fixture.url)
+        .header(CONTENT_TYPE, "application/json")
+        .body(image_request_body())
+        .send()
+        .unwrap();
+    assert_eq!(
+        response.status().as_u16(),
+        400,
+        "no retry without the toggle"
+    );
+    assert_eq!(upstream.join().unwrap().len(), 1, "no second attempt");
 }
 
 #[test]

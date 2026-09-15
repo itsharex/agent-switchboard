@@ -1,5 +1,6 @@
 //! Local-only Claude gateway prices. Unknown prices are never reported as free.
 
+use super::claude_pricing_seed::BUILTIN_SEED;
 use super::request_ledger::{ClaudeRequestCost, ClaudeRequestRecord};
 use asb_core::contracts::{
     decimal_micros, format_usd_micros, ClaudeBilling, ClaudePricingModelSource,
@@ -8,6 +9,19 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
 
 const FILE: &str = "claude-pricing.json";
+const SOURCE: &str = "CC Switch d695a2d / 本地参考价，非账单";
+/// The seed generation a file was last filled from. Version 1 files predate
+/// the full vendor table and are filled on load; version 2 files are the
+/// user's own state and load exactly as stored.
+const SEED_VERSION: u8 = 2;
+/// The three reference rows version 1 files were seeded with, in their old
+/// values. A stored row equal to one of these was never customized, so the
+/// fill refreshes it to the current seed (official 2026-09 list prices).
+const V1_SEED: &[(&str, &str, &str, &str, &str)] = &[
+    ("claude-opus-5", "5", "25", "0.5", "6.25"),
+    ("claude-sonnet-5", "3", "15", "0.3", "3.75"),
+    ("claude-haiku-4-5", "1", "5", "0.1", "1.25"),
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -26,32 +40,64 @@ pub(crate) struct ClaudePriceBook {
     pub(crate) models: BTreeMap<String, ClaudeModelPrice>,
 }
 
+fn seeded_price(input: &str, output: &str, read: &str, create: &str) -> ClaudeModelPrice {
+    ClaudeModelPrice {
+        input_usd_per_million: input.into(),
+        output_usd_per_million: output.into(),
+        cache_read_usd_per_million: read.into(),
+        cache_creation_usd_per_million: create.into(),
+        source: SOURCE.into(),
+    }
+}
+
 impl Default for ClaudePriceBook {
     fn default() -> Self {
         let mut models = BTreeMap::new();
-        for (model, input, output, read, create) in [
-            ("claude-opus-5", "5", "25", "0.5", "6.25"),
-            ("claude-sonnet-5", "3", "15", "0.3", "3.75"),
-            ("claude-haiku-4-5", "1", "5", "0.1", "1.25"),
-        ] {
-            models.insert(
-                model.into(),
-                ClaudeModelPrice {
-                    input_usd_per_million: input.into(),
-                    output_usd_per_million: output.into(),
-                    cache_read_usd_per_million: read.into(),
-                    cache_creation_usd_per_million: create.into(),
-                    source: "CC Switch d695a2d / 本地参考价，非账单".into(),
-                },
-            );
+        for (model, input, output, read, create) in BUILTIN_SEED {
+            models.insert((*model).into(), seeded_price(input, output, read, create));
         }
-        Self { version: 1, models }
+        Self {
+            version: SEED_VERSION,
+            models,
+        }
     }
 }
 
 impl ClaudePriceBook {
+    /// Fills a book from an older seed generation: every built-in row the file
+    /// lacks is added, and a version-1 row that still equals its old default
+    /// is refreshed to the current seed. Rows the user touched stay theirs.
+    fn filled_from_older_seed(mut self) -> Self {
+        if self.version >= SEED_VERSION {
+            return self;
+        }
+        for (model, input, output, read, create) in BUILTIN_SEED {
+            match self.models.get_mut(*model) {
+                Some(price) => {
+                    let untouched = V1_SEED.iter().any(|(old, i, o, r, c)| {
+                        *old == *model
+                            && price.input_usd_per_million == *i
+                            && price.output_usd_per_million == *o
+                            && price.cache_read_usd_per_million == *r
+                            && price.cache_creation_usd_per_million == *c
+                            && price.source == SOURCE
+                    });
+                    if untouched {
+                        *price = seeded_price(input, output, read, create);
+                    }
+                }
+                None => {
+                    self.models
+                        .insert((*model).into(), seeded_price(input, output, read, create));
+                }
+            }
+        }
+        self.version = SEED_VERSION;
+        self
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.version != 1 || self.models.len() > 5000 {
+        if self.version != SEED_VERSION || self.models.len() > 5000 {
             return Err("Claude 价格表版本或数量无效".into());
         }
         for (model, price) in &self.models {
@@ -83,6 +129,7 @@ impl ClaudePriceBook {
         };
         let book: Self = crate::config_store::parse_strict(&text)
             .map_err(|e| format!("Claude 价格表无效：{e}"))?;
+        let book = book.filled_from_older_seed();
         book.validate()?;
         Ok(book)
     }
@@ -175,7 +222,11 @@ pub(crate) struct ClaudePriceBookSnapshot {
 pub(crate) fn read_snapshot(root: &Path) -> Result<ClaudePriceBookSnapshot, String> {
     let text = crate::config_store::read_optional(&root.join(FILE)).map_err(|e| e.to_string())?;
     let book = match &text {
-        Some(text) => crate::config_store::parse_strict(text).map_err(|e| e.to_string())?,
+        Some(text) => {
+            let stored: ClaudePriceBook =
+                crate::config_store::parse_strict(text).map_err(|e| e.to_string())?;
+            stored.filled_from_older_seed()
+        }
         None => ClaudePriceBook::default(),
     };
     book.validate()?;
@@ -201,7 +252,9 @@ mod quote_tests {
             .estimate(&record(), &billing)
             .unwrap()
             .unwrap();
-        assert_eq!(cost.total_usd, "6.450000");
+        // 0.4×$2 + 0.1×$10 + 0.5×$0.20 + 0.1×$2.50 = $2.15, doubled by the
+        // profile multiplier.
+        assert_eq!(cost.total_usd, "4.300000");
         assert_eq!(cost.model, "claude-sonnet-5");
     }
     #[test]
@@ -219,5 +272,80 @@ mod quote_tests {
         assert!(ClaudePriceBook::default()
             .estimate(&record, &ClaudeBilling::default())
             .is_err());
+    }
+    #[test]
+    fn seed_covers_every_vendor_family_the_presets_and_gateway_route_to() {
+        let book = ClaudePriceBook::default();
+        for model in [
+            "claude-opus-4-6-20260206",
+            "claude-haiku-4-5-20251001",
+            "gemini-3.6-flash",
+            "gpt-5.6",
+            "kimi-k2.6",
+            "deepseek-v3",
+            "grok-4.6",
+            "qwen3.8-max",
+        ] {
+            assert!(
+                book.models.contains_key(model),
+                "{model} must carry a built-in reference price"
+            );
+        }
+    }
+    #[test]
+    fn version_one_files_gain_the_full_seed_without_losing_customizations() {
+        let mut stale = ClaudePriceBook {
+            version: 1,
+            models: BTreeMap::new(),
+        };
+        for (model, input, output, read, create) in V1_SEED {
+            stale
+                .models
+                .insert((*model).into(), seeded_price(input, output, read, create));
+        }
+        // A user-customized price keeps both its values and its source.
+        stale.models.insert(
+            "claude-opus-5".into(),
+            ClaudeModelPrice {
+                input_usd_per_million: "9".into(),
+                output_usd_per_million: "40".into(),
+                cache_read_usd_per_million: "0.9".into(),
+                cache_creation_usd_per_million: "5".into(),
+                source: "user".into(),
+            },
+        );
+        // A user addition survives untouched.
+        stale.models.insert(
+            "my-relay-model".into(),
+            ClaudeModelPrice {
+                input_usd_per_million: "1".into(),
+                output_usd_per_million: "2".into(),
+                cache_read_usd_per_million: "0".into(),
+                cache_creation_usd_per_million: "0".into(),
+                source: "user".into(),
+            },
+        );
+        let filled = stale.filled_from_older_seed();
+        assert_eq!(filled.version, SEED_VERSION);
+        filled.validate().unwrap();
+        // The stale seeded sonnet row was refreshed to the official list price.
+        assert_eq!(
+            filled.models["claude-sonnet-5"].output_usd_per_million,
+            "10"
+        );
+        // The customized row kept the user's values.
+        assert_eq!(filled.models["claude-opus-5"].input_usd_per_million, "9");
+        // The user addition stayed.
+        assert!(filled.models.contains_key("my-relay-model"));
+        // The full vendor table arrived.
+        assert!(filled.models.contains_key("gemini-3.6-flash"));
+        // A version-2 file loads exactly as stored: deletions are honored.
+        let mut trimmed = ClaudePriceBook::default();
+        trimmed.models.remove("gemini-3.6-flash");
+        assert_eq!(
+            trimmed.clone().filled_from_older_seed(),
+            trimmed,
+            "current-generation files must never be re-filled"
+        );
     }
 }

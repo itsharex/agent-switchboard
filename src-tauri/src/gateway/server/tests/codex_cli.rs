@@ -117,9 +117,14 @@ fn verify_responses_cli(mode: ResponsesRequestMode, api_key_only: bool) {
     let (codex_home, workdir) =
         prepare_client(directory.path(), &projection, &gateway, &upstream_key);
     if api_key_only {
-        fs::write(codex_home.join("auth.json"), serde_json::json!({
-            "auth_mode": "apikey", "OPENAI_API_KEY": "asb-local-gateway"
-        }).to_string()).unwrap();
+        fs::write(
+            codex_home.join("auth.json"),
+            serde_json::json!({
+                "auth_mode": "apikey", "OPENAI_API_KEY": "asb-local-gateway"
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
     let output = run_isolated_cli(&codex_home, workdir);
     assert_cli_output(&output, &upstream_key, &projection_token(&projection));

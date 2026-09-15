@@ -108,6 +108,124 @@ fn claude_gateway_applies_connection_overrides_at_the_upstream_exit() {
     gateway.shutdown();
 }
 
+#[test]
+fn codex_gateway_applies_connection_overrides_at_the_upstream_exit() {
+    let upstream = Server::http(("127.0.0.1", 0)).expect("upstream listener");
+    let upstream_base = endpoint(&upstream);
+    let directory = tempfile::tempdir().expect("temporary state");
+    let state = LocalState::from_root(directory.path().join("state"));
+    let key = "fixture-codex-upstream-key".to_string();
+    let mut profile = sandbox_codex_file(
+        &state,
+        "Codex request override sandbox",
+        upstream_base.clone(),
+        key.clone(),
+        CodexUpstream::ChatCompletions,
+    );
+    profile.profile.connection = codex_connection_options();
+    let gateway = GatewayController::start(&state);
+    let projection = gateway
+        .project_codex(&profile, default_client_settings(AppKind::Codex))
+        .expect("project Codex route");
+    gateway
+        .commit(&projection, || Ok(()))
+        .expect("activate route");
+    let url = codex_endpoint(&projection);
+
+    let worker = thread::spawn(move || {
+        let mut request = upstream
+            .recv_timeout(Duration::from_secs(10))
+            .expect("upstream receive")
+            .expect("upstream request");
+        assert_eq!(request.url(), "/v1/chat/completions");
+        assert_header(&request, "user-agent", Some("asb-override-fixture/1"));
+        assert_header(&request, "x-provider-tag", Some("override"));
+        assert_header(
+            &request,
+            "authorization",
+            Some("Bearer fixture-codex-upstream-key"),
+        );
+        assert_header(&request, "content-type", Some("application/json"));
+        assert_ne!(header(&request, "host"), Some("blocked.example"));
+        let mut body = String::new();
+        request
+            .as_reader()
+            .read_to_string(&mut body)
+            .expect("read upstream body");
+        let body: Value = serde_json::from_str(&body).expect("upstream JSON");
+        assert_eq!(body["model"], "override-model");
+        assert_eq!(body["metadata"]["tenant"], "fixture");
+        assert_eq!(body["stream"], false);
+        request
+            .respond(
+                Response::from_string(
+                    json!({
+                        "id": "codex_override",
+                        "object": "chat.completion",
+                        "model": "override-model",
+                        "choices": [{
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop"
+                        }],
+                        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+                    })
+                    .to_string(),
+                )
+                .with_header(content_type("application/json")),
+            )
+            .expect("respond upstream");
+    });
+
+    let response = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .expect("HTTP client")
+        .post(url)
+        .header(
+            "Authorization",
+            format!("Bearer {}", projection_token(&projection)),
+        )
+        .header(CONTENT_TYPE, "application/json")
+        .body(
+            json!({
+                "model": "sandbox-model",
+                "stream": false,
+                "input": [{"role": "user", "content": "hello"}]
+            })
+            .to_string(),
+        )
+        .send()
+        .expect("Codex gateway request");
+    assert_eq!(response.status().as_u16(), 200);
+    let body: Value = serde_json::from_str(&response.text().expect("Codex response"))
+        .expect("Codex response JSON");
+    assert_eq!(body["output"][0]["status"], "completed");
+    worker.join().expect("upstream worker");
+    gateway.shutdown();
+}
+
+/// Save-time validation rejects protected header overrides, so the Codex
+/// fixture only carries overridable values; the protected-name egress gate
+/// stays pinned by the Claude test below.
+fn codex_connection_options() -> ProviderConnectionOptions {
+    let mut headers = BTreeMap::new();
+    headers.insert("x-provider-tag".to_string(), "override".to_string());
+    ProviderConnectionOptions {
+        custom_user_agent: Some("asb-override-fixture/1".to_string()),
+        local_proxy_request_overrides: Some(LocalProxyRequestOverrides {
+            headers,
+            body: json!({
+                "model": "override-model",
+                "metadata": {"tenant": "fixture"},
+                "stream": true
+            }),
+        }),
+        ..Default::default()
+    }
+}
+
 fn connection_options() -> ProviderConnectionOptions {
     let mut headers = BTreeMap::new();
     headers.insert("x-provider-tag".to_string(), "override".to_string());

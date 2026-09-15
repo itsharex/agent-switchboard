@@ -21,14 +21,32 @@ pub(crate) fn preview(
     let mut entries = overlay(plan);
     entries.extend(super::native::entries(current, plan)?);
     let mut preview = preview_entries_from_root(root, entries, warnings, backup_dir)?;
-    preview.changes.extend(
-        crate::claude_common::changes(current, &plan.client_settings.claude_extra).map_err(
-            |message| AdapterError {
-                message,
-                line: None,
-            },
-        )?,
-    );
+    crate::claude_common::validate_scopes(
+        &plan.client_settings.claude_extra,
+        &plan.profile.claude_fragment,
+    )
+    .map_err(|message| AdapterError {
+        message,
+        line: None,
+    })?;
+    let fragment_changes = |result: Result<Vec<KeyChange>, String>| {
+        result.map_err(|message| AdapterError {
+            message,
+            line: None,
+        })
+    };
+    preview
+        .changes
+        .extend(fragment_changes(crate::claude_common::changes(
+            current,
+            &plan.client_settings.claude_extra,
+        ))?);
+    preview
+        .changes
+        .extend(fragment_changes(crate::claude_common::changes_profile(
+            current,
+            &plan.profile.claude_fragment,
+        ))?);
     Ok(preview)
 }
 

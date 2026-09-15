@@ -10,6 +10,7 @@
 //! visible, recoverable runtime state — never a reason to refuse the window.
 
 pub(crate) mod claude_pricing;
+pub(crate) mod claude_pricing_seed;
 pub(crate) mod claude_settings;
 pub(crate) mod codex;
 pub(crate) mod failover;
@@ -19,9 +20,9 @@ pub(crate) mod port_change;
 mod port_probe;
 mod provider_health;
 pub(crate) mod request_ledger;
-mod usage_metadata;
 mod server;
 mod transform;
+mod usage_metadata;
 
 use metrics::{GatewayMetrics, GatewayMetricsSnapshot};
 
@@ -172,6 +173,12 @@ pub(crate) struct ActiveRoute {
     pub(crate) claude_primary_model: Option<String>,
     pub(crate) claude_model_options: Option<ClaudeModelSettings>,
     pub(crate) claude_account: Option<crate::claude_auth::ResolvedAccount>,
+    /// Present only on an official-takeover Codex route. Carries the bound
+    /// managed account; the forward path resolves fresh tokens per request.
+    pub(crate) codex_account: Option<asb_core::contracts::CodexManagedAuth>,
+    /// The active Claude profile's settings fragment, replayed verbatim by
+    /// identity rewrites so a port change never strips profile-owned keys.
+    pub(crate) claude_fragment: asb_core::claude_common::Extra,
     /// Present only for Codex. This is the accepted-request routing source
     /// for its typed catalog, model mapping, and operation capabilities.
     pub(crate) codex: Option<CodexRouteSnapshot>,
@@ -229,6 +236,7 @@ pub(crate) struct GatewayInner {
     pub(crate) provider_health: RwLock<BTreeMap<String, Arc<ProviderHealth>>>,
     pub(crate) health_store: Arc<ClaudeHealthStore>,
     pub(crate) codex_health: Arc<codex::health::CodexHealthStore>,
+    pub(crate) codex_history: Arc<codex::history::CodexToolHistory>,
     pub(crate) claude_request_ledger: Arc<ClaudeRequestLedger>,
     pub(crate) claude_auth: Arc<crate::claude_auth::ClaudeAuth>,
     pub(crate) activation_lock: Mutex<()>,

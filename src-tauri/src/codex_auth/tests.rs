@@ -202,50 +202,98 @@ fn corrupted_account_store_is_not_silently_replaced() {
 
 #[test]
 fn shared_native_refresh_is_synchronized_without_changing_api_key_mode_or_unowned_keys() {
-    let directory = tempfile::tempdir().unwrap(); let root = directory.path();
-    let id = insert(root, "one", "work"); let auth = root.join("auth.json");
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let id = insert(root, "one", "work");
+    let auth = root.join("auth.json");
     let _guard = store::lock().unwrap();
     let (mut file, revision) = store::load(root).unwrap();
     file.accounts[0].expires_at = 1;
-    let mut live: serde_json::Value = serde_json::from_str(&native(&file.accounts[0].tokens, 1)).unwrap();
-    live["auth_mode"] = json!("apikey"); live["OPENAI_API_KEY"] = json!("third-party-key"); live["host_note"] = json!("keep"); live["tokens"]["native_extra"] = json!("also keep");
-    fs::write(&auth, live.to_string()).unwrap(); store::save(root, &file, &revision).unwrap();
+    let mut live: serde_json::Value =
+        serde_json::from_str(&native(&file.accounts[0].tokens, 1)).unwrap();
+    live["auth_mode"] = json!("apikey");
+    live["OPENAI_API_KEY"] = json!("third-party-key");
+    live["host_note"] = json!("keep");
+    live["tokens"]["native_extra"] = json!("also keep");
+    fs::write(&auth, live.to_string()).unwrap();
+    store::save(root, &file, &revision).unwrap();
     let account = manager::valid_account_with(root, Some(&id), &auth, 100_000, |token| {
-        let mut next = token.clone(); next.refresh_token = "rotated-shared-chain".into(); Ok(next)
-    }).unwrap();
-    assert!(account.native_sync.is_none()); assert!(account.native_sync_error.is_none());
-    let after: serde_json::Value = serde_json::from_str(&fs::read_to_string(&auth).unwrap()).unwrap();
+        let mut next = token.clone();
+        next.refresh_token = "rotated-shared-chain".into();
+        Ok(next)
+    })
+    .unwrap();
+    assert!(account.native_sync.is_none());
+    assert!(account.native_sync_error.is_none());
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&auth).unwrap()).unwrap();
     assert_eq!(after["tokens"]["refresh_token"], "rotated-shared-chain");
-    assert_eq!(after["auth_mode"], "apikey"); assert_eq!(after["OPENAI_API_KEY"], "third-party-key"); assert_eq!(after["host_note"], "keep"); assert_eq!(after["tokens"]["native_extra"], "also keep");
+    assert_eq!(after["auth_mode"], "apikey");
+    assert_eq!(after["OPENAI_API_KEY"], "third-party-key");
+    assert_eq!(after["host_note"], "keep");
+    assert_eq!(after["tokens"]["native_extra"], "also keep");
     assert!(!root.join("config.toml").exists());
-    assert!(!asb_switch::list_backups(&asb_switch::FsIo, &root.join("codex/auth-backups")).is_empty());
+    assert!(
+        !asb_switch::list_backups(&asb_switch::FsIo, &root.join("codex/auth-backups")).is_empty()
+    );
 }
 #[test]
 fn refresh_never_replaces_a_concurrent_native_login_and_retains_the_fresh_managed_tokens() {
-    let directory = tempfile::tempdir().unwrap(); let root = directory.path();
-    let id = insert(root, "one", "work"); let auth = root.join("auth.json");
-    let _guard = store::lock().unwrap(); let (mut file, revision) = store::load(root).unwrap();
-    file.accounts[0].expires_at = 1; fs::write(&auth, native(&file.accounts[0].tokens, 1)).unwrap(); store::save(root, &file, &revision).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let id = insert(root, "one", "work");
+    let auth = root.join("auth.json");
+    let _guard = store::lock().unwrap();
+    let (mut file, revision) = store::load(root).unwrap();
+    file.accounts[0].expires_at = 1;
+    fs::write(&auth, native(&file.accounts[0].tokens, 1)).unwrap();
+    store::save(root, &file, &revision).unwrap();
     let external = native(&tokens("other", "other-work"), 200_000);
     let refreshed = manager::valid_account_with(root, Some(&id), &auth, 100_000, |token| {
         fs::write(&auth, &external).unwrap();
-        let mut next = token.clone(); next.refresh_token = "fresh-managed-token".into(); Ok(next)
-    }).unwrap();
+        let mut next = token.clone();
+        next.refresh_token = "fresh-managed-token".into();
+        Ok(next)
+    })
+    .unwrap();
     assert_eq!(refreshed.tokens.refresh_token, "fresh-managed-token");
-    assert!(refreshed.native_sync.is_none()); assert_eq!(fs::read_to_string(&auth).unwrap(), external);
+    assert!(refreshed.native_sync.is_none());
+    assert_eq!(fs::read_to_string(&auth).unwrap(), external);
 }
 #[test]
 fn native_sync_retries_from_its_persisted_intent_after_a_lock_failure() {
-    let directory = tempfile::tempdir().unwrap(); let root = directory.path();
-    let id = insert(root, "one", "work"); let auth = root.join("auth.json");
-    let _guard = store::lock().unwrap(); let (mut file, revision) = store::load(root).unwrap();
-    file.accounts[0].expires_at = 1; fs::write(&auth, native(&file.accounts[0].tokens, 1)).unwrap(); store::save(root, &file, &revision).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let id = insert(root, "one", "work");
+    let auth = root.join("auth.json");
+    let _guard = store::lock().unwrap();
+    let (mut file, revision) = store::load(root).unwrap();
+    file.accounts[0].expires_at = 1;
+    fs::write(&auth, native(&file.accounts[0].tokens, 1)).unwrap();
+    store::save(root, &file, &revision).unwrap();
     let config = root.join("config.toml");
-    assert!(matches!(asb_switch::lockfile::acquire(&asb_switch::FsIo, &config, "fixture"), asb_switch::lockfile::AcquireOutcome::Acquired));
-    let first = manager::valid_account_with(root, Some(&id), &auth, 100_000, |token| { let mut next = token.clone(); next.refresh_token = "rotated-once".into(); Ok(next) }).unwrap();
-    assert!(first.native_sync.is_some()); assert!(first.native_sync_error.is_some());
+    assert!(matches!(
+        asb_switch::lockfile::acquire(&asb_switch::FsIo, &config, "fixture"),
+        asb_switch::lockfile::AcquireOutcome::Acquired
+    ));
+    let first = manager::valid_account_with(root, Some(&id), &auth, 100_000, |token| {
+        let mut next = token.clone();
+        next.refresh_token = "rotated-once".into();
+        Ok(next)
+    })
+    .unwrap();
+    assert!(first.native_sync.is_some());
+    assert!(first.native_sync_error.is_some());
     asb_switch::lockfile::release(&asb_switch::FsIo, &config).unwrap();
-    let retried = manager::valid_account_with(root, Some(&id), &auth, 100_000, |_| panic!("must reuse the committed fresh tokens")).unwrap();
-    assert!(retried.native_sync.is_none()); assert!(retried.native_sync_error.is_none());
-    assert_eq!(serde_json::from_str::<serde_json::Value>(&fs::read_to_string(auth).unwrap()).unwrap()["tokens"]["refresh_token"], "rotated-once");
+    let retried = manager::valid_account_with(root, Some(&id), &auth, 100_000, |_| {
+        panic!("must reuse the committed fresh tokens")
+    })
+    .unwrap();
+    assert!(retried.native_sync.is_none());
+    assert!(retried.native_sync_error.is_none());
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&fs::read_to_string(auth).unwrap()).unwrap()
+            ["tokens"]["refresh_token"],
+        "rotated-once"
+    );
 }

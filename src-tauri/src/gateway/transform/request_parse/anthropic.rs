@@ -133,7 +133,12 @@ fn parse_tool_result(
     if content.iter().any(|part| {
         !matches!(
             part,
-            Part::Text(_) | Part::Image(_) | Part::Document(_) | Part::ToolReference(_)
+            Part::Text(_)
+                | Part::Image(_)
+                | Part::Document(_)
+                | Part::File { .. }
+                | Part::Audio { .. }
+                | Part::ToolReference(_)
         )
     }) {
         return error("Anthropic tool_result.content must contain only text, images, documents or tool references");

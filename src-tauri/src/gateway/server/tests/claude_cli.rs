@@ -1,7 +1,9 @@
 use super::*;
-mod parity;
 mod gemini;
 mod native;
+mod parity;
+mod recovery;
+mod resilience;
 mod runner;
 
 #[test]

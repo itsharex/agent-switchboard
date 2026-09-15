@@ -15,6 +15,9 @@ import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
 import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import type { ProviderEditorSession } from "../app/useProviders";
+import { useState } from "react";
+import { Button } from "../components/Button";
+import { ClaudeManagementDialog } from "../components/claude-management/ClaudeToolsLauncher";
 
 interface ProvidersPageProps {
   view: ProviderView;
@@ -63,6 +66,8 @@ interface ProvidersPageProps {
   onTogglePreview: (profile: ProviderProfile) => void;
   onEdit: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
+  /** Refreshes the provider snapshot after a management-dialog change. */
+  onRefresh?: () => Promise<void>;
 }
 
 function ProviderEditView(props: ProvidersPageProps) {
@@ -120,6 +125,7 @@ function ProviderListView({
   onConfigureUsage: (profile: ProviderProfile) => void;
 }) {
   const { appFilter, busy } = props;
+  const [manageOpen, setManageOpen] = useState(false);
   return (
     <ProviderWorkspaceShell
       ariaLabel="供应商工作区"
@@ -133,6 +139,11 @@ function ProviderListView({
       onOpenHistory={props.onOpenHistory}
       onImport={props.onImport}
       onNew={props.onNew}
+      extraActions={
+        <Button variant="secondary" disabled={busy} onClick={() => setManageOpen(true)}>
+          管理 Claude 功能
+        </Button>
+      }
     >
       <ProviderList
         profiles={props.profiles.filter((profile) => profile.app === appFilter)}
@@ -152,6 +163,14 @@ function ProviderListView({
         onDelete={props.onDelete}
         renderPreview={() => <ProviderPreview {...props} />}
       />
+      {manageOpen && (
+        <ClaudeManagementDialog
+          onClose={() => setManageOpen(false)}
+          onChanged={() => {
+            if (props.onRefresh) void props.onRefresh();
+          }}
+        />
+      )}
     </ProviderWorkspaceShell>
   );
 }

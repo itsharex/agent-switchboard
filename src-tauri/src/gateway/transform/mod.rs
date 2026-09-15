@@ -6,8 +6,8 @@
 
 mod anthropic_reasoning;
 mod chat_reasoning;
-mod claude_model;
 mod claude_gemini;
+mod claude_model;
 pub(crate) mod minimal;
 mod reasoning;
 mod request;
@@ -15,7 +15,11 @@ mod response;
 mod sse;
 mod stream;
 mod tool_names;
+mod upstream_compat;
 mod usage;
+pub(crate) use upstream_compat::{
+    apply_request_compat, restore_native_json, wrap_native_sse_reader,
+};
 
 use serde_json::Value;
 
@@ -96,6 +100,21 @@ pub(crate) enum Part {
     Text(String),
     Image(ImageSource),
     Document(Document),
+    /// Responses `input_file`: an OpenAI-hosted id, a data URL, an https URL,
+    /// and an optional display name. Chat receives the reference fields
+    /// verbatim; Anthropic receives a document block.
+    File {
+        file_id: Option<String>,
+        file_data: Option<String>,
+        file_url: Option<String>,
+        filename: Option<String>,
+    },
+    /// Responses `input_audio` (base64 payload plus declared format). Chat
+    /// Completions carries it verbatim; Anthropic has no audio input.
+    Audio {
+        data: String,
+        format: String,
+    },
     /// A client-side Claude search reference resolved against this request's
     /// complete tool catalogue. OpenAI receives the definition as tool output.
     ToolReference(Tool),

@@ -21,6 +21,7 @@ pub(super) async fn dispatch(
             argument(&request.args, "provider")?,
             argument(&request.args, "accountId")?
         )),
+        "get_claude_native_quota" => command!(accounts::get_claude_native_quota()),
         "get_claude_accounts" => command!(accounts::get_claude_accounts(app.clone())),
         "save_claude_account" => command!(accounts::save_claude_account(
             app.clone(),

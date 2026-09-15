@@ -12,7 +12,7 @@ use asb_core::extensions::contracts::{
 };
 use asb_core::extensions::mcp::{
     apply_claude_project_private_server_patches, apply_claude_user_server_patches,
-    apply_codex_server_patches, render_claude, render_codex,
+    apply_codex_server_patches, render_claude, render_codex, ClaudeHost,
 };
 use asb_core::extensions::plan::{PlanStep, PlannedFile};
 use asb_core::extensions::skill::ContentEntry;
@@ -69,7 +69,8 @@ impl Planner<'_> {
                         (rendered, changes, format!("mcp_servers.{key}"))
                     }
                     McpScope::ClaudeUserServers => {
-                        let render = render_claude(mcp, self.secrets).map_err(projection_error)?;
+                        let render = render_claude(mcp, self.secrets, ClaudeHost::current())
+                            .map_err(projection_error)?;
                         let (rendered, changes) = apply_claude_user_server_patches(
                             &text,
                             &[(key.to_string(), if enabled { Some(render) } else { None })],
@@ -78,7 +79,8 @@ impl Planner<'_> {
                         (rendered, changes, format!("mcpServers.{key}"))
                     }
                     McpScope::ClaudeProjectPrivate { project_path } => {
-                        let render = render_claude(mcp, self.secrets).map_err(projection_error)?;
+                        let render = render_claude(mcp, self.secrets, ClaudeHost::current())
+                            .map_err(projection_error)?;
                         let (rendered, changes) = apply_claude_project_private_server_patches(
                             &text,
                             project_path,

@@ -1,7 +1,7 @@
 //! Claude-only request billing and cache policy. Client preferences retain their own file.
 
-use serde::{Deserialize, Serialize};
 use super::money::decimal_micros;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -45,4 +45,3 @@ impl ClaudeBilling {
         Ok(())
     }
 }
-

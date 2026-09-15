@@ -43,7 +43,28 @@ pub(super) fn respond_models(
     request: crate::gateway::http::Request,
     span: RequestSpan,
     route: &ActiveRoute,
+    inner: &super::GatewayInner,
 ) {
+    // An official-takeover route has no ASB catalog: the backend document is
+    // the model list, fetched with the request's freshly resolved account.
+    if route.codex_account.is_some() {
+        match super::codex_account::official_models_document(inner, route) {
+            Ok(document) => {
+                span.finish(Some(200), document.len() as u64);
+                super::respond::respond_bytes(
+                    request,
+                    200,
+                    "application/json; charset=utf-8",
+                    document.into_bytes(),
+                );
+            }
+            Err((status, message)) => {
+                span.finish(Some(status), 0);
+                super::respond_error(request, Some(UpstreamProtocol::Responses), status, &message);
+            }
+        }
+        return;
+    }
     let snapshot = route
         .codex
         .as_ref()
@@ -63,6 +84,12 @@ pub(super) fn resolve_model_and_validate(
         .codex
         .as_ref()
         .ok_or_else(|| "Codex 路由缺少专用模型快照".to_string())?;
+    // Official takeover: the ChatGPT backend owns model identity and request
+    // capabilities, so admission keeps the client's body verbatim instead of
+    // gating it against an ASB catalog that can never list official models.
+    if route.codex_account.is_some() {
+        return official_passthrough(operation, body);
+    }
     let mut value: Value =
         serde_json::from_slice(&body).map_err(|_| "Codex 请求体不是有效 JSON".to_string())?;
     let object = value
@@ -202,6 +229,23 @@ fn catalog_entry<'a>(
         .iter()
         .find(|entry| entry.id == requested_model)
         .ok_or_else(|| format!("请求模型不在已激活 Codex 目录中：{requested_model}"))
+}
+
+/// Official-takeover admission: JSON-shape checks only, no catalog rewrite.
+fn official_passthrough(operation: CodexOperation, body: Vec<u8>) -> Result<Vec<u8>, String> {
+    let value: Value = serde_json::from_slice(&body).map_err(|_| "Codex 请求体不是有效 JSON")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| "Codex 请求体必须是 JSON 对象".to_string())?;
+    match object.get("model") {
+        Some(Value::String(model)) if !model.trim().is_empty() => {}
+        Some(_) => return Err("Codex 请求模型必须是字符串".to_string()),
+        None if requires_model(operation) => {
+            return Err("官方 Codex 请求缺少 model 字段".to_string())
+        }
+        None => {}
+    }
+    Ok(body)
 }
 
 fn contains_image(value: &Value) -> bool {

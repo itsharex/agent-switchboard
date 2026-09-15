@@ -122,7 +122,12 @@ mod tests {
                 reference: "ref-1".to_string(),
             }),
         };
-        let render = asb_core::extensions::mcp::render_claude(&definition, &resolve).unwrap();
+        let render = asb_core::extensions::mcp::render_claude(
+            &definition,
+            &resolve,
+            asb_core::extensions::mcp::ClaudeHost::Unix,
+        )
+        .unwrap();
         match render {
             asb_core::extensions::mcp::ClaudeServerRender::Http { headers, .. } => {
                 assert_eq!(

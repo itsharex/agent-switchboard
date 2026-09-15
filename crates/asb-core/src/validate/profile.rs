@@ -30,6 +30,7 @@ impl ProviderProfile {
             website_url: self.website_url.as_deref(),
             usage_query: self.usage_query.as_ref(),
             official_quota_refresh_interval: self.official_quota_refresh_interval_minutes,
+            claude_fragment: &self.claude_fragment,
         })
     }
 }
@@ -54,6 +55,7 @@ impl ProviderDraft {
             website_url: self.website_url.as_deref(),
             usage_query: self.usage_query.as_ref(),
             official_quota_refresh_interval: self.official_quota_refresh_interval_minutes,
+            claude_fragment: &self.claude_fragment,
         })
     }
 }
@@ -75,6 +77,7 @@ struct ProfileFields<'a> {
     website_url: Option<&'a str>,
     usage_query: Option<&'a UsageQuery>,
     official_quota_refresh_interval: Option<u32>,
+    claude_fragment: &'a crate::claude_common::Extra,
 }
 
 fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationError> {
@@ -86,12 +89,20 @@ fn validate_profile_fields(fields: ProfileFields<'_>) -> Result<(), ValidationEr
         app,
         model,
         model_options,
+        claude_fragment,
         notes,
         website_url,
         usage_query,
         official_quota_refresh_interval,
         ..
     } = fields;
+    if !claude_fragment.is_empty() {
+        if app != AppKind::Claude {
+            return Err(ValidationError::ClaudeFragmentRequiresClaude);
+        }
+        crate::claude_common::validate(claude_fragment)
+            .map_err(ValidationError::ClaudeFragmentInvalid)?;
+    }
     validate_model_identifier(model, "主模型")?;
     if let Some(options) = model_options {
         validate_model_options(app, options, model)?;

@@ -1,10 +1,11 @@
-mod claude_cli;
 mod claude_accounts;
+mod claude_cli;
 mod claude_failover;
 mod codex_cli;
 mod codex_compact_cli;
 mod codex_failover;
 mod codex_metering;
+mod codex_official_takeover;
 mod compaction;
 mod lifecycle;
 mod model_budgets;
@@ -147,7 +148,9 @@ pub(crate) fn sandbox_codex_file(
 
 fn codex_upstream(protocol: UpstreamProtocol) -> CodexUpstream {
     match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::Responses => CodexUpstream::Responses,
         UpstreamProtocol::ChatCompletions => CodexUpstream::ChatCompletions,
         UpstreamProtocol::AnthropicMessages => CodexUpstream::AnthropicMessages,
@@ -167,6 +170,7 @@ fn sandbox_profile(
         .create_provider(ProviderDraft {
             authentication: None,
             parameters: asb_core::ownership::default_provider_parameters(app),
+            claude_fragment: Default::default(),
             app,
             route_mode: RouteMode::Custom,
             name: name.to_string(),
@@ -194,6 +198,7 @@ fn sandbox_profile(
             notes: None,
             website_url: None,
             usage_query: None,
+            display: None,
             official_quota_refresh_interval_minutes: None,
         })
         .expect("create provider")

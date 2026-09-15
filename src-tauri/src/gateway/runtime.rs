@@ -105,7 +105,7 @@ impl GatewayInner {
         }
     }
 
-    fn prioritize_endpoint(&self, route: &ActiveRoute) {
+    pub(crate) fn prioritize_endpoint(&self, route: &ActiveRoute) {
         let Ok(mut candidates) = self.candidate_routes.write() else {
             return;
         };

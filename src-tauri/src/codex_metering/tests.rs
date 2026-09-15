@@ -17,7 +17,7 @@ fn prices() -> BTreeMap<String, CodexModelPrice> {
 }
 fn record(at_ms: u64) -> CodexRequestRecord {
     serde_json::from_value(json!({
-        "id": uuid::Uuid::new_v4().to_string(), "atMs": at_ms, "billable": true,
+        "id": uuid::Uuid::new_v4().to_string(), "origin": "proxy", "atMs": at_ms, "billable": true,
         "profileId": PROVIDER, "routeRevision": "revision-a", "upstreamProtocol": "responses",
         "requestModel": "client-alias", "mappedModel": "actual-model", "responseModel": "response-model",
         "status": 200, "durationMs": 12, "firstByteLatencyMs": 4, "firstTokenLatencyMs": 5,
@@ -27,6 +27,60 @@ fn record(at_ms: u64) -> CodexRequestRecord {
             "dailyLimitUsd": null, "monthlyLimitUsd": null },
         "cost": null, "pricingError": null, "attempts": []
     })).unwrap()
+}
+
+/// A gateway-recorded turn with explicit usage, shared with session sync tests.
+pub(super) fn proxy_record(
+    timestamp: &str,
+    model: &str,
+    input: Option<u64>,
+    output: Option<u64>,
+    cache_read: Option<u64>,
+) -> CodexRequestRecord {
+    let at_ms = chrono::DateTime::parse_from_rfc3339(timestamp)
+        .unwrap()
+        .timestamp_millis()
+        .max(0) as u64;
+    let mut record = record(at_ms);
+    record.mapped_model = Some(model.into());
+    record.request_model = None;
+    record.response_model = None;
+    record.input_tokens = input;
+    record.output_tokens = output;
+    record.cache_read_tokens = cache_read;
+    record.cache_creation_tokens = None;
+    record.reasoning_tokens = None;
+    record
+}
+
+/// A minimal valid session-sourced record, shared with session sync tests.
+pub(super) fn session_record_shape(thread: &str, index: u32) -> CodexRequestRecord {
+    CodexRequestRecord {
+        id: session_request_id(thread, index),
+        origin: CodexUsageOrigin::Session,
+        thread_id: Some(thread.to_string()),
+        at_ms: 1,
+        billable: true,
+        profile_id: None,
+        route_revision: None,
+        upstream_protocol: None,
+        request_model: None,
+        mapped_model: Some("gpt-5.4".into()),
+        response_model: None,
+        status: Some(200),
+        duration_ms: 0,
+        first_byte_latency_ms: None,
+        first_token_latency_ms: None,
+        input_tokens: Some(1),
+        output_tokens: Some(1),
+        cache_read_tokens: Some(0),
+        cache_creation_tokens: None,
+        reasoning_tokens: None,
+        billing: Default::default(),
+        cost: None,
+        pricing_error: None,
+        attempts: Vec::new(),
+    }
 }
 #[test]
 fn prices_the_actual_model_without_double_counting_caches_or_reasoning() {
@@ -137,7 +191,7 @@ fn settings_are_versioned_validated_and_compare_and_swapped() {
     assert_eq!(read_settings(root).unwrap().revision, saved.revision);
 }
 #[test]
-fn a_fresh_database_is_v1_and_unknown_historical_databases_are_preserved() {
+fn a_fresh_database_is_v2_and_unknown_historical_databases_are_preserved() {
     let temporary = tempfile::tempdir().unwrap();
     let ledger = CodexRequestLedger::new(temporary.path());
     ledger.append(&record(1)).unwrap();
@@ -145,7 +199,7 @@ fn a_fresh_database_is_v1_and_unknown_historical_databases_are_preserved() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 1);
+    assert_eq!(version, 2);
     db.pragma_update(None, "user_version", 7).unwrap();
     drop(db);
     let before = std::fs::read(&ledger.path).unwrap();

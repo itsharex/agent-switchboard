@@ -84,8 +84,12 @@ fn import_supported(
         serde_json::from_str(text).expect("syntax checked before import inspection");
     let claude_import_error = import_models(&root, ModelSource::Client).err();
     let native = crate::claude_native::from_config(&root);
-    if let Err(error) = &native { warnings.push(format!("Claude 原生云配置无法导入：{error}")); return false; }
-    let mut importable = native.ok().flatten().is_some() || route.route_mode == RouteMode::Official
+    if let Err(error) = &native {
+        warnings.push(format!("Claude 原生云配置无法导入：{error}"));
+        return false;
+    }
+    let mut importable = native.ok().flatten().is_some()
+        || route.route_mode == RouteMode::Official
         || (route.base_url.is_some() && claude_import_error.is_none());
     if route.route_mode == RouteMode::Custom {
         if let Some(error) = claude_import_error {

@@ -33,7 +33,12 @@ pub(super) fn fetch(
             url.query_pairs_mut().append_pair("pageToken", token);
         }
         let request = match scheme {
-            AuthenticationScheme::Bearer => client.get(url.clone()).bearer_auth(&key),
+            // Google OAuth callers identify the CLI client; plain API keys
+            // never send this marker.
+            AuthenticationScheme::Bearer => client
+                .get(url.clone())
+                .header("x-goog-api-client", "GeminiCLI/1.0")
+                .bearer_auth(&key),
             AuthenticationScheme::XGoogApiKey => {
                 client.get(url.clone()).header("x-goog-api-key", &key)
             }

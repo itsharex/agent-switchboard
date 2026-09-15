@@ -1,12 +1,23 @@
 //! Additional Claude shared configuration. Visual preferences retain their own keys.
+mod import;
 mod pointer;
 mod projection;
+mod shared;
 mod validation;
-pub use projection::{apply, changes, diff_documents, fragment, owned_paths};
+pub use import::import_fragment;
+pub use projection::{
+    apply, apply_profile, changes, changes_profile, diff_documents, fragment, import_filter,
+    owned_paths, validate_scopes,
+};
 use serde_json::{Map, Value};
+pub use shared::{apply_visual, extra_leaf_paths, import_shared, merged_extra, SharedSnippet};
 use std::collections::BTreeMap;
 pub use validation::validate;
 pub const MANIFEST: &str = "ASB_CLAUDE_COMMON_KEYS";
+/// Ownership manifest for the active provider profile's fragment. It travels
+/// through the same declared-path mechanism as the shared extra so a profile
+/// switch removes exactly the fragment it installed.
+pub const PROFILE_MANIFEST: &str = "ASB_CLAUDE_PROFILE_KEYS";
 pub type Extra = Map<String, Value>;
 
 /// Separates visual client fields from the additional fragment, without giving
@@ -67,8 +78,8 @@ fn collect(
     }
     Ok(())
 }
-fn declared(root: &Value) -> Result<Vec<String>, String> {
-    let Some(value) = root.pointer(&format!("/env/{MANIFEST}")) else {
+fn declared(root: &Value, manifest: &str) -> Result<Vec<String>, String> {
+    let Some(value) = root.pointer(&format!("/env/{manifest}")) else {
         return Ok(Vec::new());
     };
     let text = value

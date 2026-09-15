@@ -7,6 +7,8 @@ import { Input } from "../Input";
 import { Select } from "../Select";
 import { PresetForm } from "./PresetForm";
 import { ConnectionForm } from "./ConnectionForm";
+import { EndpointsPanel } from "./EndpointsPanel";
+import { SnippetImport } from "./SnippetImport";
 import type { ClaudeOperations } from "./operations";
 export function ProvidersPane({ operations: op }: { operations: ClaudeOperations }) {
   const [presets, setPresets] = useState<api.ClaudePresetSummary[]>([]);
@@ -26,15 +28,18 @@ export function ProvidersPane({ operations: op }: { operations: ClaudeOperations
   const select = (id: string | null) => { setSelected(id); setCopyName((records.find((r) => r.profile.id === id)?.profile.name ?? "") + " 副本"); };
   return <div className="asb-provider-section-fields">
     <Select ariaLabel="Claude 供应商管理操作" value={mode} disabled={busy} onChange={setMode}
-      options={[{ value: "presets", label: "离线供应商预设" }, { value: "profiles", label: "档案连接、绑定与复制" }]} />
+      options={[{ value: "presets", label: "离线供应商预设" }, { value: "profiles", label: "档案连接、绑定与复制" }, { value: "snippet", label: "通用配置片段导入" }]} />
     {mode === "presets" && accounts && <PresetForm presets={presets} accounts={accounts.accounts} operations={op} onSaved={refresh} />}
+    {mode === "snippet" && <SnippetImport operations={op} />}
     {mode === "profiles" && <>
       <div className="asb-form-actions"><Input aria-label="搜索 Claude 档案" value={query} disabled={busy} onChange={(e) => setQuery(e.target.value)} />
         <Button variant="secondary" disabled={busy} onClick={() => void run(async () => { setRecords(await api.searchClaudeProfiles(query)); select(null); })}>搜索档案</Button></div>
       <Select ariaLabel="Claude 本地档案" value={selected} disabled={busy} placeholder="选择档案" onChange={select}
-        options={records.map((r) => ({ value: r.profile.id, label: r.profile.name }))} />
+        options={records.map((r) => ({ value: r.profile.id, label: r.profile.name + (r.profile.display?.category ? ` · ${r.profile.display.category}` : "") }))} />
       {record && <>
         <ConnectionForm key={record.profile.id + record.fileHash} record={record} accounts={accounts?.accounts ?? []} operations={op} onSaved={refresh} />
+        {record.profile.routeMode === "custom" && !record.profile.connection?.claudeNative && !record.profile.connection?.providerType
+          && <EndpointsPanel key={"endpoints-" + record.profile.id + record.fileHash} record={record} operations={op} />}
         {record.profile.routeMode === "custom" && <div className="asb-form-actions">
           <Input aria-label="Claude 副本名称" value={copyName} disabled={busy} onChange={(e) => setCopyName(e.target.value)} />
           <Button variant="secondary" disabled={busy || !copyName.trim()} onClick={() => void run(async () => {

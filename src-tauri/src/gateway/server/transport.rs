@@ -10,12 +10,12 @@ use std::time::Duration;
 use tiny_http::Header;
 use tokio::sync::{mpsc as tokio_mpsc, watch};
 
-#[derive(Clone, Copy)]
-pub(super) struct Timeouts {
-    pub(super) headers: Duration,
-    pub(super) first_byte: Duration,
-    pub(super) idle: Duration,
-    pub(super) total: Duration,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Timeouts {
+    pub(crate) headers: Duration,
+    pub(crate) first_byte: Duration,
+    pub(crate) idle: Duration,
+    pub(crate) total: Duration,
 }
 
 impl Default for Timeouts {
@@ -81,7 +81,7 @@ pub(super) fn send_with_timeouts(
     }
     crate::upstream_overrides::apply_header_overrides(&mut headers, &route.connection);
     let request = client
-        .client
+        .client()
         .request(method, url)
         .headers(headers)
         .body(body);

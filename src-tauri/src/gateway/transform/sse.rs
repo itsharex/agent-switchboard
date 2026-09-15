@@ -24,7 +24,9 @@ pub(crate) fn diagnostic_event(
             error["type"] = serde_json::json!("api_error");
             ("error", serde_json::json!({"type":"error", "error":error}))
         }
-        UpstreamProtocol::ChatCompletions | UpstreamProtocol::GeminiGenerateContent => ("error", serde_json::json!({"error":error})),
+        UpstreamProtocol::ChatCompletions | UpstreamProtocol::GeminiGenerateContent => {
+            ("error", serde_json::json!({"error":error}))
+        }
     };
     render_event(event, &value)
 }

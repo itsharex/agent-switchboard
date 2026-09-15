@@ -22,7 +22,9 @@ impl GatewayController {
         policy: &codex::policy::CodexGatewayPolicy,
     ) -> Result<GatewayProjection, String> {
         policy.validate()?;
-        let preserve = crate::codex_auth::policy::load(&self.inner.state_root)?.policy.preserve_official_login;
+        let preserve = crate::codex_auth::policy::load(&self.inner.state_root)?
+            .policy
+            .preserve_official_login;
         file.validate()?;
         let profile = file.client_projection().into_profile(AppKind::Codex);
         let catalog = CodexCatalogProjection::from_file(file, &codex_route_fingerprint(file)?)?;
@@ -111,5 +113,99 @@ impl GatewayController {
             )
             .with_codex_model_catalog(codex_catalog_file_name(&file.profile.id, &revision)),
         ))
+    }
+
+    /// Projects an official Codex switch through the local gateway while the
+    /// policy enables takeover and a managed account is bound. The client
+    /// keeps the built-in `openai` provider with the gateway entry in
+    /// `openai_base_url`; the route resolves fresh managed tokens per request
+    /// and never joins the third-party failover queue. A native CLI login
+    /// without a binding stays direct: the gateway must never rewrite
+    /// `auth.json` outside the switch executor.
+    pub(crate) fn project_codex_official_takeover(
+        &self,
+        plan: SwitchPlan,
+        policy: &codex::policy::CodexGatewayPolicy,
+    ) -> Result<GatewayProjection, String> {
+        policy.validate()?;
+        if !policy.takeover {
+            return Err("Codex 官方接管需要先在网关策略中启用接管".to_string());
+        }
+        let auth = plan
+            .codex_managed_auth()
+            .cloned()
+            .ok_or_else(|| "Codex 官方接管需要绑定一个托管账号；原生登录请保持直连".to_string())?;
+        if self.blocked_recovery().is_some() {
+            return Err("存在未完成的端口修改恢复，无法切换 Codex 供应商".to_string());
+        }
+        let base_url = self
+            .listening_base_url()
+            .ok_or_else(|| "本机协议网关当前未在监听，无法接管 Codex 官方登录".to_string())?;
+        let identity = self
+            .inner
+            .state
+            .lock()
+            .map_err(|_| "本机协议网关状态锁不可用".to_string())?
+            .identity
+            .clone();
+        let fingerprint = hex_digest(
+            serde_json::json!({
+                "codexOfficial": true,
+                "profileId": plan.profile.id,
+                "managedId": auth.managed_id,
+                "accountId": auth.account_id,
+            })
+            .to_string()
+            .as_bytes(),
+        );
+        let snapshot = asb_core::contracts::CodexRouteSnapshot::official(
+            &plan.profile.id,
+            crate::codex_auth::OFFICIAL_CODEX_BASE,
+            fingerprint.clone(),
+        )?;
+        let route = ActiveRoute {
+            app: AppKind::Codex,
+            profile_id: plan.profile.id.clone(),
+            client_token: route_token(&identity, AppKind::Codex, &plan.profile.id, &fingerprint),
+            continuation_key: codex_continuation_key(&identity, &plan.profile.id, &fingerprint),
+            fingerprint,
+            upstream_base_url: crate::codex_auth::OFFICIAL_CODEX_BASE.to_string(),
+            connection: Default::default(),
+            upstream_protocol: UpstreamProtocol::Responses,
+            responses_options: plan.profile.responses_options.clone(),
+            max_output_tokens: None,
+            api_key: String::new(),
+            authentication: asb_core::AuthenticationScheme::Bearer,
+            claude_fragment: Default::default(),
+            claude_primary_model: None,
+            claude_model_options: None,
+            claude_account: None,
+            codex_account: Some(auth),
+            codex: Some(snapshot),
+        };
+        let projected = SwitchPlan::through_gateway(
+            plan.profile,
+            plan.client_settings,
+            route.client_endpoint(&base_url),
+            route.client_token.clone(),
+        )
+        .with_codex_managed_auth(
+            route
+                .codex_account
+                .clone()
+                .expect("official takeover carries its bound account"),
+        );
+        asb_core::validate_plan(&projected.profile, &projected.client_settings)
+            .map_err(|error| error.to_string())?;
+        Ok(GatewayProjection {
+            plan: projected,
+            activation: GatewayActivation::Routed(route),
+            warning: Some(
+                "官方 ChatGPT 账号将经过本机协议网关（仅限绑定的托管账号）；本地登录与绑定账号身份不一致的请求将被拒绝；官方账号不参与自动故障转移"
+                    .to_string(),
+            ),
+            codex_catalog: None,
+            candidate_routes: Vec::new(),
+        })
     }
 }

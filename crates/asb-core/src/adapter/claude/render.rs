@@ -8,12 +8,19 @@ pub(crate) fn render(current: &str, plan: &SwitchPlan) -> Result<String, Adapter
     let mut entries = overlay(plan);
     entries.extend(super::native::entries(current, plan)?);
     let rendered = render_entries(current, entries)?;
-    crate::claude_common::apply(&rendered, &plan.client_settings.claude_extra).map_err(|message| {
-        AdapterError {
-            message,
-            line: None,
-        }
-    })
+    let fragment_error = |message: String| AdapterError {
+        message,
+        line: None,
+    };
+    crate::claude_common::validate_scopes(
+        &plan.client_settings.claude_extra,
+        &plan.profile.claude_fragment,
+    )
+    .map_err(fragment_error)?;
+    let rendered = crate::claude_common::apply(&rendered, &plan.client_settings.claude_extra)
+        .map_err(fragment_error)?;
+    crate::claude_common::apply_profile(&rendered, &plan.profile.claude_fragment)
+        .map_err(fragment_error)
 }
 
 pub(crate) fn render_gateway_base_url(

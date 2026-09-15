@@ -25,7 +25,7 @@ pub(super) fn render_chat_tool_result(
             Part::Document(document) if matches!(document.source, DocumentSource::Text(_)) => {
                 text.push(Part::Text(super::claude_media::document_text(document)))
             }
-            Part::Image(_) | Part::Document(_) => {
+            Part::Image(_) | Part::Document(_) | Part::File { .. } | Part::Audio { .. } => {
                 text.push(Part::Text(format!("\n{TOOL_RESULT_MEDIA_MARKER}\n")));
                 media.push(part.clone());
             }

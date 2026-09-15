@@ -17,6 +17,7 @@ fn claude_draft(model: &str) -> ProviderDraft {
     ProviderDraft {
         authentication: None,
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
         app: AppKind::Claude,
         route_mode: RouteMode::Custom,
         name: "测试中转".to_string(),
@@ -32,6 +33,7 @@ fn claude_draft(model: &str) -> ProviderDraft {
         website_url: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
+        display: None,
     }
 }
 

@@ -521,7 +521,7 @@ fn claude_http_bearer_renders_into_authorization() {
             reference: "ref-1".to_string(),
         }),
     };
-    let render = render_claude(&definition, &resolve_yes).unwrap();
+    let render = render_claude(&definition, &resolve_yes, ClaudeHost::Unix).unwrap();
     match render {
         ClaudeServerRender::Http { headers, .. } => {
             assert_eq!(
@@ -531,6 +531,71 @@ fn claude_http_bearer_renders_into_authorization() {
         }
         other => panic!("expected http render, got {other:?}"),
     }
+}
+
+#[test]
+fn windows_claude_renders_wrap_shell_launchers_and_imports_unwrap_them() {
+    let npx = McpDefinition::Stdio {
+        command: "npx".to_string(),
+        args: vec!["-y".to_string(), "@scope/server".to_string()],
+        env: BTreeMap::new(),
+        codex_options: None,
+    };
+    match render_claude(&npx, &resolve_yes, ClaudeHost::Windows).unwrap() {
+        ClaudeServerRender::Stdio { command, args, .. } => {
+            assert_eq!(command, "cmd");
+            assert_eq!(args, ["/c", "npx", "-y", "@scope/server"]);
+        }
+        other => panic!("expected stdio render, got {other:?}"),
+    }
+    match render_claude(&npx, &resolve_yes, ClaudeHost::Unix).unwrap() {
+        ClaudeServerRender::Stdio { command, args, .. } => {
+            assert_eq!(command, "npx");
+            assert_eq!(args, ["-y", "@scope/server"]);
+        }
+        other => panic!("expected stdio render, got {other:?}"),
+    }
+
+    // Shim detection is case-insensitive, accepts `.cmd`, and looks at the
+    // file name of a full path; plain binaries and explicit cmd stay as-is.
+    let args = vec!["server.js".to_string()];
+    assert_eq!(
+        wrap_windows_launcher("C:\\tools\\Node.CMD", &args),
+        Some((
+            "cmd".to_string(),
+            vec!["/c".to_string(), "C:\\tools\\Node.CMD".to_string(), "server.js".to_string()]
+        ))
+    );
+    assert_eq!(wrap_windows_launcher("python", &args), None);
+    assert_eq!(
+        wrap_windows_launcher("cmd.exe", &["/c".to_string(), "npx".to_string()]),
+        None
+    );
+
+    assert_eq!(
+        unwrap_windows_launcher("cmd", &["/C".to_string(), "npx".to_string(), "x".to_string()]),
+        Some(("npx".to_string(), vec!["x".to_string()]))
+    );
+    assert_eq!(
+        unwrap_windows_launcher("cmd", &["/c".to_string(), "dir".to_string()]),
+        None
+    );
+    assert_eq!(unwrap_windows_launcher("npx", &[]), None);
+
+    let document = r#"{ "mcpServers": {
+        "wrapped": { "type": "stdio", "command": "cmd", "args": ["/c", "npx", "-y", "@scope/server"] },
+        "shell": { "command": "cmd", "args": ["/c", "echo", "hi"] }
+    } }"#;
+    assert_eq!(import_claude_server(document, "wrapped").unwrap(), npx);
+    assert_eq!(
+        import_claude_server(document, "shell").unwrap(),
+        McpDefinition::Stdio {
+            command: "cmd".to_string(),
+            args: vec!["/c".to_string(), "echo".to_string(), "hi".to_string()],
+            env: BTreeMap::new(),
+            codex_options: None,
+        }
+    );
 }
 
 #[test]

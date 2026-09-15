@@ -133,10 +133,18 @@ fn render_responses_input(request: &CanonicalRequest) -> Result<Vec<Value>, Tran
                     ordinary.clear();
                     input.push(reasoning.responses_input_item()?);
                 }
-                Part::Document(_) | Part::ToolReference(_) if message.role == Role::User => {
+                Part::Document(_)
+                | Part::File { .. }
+                | Part::Audio { .. }
+                | Part::ToolReference(_)
+                    if message.role == Role::User =>
+                {
                     ordinary.push(part.clone())
                 }
-                Part::Document(_) | Part::ToolReference(_) => {
+                Part::Document(_)
+                | Part::File { .. }
+                | Part::Audio { .. }
+                | Part::ToolReference(_) => {
                     return error("文档和工具引用只能出现在用户输入或工具结果中")
                 }
                 Part::Text(_) | Part::Image(_) => ordinary.push(part.clone()),

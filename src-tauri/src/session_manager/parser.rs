@@ -199,6 +199,11 @@ pub(super) fn valid_session_id(id: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
+/// Applies the list-title limit to a title sourced outside the transcript.
+pub(super) fn clamp_title(text: &str) -> String {
+    clamp_text(text, TITLE_LIMIT)
+}
+
 fn clamp_text(text: &str, limit: usize) -> String {
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.chars().count() <= limit {

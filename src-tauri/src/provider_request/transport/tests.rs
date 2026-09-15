@@ -113,7 +113,9 @@ fn protocol_requests_use_their_only_authentication_and_fixed_payload() {
         assert_eq!(body["stream"], false);
         assert!(body.to_string().contains(REQUEST_PROMPT));
         let cap = match protocol {
-            asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+            asb_core::UpstreamProtocol::GeminiGenerateContent => {
+                panic!("Google native has a separate Claude fixture")
+            }
             UpstreamProtocol::Responses => "max_output_tokens",
             UpstreamProtocol::ChatCompletions => "max_completion_tokens",
             UpstreamProtocol::AnthropicMessages => "max_tokens",
@@ -204,7 +206,7 @@ fn timeout_while_reading_a_response_stops_the_socket() {
             .unwrap();
         assert_socket_closed(&mut stream);
     });
-    let client = client_builder()
+    let client = super::fresh_client_builder()
         .no_proxy()
         .timeout(Duration::from_millis(200))
         .build()

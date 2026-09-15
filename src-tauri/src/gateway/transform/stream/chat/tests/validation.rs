@@ -4,7 +4,9 @@ fn assert_failure(source: &str, target: UpstreamProtocol, expected: &str) {
     let (events, failed) = transcode(source, target);
     assert!(failed, "invalid stream must fail");
     let kind = match target {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::AnthropicMessages => "error",
         UpstreamProtocol::Responses => "response.failed",
         UpstreamProtocol::ChatCompletions => unreachable!(),

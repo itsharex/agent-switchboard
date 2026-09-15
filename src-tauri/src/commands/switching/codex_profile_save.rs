@@ -1,7 +1,7 @@
 //! Active-save transaction for the current Codex-only provider contract.
-use super::plan::{build_codex_plan, preview_projection};
 #[cfg(test)]
 use super::plan::execute_projection;
+use super::plan::{build_codex_plan, preview_projection};
 use crate::commands::error::{
     operation_error, require_write_confirmation, store_error, CommandError,
 };
@@ -39,7 +39,11 @@ pub(super) struct PreparedCodexProfileSave {
 
 impl CodexProfileSavePreparations {
     pub(super) fn cancel(&self, id: &str) -> Result<(), CommandError> {
-        self.inner.entries.lock().map_err(|_| unavailable())?.remove(id);
+        self.inner
+            .entries
+            .lock()
+            .map_err(|_| unavailable())?
+            .remove(id);
         Ok(())
     }
 

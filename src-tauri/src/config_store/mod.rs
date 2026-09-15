@@ -19,6 +19,7 @@
 //! the only writer of real client files.
 
 pub mod client_settings;
+mod codex_endpoints;
 mod codex_management;
 mod codex_providers;
 pub mod history;
@@ -107,7 +108,9 @@ pub struct PendingProfileSave {
 }
 
 impl ConfigStore {
-    pub(crate) fn state_root(&self) -> &Path { &self.state_root }
+    pub(crate) fn state_root(&self) -> &Path {
+        &self.state_root
+    }
 
     pub fn new(state_root: PathBuf) -> Self {
         Self { state_root }

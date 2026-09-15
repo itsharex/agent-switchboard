@@ -71,6 +71,8 @@ mod tests {
             claude_primary_model: None,
             claude_model_options: None,
             claude_account: None,
+            codex_account: None,
+            claude_fragment: Default::default(),
             codex: None,
         }
     }

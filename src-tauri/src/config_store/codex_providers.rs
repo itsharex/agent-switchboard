@@ -15,9 +15,9 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use uuid::Uuid;
 
-struct LoadedCodexProvider {
-    file: CodexProviderFile,
-    hash: String,
+pub(super) struct LoadedCodexProvider {
+    pub(super) file: CodexProviderFile,
+    pub(super) hash: String,
 }
 
 impl ConfigStore {
@@ -264,7 +264,7 @@ impl ConfigStore {
     }
 }
 
-fn load(store: &ConfigStore) -> Result<Vec<LoadedCodexProvider>, ProfileStoreError> {
+pub(super) fn load(store: &ConfigStore) -> Result<Vec<LoadedCodexProvider>, ProfileStoreError> {
     store.ensure_layout()?;
     let directory = store.providers_dir(asb_core::contracts::AppKind::Codex);
     let entries = match fs::read_dir(directory) {
@@ -316,7 +316,10 @@ fn load(store: &ConfigStore) -> Result<Vec<LoadedCodexProvider>, ProfileStoreErr
     Ok(loaded)
 }
 
-fn write(store: &ConfigStore, file: &CodexProviderFile) -> Result<String, StoreOperationError> {
+pub(super) fn write(
+    store: &ConfigStore,
+    file: &CodexProviderFile,
+) -> Result<String, StoreOperationError> {
     file.validate()?;
     let json =
         serde_json::to_string_pretty(file).map_err(|_| "Codex 供应商文件序列化失败".to_string())?;

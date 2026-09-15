@@ -26,6 +26,8 @@ export function GatewayPane({ operations: op }: { operations: ClaudeOperations }
   const [view, setView] = useState<api.ClaudeFailoverView | null>(null);
   const [policy, setPolicy] = useState<api.ClaudeFailoverPolicy | null>(null);
   const [stop, setStop] = useState<api.ClaudeGatewayStopPreview | null>(null);
+  const [source, setSource] = useState<api.ClaudeFailoverSourceScan | null>(null);
+  const [sourcePath, setSourcePath] = useState("");
   const { run, busy, changed } = op;
   const accept = (next: api.ClaudeFailoverView) => { setView(next); setPolicy(next.policy); };
   useEffect(() => { void run(async () => accept(await api.getClaudeFailover())); }, [run]);
@@ -65,5 +67,24 @@ export function GatewayPane({ operations: op }: { operations: ClaudeOperations }
       <Button variant="secondary" disabled={busy} onClick={() => setStop(null)}>取消停止接管</Button>
       <Button variant="primary" disabled={busy} onClick={() => void run(async () => { const result = await api.stopClaudeGateway(stop, true); setStop(null); accept(await api.getClaudeFailover()); changed("Claude 接管已停止并恢复配置。" + result.warnings.join("；")); })}>确认停止并恢复 Claude 配置</Button>
     </section>}
+    <section aria-label="从 CC Switch 导入故障转移队列" className="asb-provider-section-fields">
+      <label className="asb-field"><span>CC Switch 数据库路径</span><Input value={sourcePath} disabled={busy} placeholder="~/.cc-switch/cc-switch.db" onChange={(e) => { setSourcePath(e.target.value); setSource(null); }} /></label>
+      <Button variant="secondary" disabled={busy || !sourcePath.trim()} onClick={() => void run(async () => setSource(await api.scanClaudeFailoverSource(sourcePath.trim())))}>只读扫描 Claude 故障转移队列</Button>
+      {source && !source.found && <p role="status">来源没有 Claude 故障转移数据。</p>}
+      {source && source.members.length > 0 && <section aria-label="Claude 故障转移队列预览">
+        <Table ariaLabel="来源队列成员" rows={source.members} rowKey={(m) => m.sourceName} columns={[
+          { key: "member", header: "来源供应商", render: (m) => m.sourceName },
+          { key: "route", header: "路由", render: (m) => [m.baseUrl, m.model].filter(Boolean).join(" · ") || "—" },
+          { key: "match", header: "本地档案", render: (m) => m.matchedProfileName ?? "未匹配（请先导入该供应商）" },
+        ]} />
+        {source.warnings.map((warning) => <p className="asb-scope-note" key={warning}>{warning}</p>)}
+        <p className="asb-scope-note">将导入队列顺序与来源策略（接管 {source.proposal.takeover ? "开" : "关"} · Failover {source.proposal.enabled ? "开" : "关"} · 重试 {source.proposal.maxRetries} 次）；只写本应用策略，真实客户端配置不变。</p>
+        <Button variant="primary" disabled={busy} onClick={() => void run(async () => {
+          const result = await api.importClaudeFailoverSource(sourcePath.trim(), source.sourceRevision, source.policyRevision, true);
+          setSource(null); accept(result.view);
+          changed(`已导入 Claude 故障转移队列：${result.queued} 个成员。` + result.warnings.join("；"));
+        })}>确认导入队列与策略</Button>
+      </section>}
+    </section>
   </div>;
 }

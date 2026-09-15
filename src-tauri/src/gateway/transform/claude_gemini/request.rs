@@ -142,7 +142,7 @@ fn message_parts(
                     return error("Gemini 工具调用角色或类型无效");
                 }
                 validate_name(name)?;
-                remember(calls, id, name, None)?;
+                calls.remember(id, name, None)?;
                 result.push(json!({"functionCall":{"name":name,"args":input}}));
             }
             Part::ToolResult {

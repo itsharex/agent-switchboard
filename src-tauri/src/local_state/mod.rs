@@ -159,6 +159,25 @@ impl LocalState {
         ))
     }
 
+    /// The Claude CLI's `config.json` beside its login cache. Only the
+    /// plugin-integration marker is ever written there, by `claude_integration`.
+    pub fn claude_plugin_config_path() -> Result<PathBuf, String> {
+        Ok(Self::claude_credentials_path()?.with_file_name("config.json"))
+    }
+
+    /// The Claude user document (`~/.claude.json`), resolved exactly as the
+    /// extensions workspace resolves it so both writers share one lock path.
+    pub fn claude_user_document_path() -> Result<PathBuf, String> {
+        let home = user_home_dir()?;
+        let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Ok(crate::extensions::paths::claude_user_json_path(
+            &home,
+            config_dir.as_deref(),
+        ))
+    }
+
     pub fn backup_dir(&self) -> PathBuf {
         self.root.join("backups")
     }

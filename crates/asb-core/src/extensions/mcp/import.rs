@@ -188,9 +188,14 @@ fn import_claude_stdio(
 ) -> Result<McpDefinition, NativeMcpImportError> {
     reject_json_unknown_fields(server, CLAUDE_STDIO_FIELDS)?;
     let command = json_required_string(server, "command")?;
+    let args = json_string_array(server, "args")?;
+    // A Windows `cmd /c npx …` entry is the host form of the portable
+    // launcher; the library keeps the portable form and re-wraps on render.
+    let (command, args) =
+        super::unwrap_windows_launcher(&command, &args).unwrap_or((command, args));
     Ok(McpDefinition::Stdio {
         command,
-        args: json_string_array(server, "args")?,
+        args,
         env: json_secret_map(server, "env")?,
         codex_options: None,
     })

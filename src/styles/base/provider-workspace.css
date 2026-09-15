@@ -1,19 +1,4 @@
-/* The legacy Codex provider page keeps its original two-row toolbar. */
-.asb-provider-workspace-legacy .asb-tabs-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-2);
-  margin-bottom: var(--asb-space-3);
-}
-
-.asb-provider-workspace-legacy .asb-provider-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--asb-space-2);
-}
-
-/* Third-party enable precondition, retained for non-legacy workspaces. */
+/* Third-party enable precondition. */
 .asb-provider-login-notice {
   display: flex;
   flex-direction: column;

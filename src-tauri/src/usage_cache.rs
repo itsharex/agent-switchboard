@@ -187,6 +187,7 @@ mod tests {
             ProviderDraft {
                 authentication: None,
                 parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+                claude_fragment: Default::default(),
                 app: AppKind::Claude,
                 route_mode: RouteMode::Custom,
                 name: "查询供应商".to_string(),
@@ -200,6 +201,7 @@ mod tests {
                 model_options: None,
                 notes: None,
                 website_url: None,
+                display: None,
                 usage_query: Some(UsageQuery::Declarative {
                     url: "{{baseUrl}}/usage".to_string(),
                     remaining_path: Some("/remaining".to_string()),

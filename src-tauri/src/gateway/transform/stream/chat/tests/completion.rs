@@ -47,7 +47,9 @@ fn final_arguments_and_usage_after_repeated_finish_are_not_lost() {
             r#"{"value":1}"#,
         );
         match target {
-            asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+            asb_core::UpstreamProtocol::GeminiGenerateContent => {
+                panic!("Google native has a separate Claude fixture")
+            }
             UpstreamProtocol::AnthropicMessages => {
                 let deltas = events_of(&stream.events, "message_delta");
                 assert_eq!(deltas.len(), 1);
@@ -98,7 +100,9 @@ fn empty_reasoning_and_placeholder_fields_leave_a_single_text_block() {
         stream.push(finish("stop"));
         stream.done();
         match target {
-            asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+            asb_core::UpstreamProtocol::GeminiGenerateContent => {
+                panic!("Google native has a separate Claude fixture")
+            }
             UpstreamProtocol::AnthropicMessages => {
                 let starts = events_of(&stream.events, "content_block_start");
                 assert_eq!(starts.len(), 1);

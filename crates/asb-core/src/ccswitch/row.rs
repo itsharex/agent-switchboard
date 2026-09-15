@@ -15,6 +15,8 @@ pub struct CcSwitchRow {
     /// Local metadata carried over on import; both columns are nullable.
     pub website_url: Option<String>,
     pub notes: Option<String>,
+    /// Source display columns; nullable application-side metadata.
+    pub display: Option<crate::contracts::ProviderDisplay>,
     /// Source-provider metadata. Only the optional usage script is
     /// considered; its source never crosses the scan-response boundary.
     pub meta: Option<String>,

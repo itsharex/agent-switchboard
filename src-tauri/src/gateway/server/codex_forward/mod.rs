@@ -51,6 +51,7 @@ pub(super) fn respond(
         policy,
         limit,
         last_failure: None,
+        media_retried: false,
     }
     .run(candidates);
 }
@@ -82,6 +83,7 @@ struct Forward {
     policy: CodexGatewayPolicy,
     limit: usize,
     last_failure: Option<attempt::Failure>,
+    media_retried: bool,
 }
 impl Forward {
     fn run(mut self, candidates: Vec<ActiveRoute>) {
@@ -113,6 +115,13 @@ impl Forward {
                         self.span.finish(None, 0);
                         return;
                     }
+                    let failure = match self.media_downgrade(&candidate, failure) {
+                        Ok(failure) => failure,
+                        Err((upstream, stream)) => {
+                            self.deliver(&candidate, permit, upstream, stream);
+                            return;
+                        }
+                    };
                     if failure.penalize {
                         permit.record_failure();
                     } else {
@@ -130,13 +139,7 @@ impl Forward {
     }
 
     fn prepare(&mut self, route: &ActiveRoute) -> Option<attempt::Prepared> {
-        match attempt::prepare(
-            route,
-            &self.inner.configured_base_url(),
-            self.request.url(),
-            &self.body,
-            self.request.headers(),
-        ) {
+        match self.prepare_body(route, &self.body) {
             Ok(prepared) => Some(prepared),
             Err(failure) => {
                 if self.last_failure.is_none() {
@@ -144,6 +147,60 @@ impl Forward {
                 }
                 None
             }
+        }
+    }
+    fn prepare_body(
+        &self,
+        route: &ActiveRoute,
+        body: &[u8],
+    ) -> Result<attempt::Prepared, attempt::Failure> {
+        attempt::prepare(
+            route,
+            &self.inner.configured_base_url(),
+            self.request.url(),
+            body,
+            self.request.headers(),
+            &self.inner.codex_history,
+        )
+    }
+    /// One retry per request with image blocks replaced by a text marker
+    /// after an upstream modality rejection. Success delivers through the
+    /// same permit; a failed retry becomes the recorded failure and the
+    /// original body resumes for any remaining candidate.
+    fn media_downgrade(
+        &mut self,
+        route: &ActiveRoute,
+        failure: attempt::Failure,
+    ) -> Result<attempt::Failure, (UpstreamResponse, bool)> {
+        if self.media_retried
+            || !self.policy.media_fallback
+            || !crate::gateway::codex::media::is_unsupported_image_failure(&failure.diagnostic)
+        {
+            return Ok(failure);
+        }
+        let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&self.body) else {
+            return Ok(failure);
+        };
+        if !crate::gateway::codex::media::contains_images(&value) {
+            return Ok(failure);
+        }
+        self.media_retried = true;
+        let replaced = crate::gateway::codex::media::replace_images_with_marker(&mut value);
+        if replaced == 0 {
+            return Ok(failure);
+        }
+        let Ok(media_body) = serde_json::to_vec(&value) else {
+            return Ok(failure);
+        };
+        let original = std::mem::replace(&mut self.body, media_body);
+        let outcome = match self.prepare_body(route, &self.body) {
+            Ok(prepared) => self.send(route, prepared),
+            Err(retry_failure) => Err(retry_failure),
+        };
+        self.body = original;
+        match outcome {
+            Ok((upstream, stream)) => Err((upstream, stream)),
+            Err(retry_failure) => Ok(retry_failure),
         }
     }
     fn send(
@@ -196,6 +253,14 @@ impl Forward {
         stream: bool,
     ) {
         let completed = self.span.observe_completion();
+        let binding = crate::gateway::codex::history::HistoryBinding::for_request(
+            &self.body,
+            Some(self.request.headers()),
+        );
+        let recorder = crate::gateway::codex::history::StreamRecorder::new(
+            self.inner.codex_history.clone(),
+            binding,
+        );
         respond_upstream(
             self.request,
             self.span,
@@ -203,9 +268,13 @@ impl Forward {
             route,
             stream,
             upstream,
+            Some(recorder),
         );
         match completed.load(Ordering::Acquire) {
-            200..=299 => permit.record_success(),
+            200..=299 => {
+                permit.record_success();
+                self.inner.record_codex_endpoint_success(route);
+            }
             0 => drop(permit),
             status if crate::gateway::is_retryable_http_status(status) => permit.record_failure(),
             _ => drop(permit),

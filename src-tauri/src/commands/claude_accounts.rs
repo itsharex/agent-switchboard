@@ -166,3 +166,18 @@ pub(crate) async fn get_claude_account_quota(
     })
     .await
 }
+
+/// The Claude CLI's own subscription usage, read from its native login cache.
+/// This is neither a managed account nor gateway metering: the credential is
+/// read once, never refreshed, and never returned.
+#[tauri::command]
+pub(crate) async fn get_claude_native_quota(
+) -> Result<crate::claude_native_quota::ClaudeNativeQuota, CommandError> {
+    blocking(move || {
+        let path = crate::local_state::LocalState::claude_credentials_path()
+            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+        crate::claude_native_quota::query(&path, crate::claude_native_quota::USAGE_URL)
+            .map_err(|message| CommandError::new("claude-native-quota-unavailable", message))
+    })
+    .await
+}

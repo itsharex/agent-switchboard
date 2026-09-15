@@ -1,6 +1,5 @@
 use super::*;
 use crate::gateway::codex::policy::CodexTrafficSettings;
-use std::time::Duration;
 use tiny_http::Header;
 
 pub(super) struct Prepared {
@@ -22,6 +21,7 @@ pub(super) fn prepare(
     request_url: &str,
     body: &[u8],
     incoming: &[Header],
+    history: &crate::gateway::codex::history::CodexToolHistory,
 ) -> Result<Prepared, Failure> {
     let invalid = |message: String| Failure {
         status: 422,
@@ -33,12 +33,26 @@ pub(super) fn prepare(
             &message,
         ),
     };
-    let body = super::super::codex::resolve_model_and_validate(
+    let mut body = super::super::codex::resolve_model_and_validate(
         route,
         CodexOperation::Responses,
         body.to_vec(),
     )
     .map_err(invalid)?;
+    // Short Codex continuations only convert when the referenced tool calls
+    // are restored first; the Chat bridge is the only protocol that needs it.
+    if route.upstream_protocol == UpstreamProtocol::ChatCompletions {
+        let binding =
+            crate::gateway::codex::history::HistoryBinding::for_request(&body, Some(incoming));
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&body).map_err(|_| invalid("Codex 源请求不是 JSON".into()))?;
+        let had_previous = value.get("previous_response_id").is_some();
+        let changed = history.enrich(&binding, &mut value).map_err(invalid)?;
+        if changed > 0 || had_previous {
+            body =
+                serde_json::to_vec(&value).map_err(|_| invalid("Codex 源请求无法编码".into()))?;
+        }
+    }
     let key = ReasoningTransport::from_continuation_key(route.continuation_key);
     let mut converted = convert_request(
         UpstreamProtocol::Responses,
@@ -50,7 +64,10 @@ pub(super) fn prepare(
     )
     .and_then(|request| crate::gateway::transform::minimal::apply(request, route.responses_options))
     .map_err(|error| invalid(error.to_string()))?;
-    let anthropic_beta = crate::gateway::codex::request::prepare(route, &body, &mut converted.body, Some(incoming)).map_err(invalid)?;
+    crate::gateway::transform::apply_request_compat(route, &mut converted.body).map_err(invalid)?;
+    let anthropic_beta =
+        crate::gateway::codex::request::prepare(route, &body, &mut converted.body, Some(incoming))
+            .map_err(invalid)?;
     let model =
         crate::gateway::usage_metadata::model_from_bytes(route.upstream_protocol, &converted.body);
     let url = upstream_url(route, gateway_base, request_url).map_err(invalid)?;
@@ -70,12 +87,6 @@ pub(super) fn send(
     settings: &CodexTrafficSettings,
 ) -> Result<(UpstreamResponse, bool), Failure> {
     let stream = prepared.converted.stream;
-    let timeouts = super::super::transport::Timeouts {
-        headers: Duration::from_secs(settings.headers_timeout_seconds.into()),
-        first_byte: Duration::from_secs(settings.first_byte_timeout_seconds.into()),
-        idle: Duration::from_secs(settings.idle_timeout_seconds.into()),
-        total: Duration::from_secs(settings.total_timeout_seconds.into()),
-    };
     let response = super::super::transport::send_with_timeouts(
         client,
         route,
@@ -85,7 +96,7 @@ pub(super) fn send(
         Some(request.headers()),
         None,
         prepared.anthropic_beta.as_deref(),
-        timeouts,
+        settings.timeouts(stream),
         Some(&|| request.is_cancelled()),
     )
     .map_err(classify)?;

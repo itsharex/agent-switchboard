@@ -127,8 +127,10 @@ impl CodexProviderFile {
                 context_window: Some(default.context_window),
             })),
             parameters: self.parameters.clone(),
+            claude_fragment: Default::default(),
             notes: self.notes.clone(),
             website_url: self.website_url.clone(),
+            display: None,
             usage_query: self.usage_query.clone(),
             official_quota_refresh_interval_minutes: None,
         }

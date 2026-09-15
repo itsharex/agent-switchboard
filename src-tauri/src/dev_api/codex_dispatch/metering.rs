@@ -42,6 +42,16 @@ pub(super) async fn dispatch(
             )
             .await,
         ),
+        "sync_codex_session_usage" => {
+            as_json(codex_metering::sync_codex_session_usage(app.clone()).await)
+        }
+        "rebuild_codex_session_usage" => as_json(
+            codex_metering::rebuild_codex_session_usage(
+                app.clone(),
+                argument(&request.args, "confirmWrite")?,
+            )
+            .await,
+        ),
         _ => return Ok(None),
     };
     result.map(Some)

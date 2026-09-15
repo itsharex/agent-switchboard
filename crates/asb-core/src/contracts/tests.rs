@@ -266,10 +266,12 @@ fn provider_files_carry_no_client_field_and_round_trip_through_profiles() {
         max_output_tokens: None.into(),
         model_options: None,
         parameters: crate::ownership::default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
         notes: None,
         website_url: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
+        display: None,
     };
     let file = ProviderFile::from_profile(&profile, 300);
     let text = serde_json::to_string(&file).expect("provider file serializes");
@@ -366,10 +368,12 @@ fn classification_draft() -> ProviderDraft {
         model: Some("gpt-test".to_string()),
         model_options: None,
         parameters: crate::ownership::default_provider_parameters(AppKind::Codex),
+        claude_fragment: Default::default(),
         notes: None,
         website_url: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
+        display: None,
     }
 }
 
@@ -513,4 +517,50 @@ fn official_quota_interval_is_metadata_only_and_survives_storage() {
             .official_quota_refresh_interval_minutes,
         Some(30)
     );
+}
+
+#[test]
+fn display_metadata_round_trips_and_stays_absent_when_unset() {
+    let mut profile = ProviderProfile {
+        authentication: None,
+        id: "0b91a2f4-6c85-4a12-9f0d-2f4a1b3c5d6e".into(),
+        app: AppKind::Claude,
+        route_mode: RouteMode::Custom,
+        name: "中继".into(),
+        model: None,
+        base_url: Some("https://relay.example".into()),
+        connection: Default::default(),
+        api_key: "test-api-key".into(),
+        upstream_protocol: Some(UpstreamProtocol::AnthropicMessages),
+        responses_options: None,
+        max_output_tokens: None.into(),
+        model_options: None,
+        parameters: crate::ownership::default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
+        notes: None,
+        website_url: None,
+        display: Some(crate::ProviderDisplay {
+            icon: Some("leaf".into()),
+            icon_color: None,
+            category: Some("official".into()),
+            created_at: Some(42),
+        }),
+        usage_query: None,
+        official_quota_refresh_interval_minutes: None,
+    };
+    let file = ProviderFile::from_profile(&profile, 1);
+    let text = serde_json::to_string(&file).expect("file serializes");
+    assert!(text.contains("\"display\":{\"icon\":\"leaf\""));
+    assert!(text.contains("\"category\":\"official\""));
+    let parsed: ProviderFile = serde_json::from_str(&text).expect("file parses");
+    assert_eq!(parsed.into_profile(AppKind::Claude), profile);
+    // An application file from before the display columns existed still parses.
+    let bare = serde_json::to_string(&{
+        profile.display = None;
+        ProviderFile::from_profile(&profile, 1)
+    })
+    .expect("bare file serializes");
+    assert!(!bare.contains("\"display\""));
+    let parsed: ProviderFile = serde_json::from_str(&bare).expect("bare file parses");
+    assert!(parsed.into_profile(AppKind::Claude).display.is_none());
 }

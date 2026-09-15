@@ -15,6 +15,61 @@ fn failure(message: impl Into<String>) -> CommandError {
     CommandError::new("claude-provider-operation-failed", message)
 }
 
+/// The shared-snippet scan outcome together with the current client-settings
+/// revision the confirmation must echo back.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSnippetScanView {
+    #[serde(flatten)]
+    pub source: crate::claude_snippets::ClaudeSnippetSource,
+    pub settings_revision: String,
+}
+
+#[tauri::command]
+pub(crate) async fn scan_claude_snippet_source(
+    app: AppHandle,
+    source_path: String,
+) -> Result<ClaudeSnippetScanView, CommandError> {
+    let local = state(&app)?;
+    blocking(move || {
+        let source =
+            crate::claude_snippets::scan(std::path::Path::new(&source_path)).map_err(failure)?;
+        let settings_revision = local
+            .configuration()
+            .get_client_settings(AppKind::Claude)
+            .map(|snapshot| snapshot.settings_hash)
+            .map_err(|error| failure(error.to_string()))?;
+        Ok(ClaudeSnippetScanView {
+            source,
+            settings_revision,
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn import_claude_snippet_source(
+    app: AppHandle,
+    source_path: String,
+    source_revision: String,
+    expected_settings_hash: String,
+    confirm_write: bool,
+) -> Result<crate::claude_snippets::ClaudeSnippetImport, CommandError> {
+    require_write_confirmation(confirm_write, "导入 Claude 通用配置片段")?;
+    let local = state(&app)?;
+    blocking(move || {
+        super::switching::ensure_profile_save_recovered(&app)?;
+        crate::claude_snippets::import(
+            &local.configuration(),
+            std::path::Path::new(&source_path),
+            &source_revision,
+            &expected_settings_hash,
+        )
+        .map_err(failure)
+    })
+    .await
+}
+
 #[tauri::command]
 pub(crate) fn list_claude_presets() -> Result<Vec<ClaudePresetSummary>, CommandError> {
     claude_presets::list().map_err(failure)

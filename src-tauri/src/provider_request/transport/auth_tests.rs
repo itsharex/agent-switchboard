@@ -43,7 +43,9 @@ fn connection(
 
 fn endpoint_path(protocol: UpstreamProtocol) -> &'static str {
     match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::AnthropicMessages => "/v1/messages",
         UpstreamProtocol::ChatCompletions => "/v1/chat/completions",
         UpstreamProtocol::Responses => "/v1/responses",
@@ -56,7 +58,9 @@ fn assert_built_headers(
     expected: AuthenticationScheme,
 ) {
     let (selected, other, value) = match expected {
-        asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+        asb_core::AuthenticationScheme::XGoogApiKey => {
+            panic!("Google native has a separate Claude fixture")
+        }
         AuthenticationScheme::Bearer => {
             ("authorization", "x-api-key", format!("Bearer {TEST_KEY}"))
         }
@@ -98,7 +102,9 @@ fn accepts_headers(
     let bearer = header_values(request, "authorization");
     let api_key = header_values(request, "x-api-key");
     let auth = match expected {
-        asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+        asb_core::AuthenticationScheme::XGoogApiKey => {
+            panic!("Google native has a separate Claude fixture")
+        }
         AuthenticationScheme::Bearer => {
             bearer == [format!("Bearer {TEST_KEY}")] && api_key.is_empty()
         }
@@ -214,7 +220,9 @@ fn strict_request_fixture_rejects_wrong_and_dual_authentication() {
                 let mut request =
                     build_request(&client, &endpoint, &connection, protocol, "model").unwrap();
                 let (selected, other) = match expected {
-                    asb_core::AuthenticationScheme::XGoogApiKey => panic!("Google native has a separate Claude fixture"),
+                    asb_core::AuthenticationScheme::XGoogApiKey => {
+                        panic!("Google native has a separate Claude fixture")
+                    }
                     AuthenticationScheme::Bearer => ("authorization", "x-api-key"),
                     AuthenticationScheme::XApiKey => ("x-api-key", "authorization"),
                 };

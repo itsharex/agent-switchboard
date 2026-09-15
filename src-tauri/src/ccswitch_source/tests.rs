@@ -385,6 +385,7 @@ fn import_enriches_a_matching_profile_with_the_source_usage_script() {
         .import_provider(ProviderDraft {
             authentication: Some(AuthenticationScheme::Bearer),
             parameters: asb_core::ownership::default_provider_parameters(AppKind::Claude),
+            claude_fragment: Default::default(),
             app: AppKind::Claude,
             route_mode: asb_core::RouteMode::Custom,
             name: "中继 A".to_string(),
@@ -404,6 +405,7 @@ fn import_enriches_a_matching_profile_with_the_source_usage_script() {
             website_url: Some("https://relay.internal".to_string()),
             usage_query: None,
             official_quota_refresh_interval_minutes: None,
+            display: None,
         })
         .expect("existing routing profile");
 
@@ -673,4 +675,60 @@ fn codex_zhipu_token_plan_row_imports_with_a_native_usage_query() {
         records[0].usage_query,
         Some(asb_core::contracts::UsageQuery::Script { .. })
     ));
+}
+
+#[test]
+fn provider_display_columns_reach_the_claude_draft_and_old_databases_still_scan() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("display-source.db");
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE providers (
+                    id TEXT, app_type TEXT, name TEXT, settings_config TEXT,
+                    website_url TEXT, notes TEXT, meta TEXT,
+                    icon TEXT, icon_color TEXT, category TEXT, created_at INTEGER,
+                    PRIMARY KEY (id, app_type)
+                );
+                INSERT INTO providers VALUES (
+                    'id-d', 'claude', '展示中继',
+                    '{\"env\":{\"ANTHROPIC_BASE_URL\":\"https://relay.example/v1\",\"ANTHROPIC_AUTH_TOKEN\":\"tok\"}}',
+                    'https://relay.example', NULL, NULL,
+                    'leaf', '#00ff88', 'third_party', 1730000000000);
+                INSERT INTO providers VALUES (
+                    'id-bare', 'claude', '裸中继',
+                    '{\"env\":{\"ANTHROPIC_BASE_URL\":\"https://bare.example/v1\",\"ANTHROPIC_AUTH_TOKEN\":\"tok2\"}}',
+                    NULL, NULL, NULL, NULL, NULL, NULL, NULL);",
+        )
+        .unwrap();
+    let state = LocalState::from_root(dir.path().join("state"));
+    let raw = db::scan_db(&path).unwrap();
+    let displays = raw
+        .proposals
+        .into_iter()
+        .map(|proposal| match proposal.draft {
+            ccswitch::CcSwitchProviderDraft::Claude(draft) => (draft.name, draft.display),
+            _ => panic!("expected Claude proposals"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(displays.len(), 2);
+    let (name, display) = displays
+        .iter()
+        .find(|(name, _)| name == "展示中继")
+        .expect("display row present");
+    assert_eq!(name, "展示中继");
+    let display = display.as_ref().expect("display carried from source row");
+    assert_eq!(display.icon.as_deref(), Some("leaf"));
+    assert_eq!(display.icon_color.as_deref(), Some("#00ff88"));
+    assert_eq!(display.category.as_deref(), Some("third_party"));
+    assert_eq!(display.created_at, Some(1_730_000_000_000));
+    let (_, bare) = displays.iter().find(|(name, _)| name == "裸中继").unwrap();
+    assert!(bare.is_none());
+    // The shared minimal fixture has no display columns at all; the reader
+    // tolerates that shape (proven by every other test here), and the scan
+    // response still never carries draft bodies or credentials.
+    let scan = scan_at(&fixture_db(dir.path()), &state).unwrap();
+    let serialized = serde_json::to_string(&scan).unwrap();
+    assert!(!serialized.contains("display"));
+    assert!(!serialized.contains(SOURCE_TOKEN));
 }

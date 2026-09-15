@@ -85,3 +85,15 @@ export const getClaudeAccountModels = (
 export const getClaudeAccountQuota = (
   provider: ClaudeAuthProvider, accountId: string | null,
 ): Promise<ClaudeAccountQuota> => invoke("get_claude_account_quota", { provider, accountId });
+
+/** Subscription usage of the Claude CLI's own login; the credential is read once and never returned. */
+export interface ClaudeNativeQuota {
+  windows: { id: string; label: string; usedPercent: number; resetsAtMs: number | null }[];
+  extraUsage: {
+    enabled: boolean; monthlyLimit: number | null; usedCredits: number | null; utilization: number | null; currency: string | null;
+  } | null;
+  credentialExpiresAtMs: number | null;
+  credentialExpired: boolean;
+  checkedAtMs: number;
+}
+export const getClaudeNativeQuota = (): Promise<ClaudeNativeQuota> => invoke("get_claude_native_quota");

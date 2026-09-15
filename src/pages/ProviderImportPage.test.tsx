@@ -22,10 +22,10 @@ const ccScan: CcSwitchScan = {
   dbPath: "test/cc-switch.db",
   providers: [
     { key: "claude:b", app: "claude", routeMode: "official", name: "导入 Claude", model: null, baseUrl: null,
-      usageScriptImportable: false, usageScriptUpdatesExisting: false, existing: false, warnings: [] },
+      usageScriptImportable: false, usageScriptUpdatesExisting: false, endpointCandidates: 0, existing: false, warnings: [] },
     { key: "codex:a", app: "codex", routeMode: "custom", name: "导入 Codex", model: "gpt-5",
       baseUrl: "https://provider.example/v1", usageScriptImportable: false, usageScriptUpdatesExisting: false,
-      existing: false, warnings: [] },
+      endpointCandidates: 0, existing: false, warnings: [] },
   ], skipped: [],
 };
 
@@ -128,7 +128,7 @@ describe("ProviderImportPage CC Switch source", () => {
 
   it("keeps partial import diagnostics available when the operation is not completed", async () => {
     const onBack = vi.fn();
-    renderPage({ onBack, ccResult: { importedCount: 1, usageScriptImportedCount: 0, skippedExisting: [],
+    renderPage({ onBack, ccResult: { importedCount: 1, usageScriptImportedCount: 0, endpointCandidatesImported: 0, skippedExisting: [],
       notImported: [{ key: "claude:b", appType: "claude", name: "导入 Claude", reason: "源档案已改变" }] } });
     await userEvent.click(screen.getByRole("radio", { name: "CC Switch" }));
     expect(screen.getByRole("status", { name: "导入结果" })).toHaveTextContent("已导入 1 项 · 未导入 1 项");

@@ -14,9 +14,11 @@ fn draft(protocol: UpstreamProtocol) -> ProviderDraft {
         route_mode: RouteMode::Custom,
         name: "parameter owner".into(),
         parameters: default_provider_parameters(AppKind::Claude),
+        claude_fragment: Default::default(),
         base_url: Some("https://relay.example/v1".into()),
         connection: Default::default(),
         api_key: "isolated-fixture".into(),
+        display: None,
         upstream_protocol: Some(protocol),
         responses_options: (Some(protocol)
             == Some(asb_core::contracts::UpstreamProtocol::Responses))
@@ -156,6 +158,7 @@ fn official_draft() -> ProviderDraft {
         route_mode: RouteMode::Official,
         name: "Codex 官方登录".into(),
         parameters: default_provider_parameters(AppKind::Codex),
+        claude_fragment: Default::default(),
         base_url: None,
         connection: Default::default(),
         api_key: String::new(),
@@ -168,5 +171,6 @@ fn official_draft() -> ProviderDraft {
         website_url: None,
         usage_query: None,
         official_quota_refresh_interval_minutes: None,
+        display: None,
     }
 }

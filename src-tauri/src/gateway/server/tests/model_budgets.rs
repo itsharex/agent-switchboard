@@ -121,7 +121,9 @@ fn serve_budget_upstream(
                 .expect("receive upstream request")
                 .expect("upstream request");
             let path = match protocol {
-                asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+                asb_core::UpstreamProtocol::GeminiGenerateContent => {
+                    panic!("Google native has a separate Claude fixture")
+                }
                 UpstreamProtocol::Responses => "/v1/responses",
                 UpstreamProtocol::ChatCompletions => "/v1/chat/completions",
                 UpstreamProtocol::AnthropicMessages => "/v1/messages",
@@ -153,7 +155,9 @@ fn budget_response(
         return ("text/event-stream", anthropic_stream(&body["model"], index));
     }
     let response = match protocol {
-        asb_core::UpstreamProtocol::GeminiGenerateContent => panic!("Google native has a separate Claude fixture"),
+        asb_core::UpstreamProtocol::GeminiGenerateContent => {
+            panic!("Google native has a separate Claude fixture")
+        }
         UpstreamProtocol::AnthropicMessages => json!({
             "id": format!("msg_budget_{index}"), "type": "message", "role": "assistant",
             "model": body["model"], "content": [{"type": "text", "text": "ok"}],

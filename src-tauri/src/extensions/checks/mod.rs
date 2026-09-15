@@ -330,6 +330,18 @@ pub fn run_check(
         Err(message) => ProbeOutcome::failed("material", message),
         Ok(material) => match definition {
             McpDefinition::Stdio { command, args, .. } => {
+                // This process spawns the server the same way Claude Code
+                // does, so Windows shell shims need the same `cmd /c` wrap.
+                let wrapped = match asb_core::extensions::mcp::ClaudeHost::current() {
+                    asb_core::extensions::mcp::ClaudeHost::Windows => {
+                        asb_core::extensions::mcp::wrap_windows_launcher(command, args)
+                    }
+                    asb_core::extensions::mcp::ClaudeHost::Unix => None,
+                };
+                let (command, args) = wrapped
+                    .as_ref()
+                    .map(|(command, args)| (command.as_str(), args.as_slice()))
+                    .unwrap_or((command.as_str(), args.as_slice()));
                 check_stdio(command, args, &material.env, &deadline)
             }
             McpDefinition::Http { url, .. } => check_http(

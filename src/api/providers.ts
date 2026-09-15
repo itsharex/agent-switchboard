@@ -39,6 +39,15 @@ export interface ProviderConnectionOptions {
   claudeModelsUrl?: string | null;
 }
 
+/** Source display columns; application-side metadata that never reaches any
+ * client configuration and never participates in routing identity. */
+export interface ProviderDisplay {
+  icon?: string | null;
+  iconColor?: string | null;
+  category?: string | null;
+  createdAt?: number | null;
+}
+
 export interface ProviderProfile {
   id: string;
   app: AppKind;
@@ -54,10 +63,15 @@ export interface ProviderProfile {
   maxOutputTokens: number | null;
   modelOptions: ModelOptions | null;
   parameters: SettingsValues;
+  /** Claude-only additional settings.json fragment owned by this profile;
+   * applied while active and removed on switch-away. Codex never sets it. */
+  claudeFragment?: Record<string, unknown>;
   /** Local-only note; never written into any client configuration. */
   notes?: string | null;
   /** Provider homepage, used for navigation only. */
   websiteUrl: string | null;
+  /** Source display columns; see ProviderDisplay. */
+  display?: ProviderDisplay | null;
   /** Application-side usage-balance query; never written into client config. */
   usageQuery?: UsageQuery | null;
   /** Whole minutes between official Codex quota panel re-queries; absent or
@@ -88,8 +102,11 @@ export interface ProviderDraft {
   maxOutputTokens: number | null;
   modelOptions: ModelOptions | null;
   parameters: SettingsValues;
+  /** Claude-only additional settings.json fragment; see ProviderProfile. */
+  claudeFragment?: Record<string, unknown>;
   notes?: string | null;
   websiteUrl: string | null;
+  display?: ProviderDisplay | null;
   usageQuery?: UsageQuery | null;
   officialQuotaRefreshIntervalMinutes?: number | null;
 }
