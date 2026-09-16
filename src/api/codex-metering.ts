@@ -28,6 +28,8 @@ export interface CodexLedgerFilter {
 }
 export interface CodexRequestRecord {
   id: string;
+  origin: "proxy" | "session";
+  threadId?: string;
   atMs: number;
   billable: boolean;
   profileId: string | null;
@@ -75,3 +77,19 @@ export const getCodexRequestSummary = (filter: CodexLedgerFilter | null): Promis
   invoke("get_codex_request_summary", { filter });
 export const repriceCodexRequests = (filter: CodexLedgerFilter | null, expectedRevision: string,
   confirmWrite: boolean): Promise<number> => invoke("reprice_codex_requests", { filter, expectedRevision, confirmWrite });
+export interface CodexSessionSyncReport {
+  filesScanned: number;
+  imported: number;
+  skipped: number;
+  suspectedDuplicates: number;
+  deferredFiles: number;
+  errors: string[];
+}
+export interface CodexSessionRebuildOutcome {
+  backupPath: string | null;
+  report: CodexSessionSyncReport;
+}
+export const syncCodexSessionUsage = (): Promise<CodexSessionSyncReport> =>
+  invoke("sync_codex_session_usage");
+export const rebuildCodexSessionUsage = (confirmWrite: boolean): Promise<CodexSessionRebuildOutcome> =>
+  invoke("rebuild_codex_session_usage", { confirmWrite });

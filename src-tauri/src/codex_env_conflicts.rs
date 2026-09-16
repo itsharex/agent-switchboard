@@ -122,7 +122,11 @@ fn parse_export(line: &str) -> Option<(String, String)> {
     let value = value
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
-        .or_else(|| value.strip_prefix('\'').and_then(|rest| rest.strip_suffix('\'')))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|rest| rest.strip_suffix('\''))
+        })
         .unwrap_or(value);
     Some((name.to_string(), value.to_string()))
 }
@@ -188,10 +192,9 @@ fn remove_selected(
     let backup = write_backup(root, &chosen)?;
     // Higher lines first so earlier line numbers stay valid within one file.
     chosen.sort_by(|left, right| match (&left.source, &right.source) {
-        (
-            CodexEnvSource::File { path: a, line: x },
-            CodexEnvSource::File { path: b, line: y },
-        ) => a.cmp(b).then(y.cmp(x)),
+        (CodexEnvSource::File { path: a, line: x }, CodexEnvSource::File { path: b, line: y }) => {
+            a.cmp(b).then(y.cmp(x))
+        }
         (CodexEnvSource::File { .. }, _) => std::cmp::Ordering::Greater,
         (_, CodexEnvSource::File { .. }) => std::cmp::Ordering::Less,
         _ => std::cmp::Ordering::Equal,
@@ -242,9 +245,8 @@ fn remove_export_line(path: &Path, line: usize, name: &str) -> Result<(), String
         .map_err(|error| format!("无法读取 {}：{error}", path.display()))?;
     let mut lines: Vec<&str> = text.lines().collect();
     let index = line.checked_sub(1).filter(|index| *index < lines.len());
-    let still_there = index.is_some_and(|index| {
-        parse_export(lines[index]).is_some_and(|(found, _)| found == name)
-    });
+    let still_there = index
+        .is_some_and(|index| parse_export(lines[index]).is_some_and(|(found, _)| found == name));
     if !still_there {
         return Err(format!(
             "{} 第 {line} 行已不再定义 {name}，未改写该文件",
@@ -341,7 +343,11 @@ mod platform {
     use winreg::{RegKey, HKEY};
 
     const HIVES: [(&str, HKEY, &str); 2] = [
-        ("HKEY_CURRENT_USER\\Environment", HKEY_CURRENT_USER, "Environment"),
+        (
+            "HKEY_CURRENT_USER\\Environment",
+            HKEY_CURRENT_USER,
+            "Environment",
+        ),
         (
             "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
             HKEY_LOCAL_MACHINE,
@@ -424,7 +430,13 @@ mod platform {
     pub(super) fn shell_files() -> Vec<PathBuf> {
         let mut files = Vec::new();
         if let Ok(home) = crate::local_state::user_home_dir() {
-            for name in [".bashrc", ".bash_profile", ".zshrc", ".zprofile", ".profile"] {
+            for name in [
+                ".bashrc",
+                ".bash_profile",
+                ".zshrc",
+                ".zprofile",
+                ".profile",
+            ] {
                 files.push(home.join(name));
             }
         }

@@ -245,19 +245,48 @@ pub fn probe(url: &str) -> Result<ProbeResult, String> {
     probe_with_client(url, &client())
 }
 
+/// Probes one URL the way an endpoint race measures it: one untimed warm-up
+/// request first, so the connection is reused and the recorded figure is not
+/// inflated by the first-packet penalty, then a single timed request whose
+/// result is reported. `attempt_timeout` is applied to both phases so a dead
+/// host cannot hold the race open longer than the caller allowed.
+///
+/// The warm-up is deliberately untimed and its outcome discarded: a host that
+/// only answers the second request is still reported from the timed phase, and
+/// a host that fails both still surfaces exactly one classified error.
+pub fn probe_warmed(url: &str, attempt_timeout: Duration) -> Result<ProbeResult, String> {
+    measure(url, &client(), attempt_timeout, true)
+}
+
 pub(super) fn probe_with_client(
     url: &str,
     client: &reqwest::blocking::Client,
+) -> Result<ProbeResult, String> {
+    measure(url, client, PROBE_ATTEMPT_TIMEOUT, false)
+}
+
+/// The single measurement body behind both probe entry points: they differ
+/// only in the attempt budget and whether an untimed warm-up runs first.
+fn measure(
+    url: &str,
+    client: &reqwest::blocking::Client,
+    attempt_timeout: Duration,
+    warm_up: bool,
 ) -> Result<ProbeResult, String> {
     let parsed = parse_url(url).ok_or_else(|| "端点必须是 http(s) URL".to_string())?;
     let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let url = request_url(&parsed);
 
+    if warm_up {
+        // Outcome intentionally ignored: no retry, no timing.
+        let _ = client.get(&url).timeout(attempt_timeout).send();
+    }
+
     let started = Instant::now();
     let outcome = probe_with_retries(|| {
         client
             .get(&url)
-            .timeout(PROBE_ATTEMPT_TIMEOUT)
+            .timeout(attempt_timeout)
             .send()
             .map(|response| response.status().as_u16())
             .map_err(|error| classify(&error))

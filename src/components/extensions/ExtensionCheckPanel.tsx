@@ -131,16 +131,18 @@ export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
 
   return (
     <div className="asb-ext-section" aria-label="连接检测">
-      <h3 className="asb-section-title">连接检测</h3>
-      <div className="asb-ext-actions">
-        <Button variant="secondary" disabled={busy || !target || running} onClick={() => void start()}>
-          连接检测
-        </Button>
-        {running && (
-          <Button variant="secondary" onClick={() => void cancel()}>
-            取消检测
+      <div className="asb-ext-section-heading">
+        <h3 className="asb-section-title">连接检测</h3>
+        <div className="asb-ext-actions">
+          <Button variant="secondary" disabled={busy || !target || running} onClick={() => void start()}>
+            检测
           </Button>
-        )}
+          {running && (
+            <Button variant="secondary" onClick={() => void cancel()}>
+              取消
+            </Button>
+          )}
+        </div>
       </div>
       {(running || finished) && (
         <ol className="asb-ext-stages" aria-label="检测阶段">

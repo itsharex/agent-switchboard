@@ -1,11 +1,12 @@
 import type { ExtensionListItem, ProjectRegistration } from "../../api/client";
 import { EXTENSION_CLIENTS, itemSupportsClient } from "../../app/extensions/deployment-state";
 import { Button } from "../Button";
+import { ConnectivityIcon, PinIcon, TrashIcon } from "../icons";
+import { Tooltip } from "../Tooltip";
 import { Checkbox } from "../Checkbox";
 import type { SelectOption } from "../Select";
-import type { ExtensionDetailProps } from "./detail-types";
+import type { ExtensionManagementProps } from "./management-types";
 import { FILE_STATE_LABELS, targetLabel, targetValue } from "./labels";
-import { ConnectivityIcon } from "../icons";
 
 function installOptions(item: ExtensionListItem, projects: ProjectRegistration[]): SelectOption[] {
   const options = EXTENSION_CLIENTS.filter((client) => itemSupportsClient(item, client)).map((client) => ({
@@ -35,7 +36,7 @@ export function ExtensionBindings({
   onChangeBinding,
   onToggleLock,
   onRemoveBinding,
-}: ExtensionDetailProps) {
+}: ExtensionManagementProps) {
   return (
     <section className="asb-ext-section">
       <h4 className="asb-section-title">已安装到</h4>
@@ -67,19 +68,32 @@ export function ExtensionBindings({
                   {warning}
                 </span>
               ))}
-              {item.kind === "skill" && (
-                <Button
-                  variant="secondary"
-                  disabled={busy || (!binding.lockedDigest && binding.fileState !== "inSync")}
-                  aria-label={`${binding.lockedDigest ? "解除固定" : "固定版本"} ${targetLabel(binding.target, projectNames)}`}
-                  onClick={() => onToggleLock(binding, binding.lockedDigest == null)}
-                >
-                  {binding.lockedDigest ? "解除固定" : "固定版本"}
-                </Button>
-              )}
-              <Button variant="secondary" disabled={busy} onClick={() => onRemoveBinding(binding)}>
-                从客户端移除
-              </Button>
+              <div className="asb-ext-binding-actions">
+                {item.kind === "skill" && (
+                  <Tooltip label={binding.lockedDigest ? "解除固定版本" : "固定当前版本"}>
+                    <Button
+                      variant="icon"
+                      className="asb-ext-binding-action"
+                      disabled={busy || (!binding.lockedDigest && binding.fileState !== "inSync")}
+                      aria-label={`${binding.lockedDigest ? "解除固定版本" : "固定当前版本"} ${targetLabel(binding.target, projectNames)}`}
+                      onClick={() => onToggleLock(binding, binding.lockedDigest == null)}
+                    >
+                      <PinIcon />
+                    </Button>
+                  </Tooltip>
+                )}
+                <Tooltip label="从客户端移除">
+                  <Button
+                    variant="icon"
+                    className="asb-ext-binding-action is-danger"
+                    disabled={busy}
+                    aria-label={`从客户端移除 ${targetLabel(binding.target, projectNames)}`}
+                    onClick={() => onRemoveBinding(binding)}
+                  >
+                    <TrashIcon />
+                  </Button>
+                </Tooltip>
+              </div>
             </li>
           ))}
         </ul>
@@ -95,35 +109,40 @@ export function ExtensionInstallTargets({
   installTargets,
   onInstallTargetsChange,
   onInstall,
-}: ExtensionDetailProps) {
+}: ExtensionManagementProps) {
   const options = installOptions(item, projects);
   if (options.length === 0) return null;
   return (
     <section className="asb-ext-section">
-      <h4 className="asb-section-title">安装到其他位置</h4>
-      <div className="asb-ext-target-list" aria-label="安装目标">
-        {options.map((option) => (
-          <Checkbox
-            key={option.value}
-            checked={installTargets.includes(option.value)}
-            label={option.label}
-            ariaLabel={`安装目标 ${option.label}`}
-            disabled={busy}
-            onChange={(checked) =>
-              onInstallTargetsChange(
-                checked
-                  ? [...installTargets, option.value]
-                  : installTargets.filter((value) => value !== option.value),
-              )
-            }
-          />
-        ))}
-      </div>
-      <div className="asb-ext-actions">
-        <Button variant="primary" disabled={busy || installTargets.length === 0} onClick={onInstall}>
-          安装到所选目标
-        </Button>
-      </div>
+      <details className="asb-ext-disclosure asb-ext-install-targets">
+        <summary>
+          <span className="asb-section-title">安装到其他位置</span>
+          <span className="asb-scope-note">{options.length} 个可用目标</span>
+        </summary>
+        <div className="asb-ext-disclosure-content">
+          <div className="asb-ext-target-list" aria-label="安装目标">
+            {options.map((option) => (
+              <Checkbox
+                key={option.value}
+                checked={installTargets.includes(option.value)}
+                label={option.label}
+                ariaLabel={`安装目标 ${option.label}`}
+                disabled={busy}
+                onChange={(checked) =>
+                  onInstallTargetsChange(
+                    checked
+                      ? [...installTargets, option.value]
+                      : installTargets.filter((value) => value !== option.value),
+                  )
+                }
+              />
+            ))}
+          </div>
+          <Button variant="primary" disabled={busy || installTargets.length === 0} onClick={onInstall}>
+            安装所选
+          </Button>
+        </div>
+      </details>
     </section>
   );
 }

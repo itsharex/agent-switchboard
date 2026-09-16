@@ -325,3 +325,88 @@ fn read_claude_server_entry(key: &str, entry: &JsonValue) -> ObservedMcpServer {
         problem,
     }
 }
+
+/// 当前文档中一个托管条目的规范文本，与补丁层写入 `EntryChange` 的形式
+/// 完全一致（Codex = scratch 文档渲染；Claude = 紧凑 JSON），因此可直接与
+/// 基线的 `last_written_value` 比较。条目不存在返回 `None`。
+///
+/// 这是 E02 条目级所有权判定的事实来源：切换投影/片段合并会改写文档的
+/// 其他部分，但只要本应用的条目原样，所有权就没有被动过；文档级哈希只
+/// 能作为快路径，不能作为唯一判据。
+pub fn managed_entry_text(
+    binding: &crate::extensions::contracts::ExtensionBinding,
+    document: &str,
+    projects: &[crate::extensions::contracts::ProjectRegistration],
+) -> Result<Option<String>, crate::adapter::AdapterError> {
+    use crate::contracts::AppKind;
+    use crate::extensions::contracts::ExtensionTarget;
+    let Some(key) = binding.native_key.as_deref() else {
+        return Ok(None);
+    };
+    match (binding.target.client(), &binding.target) {
+        (AppKind::Codex, _) => {
+            let doc = crate::adapter::codex::parse(document)?;
+            let item = doc
+                .get("mcp_servers")
+                .and_then(|collection| collection.as_table_like())
+                .and_then(|collection| collection.get(key));
+            Ok(item.map(|item| super::codex_patch::render_codex_entry_text(key, item)))
+        }
+        (AppKind::Claude, ExtensionTarget::ProjectPrivate { project_id, .. }) => {
+            let Some(project) = projects.iter().find(|project| project.id == *project_id) else {
+                return Ok(None);
+            };
+            claude_entry_text_at(document, &["projects", project.root.as_str(), "mcpServers"], key)
+        }
+        (AppKind::Claude, _) => claude_entry_text_at(document, &["mcpServers"], key),
+    }
+}
+
+/// 从 Claude JSON 文档的固定路径取出一个条目的紧凑序列化文本。
+fn claude_entry_text_at(
+    document: &str,
+    path: &[&str],
+    key: &str,
+) -> Result<Option<String>, crate::adapter::AdapterError> {
+    let root = crate::adapter::claude::parse(document)?;
+    let mut node: &JsonValue = &root;
+    for segment in path {
+        let Some(next) = node.get(segment) else {
+            return Ok(None);
+        };
+        node = next;
+    }
+    Ok(node.get(key).map(super::claude_patch::render_json_entry))
+}
+
+/// 条目级所有权判定的比较原语：当前条目文本与基线 `last_written_value`
+/// 是否仍是同一个值。两侧都是补丁层的规范渲染文本，但比较按**结构**进
+/// 行——TOML 的装饰（空白/注释/引号风格）会随第一方重渲染漂移，不能作
+/// 为所有权判据；条目内多出的宿主字段也不构成变更（补丁层本就原样保留
+/// 它们）。值变化、条目消失或文档不可解析才是外部变更（fail-closed）。
+pub fn managed_entry_unchanged(
+    client: crate::contracts::AppKind,
+    current: Option<String>,
+    last_written: Option<&str>,
+) -> bool {
+    match (current, last_written) {
+        (Some(current), Some(last_written)) => match client {
+            crate::contracts::AppKind::Codex => crate::adapter::codex::fragment_is_applied(
+                &current,
+                last_written,
+            )
+            .unwrap_or(false),
+            crate::contracts::AppKind::Claude => {
+                match (
+                    serde_json::from_str::<JsonValue>(&current),
+                    serde_json::from_str::<JsonValue>(last_written),
+                ) {
+                    (Ok(current), Ok(written)) => current == written,
+                    _ => false,
+                }
+            }
+        },
+        (None, None) => true,
+        _ => false,
+    }
+}

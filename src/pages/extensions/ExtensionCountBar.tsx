@@ -11,8 +11,8 @@ import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 import { pendingDeployment } from "./pending-deployment";
 
 /**
- * The library's count bar, the cc-switch AppCountBar counterpart
- * (2026-09-12 用户指令「UI/UX/功能继续对齐 cc-switch」).
+ * The library's count bar: the single owner of library-wide deployment
+ * counts and update actions.
  *
  * One glass row above the search: the library total on the left, one
  * clickable count chip per client on the right. A chip is the whole

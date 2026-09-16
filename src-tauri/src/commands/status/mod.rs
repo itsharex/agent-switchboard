@@ -12,7 +12,7 @@ mod tests;
 
 use super::error::{blocking, observe, state, CommandError};
 use crate::runtime_log::RuntimeLogAction;
-use asb_core::contracts::{AppKind, ConfigWriteRecord, MatchStatus, RouteState};
+use asb_core::contracts::{AppKind, ConfigWriteRecord, MatchStatus, RouteState, SettingsValues};
 use asb_core::LockStatus;
 use asb_switch::io::FsIo;
 use asb_switch::lockfile::{self, RecoveryEntry};
@@ -30,6 +30,10 @@ pub struct ConfigFileStatus {
     pub syntax_ok: bool,
     pub route: Option<RouteState>,
     pub read_error: Option<String>,
+    /// Read-only client-owned values extracted from the real configuration file.
+    pub client_settings: Option<SettingsValues>,
+    /// A valid client file can still contain an invalid value for an owned setting.
+    pub client_settings_error: Option<String>,
     pub match_status: MatchStatus,
     pub active_profile_id: Option<String>,
     pub last_switch: Option<ConfigWriteRecord>,

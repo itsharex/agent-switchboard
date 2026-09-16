@@ -7,7 +7,7 @@ import {
   deleteProfile,
   prepareCodexProfileSave,
   prepareProfileSave,
-  reorderProfiles,
+  reorderClaudeProfiles,
   resetProfileStore,
   type AppKind,
   type CommandError,
@@ -55,7 +55,6 @@ interface ProvidersDeps {
   retractPreview: () => void;
   refresh: () => Promise<void>;
   selectProfile: (profileId: string) => Promise<void> | void;
-  setRecords: (records: ProviderRecord[]) => void;
   setSelectedId: (id: string | null) => void;
 }
 
@@ -302,21 +301,21 @@ function useProviderSaves(
 }
 
 function useProviderMetadata(deps: ProvidersDeps) {
-  const { appFilter, busy, clearError, onError, records, refresh, setBusy, setRecords } = deps;
-  const dragReorderProfiles = useCallback(async (orderedIds: string[]) => {
+  const { appFilter, busy, clearError, onError, records, refresh, setBusy } = deps;
+  const dragReorderClaudeProfiles = useCallback(async (orderedIds: string[]) => {
     if (busy) return;
-    const expectedFileHashes = Object.fromEntries(records.filter((record) => record.profile.app === appFilter)
-      .map((record) => [record.profile.id, record.fileHash]));
+    const expectedFileHashes = Object.fromEntries(records.map((record) => [record.profile.id, record.fileHash]));
     setBusy(true);
     clearError();
     try {
-      setRecords(await reorderProfiles(appFilter, orderedIds, expectedFileHashes));
+      await reorderClaudeProfiles(orderedIds, expectedFileHashes);
+      await refresh();
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
-  }, [appFilter, busy, clearError, onError, records, setBusy, setRecords]);
+  }, [busy, clearError, onError, records, refresh, setBusy]);
   /** Persists one metadata-only patch (usage query, quota interval) over a
    * stored profile. Only application-side fields may flow through here: a
    * patch must never re-apply the client configuration. */
@@ -360,7 +359,7 @@ function useProviderMetadata(deps: ProvidersDeps) {
       saveProfilePatch(profile, { officialQuotaRefreshIntervalMinutes: minutes > 0 ? minutes : null }),
     [saveProfilePatch],
   );
-  return { dragReorderProfiles, saveProfileUsageQuery, saveOfficialQuotaInterval };
+  return { dragReorderClaudeProfiles, saveProfileUsageQuery, saveOfficialQuotaInterval };
 }
 
 /** One pending destructive provider removal. `generic` covers the Claude

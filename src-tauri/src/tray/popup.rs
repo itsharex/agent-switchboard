@@ -10,12 +10,19 @@ use tauri::{
 
 pub const LABEL: &str = "tray";
 
+/// How long after a successful show the first focus loss is treated as the
+/// taskbar's own activation stealing the foreground, not as a dismissal. On
+/// Windows the tray click activates the taskbar, which can take the foreground
+/// right after `set_focus` and instantly re-hide the freshly shown panel.
+const SHOW_FOCUS_GRACE: Duration = Duration::from_millis(250);
+
 #[derive(Default)]
 struct Lifecycle {
     ready: bool,
     requested: bool,
     visible: bool,
     focus_hidden_at: Option<Instant>,
+    shown_at: Option<Instant>,
 }
 
 impl Lifecycle {
@@ -23,6 +30,14 @@ impl Lifecycle {
         self.focus_hidden_at
             .take()
             .is_some_and(|at| now.saturating_duration_since(at) < Duration::from_millis(250))
+    }
+
+    /// Consumes the show stamp so only the first focus loss after a show is
+    /// eligible for the grace; later dismissals stay immediate.
+    fn within_show_grace(&mut self, now: Instant) -> bool {
+        self.shown_at
+            .take()
+            .is_some_and(|at| now.saturating_duration_since(at) < SHOW_FOCUS_GRACE)
     }
 }
 
@@ -162,7 +177,8 @@ pub fn toggle(
     })?;
     if app.get_webview_window(LABEL).is_none() {
         let _ = hide(app, false);
-        return Err("托盘窗口不可用，请重新启动应用".into());
+        spawn_rebuild(app);
+        return Ok(());
     }
     super::refresh(app);
     if with_state(app, |state| state.lifecycle.ready)? {
@@ -195,6 +211,43 @@ pub fn toggle(
             .map_err(|error| format!("无法监测托盘加载: {error}"))?;
     }
     Ok(())
+}
+
+/// Recreating a WebView synchronously inside the Windows tray-event handler
+/// can deadlock WebView2 initialization, so the rebuild is queued onto the
+/// event loop from a worker thread. A rebuild keeps the interaction alive:
+/// the fresh page repeats the readiness handshake and `trayReady` reopens the
+/// panel, instead of the click permanently degrading to the main window.
+fn spawn_rebuild(app: &AppHandle) {
+    let handle = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("tray-window-rebuild".into())
+        .spawn(move || {
+            let callback_handle = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                if callback_handle.get_webview_window(LABEL).is_some() {
+                    return; // another interaction already restored the window
+                }
+                match ensure_window(&callback_handle) {
+                    Ok(_) => {
+                        let _ = with_state(&callback_handle, |state| {
+                            state.lifecycle.ready = false;
+                            state.lifecycle.requested = true;
+                            state.generation = state.generation.wrapping_add(1);
+                        });
+                        super::refresh(&callback_handle);
+                    }
+                    Err(error) => {
+                        log::warn!("托盘窗口重建失败: {error}");
+                        super::recover_main(&callback_handle, &error);
+                    }
+                }
+            });
+        });
+    if let Err(error) = spawned {
+        log::warn!("无法调度托盘窗口重建: {error}");
+        super::recover_main(app, "托盘窗口不可用，请重新启动应用");
+    }
 }
 
 fn position(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
@@ -260,6 +313,7 @@ fn show(app: &AppHandle) -> Result<(), String> {
     with_state(app, |state| {
         state.lifecycle.visible = true;
         state.lifecycle.requested = false;
+        state.lifecycle.shown_at = Some(Instant::now());
     })
 }
 
@@ -306,6 +360,7 @@ pub fn hide(app: &AppHandle, focus_lost: bool) -> Result<(), String> {
         }
         state.lifecycle.visible = false;
         state.lifecycle.requested = false;
+        state.lifecycle.shown_at = None;
         state.generation = state.generation.wrapping_add(1);
     })
 }
@@ -321,7 +376,14 @@ pub fn window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             hide(app, false)
         }
         tauri::WindowEvent::Focused(false) => {
-            if with_state(app, |state| state.lifecycle.visible).unwrap_or(false) {
+            let fresh = with_state(app, |state| state.lifecycle.within_show_grace(Instant::now()))
+                .unwrap_or(false);
+            if fresh {
+                // The same activation that revealed the panel can hand the
+                // foreground to the taskbar; re-assert focus once instead of
+                // instantly hiding a panel the user just opened.
+                window.set_focus().map_err(|error| error.to_string())
+            } else if with_state(app, |state| state.lifecycle.visible).unwrap_or(false) {
                 hide(app, true)
             } else {
                 Ok(())
@@ -357,5 +419,26 @@ mod tests {
         };
         assert!(lifecycle.suppress_click(now + Duration::from_millis(40)));
         assert!(!lifecycle.suppress_click(now + Duration::from_millis(60)));
+    }
+
+    #[test]
+    fn fresh_show_grace_covers_only_the_first_focus_loss() {
+        let now = Instant::now();
+        let mut lifecycle = Lifecycle {
+            shown_at: Some(now),
+            ..Lifecycle::default()
+        };
+        assert!(lifecycle.within_show_grace(now + Duration::from_millis(40)));
+        assert!(!lifecycle.within_show_grace(now + Duration::from_millis(60)));
+    }
+
+    #[test]
+    fn stale_show_stamp_never_receives_the_grace() {
+        let now = Instant::now();
+        let mut lifecycle = Lifecycle {
+            shown_at: Some(now - Duration::from_secs(5)),
+            ..Lifecycle::default()
+        };
+        assert!(!lifecycle.within_show_grace(now));
     }
 }

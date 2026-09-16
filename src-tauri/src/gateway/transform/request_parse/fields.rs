@@ -56,7 +56,7 @@ pub(super) fn parse_anthropic_thinking(
         }
         "disabled" => {
             allowed(thinking, &["type"], "Anthropic thinking")?;
-            // CC Switch omits effort for disabled thinking; it does not send
+            // the source application omits effort for disabled thinking; it does not send
             // an unsupported `none` value to reasoning-only OpenAI models.
             Ok(None)
         }

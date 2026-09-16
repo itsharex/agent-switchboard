@@ -279,6 +279,10 @@ pub(crate) fn validate_restore_generation(
     Ok(())
 }
 
+/// The auth transaction owns only the file store. A different
+/// `cli_auth_credentials_store` is a deliberate user choice this transaction
+/// cannot honour, so the switch is refused rather than writing a file store
+/// behind an unreadable selection.
 pub(crate) fn validate_storage(config: &str, plan: &SwitchPlan) -> Result<(), SwitchError> {
     if expected_action(plan).is_none() {
         return Ok(());
@@ -295,8 +299,13 @@ pub(crate) fn validate_storage(config: &str, plan: &SwitchPlan) -> Result<(), Sw
     Ok(())
 }
 
-fn validate_managed(auth: &asb_core::contracts::CodexManagedAuth) -> Result<(), SwitchError> {
-    if [
+/// Public seam for the integration suite: proves the storage guard in
+/// isolation, independent of the executor's earlier hash checks.
+pub fn validate_codex_auth_storage(config: &str, plan: &SwitchPlan) -> Result<(), SwitchError> {
+    validate_storage(config, plan)
+}
+
+fn validate_managed(auth: &asb_core::contracts::CodexManagedAuth) -> Result<(), SwitchError> {    if [
         &auth.managed_id,
         &auth.account_id,
         &auth.subject,

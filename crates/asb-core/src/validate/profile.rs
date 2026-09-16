@@ -197,6 +197,14 @@ fn validate_custom_route(fields: &ProfileFields<'_>) -> Result<(), ValidationErr
     if !managed_auth && fields.api_key.trim().is_empty() {
         return Err(ValidationError::EmptyApiKey);
     }
+    if managed_auth
+        && fields.app == AppKind::Codex
+        && fields.connection.provider_type.as_deref() == Some("xai_oauth")
+        && !fields.api_key.trim().is_empty()
+        && fields.api_key != crate::contracts::XAI_OAUTH_PLACEHOLDER
+    {
+        return Err(ValidationError::XaiManagedCardRejectsStaticKey);
+    }
     if fields.api_key.chars().any(char::is_control) {
         return Err(ValidationError::InvalidApiKeyCharacters);
     }

@@ -34,7 +34,7 @@ export function NewSkillDialog({ workspace: w }: Props) {
         setNewSkillDescription={setDescription}
         createSkill={async () => {
           const definition = await w.ext.createSkill({ name: name.trim(), description: description.trim() });
-          if (definition) w.nav.showDefinition(definition.id, "skill", true);
+          if (definition) w.nav.openSkillEditor(definition.id);
         }}
       />
     </ExtensionDialog>

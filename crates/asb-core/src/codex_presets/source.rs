@@ -104,6 +104,9 @@ impl PresetSource {
             );
             meta["endpointAutoSelect"] = json!(false);
         }
+        if self.provider_type.as_deref() == Some("xai_oauth") {
+            meta["providerType"] = json!("xai_oauth");
+        }
         Ok(CcSwitchRow {
             id: self.id.clone(),
             app_type: "codex".into(),

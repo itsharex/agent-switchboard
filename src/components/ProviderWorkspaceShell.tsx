@@ -27,8 +27,7 @@ import { ClientPicker } from "./ClientPicker";
 import { DualRelay } from "./DualRelay";
 import { GripIcon, PlusIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
-import { WorkspaceHeader } from "./WorkspaceHeader";
-import { cx } from "@/utils/cx";
+import { ModuleHeader, WorkspaceHeader } from "./WorkspaceHeader";
 import "../styles/base/provider-workspace.css";
 
 interface ProviderWorkspaceShellProps {
@@ -50,10 +49,10 @@ interface ProviderWorkspaceShellProps {
   children: ReactNode;
 }
 
-/** The one provider-workspace skeleton (2026-09-12 user directive; the two
- * clients render identically since 2026-09-15): the workspace header — row 1
- * the title alone, row 2 the client switch left and every page action right —
- * followed by the dual route cards and the lists. */
+/** The one provider-workspace skeleton: the observed connection cards lead
+ * the supplier page, followed by the workspace header — row 1 the title
+ * alone, row 2 the client switch left and every page action right — and the
+ * filtered supplier list. */
 export function ProviderWorkspaceShell({
   ariaLabel,
   app,
@@ -70,38 +69,43 @@ export function ProviderWorkspaceShell({
   children,
 }: ProviderWorkspaceShellProps) {
   return (
-    <section className="asb-panel asb-provider-workspace" aria-label={ariaLabel}>
-      <WorkspaceHeader
-        title="供应商"
-        primary={
-          <ClientPicker
-            app={app}
-            onChange={onSelectApp}
-            disabled={busy}
-            label="供应商客户端"
-          />
-        }
-        primaryActions={
-          <>
-            <Button variant="secondary" onClick={onOpenClientSettings}>
-              偏好设置
-            </Button>
-            <Button variant="secondary" onClick={onOpenHistory}>
-              切换历史
-            </Button>
-            <Button variant="secondary" disabled={busy} onClick={onImport}>
-              导入
-            </Button>
-            {extraActions}
-            <Button variant="plus" disabled={busy} onClick={onNew}>
-              <PlusIcon />
-              新建供应商
-            </Button>
-          </>
-        }
-      />
-      <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
-      {children}
+    <section className="asb-provider-workspace" aria-label={ariaLabel}>
+      <section className="asb-panel asb-provider-connection-panel" aria-label="当前连接">
+        <ModuleHeader title="当前连接" />
+        <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
+      </section>
+      <section className="asb-panel asb-provider-list-panel" aria-label="供应商列表">
+        <WorkspaceHeader
+          title="供应商"
+          primary={
+            <ClientPicker
+              app={app}
+              onChange={onSelectApp}
+              disabled={busy}
+              label="供应商客户端"
+            />
+          }
+          primaryActions={
+            <>
+              <Button variant="secondary" onClick={onOpenClientSettings}>
+                客户端通用配置
+              </Button>
+              <Button variant="secondary" onClick={onOpenHistory}>
+                切换历史
+              </Button>
+              <Button variant="secondary" disabled={busy} onClick={onImport}>
+                导入
+              </Button>
+              {extraActions}
+              <Button variant="plus" disabled={busy} onClick={onNew}>
+                <PlusIcon />
+                新建供应商
+              </Button>
+            </>
+          }
+        />
+        {children}
+      </section>
     </section>
   );
 }
@@ -112,9 +116,6 @@ interface SortableProviderRowsProps {
   onReorder?: (orderedIds: string[]) => void;
   emptyLabel?: string;
   ariaLabel?: string;
-  /** A fixed row rendered above the sortable ones (e.g. the Codex
-   * official-login entry). It is never a reorder target. */
-  leading?: ReactNode;
   children: ReactNode;
 }
 
@@ -124,7 +125,6 @@ export function SortableProviderRows({
   onReorder,
   emptyLabel = "尚无供应商",
   ariaLabel = "供应商列表",
-  leading,
   children,
 }: SortableProviderRowsProps) {
   const sensors = useSensors(
@@ -139,7 +139,7 @@ export function SortableProviderRows({
     if (oldIndex === -1 || newIndex === -1) return;
     onReorder?.(arrayMove(ids, oldIndex, newIndex));
   };
-  if (ids.length === 0 && !leading) {
+  if (ids.length === 0) {
     return (
       <div className="asb-empty-state">
         <span className="asb-empty-state-icon" aria-hidden="true">
@@ -153,7 +153,6 @@ export function SortableProviderRows({
     <ul className="asb-rows" role="list" aria-label={ariaLabel}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          {leading}
           {children}
         </SortableContext>
       </DndContext>
@@ -168,9 +167,12 @@ interface ProviderRowShellProps {
   selected: boolean;
   previewOpen: boolean;
   sortable: boolean;
-  /** Detail line inside the row; omitted entirely when null. */
-  meta?: ReactNode;
-  metaWithUsage?: boolean;
+  /** Selected model, shown above the provider URL. */
+  model?: ReactNode;
+  /** Provider URL, always rendered on its own line. */
+  url?: ReactNode;
+  /** Additional status or usage information below the model and URL. */
+  details?: ReactNode;
   /** Primary action before the status pill (启用). */
   primaryAction?: ReactNode;
   /** Action after the status pill (official 重新登录). */
@@ -184,7 +186,7 @@ interface ProviderRowShellProps {
 /** The one provider row layout: grip, avatar, name, meta line, primary
  * action, status pill, and the icon cluster. Both clients compose their rows
  * on this shell so the list UI stays a single visual language. The identity
- * bar (avatar, name, meta) is display-only (2026-09-12 user directive): only
+ * bar (avatar, name, meta) is display-only: only
  * the action buttons are clickable, and the pages select the row from those
  * buttons so the bar keeps its selected highlight afterwards. */
 export function ProviderRowShell({
@@ -194,8 +196,9 @@ export function ProviderRowShell({
   selected,
   previewOpen,
   sortable,
-  meta,
-  metaWithUsage = false,
+  model,
+  url,
+  details,
   primaryAction,
   secondaryAction,
   actions,
@@ -213,9 +216,11 @@ export function ProviderRowShell({
       </span>
       <span className="asb-row-main">
         <span className="asb-row-name">{name}</span>
-        {meta && (
-          <span className={cx("asb-row-meta", metaWithUsage && "asb-row-meta-with-usage")}>
-            {meta}
+        {(model || url || details) && (
+          <span className="asb-row-meta">
+            {model && <span className="asb-row-model">{model}</span>}
+            {url && <span className="asb-row-url">{url}</span>}
+            {details && <span className="asb-row-details">{details}</span>}
           </span>
         )}
       </span>

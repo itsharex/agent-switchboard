@@ -27,7 +27,7 @@ pub(super) fn insert_openai_reasoning(
             _ => effort_name(effort),
         }
     } else {
-        // As in CC Switch, do not inject effort into unrelated model APIs.
+        // As in the source application, do not inject effort into unrelated model APIs.
         return;
     };
     match protocol {

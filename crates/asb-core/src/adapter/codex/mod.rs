@@ -4,9 +4,12 @@
 //! comments and layout are preserved by editing the document through
 //! `toml_edit` instead of re-serializing from a typed mirror.
 
-mod document;
 mod common;
+mod common_fragment;
+mod document;
 pub use common::extract_client_settings;
+pub use common_fragment::{declared_mcp_server_keys, fragment_is_applied, validate_fragment};
+mod legacy;
 mod overlay;
 mod preview;
 mod render;
@@ -16,9 +19,11 @@ mod subagents;
 mod tests;
 
 pub(crate) use document::{check_syntax, parse};
+pub use legacy::{
+    normalize_legacy_codex_configuration, CodexLegacyMigration, RETIRED_CODEX_PROVIDER_IDS,
+};
 pub(crate) use preview::preview;
-pub(crate) use render::render_gateway_base_url;
-pub(crate) use render::{render, render_client_settings};
+pub(crate) use render::{render, render_client_settings, render_client_settings_into_file, render_gateway_base_url};
 pub(crate) use state::{matches_provider_settings, owned_diff};
 pub use state::{route_state, OFFICIAL_PROVIDER};
 pub use subagents::{deprecated_subagent_keys, read_subagent_settings, render_subagent_settings};
@@ -26,9 +31,6 @@ pub use subagents::{deprecated_subagent_keys, read_subagent_settings, render_sub
 fn validate_projection(
     plan: &crate::contracts::SwitchPlan,
 ) -> Result<(), crate::adapter::AdapterError> {
-    if plan.profile.route_mode != crate::contracts::RouteMode::Custom {
-        return Ok(());
-    }
     if plan.is_gateway() {
         if !plan.client_base_url().is_some_and(is_gateway_base_url) {
             return Err(crate::adapter::AdapterError {
@@ -36,6 +38,9 @@ fn validate_projection(
                 line: None,
             });
         }
+        return Ok(());
+    }
+    if plan.profile.route_mode != crate::contracts::RouteMode::Custom {
         return Ok(());
     }
     if plan.profile.upstream_protocol != Some(crate::contracts::UpstreamProtocol::Responses) {

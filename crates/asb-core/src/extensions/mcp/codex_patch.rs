@@ -79,8 +79,10 @@ pub fn apply_codex_server_patches(
 
 /// Renders one `mcp_servers.<key>` entry (including nested tables) by
 /// placing it into a scratch document, so the canonical text matches what
-/// the real document looks like.
-fn render_codex_entry_text(key: &str, item: &Item) -> String {
+/// the real document looks like. Also the canonical form of
+/// `EntryChange.before/after`, and therefore the comparison basis for the
+/// entry-level ownership checks (`managed_entry_text`).
+pub(crate) fn render_codex_entry_text(key: &str, item: &Item) -> String {
     let mut scratch = DocumentMut::new();
     scratch["mcp_servers"] = table();
     if let Some(scratch_table) = scratch

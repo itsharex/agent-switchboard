@@ -1,47 +1,13 @@
-import { ClientSettingsPanel } from "../components/ClientSettingsPanel";
-import { CodexSubagentSettingsPanel } from "../components/CodexSubagentSettingsPanel";
 import { BackupsPage } from "../pages/BackupsPage";
 import { DiagnosticsPage } from "../pages/DiagnosticsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import type { SwitchboardModel } from "./useSwitchboardModel";
-
-function ClientPreferences({ model }: { model: SwitchboardModel }) {
-  const { clientSettings: settings, codexSubagentSettings, snapshot, busy, appFilter: app } = model;
-  const activeProfileId = snapshot.activeProfileId(app);
-  const hasActiveProvider = app === "codex"
-    ? snapshot.codexRecords.some((record) => record.profile.id === activeProfileId)
-    : snapshot.profiles.some((profile) => profile.app === app && profile.id === activeProfileId);
-  return (
-    <ClientSettingsPanel key={app} app={app} onSelectApp={model.providers.selectApp} editorState={settings.editorState}
-      busy={busy} configStatus={snapshot.statuses?.find((status) => status.app === app)}
-      hasActiveProvider={hasActiveProvider} onValueChange={settings.changeValue}
-      previewBlockedReason={model.providers.editorSession ? "请先保存或取消供应商编辑，再预览应用。"
-        : model.providerView.kind === "usage" ? "请先保存或取消用量查询编辑，再预览应用。" : null}
-      onResetGroup={settings.resetGroupToDefaults} onSave={(target) => void settings.saveSettings(target)}
-      onSaveAndPreview={(target) => void model.saveClientSettingsAndPreview(target)}
-      onOpenProviders={model.returnToProviders} onRetryLoad={settings.retryLoad} onPreview={settings.previewSettings}
-      onPreviewContentChange={settings.changePreviewContent}
-      subagentSettings={app === "codex" ? (
-        <CodexSubagentSettingsPanel
-          editorState={codexSubagentSettings.editorState}
-          busy={busy}
-          onChange={codexSubagentSettings.changeValue}
-          onReset={codexSubagentSettings.resetToAutomatic}
-          onRetryLoad={codexSubagentSettings.retryLoad}
-          onPreview={codexSubagentSettings.preview}
-          onApplyPreview={codexSubagentSettings.applyPreview}
-        />
-      ) : undefined}
-    />
-  );
-}
 
 export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
   const { appSettingsState: settings, updateCheck: update, snapshot, operations, busy } = model;
   return (
     <SettingsPage section={model.settingsSection} onSectionChange={model.setSettingsSection}
       onReturnToProviders={model.settingsReturnToProviders ? model.returnToProviders : undefined}
-      clientSettings={<ClientPreferences model={model} />}
       backups={<BackupsPage records={snapshot.backups} busy={busy} lastSwitch={model.lastSwitchOverall}
         cloudBackup={model.cloudBackup} onRestore={operations.runRestore} onUndo={operations.requestUndo}
         onOpenDir={model.openBackupFolder} />}

@@ -217,6 +217,50 @@ pub struct SwitchRequest<'a> {
 /// It has the same lock, backup, validation, atomic replacement, and
 /// callback rollback contract as a provider projection, without recomputing
 /// unrelated provider or client-setting fields.
+/// Builds the same redacted, hash-bound preview for a caller-rendered
+/// document that the executor will later write.
+pub fn preview_rendered(
+    app: asb_core::AppKind,
+    target: &Path,
+    backup_dir: &Path,
+    current: &str,
+    rendered: &str,
+) -> Result<FilePreview, SwitchError> {
+    let comparison_current = if current.is_empty() && app == asb_core::AppKind::Claude {
+        "{}"
+    } else {
+        current
+    };
+    asb_core::adapter::validate_syntax(app, comparison_current).map_err(|error| SwitchError::PlanRejected {
+        message: error.message,
+        line: error.line,
+    })?;
+    asb_core::adapter::validate_syntax(app, rendered).map_err(|error| SwitchError::PlanRejected {
+        message: error.message,
+        line: error.line,
+    })?;
+    let changes = asb_core::adapter::owned_diff(app, rendered, comparison_current).map_err(|error| SwitchError::PlanRejected {
+        message: error.message,
+        line: error.line,
+    })?;
+    Ok(FilePreview {
+        preview: SwitchPreview {
+            app,
+            target: target.to_string_lossy().into_owned(),
+            changes,
+            warnings: vec![],
+            backup_dir: backup_dir.to_string_lossy().into_owned(),
+        },
+        content_hash: sha256_hex(current),
+        rendered_hash: sha256_hex(rendered),
+        content: crate::display::display_content(app, rendered),
+        auth_hash: None,
+        auth_rendered_hash: None,
+        auth_existed: None,
+        auth_rendered_existed: None,
+    })
+}
+
 pub struct RenderedWriteRequest<'a> {
     pub target: &'a Path,
     pub app: asb_core::AppKind,

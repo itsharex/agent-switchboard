@@ -1,4 +1,4 @@
-/* 本机协议网关（设置 → 诊断）。2026-09-11 用户指令去 Tailwind 化：本页曾按
+/* 本机协议网关（设置 → 诊断）。本页曾按
  * 图表组件层的工具类语言实现，现全部回归 Frosted Relay 令牌；唯一保留的
  * boardui 表面是趋势图表卡（components/charts/GatewayTrendChart.tsx 内的
  * .bui-scope）。 */

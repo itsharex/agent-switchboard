@@ -83,6 +83,7 @@ export interface ProviderProfile {
  * every mutation of that provider file against an external change. */
 export interface ProviderRecord {
   profile: ProviderProfile;
+  position: number;
   fileHash: string;
 }
 
@@ -202,6 +203,7 @@ export interface CodexProviderDraft {
 
 export interface CodexProviderRecord {
   profile: CodexProviderProfile;
+  position: number;
   parameters: SettingsValues;
   notes: string | null;
   websiteUrl: string | null;
@@ -275,8 +277,8 @@ export function deleteCodexProfile(profileId: string, expectedFileHash: string):
 export function reorderCodexProfiles(
   orderedIds: string[],
   expectedFileHashes: Record<string, string>,
-): Promise<CodexProviderRecord[]> {
-  return invoke<CodexProviderRecord[]>("reorder_codex_profiles", {
+): Promise<void> {
+  return invoke<void>("reorder_codex_profiles", {
     orderedIds,
     expectedFileHashes,
   });
@@ -305,13 +307,11 @@ export function deleteProfile(profileId: string, expectedFileHash: string): Prom
   return invoke<void>("delete_profile", { profileId, expectedFileHash });
 }
 
-export function reorderProfiles(
-  target: AppKind,
+export function reorderClaudeProfiles(
   orderedIds: string[],
   expectedFileHashes: Record<string, string>,
-): Promise<ProviderRecord[]> {
-  return invoke<ProviderRecord[]>("reorder_profiles", {
-    target,
+): Promise<void> {
+  return invoke<void>("reorder_claude_profiles", {
     orderedIds,
     expectedFileHashes,
   });

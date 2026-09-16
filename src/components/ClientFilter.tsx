@@ -8,7 +8,7 @@ export type ClientFilterValue = "all" | AppKind;
 const FILTER_OPTIONS: readonly ClientFilterValue[] = ["all", "codex", "claude"];
 
 /**
- * The one client filter (2026-09-11 user directive).
+ * The one client filter.
  *
  * "Which client am I looking at" is the same question in the extension
  * library and the session list, so it is the same control: the shared

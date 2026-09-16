@@ -15,9 +15,6 @@ import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
 import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import type { ProviderEditorSession } from "../app/useProviders";
-import { useState } from "react";
-import { Button } from "../components/Button";
-import { ClaudeManagementDialog } from "../components/claude-management/ClaudeToolsLauncher";
 
 interface ProvidersPageProps {
   view: ProviderView;
@@ -104,7 +101,7 @@ function ProviderEditView(props: ProvidersPageProps) {
 
 function ProviderPreview(props: ProvidersPageProps) {
   if (!props.preview) return null;
-  // Read-only what-if (2026-09-12 user directive): the preview shows what a
+  // Read-only what-if: the preview shows what a
   // switch would write; the write itself is confirmed in the 启用 sheet.
   return (
     <section className="asb-preview-inline" aria-label="变更预览">
@@ -125,7 +122,6 @@ function ProviderListView({
   onConfigureUsage: (profile: ProviderProfile) => void;
 }) {
   const { appFilter, busy } = props;
-  const [manageOpen, setManageOpen] = useState(false);
   return (
     <ProviderWorkspaceShell
       ariaLabel="供应商工作区"
@@ -139,11 +135,6 @@ function ProviderListView({
       onOpenHistory={props.onOpenHistory}
       onImport={props.onImport}
       onNew={props.onNew}
-      extraActions={
-        <Button variant="secondary" disabled={busy} onClick={() => setManageOpen(true)}>
-          管理 Claude 功能
-        </Button>
-      }
     >
       <ProviderList
         profiles={props.profiles.filter((profile) => profile.app === appFilter)}
@@ -163,14 +154,6 @@ function ProviderListView({
         onDelete={props.onDelete}
         renderPreview={() => <ProviderPreview {...props} />}
       />
-      {manageOpen && (
-        <ClaudeManagementDialog
-          onClose={() => setManageOpen(false)}
-          onChanged={() => {
-            if (props.onRefresh) void props.onRefresh();
-          }}
-        />
-      )}
     </ProviderWorkspaceShell>
   );
 }

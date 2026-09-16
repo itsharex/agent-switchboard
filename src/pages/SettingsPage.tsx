@@ -12,7 +12,6 @@ interface SettingsPageProps {
   section: SettingsSection;
   onSectionChange: (section: SettingsSection) => void;
   onReturnToProviders?: () => void;
-  clientSettings: ReactNode;
   backups: ReactNode;
   diagnostics: ReactNode;
   settings: AppSettings | null;
@@ -123,7 +122,6 @@ export function SettingsPage(props: SettingsPageProps) {
       </aside>
       <div className="asb-settings-content">
         <SettingsPanel section="application" selected={section}><ApplicationSettings {...props} /></SettingsPanel>
-        <SettingsPanel section="client" selected={section}>{props.clientSettings}</SettingsPanel>
         {section === "backups" && props.backups}
         <div hidden={section !== "diagnostics"}>{props.diagnostics}</div>
         <SettingsPanel section="about" selected={section}><AboutSettings {...props} /></SettingsPanel>

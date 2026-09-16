@@ -1,5 +1,5 @@
 //! Built-in reference prices for the Claude request ledger, aligned with the
-//! CC Switch d695a2d seed table (official vendor list prices, USD per million
+//! the source application d695a2d seed table (official vendor list prices, USD per million
 //! tokens). The application owns these rows; the user price file overrides
 //! them per model. They are reference data, never a vendor bill.
 

@@ -90,6 +90,60 @@
   justify-content: flex-end;
 }
 
+/* The client configuration page has one compact decision bar: status stays
+   adjacent to the action it qualifies instead of becoming a second footer. */
+.asb-client-configuration-actions {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  grid-template-areas: "reset notice commit";
+  align-items: center;
+  gap: var(--asb-space-3);
+  margin-top: var(--asb-space-4);
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-control);
+  background: var(--asb-code-bg);
+}
+
+.asb-client-configuration-reset {
+  grid-area: reset;
+}
+
+.asb-client-configuration-notice {
+  grid-area: notice;
+  display: grid;
+  min-width: 0;
+  gap: var(--asb-space-1);
+}
+
+.asb-client-configuration-notice .asb-field-help,
+.asb-client-configuration-notice .asb-field-error {
+  margin: 0;
+}
+
+.asb-client-configuration-blocker,
+.asb-client-configuration-commit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-configuration-blocker .asb-field-help {
+  flex: 1 1 14rem;
+}
+
+.asb-client-configuration-commit {
+  grid-area: commit;
+  justify-content: flex-end;
+}
+
+.asb-client-configuration-reset .asb-btn,
+.asb-client-configuration-commit .asb-btn {
+  min-width: 8.5rem;
+  justify-content: center;
+}
+
 /* Codex subagent defaults form one direct-write resource between model
    behavior and the remaining application-owned client preferences. */
 .asb-subagent-settings {
@@ -195,8 +249,16 @@
 }
 
 @media (max-width: 680px) {
-  .asb-client-provider-help,
-  .asb-client-preference-save,
+  .asb-client-configuration-actions {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "notice"
+      "reset"
+      "commit";
+    align-items: stretch;
+  }
+
+  .asb-client-configuration-commit,
   .asb-subagent-controls {
     justify-content: flex-start;
   }

@@ -5,7 +5,7 @@ import {
   ExtensionRemoveSheet,
   SkillDisableScopeSheet,
 } from "../../components/extensions/ExtensionPlanSheet";
-import { ExtensionDetailsDialog } from "./ExtensionDetailsDialog";
+import { ExtensionManagementDialog } from "./ExtensionManagementDialog";
 import { McpEditorDialog, SkillEditorDialog } from "./ExtensionEditorDialogs";
 import {
   HistoryDialog,
@@ -45,7 +45,7 @@ function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWork
           onConfirm={() => void w.deleteDefinition(dialog.item)}
         />
       );
-    case "detail":
+    case "management":
     case "skillEditor": {
       const item = w.items.find((entry) => entry.id === dialog.definitionId);
       if (!item)
@@ -60,7 +60,7 @@ function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWork
       return dialog.type === "skillEditor" && item.kind === "skill" ? (
         <SkillEditorDialog key={item.id} workspace={w} item={item} />
       ) : (
-        <ExtensionDetailsDialog key={item.id} workspace={w} item={item} />
+        <ExtensionManagementDialog key={item.id} workspace={w} item={item} />
       );
     }
     }

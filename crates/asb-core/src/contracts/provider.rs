@@ -308,7 +308,7 @@ pub struct ProviderFile {
     /// Stable UUID; must equal the file name's stem.
     pub id: String,
     pub name: String,
-    /// Sort position within the client's provider list.
+    /// Sort position within the client's visible provider list.
     pub position: u64,
     pub route_mode: RouteMode,
     pub api_key: String,
@@ -339,7 +339,7 @@ pub struct ProviderFile {
 }
 
 /// The canonical Codex official-login draft: routing identity only — no
-/// endpoint, credential, or catalog. The single owner behind the cc-switch
+/// endpoint, credential, or catalog. The single owner behind the the source application
 /// official-row import and the post-login record creation; both only supply
 /// provider parameters.
 pub fn codex_official_draft(parameters: SettingsValues) -> ProviderDraft {
@@ -428,5 +428,6 @@ impl ProviderFile {
 #[serde(rename_all = "camelCase")]
 pub struct ProviderRecord {
     pub profile: ProviderProfile,
+    pub position: u64,
     pub file_hash: String,
 }

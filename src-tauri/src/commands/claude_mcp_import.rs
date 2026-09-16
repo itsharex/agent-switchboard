@@ -1,4 +1,4 @@
-//! CC Switch MCP 服务导入命令（Claude 专属入口）：只读扫描 + 确认后写入扩展库。
+//! the source application MCP 服务导入命令（Claude 专属入口）：只读扫描 + 确认后写入扩展库。
 
 use super::error::{blocking, require_write_confirmation, state, CommandError};
 use crate::claude_mcp_source::{self, ClaudeMcpImportResult, ClaudeMcpSource};
@@ -32,7 +32,7 @@ pub(crate) async fn import_claude_mcp_source(
     source_revision: String,
     confirm_write: bool,
 ) -> Result<ClaudeMcpImportResult, CommandError> {
-    require_write_confirmation(confirm_write, "导入 CC Switch MCP 服务到扩展库")?;
+    require_write_confirmation(confirm_write, "导入 MCP 服务到扩展库")?;
     let local = state(&app)?;
     blocking(move || {
         let store = ExtensionStore::from_state(&local);

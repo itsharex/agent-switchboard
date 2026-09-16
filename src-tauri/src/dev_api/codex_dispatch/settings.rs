@@ -1,7 +1,6 @@
 //! Codex settings IPC forwarding; business logic stays in the typed command owner.
 use super::super::http::{argument, as_json, InvokeRequest};
 use crate::commands::{self, error::CommandError};
-use asb_core::contracts::{CodexSubagentSettings, SubagentSettingsPlan};
 use serde_json::Value;
 use tauri::AppHandle;
 
@@ -33,22 +32,6 @@ pub(super) async fn dispatch(
         "get_codex_subagent_settings" => {
             command!(commands::subagent_settings::get_codex_subagent_settings(
                 app.clone(),
-            ))
-        }
-        "preview_codex_subagent_settings_command" => {
-            command!(
-                commands::subagent_settings::preview_codex_subagent_settings_command(
-                    app.clone(),
-                    argument::<CodexSubagentSettings>(&request.args, "settings")?,
-                    argument::<String>(&request.args, "expectedHash")?,
-                )
-            )
-        }
-        "apply_codex_subagent_settings" => {
-            command!(commands::subagent_settings::apply_codex_subagent_settings(
-                app.clone(),
-                argument::<SubagentSettingsPlan>(&request.args, "plan")?,
-                argument::<bool>(&request.args, "confirmWrite")?,
             ))
         }
         "query_codex_official_quota" => command!(commands::query_codex_official_quota(

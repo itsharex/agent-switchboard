@@ -36,6 +36,19 @@ pub(crate) fn render_gateway_base_url(
     )
 }
 
+pub(crate) fn render_client_settings_into_file(
+    current: &str,
+    client_settings: &SettingsValues,
+) -> Result<String, AdapterError> {
+    let rendered = render_entries(current, client_settings_overlay(client_settings))?;
+    crate::claude_common::apply(&rendered, &client_settings.claude_extra).map_err(|message| {
+        AdapterError {
+            message,
+            line: None,
+        }
+    })
+}
+
 pub(crate) fn render_client_settings(
     client_settings: &SettingsValues,
 ) -> Result<String, AdapterError> {

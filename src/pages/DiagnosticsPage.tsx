@@ -7,8 +7,7 @@ import { RuntimeOverviewPanel } from "../components/RuntimeOverviewPanel";
 import { Tabs } from "../components/Tabs";
 import { GatewayPage } from "./GatewayPage";
 import { LogsPage } from "./LogsPage";
-import { ClaudeToolsLauncher } from "../components/claude-management/ClaudeToolsLauncher";
-import { CodexToolsLauncher } from "../components/codex-management/CodexToolsLauncher";
+import { LocalManagementLauncher } from "../components/local-management/LocalManagementLauncher";
 
 interface DiagnosticsPageProps extends ConfigStatusPanelProps {
   active: boolean;
@@ -40,8 +39,7 @@ export function DiagnosticsPage(props: DiagnosticsPageProps) {
           <ConfigStatusPanel statuses={props.statuses} profiles={profiles} locks={props.locks}
             busy={busy} onRefresh={props.onRefresh} onRecoverLock={props.onRecoverLock} />
           <RuntimeOverviewPanel />
-          <CodexToolsLauncher onChanged={props.onRefresh} />
-          <ClaudeToolsLauncher onChanged={props.onRefresh} />
+          <LocalManagementLauncher onChanged={props.onRefresh} />
         </div>}
       </div>
       <div id="diagnostics-gateway-panel" role="tabpanel" aria-labelledby="diagnostics-gateway-tab" hidden={section !== "gateway"}>

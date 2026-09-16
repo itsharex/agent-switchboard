@@ -12,7 +12,7 @@ export function SnippetImport({ operations: op }: { operations: ClaudeOperations
   const disabled = op.busy;
   const preview = scanned?.preview ?? null;
   return <div className="asb-provider-section-fields">
-    <label className="asb-field"><span>CC Switch 数据库路径</span><Input value={path} disabled={disabled} placeholder="~/.cc-switch/cc-switch.db" onChange={(e) => { setPath(e.target.value); setScanned(null); }} /></label>
+    <label className="asb-field"><span>导入源数据库路径</span><Input value={path} disabled={disabled} placeholder="输入源数据库路径" onChange={(e) => { setPath(e.target.value); setScanned(null); }} /></label>
     <Button variant="secondary" disabled={disabled || !path.trim()} onClick={() => void op.run(async () => setScanned(await scanClaudeSnippetSource(path.trim())))}>只读扫描 Claude 通用配置片段</Button>
     {scanned && !scanned.found && <p role="status">来源没有 Claude 通用配置片段。</p>}
     {preview && <section aria-label="Claude 通用配置片段预览" className="asb-provider-section-fields">

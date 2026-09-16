@@ -5,7 +5,7 @@ import { Checkbox } from "../Checkbox";
 import { Table } from "../Table";
 import type { ClaudeOperations } from "./operations";
 const key = (entry: { varName: string; source: api.ClaudeEnvSource }) => entry.varName + "@" + api.describeClaudeEnvSource(entry.source);
-/** `ANTHROPIC*` variables outside settings.json override the switched route.
+/** `ANTHROPIC*` variables outside the Claude 配置文件 override the switched route.
  * Scan is read-only; removal writes a full-value backup first. */
 export function EnvConflicts({ operations: op }: { operations: ClaudeOperations }) {
   const [scan, setScan] = useState<api.ClaudeEnvScan | null>(null);

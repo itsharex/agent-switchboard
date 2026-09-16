@@ -51,6 +51,14 @@ pub(super) fn build_plan_for_profile(
             .settings
     };
     let mut plan = SwitchPlan::direct(profile, client_settings);
+    if plan.app() == AppKind::Codex {
+        // 片段随计划携带：停用档也要带文本，投影才能剥离已合并的键。
+        if let Some(fragment) = crate::codex_common::resolve_fragment(state.root(), &plan.profile.id)
+            .map_err(|error| CommandError::new("codex-common-config-invalid", error))?
+        {
+            plan = plan.with_codex_common_fragment(fragment);
+        }
+    }
     if plan.app() == AppKind::Codex && plan.profile.route_mode == asb_core::RouteMode::Official {
         plan = crate::codex_auth::projection::official_plan(state, plan)
             .map_err(|error| CommandError::new("codex-official-login-required", error))?;

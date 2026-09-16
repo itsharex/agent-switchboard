@@ -1,4 +1,4 @@
-//! Claude-only import of the CC Switch failover queue and proxy policy.
+//! Claude-only import of the the source application failover queue and proxy policy.
 //! The scan is read-only; the confirmed import writes only this application's
 //! own Claude policy file through the shared validate/save/refresh path.
 //! Codex keeps no queue here, so nothing in this module can touch Codex state.

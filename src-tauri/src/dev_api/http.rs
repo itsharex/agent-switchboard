@@ -31,6 +31,19 @@ pub(super) fn handle_request(
     app: &AppHandle,
     development_origin: &str,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
+    if request.method() == &Method::Options && request.url() == "/invoke" {
+        if !has_development_origin(request, development_origin) {
+            return error_response(
+                403,
+                "web-origin-rejected",
+                "开发后端只接受本机 Vite 页面请求",
+            );
+        }
+        return cors_response(
+            Response::from_data(Vec::new()).with_status_code(StatusCode(DEV_API_HEALTH_STATUS)),
+            development_origin,
+        );
+    }
     if is_health_request(request.method(), request.url()) {
         if !has_development_origin(request, development_origin) {
             return error_response(
@@ -39,7 +52,10 @@ pub(super) fn handle_request(
                 "开发后端只接受本机 Vite 页面请求",
             );
         }
-        return Response::from_data(Vec::new()).with_status_code(StatusCode(DEV_API_HEALTH_STATUS));
+        return cors_response(
+            Response::from_data(Vec::new()).with_status_code(StatusCode(DEV_API_HEALTH_STATUS)),
+            development_origin,
+        );
     }
     if request.method() != &Method::Post || request.url() != "/invoke" {
         return error_response(404, "web-command-not-found", "开发后端不存在该接口");
@@ -54,21 +70,55 @@ pub(super) fn handle_request(
     if !request.headers().iter().any(|header| {
         header.field.equiv("Content-Type") && header.value.as_str().starts_with("application/json")
     }) {
-        return error_response(415, "web-content-type-invalid", "开发后端请求必须使用 JSON");
+        return cors_response(
+            error_response(415, "web-content-type-invalid", "开发后端请求必须使用 JSON"),
+            development_origin,
+        );
     }
 
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
-        return error_response(400, "web-request-unreadable", "无法读取开发后端请求");
+        return cors_response(
+            error_response(400, "web-request-unreadable", "无法读取开发后端请求"),
+            development_origin,
+        );
     }
     let request = match serde_json::from_str::<InvokeRequest>(&body) {
         Ok(request) => request,
-        Err(_) => return error_response(400, "web-request-invalid", "开发后端请求格式无效"),
+        Err(_) => return cors_response(
+            error_response(400, "web-request-invalid", "开发后端请求格式无效"),
+            development_origin,
+        ),
     };
     match dispatch(app, request) {
-        Ok(result) => json_response(200, &InvokeResponse::Success { result }),
-        Err(error) => json_response(200, &InvokeResponse::Failure { error }),
+        Ok(result) => cors_response(
+            json_response(200, &InvokeResponse::Success { result }),
+            development_origin,
+        ),
+        Err(error) => cors_response(
+            json_response(200, &InvokeResponse::Failure { error }),
+            development_origin,
+        ),
     }
+}
+
+fn cors_response(
+    response: Response<std::io::Cursor<Vec<u8>>>,
+    development_origin: &str,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    response
+        .with_header(
+            Header::from_bytes("Access-Control-Allow-Origin", development_origin)
+                .expect("development origin is a valid response header"),
+        )
+        .with_header(
+            Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                .expect("static CORS methods header is valid"),
+        )
+        .with_header(
+            Header::from_bytes("Access-Control-Allow-Headers", "Content-Type")
+                .expect("static CORS headers header is valid"),
+        )
 }
 
 fn has_development_origin(request: &tiny_http::Request, development_origin: &str) -> bool {

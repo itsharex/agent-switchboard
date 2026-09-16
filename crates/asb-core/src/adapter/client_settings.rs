@@ -143,7 +143,7 @@ fn collect_json_object(
     Ok(())
 }
 
-fn json_value(value: &serde_json::Value, key: &str) -> Result<ConfigValue, AdapterError> {
+pub(crate) fn json_value(value: &serde_json::Value, key: &str) -> Result<ConfigValue, AdapterError> {
     match value {
         serde_json::Value::Bool(value) => Ok(ConfigValue::Bool(*value)),
         serde_json::Value::String(value) => Ok(ConfigValue::Str(value.clone())),

@@ -37,9 +37,10 @@ impl ConfigStore {
         draft: CodexProviderDraft,
     ) -> Result<CodexProviderRecord, StoreOperationError> {
         let loaded = load(self)?;
-        let position = loaded
-            .iter()
-            .map(|provider| provider.file.position)
+        let position = loaded.iter().map(|provider| provider.file.position)
+            .chain(self.list_providers()?.into_iter()
+                .filter(|record| record.profile.app == asb_core::contracts::AppKind::Codex)
+                .map(|record| record.position))
             .max()
             .unwrap_or(0)
             .checked_add(crate::config_store::PROVIDER_POSITION_STEP)
@@ -180,45 +181,86 @@ impl ConfigStore {
             .map_err(|_| StoreOperationError::Invalid("无法删除 Codex 供应商文件".to_string()))
     }
 
-    pub fn reorder_codex_providers(
+    pub fn reorder_codex_profiles(
         &self,
         ordered_ids: &[String],
         expected_file_hashes: &BTreeMap<String, String>,
-    ) -> Result<Vec<CodexProviderRecord>, StoreOperationError> {
+    ) -> Result<(), StoreOperationError> {
         let loaded = load(self)?;
-        if loaded.len() != ordered_ids.len() || loaded.len() != expected_file_hashes.len() {
-            return Err("Codex 排序版本必须覆盖全部供应商".into());
-        }
-        let known = loaded
-            .iter()
-            .map(|item| (item.file.profile.id.as_str(), item.hash.as_str()))
-            .collect::<BTreeMap<_, _>>();
-        let unique = ordered_ids.iter().collect::<HashSet<_>>();
-        if unique.len() != ordered_ids.len()
-            || ordered_ids.iter().any(|id| {
-                known.get(id.as_str()).is_none_or(|hash| {
-                    expected_file_hashes
-                        .get(id)
-                        .is_none_or(|expected| *hash != expected)
-                })
-            })
-        {
+        let official = self.list_providers()?
+            .into_iter()
+            .filter(|record| record.profile.app == asb_core::contracts::AppKind::Codex)
+            .collect::<Vec<_>>();
+        verify_codex_order(&loaded, &official, ordered_ids, expected_file_hashes)?;
+        let mut snapshot = crate::config_store::snapshot::read_configuration_snapshot(self)?;
+        let loaded_after = load(self)?;
+        let official_after = self.list_providers()?
+            .into_iter()
+            .filter(|record| record.profile.app == asb_core::contracts::AppKind::Codex)
+            .collect::<Vec<_>>();
+        verify_codex_order(&loaded_after, &official_after, ordered_ids, expected_file_hashes)?;
+        let current_codex_files = loaded_after
+            .into_iter()
+            .map(|loaded| loaded.file)
+            .collect::<Vec<_>>();
+        let current_official_files = crate::config_store::providers::load_provider_files(
+            self,
+            asb_core::contracts::AppKind::Codex,
+        )?;
+        if snapshot.codex_providers != current_codex_files
+            || snapshot.codex_official != current_official_files {
             return Err("Codex 供应商文件已被外部修改，请重新读取后再排序".into());
         }
-        let mut snapshot = crate::config_store::snapshot::read_configuration_snapshot(self)?;
         for (index, id) in ordered_ids.iter().enumerate() {
-            let file = snapshot
+            let position = (index as u64 + 1) * crate::config_store::PROVIDER_POSITION_STEP;
+            if let Some(file) = snapshot
                 .codex_providers
                 .iter_mut()
                 .find(|file| &file.profile.id == id)
-                .ok_or_else(|| {
-                    StoreOperationError::Invalid("Codex 排序清单包含未知供应商".to_string())
-                })?;
-            file.position = (index as u64 + 1) * crate::config_store::PROVIDER_POSITION_STEP;
+            {
+                file.position = position;
+            } else if let Some(file) = snapshot.codex_official.iter_mut().find(|file| &file.id == id) {
+                file.position = position;
+            } else {
+                return Err(StoreOperationError::Invalid("Codex 排序清单包含未知供应商".to_string()));
+            }
         }
+        snapshot.codex_providers.sort_by_key(|file| file.position);
+        snapshot.codex_official.sort_by_key(|file| file.position);
         crate::config_store::snapshot::enable_snapshot(self, &snapshot)?;
-        Ok(self.list_codex_providers()?)
+        Ok(())
     }
+}
+
+fn verify_codex_order(
+    third_party: &[LoadedCodexProvider],
+    official: &[asb_core::contracts::ProviderRecord],
+    ordered_ids: &[String],
+    expected_file_hashes: &BTreeMap<String, String>,
+) -> Result<(), StoreOperationError> {
+    if third_party.len() + official.len() != ordered_ids.len()
+        || ordered_ids.len() != expected_file_hashes.len() {
+        return Err("Codex 排序版本必须覆盖全部供应商".into());
+    }
+    let known = third_party
+        .iter()
+        .map(|item| (item.file.profile.id.as_str(), item.hash.as_str()))
+        .chain(official.iter().map(|record| (record.profile.id.as_str(), record.file_hash.as_str())))
+        .collect::<BTreeMap<_, _>>();
+    let unique = ordered_ids.iter().collect::<HashSet<_>>();
+    if known.len() != expected_file_hashes.len()
+        || unique.len() != ordered_ids.len()
+        || ordered_ids.iter().any(|id| {
+            known.get(id.as_str()).is_none_or(|hash| {
+                expected_file_hashes
+                    .get(id)
+                    .is_none_or(|expected| *hash != expected)
+            })
+        })
+    {
+        return Err("Codex 供应商文件已被外部修改，请重新读取后再排序".into());
+    }
+    Ok(())
 }
 
 /// Raw Codex files for boundaries that must preserve the specialized

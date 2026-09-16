@@ -10,6 +10,7 @@ use super::{switching, ConfigWriteGate};
 use crate::runtime_log::RuntimeLogAction;
 use asb_core::contracts::{AppKind, CodexProviderRecord, ProviderEndpoint};
 use serde::Serialize;
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +159,13 @@ pub(crate) async fn test_codex_endpoints(
     blocking(move || Ok(race(&urls))).await
 }
 
+/// Per-attempt budget of one measured probe. Codex endpoints sit behind relays
+/// that answer noticeably slower than the direct Claude ones, so this mirrors
+/// the reference's per-app table (`codex: 12`) instead of a single flat value.
+/// Kept inside the reference's [2, 30] band so a caller-supplied figure can
+/// never disable the timeout entirely.
+const CODEX_PROBE_TIMEOUT: Duration = Duration::from_secs(12);
+
 fn race(urls: &[String]) -> Vec<CodexEndpointLatency> {
     std::thread::scope(|scope| {
         let handles = urls
@@ -189,7 +197,10 @@ fn measure(url: &str) -> CodexEndpointLatency {
             error: Some("端点不能为空".into()),
         };
     }
-    match crate::probe::probe(trimmed) {
+    // Warm-up first, then time one request: an untimed first hit would
+    // otherwise fold DNS, TLS and the first-packet penalty into the figure
+    // and make a fast endpoint look slow on its first ever measurement.
+    match crate::probe::probe_warmed(trimmed, CODEX_PROBE_TIMEOUT) {
         Ok(result) => CodexEndpointLatency {
             url: trimmed.to_string(),
             latency_ms: result.latency_ms,
@@ -215,10 +226,15 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let server = std::thread::spawn(move || {
             use std::io::{Read, Write};
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut buffer = [0u8; 1024];
-            let _ = stream.read(&mut buffer);
-            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
+            // A measuring probe spends two requests: the untimed warm-up, then
+            // the timed one whose answer is reported. Answer both so the host
+            // is genuinely alive for the measured phase.
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buffer = [0u8; 1024];
+                let _ = stream.read(&mut buffer);
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
+            }
         });
         let alive = format!("http://127.0.0.1:{port}/v1");
         let rows = race(&[alive.clone(), "".into(), "ftp://nope".into()]);
@@ -230,5 +246,32 @@ mod tests {
         assert_eq!(rows[1].error.as_deref(), Some("端点不能为空"));
         assert!(rows[2].error.is_some());
         assert_eq!(rows[2].status, None);
+    }
+
+    /// The measured phase must be the one that answers: a host that only
+    /// replies to the warm-up and then goes silent reports unreachable, not a
+    /// stale status borrowed from the discarded first request.
+    #[test]
+    fn a_host_that_only_answers_the_warm_up_is_not_reported_reachable() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0u8; 1024];
+            let _ = stream.read(&mut buffer);
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+            // Drop the listener immediately: the timed request cannot connect.
+        });
+        let flaky = format!("http://127.0.0.1:{port}/v1");
+        let rows = race(&[flaky.clone()]);
+        server.join().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].url, flaky);
+        assert_eq!(
+            rows[0].status, None,
+            "warm-up 的回包不得当作测量结果上报"
+        );
+        assert!(rows[0].error.is_some(), "{:?}", rows[0]);
     }
 }

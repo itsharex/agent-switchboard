@@ -11,9 +11,12 @@ interface Props {
   /** Optional saved values. Only callers with an explicit draft baseline show
    * per-control diffs; provider parameter editors remain unchanged. */
   baselineValues?: Record<string, SettingValue>;
+  /** Read-only values currently present in the real client file. */
+  actualValues?: Record<string, SettingValue>;
   busy: boolean;
   onChange: (key: string, value: SettingValue) => void;
-  onResetGroup: (group: string | null) => void;
+  onResetGroup?: (group: string | null) => void;
+  showGroupReset?: boolean;
 }
 
 const automatic: SettingValue = { mode: "automatic" };
@@ -36,6 +39,11 @@ function diffValue(value: SettingValue): string | null {
   return value.mode === "automatic" ? null : String(value.value);
 }
 
+function actualValueLabel(spec: SettingSpec, value: SettingValue | undefined): string {
+  if (!value) return "真实文件：不可读取";
+  return `真实文件：${choiceLabel(spec, value)}`;
+}
+
 function settingChange(
   spec: SettingSpec,
   baselineValue: SettingValue | undefined,
@@ -54,6 +62,8 @@ interface ControlProps {
   spec: SettingSpec;
   value: SettingValue;
   baselineValue?: SettingValue;
+  actualValue?: SettingValue;
+  showActual: boolean;
   busy: boolean;
   onChange: (value: SettingValue) => void;
 }
@@ -87,12 +97,15 @@ function SettingControl({ spec, value, busy, onChange }: ControlProps) {
 
 /** One catalog-driven settings row. Model pickers need the provider connection
  * and are rendered by the provider parameters page instead. */
-export function SettingsRow({ spec, value, baselineValue, busy, onChange }: ControlProps) {
+export function SettingsRow({ spec, value, baselineValue, actualValue, showActual, busy, onChange }: ControlProps) {
   if (spec.control === "model") return null;
   const change = settingChange(spec, baselineValue, value);
   return (
     <div className="asb-toggle-row asb-choice-row">
-      <div className="asb-choice-head"><span className="asb-checkbox-label">{spec.label}</span></div>
+      <div className="asb-choice-head">
+        <span className="asb-checkbox-label">{spec.label}</span>
+        {showActual && <span className="asb-setting-actual" aria-live="polite">{actualValueLabel(spec, actualValue)}</span>}
+      </div>
       <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
       {change && (
         <div className="asb-setting-diff">
@@ -109,9 +122,11 @@ export function SettingsFields({
   groups,
   values,
   baselineValues,
+  actualValues,
   busy,
   onChange,
   onResetGroup,
+  showGroupReset = true,
 }: Props) {
   return (
     <div className="asb-toggle-list">
@@ -122,11 +137,14 @@ export function SettingsFields({
           <section className="asb-toggle-group" key={group}>
             <div className="asb-toggle-group-head">
               <h3 className="asb-section-title">{group}</h3>
-              <Button variant="secondary" disabled={busy} onClick={() => onResetGroup(group)}>恢复默认值</Button>
+              {showGroupReset && onResetGroup && (
+                <Button variant="secondary" disabled={busy} onClick={() => onResetGroup(group)}>恢复默认值</Button>
+              )}
             </div>
             {groupSpecs.map((spec) => (
               <SettingsRow key={spec.key} spec={spec} value={values[spec.key]}
-                baselineValue={baselineValues?.[spec.key]} busy={busy}
+                baselineValue={baselineValues?.[spec.key]} actualValue={actualValues?.[spec.key]}
+                showActual={actualValues !== undefined} busy={busy}
                 onChange={(next) => onChange(spec.key, next)} />
             ))}
           </section>

@@ -12,6 +12,19 @@ pub mod codex;
 mod parameters;
 
 pub use client_settings::parse_client_settings;
+
+/// Reads only catalog-owned client preferences from a complete live client
+/// configuration. Provider, credential, extension, and host-owned keys never
+/// enter this projection.
+pub fn extract_client_settings(
+    app: AppKind,
+    text: &str,
+) -> Result<SettingsValues, AdapterError> {
+    match app {
+        AppKind::Codex => codex::extract_client_settings(text),
+        AppKind::Claude => claude::extract_client_settings(text),
+    }
+}
 pub use parameters::read_provider_parameters;
 
 #[cfg(test)]
@@ -135,6 +148,23 @@ pub fn render_client_settings(
     match app {
         AppKind::Codex => codex::render_client_settings(client_settings),
         AppKind::Claude => claude::render_client_settings(client_settings),
+    }
+}
+
+/// Applies only client-owned visual settings to an existing real client
+/// document. Automatic values remove their owned key; all other content is
+/// preserved by the app-specific document editor.
+pub fn render_client_settings_into_file(
+    app: AppKind,
+    current: &str,
+    client_settings: &SettingsValues,
+) -> Result<String, AdapterError> {
+    client_settings
+        .validate_client_settings(app)
+        .map_err(|error| AdapterError { message: scrub_message(error.to_string()), line: None })?;
+    match app {
+        AppKind::Codex => codex::render_client_settings_into_file(current, client_settings),
+        AppKind::Claude => claude::render_client_settings_into_file(current, client_settings),
     }
 }
 

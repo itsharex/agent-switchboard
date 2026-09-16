@@ -1,4 +1,4 @@
-//! Read-only CC Switch MCP import into the extension library (Claude 专属入口)。
+//! Read-only the source application MCP import into the extension library (Claude 专属入口)。
 //! 来源 `mcp_servers` 表的每行是一份 Claude 形态的服务定义外加各客户端启用位；
 //! 这里只读取并转换成扩展库定义，不部署、不写任何客户端文件，来源启用位只作提示。
 
@@ -71,7 +71,7 @@ struct Candidate {
 
 fn open(source: &Path) -> Result<Connection, String> {
     let connection = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| format!("无法只读打开 CC Switch 数据库：{error}"))?;
+        .map_err(|error| format!("无法只读打开导入源数据库：{error}"))?;
     connection
         .busy_timeout(std::time::Duration::from_secs(3))
         .map_err(|error| error.to_string())?;
@@ -87,7 +87,7 @@ fn read_rows(connection: &Connection) -> Result<Vec<SourceRow>, String> {
         )
         .ok();
     if exists.is_none() {
-        return Err("来源没有 mcp_servers 表（需要 CC Switch 3.7+ 的统一 MCP 存储）".into());
+        return Err("来源没有 mcp_servers 表".into());
     }
     let mut statement = connection
         .prepare(
@@ -230,11 +230,11 @@ pub(crate) fn plan_import(
     new_id: impl Fn() -> String,
 ) -> Result<(Vec<ExtensionDefinition>, ClaudeMcpImportResult), String> {
     if ids.is_empty() || ids.iter().collect::<BTreeSet<_>>().len() != ids.len() {
-        return Err("请选择不重复的 CC Switch MCP 服务".into());
+        return Err("请选择不重复的 MCP 服务".into());
     }
     let candidates = candidates(source)?;
     if revision(&candidates) != source_revision {
-        return Err("CC Switch MCP 来源已改变，请重新扫描".into());
+        return Err("MCP 导入源已改变，请重新扫描".into());
     }
     let mut definitions = Vec::new();
     let mut result = ClaudeMcpImportResult {
@@ -246,7 +246,7 @@ pub(crate) fn plan_import(
         let candidate = candidates
             .iter()
             .find(|candidate| &candidate.row.id == id)
-            .ok_or("选中的 CC Switch MCP 服务不存在")?;
+            .ok_or("选中的 MCP 服务不存在")?;
         let (payload, metadata) = match &candidate.definition {
             Ok(converted) => converted.clone(),
             Err(problem) => {

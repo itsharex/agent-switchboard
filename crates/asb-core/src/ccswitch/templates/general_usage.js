@@ -22,7 +22,7 @@
         method: "GET",
         headers: {
           Authorization: substitute("Bearer {{apiKey}}", input),
-          "User-Agent": "cc-switch/1.0",
+          "User-Agent": "agent-switchboard/1.0",
         },
       };
     },

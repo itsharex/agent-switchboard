@@ -51,3 +51,21 @@ export function resumeSession(app: AppKind, sessionId: string): Promise<SessionR
 export function deleteSession(app: AppKind, sessionId: string): Promise<void> {
   return invoke<void>("delete_session", { app, sessionId });
 }
+
+export interface SessionDeleteRequest {
+  app: AppKind;
+  sessionId: string;
+}
+
+/** One line of a batch deletion: removed, or the reason the record stayed. */
+export interface SessionDeleteOutcome {
+  app: AppKind;
+  sessionId: string;
+  deleted: boolean;
+  error: string | null;
+}
+
+/** Deletes several records against one backend scan; each item reports its own outcome. */
+export function deleteSessions(requests: SessionDeleteRequest[]): Promise<SessionDeleteOutcome[]> {
+  return invoke<SessionDeleteOutcome[]>("delete_sessions", { requests });
+}

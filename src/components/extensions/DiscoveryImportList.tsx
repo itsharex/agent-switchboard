@@ -49,7 +49,7 @@ function ImportRow({ item, props }: { item: ObservedExtension; props: Props }) {
         {warningCount > 0 && <Button variant="unstyled" className="asb-warn-text"
           aria-label={"查看 " + item.name + " 的 " + warningCount + " 条警告"}
           onClick={() => props.onWarning(item.observationId)}>{warningCount} 条警告</Button>}
-        {item.actions.managedDefinitionId && <Button variant="icon" className="asb-ext-rowbtn"
+        {item.actions.managedDefinitionId && <Button variant="icon" className="asb-ext-import-details"
           aria-label={"查看 " + item.name + " 的管理详情"} onClick={() => props.onViewDetails(item)}><Eye /></Button>}
       </div>
     </li>

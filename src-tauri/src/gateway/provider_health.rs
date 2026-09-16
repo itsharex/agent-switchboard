@@ -90,11 +90,6 @@ pub struct RequestPermit<'a> {
 }
 
 impl RequestPermit<'_> {
-    /// True only for the single request admitted while the circuit is half-open.
-    pub const fn is_probe(&self) -> bool {
-        self.probe
-    }
-
     /// Records a successful request using the current monotonic clock.
     pub fn record_success(self) {
         self.record_success_at(Instant::now());

@@ -7,16 +7,25 @@ import { toast } from "../../components/use-toast";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 async function deployUpdatedDefinition(w: ExtensionWorkspace, saved: SkillUpdatePreparation | null) {
-  if (!saved || saved.deployment === "unverified") return false;
+  if (!saved) return false;
+  if (saved.deployment === "unverified") {
+    toast({
+      kind: "warning",
+      title: "定义已保存，客户端部署未验证",
+      description: "可从列表的“部署与诊断”操作重新部署当前版本。",
+    });
+    return true;
+  }
   if (saved.deployment === "notRequired") return true;
   const result = await w.applies.run({
     operations: [{ operation: "update", definitionId: saved.definition.id }],
   });
   if (result.status === "cancelled") toast({
-    kind: "info", title: "定义已保存，已取消本次客户端变更",
-    description: "可从扩展详情重新部署当前版本。",
+    kind: "info",
+    title: "定义已保存，已取消本次客户端变更",
+    description: "可从列表的“部署与诊断”操作重新部署当前版本。",
   });
-  return result.status === "applied";
+  return true;
 }
 
 export function McpEditorDialog({
@@ -32,13 +41,11 @@ export function McpEditorDialog({
         envelope={envelope}
         busy={w.writeBlocked}
         onPutSecret={w.ext.putSecret}
-        onCancel={() => w.nav.showDefinition(envelope.id, "mcp")}
+        onCancel={w.nav.closeDialog}
         onSave={async (edit) => {
           const result = await w.ext.applyMcpEdit(envelope.id, edit);
           if (!result) return false;
-          const deployed = await deployUpdatedDefinition(w, result);
-          w.nav.showDefinition(result.definition.id, "mcp");
-          return deployed;
+          return deployUpdatedDefinition(w, result);
         }}
       />
     </ExtensionDialog>
@@ -73,10 +80,10 @@ export function SkillEditorDialog({
         onSaveDependencies={w.ext.saveSkillDependencies}
         onFork={(id) =>
           void w.ext.forkSkill(id).then((result) => {
-            if (result) w.nav.showDefinition(result.id, "skill", true);
+            if (result) w.nav.openSkillEditor(result.id);
           })
         }
-        onClose={() => { if (!w.busy) w.nav.showDefinition(item.id, "skill"); }}
+        onClose={w.nav.closeDialog}
       />
     </ExtensionDialog>
   );

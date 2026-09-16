@@ -1,8 +1,6 @@
-# Claude 预设数据来源
+# Preset data attribution
 
-`catalog.json` 由 `farion1231/cc-switch@d695a2d77fd9081eafd3e9eedcbf2a97b3410928` 的
-`src/config/claudeProviderPresets.ts` 生成。仅保留功能数据；不复制上游组件、样式、商业排序标识或原生配置写入逻辑，导航链接移除推广参数。
-重建脚本：`node scripts/import-claude-presets.mjs <固定版本源码目录>`。
+`catalog.json` is generated from externally sourced preset data. The runtime projection retains functional data only and excludes source UI, visual themes, commercial placement markers, and promotion URL parameters.
 
 MIT License
 

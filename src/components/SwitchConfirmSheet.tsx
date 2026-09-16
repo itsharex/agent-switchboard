@@ -1,5 +1,6 @@
 import type { FilePreview } from "../api/client";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { PreviewInspector } from "./PreviewInspector";
 
 interface Props {
   filePreview: FilePreview;
@@ -16,10 +17,11 @@ export function SwitchConfirmSheet({ filePreview, busy, onConfirm, onCancel }: P
       details={[
         `将写入 ${preview.target}`,
         `变更 ${preview.changes.length} 个键`,
-        ...preview.warnings.map((warning) => (
-          <span key={warning} className="asb-warn-text">{warning}</span>
-        )),
-        `备份位置 ${preview.backupDir}`,
+        <PreviewInspector
+          filePreview={filePreview}
+          userConfigModel={null}
+          userConfigWarnings={[]}
+        />,
       ]}
       confirmLabel="确认切换"
       confirmDisabled={busy}

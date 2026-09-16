@@ -144,31 +144,11 @@ function ProviderRow({
       onEdit ||
       onDelete,
   );
-  const showsMeta = Boolean(modelText || websiteUrl || official || (usage && !usageOpen));
-  const meta = !showsMeta ? null : (
+  const details = !official && !(usage && !usageOpen) ? undefined : (
     <>
-      {modelText}
-      {modelText && (websiteUrl || official) && " · "}
-      {websiteUrl ? (
-        <a
-          className="asb-row-host"
-          href={websiteUrl}
-          title={websiteUrl}
-          onClick={(event) => {
-            // wry blocks webview new-window requests; the opener plugin
-            // routes the URL to the system browser instead.
-            event.preventDefault();
-            void openUrl(websiteUrl);
-          }}
-        >
-          {hostLabel(websiteUrl)}
-        </a>
-      ) : official ? (
-        <span>官方登录</span>
-      ) : null}
+      {official && <span>官方登录</span>}
       {usage && !usageOpen && (
         <span aria-label={`${profile.name} 用量摘要`} title={usage.error ?? undefined}>
-          {(modelText || websiteUrl || official) && " · "}
           {usage.data ? formatUsageSummary(usage.data) : usage.error ? "用量查询失败" : "用量读取中…"}
           {usage.data && usage.error && "（更新失败，显示上次读数）"}
           {usage.data && usage.querying && "（更新中…）"}
@@ -176,6 +156,21 @@ function ProviderRow({
       )}
     </>
   );
+  const providerUrl = websiteUrl ? (
+    <a
+      className="asb-row-host"
+      href={websiteUrl}
+      title={websiteUrl}
+      onClick={(event) => {
+        // wry blocks webview new-window requests; the opener plugin routes
+        // the URL to the system browser instead.
+        event.preventDefault();
+        void openUrl(websiteUrl);
+      }}
+    >
+      {hostLabel(websiteUrl)}
+    </a>
+  ) : undefined;
 
   return (
     <ProviderRowShell
@@ -185,8 +180,9 @@ function ProviderRow({
       selected={selected}
       previewOpen={previewOpen}
       sortable={sortable}
-      meta={meta}
-      metaWithUsage={Boolean(usage && !usageOpen)}
+      model={modelText}
+      url={providerUrl}
+      details={details}
       primaryAction={onActivate ? (
         <Tooltip label={`启用 ${profile.name}`}>
           <Button

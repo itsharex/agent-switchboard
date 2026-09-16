@@ -18,7 +18,7 @@ interface WorkspaceHeaderProps {
 }
 
 /**
- * The one page-header structure owner (2026-09-12 user directive). It always
+ * The one page-header structure owner. It always
  * renders row 1 (title alone) and, only when content exists, the primary
  * navigation row and the secondary view-controls row. A missing primary row
  * promotes secondary to the second row so no blank toolbar line renders.

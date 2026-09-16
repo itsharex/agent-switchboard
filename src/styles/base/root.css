@@ -36,7 +36,7 @@ body {
  * the UA's `1.17em` bold plus margins and outrank the type ramp.
  * `font: inherit` resets size, weight, family and line-height in one
  * declaration; margin is the UA's other default. Values live in tokens.css
- * (DESIGN.md §5, user directive 2026-09-11). Enforced by
+ * (DESIGN.md §5). Enforced by
  * src/styles/tokens.test.ts.
  */
 h1,

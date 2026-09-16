@@ -75,6 +75,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .asb-setting-actual {
+    white-space: normal;
+  }
+
   .asb-app-setting-row .asb-segments,
   .asb-app-setting-row .asb-switch {
     justify-self: start;
@@ -139,6 +143,12 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--asb-space-3);
+}
+
+.asb-setting-actual {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  white-space: nowrap;
 }
 
 /* Client preferences provide their saved values as a baseline. A changed

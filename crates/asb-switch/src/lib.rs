@@ -19,7 +19,7 @@ mod restore;
 mod subagent_settings;
 
 pub use executor::{
-    execute, execute_codex, execute_rendered, read_preview, restore, restore_projected,
+    execute, execute_codex, execute_rendered, preview_rendered, read_preview, restore, restore_projected,
     sha256_digest, sha256_hex, FilePreview, RecoveryOutcome, RenderedWriteOutcome,
     RenderedWriteRequest, RestoreOutcome, SwitchError, SwitchOutcome, SwitchRequest,
 };
@@ -38,14 +38,13 @@ pub use prompt_documents::{
     GlobalPromptDocumentRequest,
 };
 pub use restore::list_backups;
-pub use subagent_settings::{
-    preview_codex_subagent_settings, read_codex_subagent_settings, recovery_label,
-    write_codex_subagent_settings, SubagentSettingsRequest,
-};
+pub use subagent_settings::read_codex_subagent_settings;
 
 pub use config_journal::{
     config_journal_path, finish_config_recovery, pending_config_write, rollback_pending_config,
     PendingAuthWrite, PendingConfigWrite,
 };
 
-pub use codex_auth::{synchronize_codex_auth, CodexAuthSyncOutcome};
+pub use codex_auth::{
+    synchronize_codex_auth, validate_codex_auth_storage, CodexAuthSyncOutcome,
+};

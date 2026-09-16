@@ -3,7 +3,7 @@ import type { ExtensionKind, ExtensionListItem, McpEditViewEnvelope } from "../.
 import type { ExtensionSection } from "../../app/navigation";
 
 export type ExtensionDialogView =
-  | { type: "detail" | "skillEditor"; definitionId: string }
+  | { type: "management" | "skillEditor"; definitionId: string }
   | { type: "mcpEditor"; envelope: McpEditViewEnvelope }
   | { type: "remove" | "export"; item: ExtensionListItem }
   | { type: "newMcp" | "newSkill" | "portableImport" | "project" | "history" };
@@ -18,11 +18,17 @@ export function useExtensionView({ section, onSectionChange }: ExtensionNavigati
   const [sourceBrowser, setSourceBrowser] = useState(false);
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
   const [dialog, setDialog] = useState<ExtensionDialogView | null>(null);
-  const showDefinition = (id: string, nextKind: ExtensionKind, edit = false) => {
+  const openManagement = (id: string, nextKind: ExtensionKind) => {
     onSectionChange(nextKind);
     setSourceBrowser(false);
     setDiscoveryOpen(false);
-    setDialog({ type: edit ? "skillEditor" : "detail", definitionId: id });
+    setDialog({ type: "management", definitionId: id });
+  };
+  const openSkillEditor = (id: string) => {
+    onSectionChange("skill");
+    setSourceBrowser(false);
+    setDiscoveryOpen(false);
+    setDialog({ type: "skillEditor", definitionId: id });
   };
   const changeSection = (nextSection: ExtensionSection) => {
     onSectionChange(nextSection);
@@ -47,7 +53,8 @@ export function useExtensionView({ section, onSectionChange }: ExtensionNavigati
     dialog,
     setDialog,
     closeDialog: () => setDialog(null),
-    showDefinition,
+    openManagement,
+    openSkillEditor,
     clearFilters: () => setSearch(""),
   };
 }

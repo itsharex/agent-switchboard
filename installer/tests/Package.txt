@@ -1,3 +1,0 @@
-Test Installer
-0.0.0
-test-installer

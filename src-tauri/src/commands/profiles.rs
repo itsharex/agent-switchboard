@@ -113,14 +113,14 @@ pub async fn reorder_codex_profiles(
     app: tauri::AppHandle,
     ordered_ids: Vec<String>,
     expected_file_hashes: BTreeMap<String, String>,
-) -> Result<Vec<CodexProviderRecord>, CommandError> {
+) -> Result<(), CommandError> {
     let refresh_app = app.clone();
     let result = observe(RuntimeLogAction::ProfilesReordered, async move {
         let state = state(&app)?;
         blocking(move || {
             state
                 .configuration()
-                .reorder_codex_providers(&ordered_ids, &expected_file_hashes)
+                .reorder_codex_profiles(&ordered_ids, &expected_file_hashes)
                 .map_err(|error| operation_error("codex-profile-reorder-failed", error))
         })
         .await
@@ -268,12 +268,11 @@ pub async fn delete_profile(
 }
 
 #[tauri::command]
-pub async fn reorder_profiles(
+pub async fn reorder_claude_profiles(
     app: tauri::AppHandle,
-    target: AppKind,
     ordered_ids: Vec<String>,
     expected_file_hashes: BTreeMap<String, String>,
-) -> Result<Vec<ProviderRecord>, CommandError> {
+) -> Result<(), CommandError> {
     let refresh_app = app.clone();
     let result = observe(RuntimeLogAction::ProfilesReordered, async move {
         let state = state(&app)?;
@@ -281,8 +280,8 @@ pub async fn reorder_profiles(
             switching::ensure_profile_save_recovered(&app)?;
             state
                 .configuration()
-                .reorder_providers(target, &ordered_ids, &expected_file_hashes)
-                .map_err(|error| operation_error("profile-reorder-failed", error))
+                .reorder_claude_providers(&ordered_ids, &expected_file_hashes)
+                .map_err(|error| operation_error("claude-profile-reorder-failed", error))
         })
         .await
     })

@@ -1,36 +1,68 @@
 /* The modal frame itself lives in overlays.css as `.asb-dialog*` — one modal
-   skeleton for the whole app (DESIGN.md §8). This file owns only the content
-   that a dialog body renders: the detail column, the capability aside, plan
-   targets, history and the source browser. */
-.asb-ext-detail {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--asb-space-4);
+   skeleton for the whole app (DESIGN.md §8). This file owns extension
+   management, editor internals, plan targets, history and source browsing. */
+.asb-ext-management {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
 }
-.asb-ext-detail-main {
+.asb-ext-management-main {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: var(--asb-space-3);
   min-width: 0;
 }
-.asb-ext-detail-head {
+.asb-skill-workbench {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+.asb-skill-workbench-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+.asb-skill-workbench-head,
+.asb-ext-management-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--asb-space-2);
 }
-/* The aside is a supporting column, never a second title: its headings consume
-   the shared section/group classes, so nothing here sets weight locally. */
-.asb-ext-aside {
+.asb-ext-management > .asb-ext-management-head {
   display: flex;
-  flex: 0 0 var(--asb-detail-aside-width);
-  flex-direction: column;
-  gap: var(--asb-space-2);
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-content-muted);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+  padding-bottom: var(--asb-space-2);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+.asb-ext-management-head > .asb-scope-note { margin: 0; }
+.asb-ext-management-actions,
+.asb-ext-binding-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--asb-space-hairline);
+}
+.asb-ext-management-actions { margin-left: auto; }
+.asb-ext-management-action.asb-btn,
+.asb-ext-binding-action.asb-btn {
+  width: var(--asb-control-height-compact);
+  height: var(--asb-control-height-compact);
+  min-height: var(--asb-control-height-compact);
+  padding: 0;
+}
+.asb-ext-management-action.asb-btn > svg,
+.asb-ext-binding-action.asb-btn > svg {
+  width: var(--asb-icon-size-xs);
+  height: var(--asb-icon-size-xs);
+}
+.asb-ext-management-action.is-danger:hover:not(:disabled),
+.asb-ext-binding-action.is-danger:hover:not(:disabled) {
+  color: var(--asb-danger);
+  background: var(--asb-diff-remove-bg);
 }
 .asb-ext-capability-list,
 .asb-ext-secret-list {
@@ -50,6 +82,14 @@
   padding-top: var(--asb-space-3);
   border-top: 1px solid var(--asb-hairline);
 }
+.asb-ext-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+.asb-ext-section-heading > .asb-scope-note { margin-left: auto; }
+.asb-ext-section-heading > .asb-ext-actions { margin-left: auto; }
 .asb-ext-binding-list {
   display: flex;
   flex-direction: column;
@@ -63,7 +103,13 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--asb-space-2);
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius-action);
+  background: var(--asb-content-muted);
 }
+.asb-ext-binding > .asb-checkbox { min-width: 0; }
+.asb-ext-binding-actions { margin-left: auto; }
 .asb-ext-target-list {
   display: flex;
   flex-direction: column;
@@ -71,6 +117,49 @@
   gap: var(--asb-space-2);
   min-width: 0;
   width: 100%;
+}
+.asb-ext-disclosure {
+  min-width: 0;
+  border-top: 1px solid var(--asb-hairline);
+}
+.asb-ext-section > .asb-ext-disclosure { border-top: 0; }
+.asb-ext-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-control-height-compact);
+  cursor: pointer;
+  list-style: none;
+}
+.asb-ext-disclosure > summary::-webkit-details-marker { display: none; }
+.asb-ext-disclosure > summary::before {
+  content: "›";
+  flex: none;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-title);
+  line-height: 1;
+  transition: transform var(--asb-motion-press) var(--asb-easing);
+}
+.asb-ext-disclosure[open] > summary::before { transform: rotate(90deg); }
+.asb-ext-disclosure > summary > .asb-scope-note { margin-left: auto; }
+.asb-ext-disclosure-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+}
+.asb-ext-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-3) 0 0;
+}
+.asb-ext-capability-grid > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
 }
 .asb-ext-env-row {
   display: flex;
@@ -239,13 +328,8 @@
 }
 
 @media (max-width: 800px) {
-  .asb-ext-detail {
-    flex-direction: column;
-  }
-  .asb-ext-aside {
-    flex-basis: auto;
-    width: 100%;
-    box-sizing: border-box;
+  .asb-ext-capability-grid {
+    grid-template-columns: 1fr;
   }
   .asb-ext-source-fields {
     grid-template-columns: 1fr 1fr;

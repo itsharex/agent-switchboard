@@ -55,7 +55,7 @@ const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   cloudBackupRestored: "已恢复云端备份",
   sessionResumed: "已恢复会话",
   sessionDeleted: "已删除会话",
-  ccSwitchProfilesImported: "已导入 CC Switch 档案",
+  ccSwitchProfilesImported: "已导入本机档案",
   officialLoginCompleted: "已完成官方登录",
 };
 

@@ -104,3 +104,32 @@ pub use workspace::{
     __tauri_command_name_recover_extension_transactions, discover_extensions, list_extensions,
     recover_extension_transactions,
 };
+
+/// Programmable enable/disable entry for orchestrators (the Codex project
+/// plan apply). It builds the very same staged plan the workspace UI builds,
+/// then applies it immediately because the orchestrator has already taken the
+/// user's explicit confirmation for the whole project plan. A rejection or a
+/// rollback surfaces as a typed error so the caller can report it as one
+/// resource's failure and keep applying the rest.
+pub(crate) async fn apply_binding_states(
+    app: tauri::AppHandle,
+    toggles: Vec<(String, bool)>,
+) -> Result<(), crate::commands::error::CommandError> {
+    use crate::commands::error::CommandError;
+    if toggles.is_empty() {
+        return Ok(());
+    }
+    let view =
+        planner::prepare_extension_plan(app.clone(), planner::binding_state_request(toggles)).await?;
+    let outcome = apply::apply_extension_plan(app, view.plan_id, true).await?;
+    if let Some(rejected) = outcome.rejected {
+        return Err(CommandError::new("extension-plan-rejected", rejected));
+    }
+    if outcome.rolled_back {
+        return Err(CommandError::new(
+            "extension-plan-rolled-back",
+            "扩展变更已回滚，客户端文件保持原状",
+        ));
+    }
+    Ok(())
+}

@@ -205,6 +205,8 @@ fn observe_client_file(
         syntax_ok: false,
         route: None,
         read_error: None,
+        client_settings: None,
+        client_settings_error: None,
         match_status: MatchStatus::Unknown,
         active_profile_id: None,
         last_switch: state
@@ -217,17 +219,26 @@ fn observe_client_file(
             status.exists = true;
             text
         }
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(status),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            status.client_settings = Some(asb_core::ownership::default_client_settings(kind));
+            return Ok(status);
+        }
         Err(_) => {
             status.exists = true;
             status.read_error = Some("无法读取配置文件".to_string());
+            status.client_settings_error = Some("无法读取配置文件".to_string());
             return Ok(status);
         }
     };
     if adapter::validate_syntax(kind, &text).is_err() {
+        status.client_settings_error = Some("配置文件格式无效".to_string());
         return Ok(status);
     }
     status.syntax_ok = true;
+    match adapter::extract_client_settings(kind, &text) {
+        Ok(settings) => status.client_settings = Some(settings),
+        Err(error) => status.client_settings_error = Some(error.to_string()),
+    }
     let mut route = adapter::route_state(kind, &text);
     if kind == AppKind::Codex {
         route.base_url = route

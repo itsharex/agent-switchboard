@@ -84,5 +84,3 @@ mod directory_tests;
 mod repository_tests;
 #[cfg(test)]
 mod scan_tests;
-#[cfg(test)]
-mod test_support;

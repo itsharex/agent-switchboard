@@ -26,7 +26,7 @@ export function ExtensionDiscoveryPanel({ workspace: w }: { workspace: Extension
         bindingInfo={w.bindingInfo}
         onViewDetails={(observed) => {
           if (observed.actions.managedDefinitionId)
-            w.nav.showDefinition(observed.actions.managedDefinitionId, observed.kind);
+            w.nav.openManagement(observed.actions.managedDefinitionId, observed.kind);
         }}
         onRepair={(ids) => void w.applies.repair(ids)}
       />

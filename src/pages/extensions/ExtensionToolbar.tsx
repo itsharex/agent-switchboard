@@ -15,7 +15,7 @@ const EXTENSION_TOOLBAR_TABS = EXTENSION_SECTIONS.map((tab) => ({
 }));
 
 /**
- * The search row, cc-switch's ManagementListSearch counterpart: one search
+ * The search row: one search
  * field directly above the list, inside the content column. The library-wide
  * count bar (deploy toggles, update-all) owns the row above it.
  */

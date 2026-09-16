@@ -13,6 +13,11 @@ import {
   type Update,
 } from "@tauri-apps/plugin-updater";
 import { isBrowserDevelopment } from "../lib/runtime";
+import {
+  WEB_DEVELOPMENT_BACKEND_HEALTH_URL,
+  WEB_DEVELOPMENT_BACKEND_ORIGIN,
+  WEB_DEVELOPMENT_BACKEND_READY_INTERVAL_MS,
+} from "../dev/web-backend";
 import type { AppKind, CommandError } from "./shared";
 import type { AppSettings } from "./settings";
 import type { UsageSummary } from "./usage";
@@ -37,6 +42,11 @@ export function onTrayChanged(handler: () => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen("tray-changed", handler);
 }
+/** Emits whenever either real client configuration file changes on disk. */
+export function onClientConfigChanged(handler: () => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  return listen("client-config-changed", handler);
+}
 export function onTrayNavigate(handler: () => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen("tray-navigate", handler);
@@ -52,26 +62,40 @@ interface WebCommandResponse<T> {
   error?: CommandError;
 }
 
-/** In browser development, Vite proxies this call to the local Tauri helper
- * process. Desktop and test code keep the native Tauri invoke transport. */
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function waitForWebBackend(): Promise<void> {
+  for (;;) {
+    try {
+      const response = await fetch(WEB_DEVELOPMENT_BACKEND_HEALTH_URL, { cache: "no-store" });
+      if (response.status === 204) return;
+    } catch {
+      // The browser-development backend starts after Vite; wait for its health endpoint.
+    }
+    await delay(WEB_DEVELOPMENT_BACKEND_READY_INTERVAL_MS);
+  }
+}
+
+/** In browser development, calls the loopback Tauri helper only after it is ready.
+ * Desktop and test code keep the native Tauri invoke transport. */
 export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
   if (!isBrowserDevelopment) {
     return args === undefined ? tauriInvoke<T>(command) : tauriInvoke<T>(command, args);
   }
 
-  let response: Response;
-  try {
-    response = await fetch("/api/invoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command, args }),
-    });
-  } catch {
+  await waitForWebBackend();
+  const response = await fetch(`${WEB_DEVELOPMENT_BACKEND_ORIGIN}/invoke`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command, args }),
+  }).catch(() => {
     throw {
       code: "web-backend-unavailable",
       message: "本机开发后端未就绪；请通过 npm run dev 启动应用",
     } satisfies CommandError;
-  }
+  });
 
   const payload = (await response.json().catch(() => null)) as WebCommandResponse<T> | null;
   if (!response.ok || !payload) {

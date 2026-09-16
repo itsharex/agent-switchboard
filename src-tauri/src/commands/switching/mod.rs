@@ -281,45 +281,104 @@ pub async fn execute_switch(
 ) -> Result<SwitchOutcome, CommandError> {
     observe(RuntimeLogAction::ConfigurationSwitched, async move {
         require_write_confirmation(confirm_write, "写入配置")?;
-        let state = state(&app)?;
-        let gateway = app
-            .state::<crate::gateway::GatewayController>()
-            .inner()
-            .clone();
-        blocking(move || {
-            let write_gate = write_gate(&app)?;
-            let _write_gate = write_gate
-                .lock()
-                .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
-            ensure_profile_save_recovered(&app)?;
-            let projection = build_plan(&state, &gateway, &profile_id)?;
-            let mut outcome = plan::execute_projection_with_auth(
-                &state,
-                &gateway,
-                &projection,
-                &expected_hash,
-                &expected_rendered_hash,
-                auth_hash.as_deref(),
-                auth_existed,
-                auth_rendered_hash.as_deref(),
-            )?;
-            // The Claude plugin marker lives in a separate client file with its
-            // own lock and backups; the switch itself is already committed, so
-            // a failure here is reported, not rolled back.
-            if projection.plan.app() == AppKind::Claude {
-                if let Err(message) = crate::claude_integration::reconcile_after_switch(
-                    state.root(),
-                    projection.plan.profile.route_mode,
-                ) {
-                    outcome
-                        .warnings
-                        .push(format!("Claude 插件集成标记未同步：{message}"));
-                }
-            }
-            crate::tray::refresh(&app);
-            Ok(outcome)
-        })
+        execute_switch_core(
+            app,
+            profile_id,
+            expected_hash,
+            expected_rendered_hash,
+            auth_hash,
+            auth_existed,
+            auth_rendered_hash,
+        )
         .await
+    })
+    .await
+}
+
+/// Programmable switch entry for orchestrators that have already confirmed
+/// the write themselves (the Codex profile apply). Same core as
+/// [`execute_switch`]; no separate confirmation prompt.
+pub(crate) async fn switch_provider_internal(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<SwitchOutcome, CommandError> {
+    // The expected hashes for an orchestrator-driven switch come from the
+    // just-built projection's own preview: the caller has explicitly asked
+    // for this switch in the same tick, so the optimistic lock is computed
+    // here instead of round-tripping through the UI.
+    let (expected_hash, expected_rendered_hash) = blocking({
+        let app = app.clone();
+        let profile_id = profile_id.clone();
+        move || {
+            let state = state(&app)?;
+            let gateway = app
+                .state::<crate::gateway::GatewayController>()
+                .inner()
+                .clone();
+            let projection = build_plan(&state, &gateway, &profile_id)?;
+            let preview = preview_projection(&state, &projection)?;
+            Ok((preview.content_hash, preview.rendered_hash))
+        }
+    })
+    .await?;
+    execute_switch_core(
+        app,
+        profile_id,
+        expected_hash,
+        expected_rendered_hash,
+        None,
+        None,
+        None,
+    )
+    .await
+}
+
+async fn execute_switch_core(
+    app: AppHandle,
+    profile_id: String,
+    expected_hash: String,
+    expected_rendered_hash: String,
+    auth_hash: Option<String>,
+    auth_existed: Option<bool>,
+    auth_rendered_hash: Option<String>,
+) -> Result<SwitchOutcome, CommandError> {
+    let state = state(&app)?;
+    let gateway = app
+        .state::<crate::gateway::GatewayController>()
+        .inner()
+        .clone();
+    blocking(move || {
+        let write_gate = write_gate(&app)?;
+        let _write_gate = write_gate
+            .lock()
+            .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
+        ensure_profile_save_recovered(&app)?;
+        let projection = build_plan(&state, &gateway, &profile_id)?;
+        let mut outcome = plan::execute_projection_with_auth(
+            &state,
+            &gateway,
+            &projection,
+            &expected_hash,
+            &expected_rendered_hash,
+            auth_hash.as_deref(),
+            auth_existed,
+            auth_rendered_hash.as_deref(),
+        )?;
+        // The Claude plugin marker lives in a separate client file with its
+        // own lock and backups; the switch itself is already committed, so
+        // a failure here is reported, not rolled back.
+        if projection.plan.app() == AppKind::Claude {
+            if let Err(message) = crate::claude_integration::reconcile_after_switch(
+                state.root(),
+                projection.plan.profile.route_mode,
+            ) {
+                outcome
+                    .warnings
+                    .push(format!("Claude 插件集成标记未同步：{message}"));
+            }
+        }
+        crate::tray::refresh(&app);
+        Ok(outcome)
     })
     .await
 }

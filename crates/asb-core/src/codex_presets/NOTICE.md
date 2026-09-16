@@ -1,10 +1,6 @@
-# Codex preset data attribution
+# Preset data attribution
 
-`catalog.json` is generated from the data exported by `src/config/codexProviderPresets.ts`
-in `farion1231/cc-switch@d695a2d77fd9081eafd3e9eedcbf2a97b3410928`.
-ASB removes visual themes, commercial placement flags and promotion URL parameters
-from its runtime projection. It does not execute or copy the source UI or TOML-writing service.
-The JSON is generated reference data, not hand-written application source.
+`catalog.json` is generated from externally sourced preset data. The runtime projection retains functional data only and excludes source UI, visual themes, commercial placement markers, and promotion URL parameters.
 
 MIT License
 

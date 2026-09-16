@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SessionManager } from "../components/SessionManager";
+import { ClientConfigurationWorkspace } from "./ClientConfigurationWorkspace";
 import { ExtensionsWorkspace } from "./ExtensionsWorkspace";
 import { ProvidersWorkspace } from "./ProvidersWorkspace";
 import { SettingsWorkspace } from "./SettingsWorkspace";
@@ -19,6 +20,9 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
       <div hidden={page !== "供应商"} className="asb-page-stack">
         <ProvidersWorkspace model={model} active={page === "供应商"} />
       </div>
+      {visited("客户端通用配置") && <div hidden={page !== "客户端通用配置"} className="asb-page-stack">
+        <ClientConfigurationWorkspace model={model} />
+      </div>}
       {visited("扩展") && <div hidden={page !== "扩展"} className="asb-page-stack">
         <ExtensionsWorkspace model={model} />
       </div>}

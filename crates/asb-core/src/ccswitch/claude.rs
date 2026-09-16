@@ -1,4 +1,4 @@
-//! Claude-only CC Switch import boundary.
+//! Claude-only the source application import boundary.
 
 mod auth;
 #[cfg(test)]
@@ -14,7 +14,7 @@ use crate::contracts::{
 };
 use serde_json::Value;
 
-/// Top-level source keys consumed by the CC Switch structured mapping; they
+/// Top-level source keys consumed by the the source application structured mapping; they
 /// never reach the profile fragment.
 const RESERVED_TOP_KEYS: [&str; 6] = [
     "base_url",

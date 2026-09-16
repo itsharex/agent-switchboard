@@ -53,12 +53,12 @@ export function useSwitchboardModel() {
   const switchPreview = useSwitchPreview({ ...operationContext, setSelectedId });
   const { invalidateSwitchCandidates: invalidateCandidates, selectProfile } = switchPreview;
   const clientSettings = useClientSettings({
-    ...operationContext, app: appFilter, active: page === "设置" && settingsSection === "client",
+    ...operationContext, app: appFilter, active: page === "客户端通用配置",
     invalidateSwitchCandidates: invalidateCandidates, refresh,
   });
   const codexSubagentSettings = useCodexSubagentSettings({
     ...operationContext,
-    active: page === "设置" && settingsSection === "client" && appFilter === "codex",
+    active: page === "客户端通用配置" && appFilter === "codex",
     invalidateSwitchCandidates: invalidateCandidates,
     refresh,
   });
@@ -84,40 +84,18 @@ export function useSwitchboardModel() {
     ...operationContext, appFilter, setAppFilter, records,
     codexOfficialRecords: snapshot.codexOfficialRecords, selectedId,
     invalidateCandidates, retractPreview: switchPreview.retractPreview, refresh, selectProfile,
-    setRecords: snapshot.setRecords, setSelectedId,
+    setSelectedId,
   });
   const lastSwitchOverall = useMemo(() => latestOverall(snapshot.statuses ?? []), [snapshot.statuses]);
   const openBackupFolder = useCallback(
     () => openBackupDir().catch((caught) => reportError(caught as CommandError)), [reportError],
   );
   const clearRequestedCodexPreview = useCallback(() => setRequestedCodexPreviewId(null), []);
-  const saveClientSettingsAndPreview = useCallback(async (app: AppKind) => {
-    if (busy) return;
-    if (providers.editorSession || navigation.providerView.kind === "usage") {
-      reportError({ code: "provider-editor-open", message: "请先保存或取消供应商或用量查询编辑，再预览应用" });
-      return;
-    }
-    if (app === "codex") {
-      const profile = snapshot.codexRecords.find((item) => item.profile.id === activeProfileId(app));
-      if (!profile || !await clientSettings.saveSettings(app)) return;
-      setAppFilter(app);
-      navigation.setProviderView({ kind: "list" });
-      setPage("供应商");
-      setRequestedCodexPreviewId(profile.profile.id);
-      return;
-    }
-    const profile = snapshot.profiles.find((item) => item.app === app && item.id === activeProfileId(app));
-    if (!profile || !await clientSettings.saveSettings(app)) return;
-    setAppFilter(app);
-    navigation.setProviderView({ kind: "list" });
-    setPage("供应商");
-    await switchPreview.previewProfile(profile);
-  }, [busy, providers.editorSession, navigation.providerView.kind, navigation.setProviderView, reportError, snapshot.codexRecords, snapshot.profiles, activeProfileId,
-    clientSettings.saveSettings, setPage, switchPreview.previewProfile]);
+
   return { ...navigation, appFilter, ...frame, snapshot, activeProfileId, switchPreview,
     clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
     ccImport, selectedProfile, operations, providers, lastSwitchOverall, openBackupFolder, requestedCodexPreviewId,
-    clearRequestedCodexPreview, saveClientSettingsAndPreview };
+    clearRequestedCodexPreview };
 }
 
 export type SwitchboardModel = ReturnType<typeof useSwitchboardModel>;

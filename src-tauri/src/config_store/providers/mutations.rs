@@ -89,10 +89,23 @@ impl ConfigStore {
             return Err("该客户端已有官方登录入口".into());
         }
         let profile = ProviderProfile::from_draft(Uuid::new_v4().to_string(), draft);
-        let file = ProviderFile::from_profile(&profile, next_position(&existing));
+        let position = if profile.app == AppKind::Codex {
+            self.list_codex_providers()?
+                .iter()
+                .map(|record| record.position)
+                .chain(existing.iter().map(|provider| provider.file.position))
+                .max()
+                .unwrap_or(0)
+                .checked_add(POSITION_STEP)
+                .ok_or_else(|| StoreOperationError::Invalid("供应商排序位置溢出".to_string()))?
+        } else {
+            next_position(&existing)
+        };
+        let file = ProviderFile::from_profile(&profile, position);
         let hash = write_provider_file(self, profile.app, &file)?;
         Ok(ProviderRecord {
             profile,
+            position,
             file_hash: hash,
         })
     }
@@ -154,6 +167,7 @@ impl ConfigStore {
         let hash = write_provider_file(self, app, &file)?;
         Ok(ProviderRecord {
             profile,
+            position: file.position,
             file_hash: hash,
         })
     }
@@ -207,8 +221,10 @@ impl ConfigStore {
             },
         );
         let hash = write_provider_file(self, app, &file)?;
+        let position = file.position;
         Ok(ProviderRecord {
             profile: file.into_profile(app),
+            position,
             file_hash: hash,
         })
     }
@@ -238,8 +254,10 @@ impl ConfigStore {
         let mut file = loaded.file;
         file.connection.custom_endpoints.remove(&key);
         let hash = write_provider_file(self, app, &file)?;
+        let position = file.position;
         Ok(ProviderRecord {
             profile: file.into_profile(app),
+            position,
             file_hash: hash,
         })
     }
@@ -294,22 +312,15 @@ impl ConfigStore {
         Ok((app, loaded))
     }
 
-    /// Persists a drag reorder as new `position` values in the affected
-    /// provider files. The list must cover the client's providers exactly.
-    pub fn reorder_providers(
+    /// Persists a drag reorder as new `position` values in every Claude
+    /// provider file. The list must cover the Claude providers exactly.
+    pub fn reorder_claude_providers(
         &self,
-        app: AppKind,
         ordered_ids: &[String],
         expected_file_hashes: &BTreeMap<String, String>,
-    ) -> Result<Vec<ProviderRecord>, StoreOperationError> {
-        if app == AppKind::Codex {
-            return Err("Codex 供应商必须使用专用排序操作".into());
-        }
+    ) -> Result<(), StoreOperationError> {
         let (_, claude) = load_all(self)?;
-        let loaded = match app {
-            AppKind::Codex => unreachable!("Codex uses dedicated provider storage"),
-            AppKind::Claude => claude,
-        };
+        let loaded = claude;
         check_expected_files(&loaded, expected_file_hashes)?;
         let unique: HashSet<&str> = ordered_ids.iter().map(String::as_str).collect();
         if unique.len() != ordered_ids.len() || ordered_ids.len() != loaded.len() {
@@ -320,11 +331,8 @@ impl ConfigStore {
         // provider edit (including a formatting-only edit) instead of
         // replacing it blindly.
         let mut snapshot = crate::config_store::snapshot::read_configuration_snapshot(self)?;
-        let (codex_after, claude_after) = load_all(self)?;
-        let loaded_after = match app {
-            AppKind::Codex => codex_after,
-            AppKind::Claude => claude_after,
-        };
+        let (_, claude_after) = load_all(self)?;
+        let loaded_after = claude_after;
         check_expected_files(&loaded_after, expected_file_hashes)?;
         let current_files: Vec<ProviderFile> =
             loaded_after.into_iter().map(|loaded| loaded.file).collect();
@@ -349,7 +357,7 @@ impl ConfigStore {
         }
         files.sort_by_key(|file| file.position);
         crate::config_store::snapshot::enable_snapshot(self, &snapshot)?;
-        Ok(self.list_providers()?)
+        Ok(())
     }
 
     /// Imports one draft as a provider file: an exactly equal provider is a
@@ -384,8 +392,10 @@ impl ConfigStore {
                 let mut file = loaded.file.clone();
                 file.usage_query = Some(query);
                 let hash = write_provider_file(self, draft.app, &file)?;
+                let position = file.position;
                 return Ok(ProviderRecord {
                     profile: file.into_profile(draft.app),
+                    position,
                     file_hash: hash,
                 });
             }

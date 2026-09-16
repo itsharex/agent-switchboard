@@ -98,21 +98,85 @@ impl Planner<'_> {
                 format!("无法读取 {}；请先解决外部变更", document.display()),
             )
         })?;
-        if sha_hex(&bytes) != *last_document_hash {
-            return Err(CommandError::new(
+        let external_change = || {
+            CommandError::new(
                 "extension-external-change",
                 format!(
                     "{} 已在本应用上次写入后发生外部变更；请先解决冲突",
                     document.display()
                 ),
-            ));
+            )
+        };
+        let text = String::from_utf8(bytes).map_err(|_| external_change())?;
+        // 文档级哈希只作快路径（E02 条目级所有权）：切换投影、片段合并等
+        // 第一方写入会改文档其他部分，但保留非自有内容；只要本应用拥有的
+        // 每个条目仍与最后写入一致，文档就仍然可安全管理。条目本身变了
+        // 才拒绝，等待用户显式解决。
+        if sha_hex(text.as_bytes()) == *last_document_hash {
+            return Ok(true);
+        }
+        let projects = self.store.list_projects().map_err(store_error)?;
+        for entry in baseline.entries.iter().filter(|entry| {
+            matches!(
+                entry,
+                ManagedBaseline::DocumentEntry { target_path, .. }
+                    | ManagedBaseline::SetMember { target_path, .. }
+                        if target_path == document_path.as_ref()
+            )
+        }) {
+            let entry_current = match entry {
+                ManagedBaseline::DocumentEntry {
+                    last_written_value, ..
+                } => {
+                    let current = asb_core::extensions::mcp::managed_entry_text(
+                        binding,
+                        &text,
+                        &projects,
+                    )
+                    .map_err(adapter_error)?;
+                    asb_core::extensions::mcp::managed_entry_unchanged(
+                        binding.target.client(),
+                        current,
+                        last_written_value.as_deref(),
+                    )
+                }
+                ManagedBaseline::SetMember {
+                    member,
+                    last_present,
+                    ..
+                } => {
+                    let Some(project_id) = binding.target.project_id() else {
+                        return Err(external_change());
+                    };
+                    let Some(project_root) = projects
+                        .iter()
+                        .find(|project| project.id == *project_id)
+                        .map(|project| project.root.clone())
+                    else {
+                        return Err(external_change());
+                    };
+                    asb_core::extensions::mcp::claude_project_disabled_member_present(
+                        &text,
+                        &project_root,
+                        member,
+                    )
+                    .map_err(adapter_error)?
+                        == *last_present
+                }
+                ManagedBaseline::Directory { .. } => continue,
+            };
+            if !entry_current {
+                return Err(external_change());
+            }
         }
         Ok(true)
     }
 
     /// A binding may write a document for the first time, but it may never
-    /// overwrite a document position it already owns after that document
-    /// changed outside this application.
+    /// overwrite a document position it already owns after that position
+    /// changed outside this application. First-party rewrites of the rest of
+    /// the document (provider switches, fragment merges) do not block the
+    /// binding: ownership is judged per owned entry, not per document.
     pub(super) fn require_owned_document_baseline_current(
         &self,
         binding: &ExtensionBinding,

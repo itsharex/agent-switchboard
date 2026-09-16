@@ -9,10 +9,11 @@
 cd website
 npm ci
 npm run dev        # http://127.0.0.1:1421 之前请以命令输出为准
-npm test           # vitest
 npm run build      # tsc --noEmit && vite build，输出 dist/
 npm run preview    # 预览生产构建
 ```
+
+类型检查、构建与自动化测试仅在当前请求明确要求时运行。
 
 配置积木台的静态证据由桌面端适配器生成；变更核心渲染规则后，在仓库根目录运行：
 

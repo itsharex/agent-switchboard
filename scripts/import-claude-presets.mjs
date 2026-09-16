@@ -1,4 +1,4 @@
-// Rebuild only from the pinned local CC Switch checkout. No downloads or client-file writes.
+// Rebuild only from the pinned local the source application checkout. No downloads or client-file writes.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -8,7 +8,7 @@ import ts from "typescript";
 
 const revision = "d695a2d77fd9081eafd3e9eedcbf2a97b3410928";
 const checkout = process.argv[2];
-if (!checkout) throw new Error("Usage: node scripts/import-claude-presets.mjs <cc-switch-checkout>");
+if (!checkout) throw new Error("Usage: node scripts/import-claude-presets.mjs <source-checkout>");
 const source = "src/config/claudeProviderPresets.ts";
 const head = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 if (head !== revision) throw new Error("Claude preset source revision does not match the pinned baseline");
@@ -37,7 +37,7 @@ const presets = context.exports.providerPresets.map((preset, index) => ({
 if (presets.length !== 90) throw new Error("Pinned Claude preset coverage unexpectedly changed");
 const output = fileURLToPath(new URL("../crates/asb-core/src/claude_presets/catalog.json", import.meta.url));
 fs.mkdirSync(path.dirname(output), { recursive: true });
-fs.writeFileSync(output, JSON.stringify({ source: "farion1231/cc-switch", revision, presets }, null, 2) + "\n");
+fs.writeFileSync(output, JSON.stringify({ source: "offline-reference", revision, presets }, null, 2) + "\n");
 console.log("Generated " + presets.length + " offline Claude presets: " + output);
 console.log("Formats: " + [...new Set(presets.map((preset) => preset.apiFormat ?? "anthropic"))].join(", "));
 console.log("Template variables: " + [...new Set(presets.flatMap((preset) => Object.keys(preset.templateValues ?? {})))].join(", "));

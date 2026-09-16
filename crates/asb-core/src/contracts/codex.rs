@@ -13,6 +13,15 @@ pub const CODEX_PROVIDER_SCHEMA_VERSION: u8 = 1;
 #[serde(transparent)]
 pub struct CodexEndpoint(pub String);
 
+/// The stored credential of a managed xAI card: never a real key, the
+/// gateway resolves the account token per request.
+pub const XAI_OAUTH_PLACEHOLDER: &str = "xai_oauth_placeholder";
+
+/// The only upstream a managed xAI (SuperGrok) card may talk to. The
+/// editable provider endpoint is ignored so a managed account token can
+/// never be sent elsewhere.
+pub const XAI_API_BASE_URL: &str = "https://api.x.ai/v1";
+
 /// The only third-party protocols a Codex profile may target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -208,6 +217,30 @@ pub struct CodexCatalogEntry {
 }
 
 impl CodexCatalogEntry {
+    /// The default catalog entry for a bare model id: known limits, every
+    /// capability enabled, full reasoning ladder. Live-config import and
+    /// universal connections share this single fallback semantics.
+    pub fn default_entry(id: &str) -> Self {
+        let (context_window, max_output_tokens) = default_model_limits(id);
+        Self {
+            id: id.to_string(),
+            context_window,
+            max_output_tokens,
+            function_tools: true,
+            custom_tools: true,
+            tool_search: true,
+            reasoning: true,
+            default_reasoning_level: CodexReasoningLevel::Medium,
+            supported_reasoning_levels: CODEX_REASONING_LADDER.to_vec(),
+            images: false,
+            compact: true,
+            display_name: None,
+            description: None,
+            base_instructions: None,
+            supports_parallel_tool_calls: None,
+        }
+    }
+
     /// Renders one entry in Codex's external model-catalog schema. Provider
     /// files own the source facts; both the on-disk projection and `/v1/models`
     /// use this exact representation.
@@ -294,7 +327,7 @@ pub struct CodexProviderProfile {
     /// local gateway because Codex's config.toml cannot express it.
     #[serde(default)]
     pub authentication: Option<AuthenticationScheme>,
-    /// Connection behavior imported from CC Switch or edited by the shared
+    /// Connection behavior imported from the source application or edited by the shared
     /// provider machinery. It is never written as an arbitrary client key.
     #[serde(default)]
     pub connection: ProviderConnectionOptions,
@@ -381,6 +414,7 @@ impl std::fmt::Debug for CodexProviderFile {
 #[serde(rename_all = "camelCase")]
 pub struct CodexProviderRecord {
     pub profile: CodexProviderProfile,
+    pub position: u64,
     pub parameters: SettingsValues,
     pub notes: Option<String>,
     pub website_url: Option<String>,

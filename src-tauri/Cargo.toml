@@ -29,6 +29,7 @@ dirs = "6"
 flate2 = "1"
 fontdb = "0.23"
 log = "0.4"
+notify = "6.1"
 bytes = "1"
 brotli = "8"
 http-body-util = "0.1"
@@ -59,7 +60,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 # Read-only access to the import source's SQLite database. `bundled` compiles
 # libsqlite3-sys with the system cc (scoop gcc on this windows-gnu host).
-rusqlite = { version = "0.32", features = ["bundled"], default-features = false }
+rusqlite = { version = "0.32", features = ["bundled", "backup"], default-features = false }
 rquickjs = "0.12.2"
 serde = { workspace = true }
 serde_json = { workspace = true }

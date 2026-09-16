@@ -121,9 +121,9 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
   ];
 
   return (
-    <section className="asb-ext-detail" aria-label={`Skill 编辑 ${item.name}`}>
-      <div className="asb-ext-detail-main">
-        <header className="asb-ext-detail-head">
+    <section className="asb-skill-workbench" aria-label={`Skill 编辑 ${item.name}`}>
+      <div className="asb-skill-workbench-main">
+        <header className="asb-skill-workbench-head">
           <h3 className="asb-section-title">编辑 Skill：{item.name}</h3>
           <Button variant="secondary" onClick={handlers.onClose}>
             关闭编辑器

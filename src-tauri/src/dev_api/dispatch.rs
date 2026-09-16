@@ -179,9 +179,8 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument(&request.args, "profileId")?,
                 argument::<String>(&request.args, "expectedFileHash")?,
             )),
-            "reorder_profiles" => command!(commands::reorder_profiles(
+            "reorder_claude_profiles" => command!(commands::reorder_claude_profiles(
                 app.clone(),
-                argument::<AppKind>(&request.args, "target")?,
                 argument(&request.args, "orderedIds")?,
                 argument(&request.args, "expectedFileHashes")?,
             )),
@@ -223,6 +222,27 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 command!(commands::client_settings::parse_client_settings(
                     argument::<AppKind>(&request.args, "target")?,
                     argument::<String>(&request.args, "content")?,
+                ))
+            }
+            "preview_client_configuration_apply" => {
+                command!(commands::client_configuration_apply::preview_client_configuration_apply(
+                    app.clone(),
+                    argument::<AppKind>(&request.args, "target")?,
+                    argument::<SettingsValues>(&request.args, "settings")?,
+                    optional_argument::<asb_core::CodexSubagentSettings>(&request.args, "subagentSettings")?,
+                ))
+            }
+            "commit_client_configuration_apply" => {
+                command!(commands::client_configuration_apply::commit_client_configuration_apply(
+                    app.clone(),
+                    argument::<AppKind>(&request.args, "target")?,
+                    argument::<String>(&request.args, "expectedHash")?,
+                    argument::<String>(&request.args, "expectedRenderedHash")?,
+                    argument::<String>(&request.args, "expectedSettingsHash")?,
+                    argument::<bool>(&request.args, "expectedTargetExisted")?,
+                    argument::<SettingsValues>(&request.args, "settings")?,
+                    optional_argument::<asb_core::CodexSubagentSettings>(&request.args, "subagentSettings")?,
+                    argument::<bool>(&request.args, "confirmWrite")?,
                 ))
             }
             "get_global_prompt_document" => {

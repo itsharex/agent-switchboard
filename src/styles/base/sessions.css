@@ -124,6 +124,10 @@
   background: var(--asb-row-selected);
 }
 
+.asb-session-item.is-selected {
+  border-color: var(--asb-action);
+}
+
 .asb-session-item-title {
   gap: var(--asb-space-1);
   min-width: 0;

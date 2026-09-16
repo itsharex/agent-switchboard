@@ -1,5 +1,6 @@
 import { invoke } from "./client";
 import type { AppKind, UpstreamProtocol } from "./shared";
+import type { SettingsValues } from "./settings";
 import type { RouteState, ConfigWriteRecord } from "./switching";
 
 /** Closed, renderer-safe runtime events emitted by the application backend. */
@@ -56,6 +57,9 @@ export interface ConfigFileStatus {
   syntaxOk: boolean;
   route: RouteState | null;
   readError: string | null;
+  /** Values read from the real client configuration, never from ASB storage. */
+  clientSettings: SettingsValues | null;
+  clientSettingsError: string | null;
   activeProfileId: string | null;
   matchStatus: MatchStatus;
   lastSwitch: ConfigWriteRecord | null;

@@ -202,7 +202,7 @@ pub fn binding_file_state(
     binding: &ExtensionBinding,
     definition: &ExtensionDefinition,
     baseline: Option<&ManagedBaselineFile>,
-    _projects: &[asb_core::extensions::contracts::ProjectRegistration],
+    projects: &[asb_core::extensions::contracts::ProjectRegistration],
 ) -> FileState {
     // Anything newer in the definition than the last apply is pending.
     let applied_current_revision = binding.last_applied_revision == Some(definition.revision);
@@ -213,6 +213,7 @@ pub fn binding_file_state(
         ExtensionPayload::Mcp(_) => {
             let Some(ManagedBaseline::DocumentEntry {
                 target_path,
+                last_written_value,
                 last_document_hash,
                 ..
             }) = baseline.and_then(|file| {
@@ -228,13 +229,30 @@ pub fn binding_file_state(
                 Err(error) if error.kind() == ErrorKind::NotFound => return FileState::Missing,
                 Err(_) => return FileState::Unreadable,
             };
-            use sha2::Digest;
-            let current_hash = sha2::Sha256::digest(text.as_bytes())
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>();
-            if current_hash != *last_document_hash {
-                return FileState::ExternalChange;
+            // 所有权按条目判定（E02）：文档级哈希只作快路径。切换投影、
+            // 片段合并等第一方写入会改文档其他部分，只要本应用的条目仍与
+            // 最后写入一致，绑定就处于同步状态；条目本身变了才是外部变更。
+            let document_unchanged = {
+                use sha2::Digest;
+                let current_hash = sha2::Sha256::digest(text.as_bytes())
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                current_hash == *last_document_hash
+            };
+            if !document_unchanged {
+                let current = asb_core::extensions::mcp::managed_entry_text(binding, &text, projects);
+                let unchanged = match current {
+                    Ok(current) => asb_core::extensions::mcp::managed_entry_unchanged(
+                        binding.target.client(),
+                        current,
+                        last_written_value.as_deref(),
+                    ),
+                    Err(_) => false,
+                };
+                if !unchanged {
+                    return FileState::ExternalChange;
+                }
             }
             if applied_current_revision {
                 FileState::InSync

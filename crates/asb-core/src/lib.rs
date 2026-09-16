@@ -20,8 +20,6 @@ pub mod extensions;
 pub mod lock;
 pub mod ownership;
 pub mod redact;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test_support;
 pub mod validate;
 pub mod website_assembly;
 
@@ -36,10 +34,10 @@ pub use contracts::{
     CodexCatalogEntry, CodexEndpoint, CodexModelRoute, CodexModelSettings, CodexOperation,
     CodexProviderDraft, CodexProviderFile, CodexProviderProfile, CodexProviderRecord,
     CodexRouteMode, CodexRouteSnapshot, CodexSubagentKey, CodexSubagentSettings,
-    CodexSubagentSettingsPreview, CodexSubagentSettingsSnapshot, CodexUpstream, ConfigValue,
+    CodexSubagentSettingsSnapshot, CodexUpstream, ConfigValue,
     ConfigWriteRecord, ExplicitMaxOutputTokens, GlobalPromptDocument, KeyChange, MatchStatus,
     ModelOptions, ProviderDisplay, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord,
-    RouteMode, RouteState, SettingValue, SettingsValues, SubagentSettingsPlan, SwitchPlan,
+    RouteMode, RouteState, SettingValue, SettingsValues, SwitchPlan,
     SwitchPreview, UpstreamProtocol, WriteOperation, CODEX_PROVIDER_SCHEMA_VERSION,
 };
 pub use lock::{classify_lock, LockFileData, LockHolder, LockStatus, PidLiveness};

@@ -1,9 +1,12 @@
-/// <reference types="vitest/config" />
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { createWebDevelopmentBrowserPlugin } from "./src/dev/vite-browser-launch.ts";
+import {
+  WEB_DEVELOPMENT_BACKEND_HEALTH_URL,
+  WEB_DEVELOPMENT_BACKEND_READY_INTERVAL_MS,
+} from "./src/dev/web-backend.ts";
 import tauriConfig from "./src-tauri/tauri.conf.json" with { type: "json" };
 
 const developmentUrl = new URL(tauriConfig.build.devUrl);
@@ -19,8 +22,9 @@ export default defineConfig({
     tailwindcss(),
     createWebDevelopmentBrowserPlugin({
       enabled: process.env.ASB_WEB_DEVELOPMENT === "1",
-      healthUrl: "http://127.0.0.1:1422/health",
+      healthUrl: WEB_DEVELOPMENT_BACKEND_HEALTH_URL,
       origin: browserDevelopment.origin,
+      retryDelayMs: WEB_DEVELOPMENT_BACKEND_READY_INTERVAL_MS,
     }),
   ],
   clearScreen: false,
@@ -39,13 +43,6 @@ export default defineConfig({
     watch: {
       ignored: ["**/target/**", "**/target-*/**", "**/.tmp*/**", "**/node_modules/**"],
     },
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:1422",
-        changeOrigin: false,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
-    },
   },
   build: {
     target: "es2022",
@@ -56,16 +53,5 @@ export default defineConfig({
         tray: fileURLToPath(new URL("./tray.html", import.meta.url)),
       },
     },
-  },
-  test: {
-    environment: "jsdom",
-    setupFiles: ["src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
-    // Several interaction tests intentionally render large configuration lists.
-    // Keep their deadline explicit and stable under CI worker contention.
-    testTimeout: 10_000,
-    // timeLabel renders in the machine timezone; pin it so local-time
-    // assertions are identical on dev machines (UTC+8) and CI runners (UTC).
-    env: { TZ: "Asia/Shanghai" },
   },
 });

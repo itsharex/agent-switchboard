@@ -1,3 +1,16 @@
+/* The observed connection cards and the editable provider list are separate
+   surfaces: reading current state never blends into choosing or changing it. */
+.asb-provider-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+  min-width: 0;
+}
+
+.asb-provider-connection-panel .asb-route-cards {
+  margin-bottom: 0;
+}
+
 /* Third-party enable precondition. */
 .asb-provider-login-notice {
   display: flex;

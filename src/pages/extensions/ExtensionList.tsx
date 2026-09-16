@@ -1,12 +1,13 @@
 import type { ExtensionListItem, SkillUpdateReport } from "../../api/client";
 import { Button } from "../../components/Button";
-import { EditIcon, TrashIcon, UpdateIcon } from "../../components/icons";
+import { PreviewIcon, TrashIcon, UpdateIcon } from "../../components/icons";
+import { Table, type TableColumn } from "../../components/Table";
 import { Tooltip } from "../../components/Tooltip";
 import { ClientToggleGroup } from "../../components/extensions/ClientToggleGroup";
-import { TRANSPORT_LABELS } from "../../components/extensions/labels";
-import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 import { MANAGEMENT_CLIENTS } from "../../components/extensions/client-presentation";
+import { TRANSPORT_LABELS } from "../../components/extensions/labels";
 import { pendingDeployment } from "./pending-deployment";
+import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 function rowDescription(item: ExtensionListItem) {
   if (item.kind === "skill") return item.manifest.description ?? "";
@@ -25,14 +26,13 @@ function RowActions({
   report?: SkillUpdateReport;
   workspace: ExtensionWorkspace;
 }) {
-  const editLabel = item.kind === "mcp" ? `编辑定义 ${item.name}` : `编辑内容 ${item.name}`;
   return (
-    <div className={`asb-ext-row-actions${report ? " has-update" : ""}`}>
+    <div className={`asb-ext-table-actions${report ? " has-update" : ""}`}>
       {report && (
         <Tooltip label={`更新 ${item.name}`}>
           <Button
             variant="icon"
-            className="asb-ext-rowbtn"
+            className="asb-ext-table-action"
             disabled={workspace.writeBlocked}
             aria-label={`更新 ${item.name}`}
             onClick={() => void workspace.updates.update([report])}
@@ -41,21 +41,21 @@ function RowActions({
           </Button>
         </Tooltip>
       )}
-      <Tooltip label={editLabel}>
+      <Tooltip label={`部署与诊断 ${item.name}`}>
         <Button
           variant="icon"
-          className="asb-ext-rowbtn"
+          className="asb-ext-table-action"
           disabled={workspace.writeBlocked}
-          aria-label={editLabel}
-          onClick={() => void workspace.edit(item)}
+          aria-label={`打开 ${item.name} 的部署与诊断`}
+          onClick={() => workspace.nav.openManagement(item.id, item.kind)}
         >
-          <EditIcon />
+          <PreviewIcon />
         </Button>
       </Tooltip>
       <Tooltip label={`删除 ${item.name}`}>
         <Button
           variant="icon"
-          className="asb-ext-rowbtn asb-ext-rowbtn-danger"
+          className="asb-ext-table-action asb-ext-table-action-danger"
           disabled={workspace.writeBlocked}
           aria-label={`删除 ${item.name}`}
           onClick={() => workspace.nav.setDialog({ type: "remove", item })}
@@ -67,52 +67,74 @@ function RowActions({
   );
 }
 
-function ExtensionRow({ item, workspace }: { item: ExtensionListItem; workspace: ExtensionWorkspace }) {
+function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; workspace: ExtensionWorkspace }) {
   const report = workspace.updates.reportMap.get(item.id);
   const updatable = workspace.updates.updatable.find((entry) => entry.definitionId === item.id);
   const description = rowDescription(item);
   const meta = item.kind === "mcp" ? TRANSPORT_LABELS[item.transport] : item.source?.resolvedCommit ? "GitHub" : "本地";
   return (
-    <li className="asb-ext-row">
-      <Button
-        variant="unstyled"
-        className="asb-ext-row-main"
-        aria-label={`管理 ${item.name}`}
-        onClick={() => workspace.nav.showDefinition(item.id, item.kind)}
-      >
-        <span className="asb-ext-row-title">
-          <span className="asb-ext-row-name">{item.name}</span>
-          <span className="asb-ext-row-meta">{meta}</span>
-          {updatable && <span className="asb-ext-update-badge">可更新</span>}
-          {report?.error && (
-            <span className="asb-ext-row-error" title={report.error}>
-              检查失败
-            </span>
-          )}
-        </span>
-        {description && (
-          <span className="asb-ext-row-desc" title={description}>
-            {description}
-          </span>
-        )}
-      </Button>
-      <ClientToggleGroup
-        item={item}
-        busy={workspace.writeBlocked}
-        pendingClients={MANAGEMENT_CLIENTS.filter((client) => pendingDeployment(workspace.applies.pendingOperations, item, client))}
-        onToggle={(client) => void workspace.toggleClient(item, client)}
-      />
-      <RowActions item={item} report={updatable} workspace={workspace} />
-    </li>
+    <Button
+      variant="unstyled"
+      className="asb-ext-table-definition"
+      aria-label={item.kind === "mcp" ? `编辑 MCP ${item.name}` : `编辑 Skill ${item.name}`}
+      onClick={() => void workspace.edit(item)}
+    >
+      <span className="asb-ext-table-title">
+        <span className="asb-ext-table-name">{item.name}</span>
+        <span className="asb-ext-table-meta">{meta}</span>
+        {updatable && <span className="asb-ext-update-badge">可更新</span>}
+        {report?.error && <span className="asb-ext-table-error" title={report.error}>检查失败</span>}
+      </span>
+      {description && <span className="asb-ext-table-description" title={description}>{description}</span>}
+    </Button>
   );
+}
+
+function columns(workspace: ExtensionWorkspace): Array<TableColumn<ExtensionListItem>> {
+  return [
+    {
+      key: "definition",
+      header: "扩展",
+      cellClassName: "asb-ext-table-definition-cell",
+      render: (item) => <ExtensionIdentity item={item} workspace={workspace} />,
+    },
+    {
+      key: "deployments",
+      header: "客户端",
+      cellClassName: "asb-ext-table-deployments",
+      render: (item) => (
+        <ClientToggleGroup
+          item={item}
+          busy={workspace.writeBlocked}
+          pendingClients={MANAGEMENT_CLIENTS.filter((client) =>
+            pendingDeployment(workspace.applies.pendingOperations, item, client))}
+          onToggle={(client) => void workspace.toggleClient(item, client)}
+        />
+      ),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cellClassName: "asb-ext-table-action-cell",
+      render: (item) => (
+        <RowActions
+          item={item}
+          report={workspace.updates.updatable.find((entry) => entry.definitionId === item.id)}
+          workspace={workspace}
+        />
+      ),
+    },
+  ];
 }
 
 export function ExtensionList({ workspace }: { workspace: ExtensionWorkspace }) {
   return (
-    <ul className="asb-ext-rows" aria-label="扩展列表">
-      {workspace.visible.map((item) => (
-        <ExtensionRow key={item.id} item={item} workspace={workspace} />
-      ))}
-    </ul>
+    <Table
+      className="asb-ext-table"
+      columns={columns(workspace)}
+      rows={workspace.visible}
+      rowKey={(item) => item.id}
+      ariaLabel="扩展列表"
+    />
   );
 }

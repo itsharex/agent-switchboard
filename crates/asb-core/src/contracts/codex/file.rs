@@ -82,6 +82,7 @@ impl CodexProviderFile {
     pub fn record(&self, file_hash: String) -> CodexProviderRecord {
         CodexProviderRecord {
             profile: self.profile.clone(),
+            position: self.position,
             parameters: self.parameters.clone(),
             notes: self.notes.clone(),
             website_url: self.website_url.clone(),

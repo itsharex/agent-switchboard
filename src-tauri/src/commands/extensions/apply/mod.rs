@@ -19,11 +19,11 @@ use crate::extensions::secrets::SystemSecrets;
 #[serde(rename_all = "camelCase")]
 pub struct ApplyOutcomeDto {
     /// The finished record on success or on a rolled-back failure.
-    record: Option<ExtensionOperationRecord>,
+    pub(crate) record: Option<ExtensionOperationRecord>,
     /// Set when the batch was rejected outright (stale plan or lock); no
     /// client file changed.
-    rejected: Option<String>,
-    rolled_back: bool,
+    pub(crate) rejected: Option<String>,
+    pub(crate) rolled_back: bool,
 }
 
 #[tauri::command]
@@ -81,6 +81,19 @@ pub async fn apply_extension_plan(
                     });
                 }
             }
+        }
+
+        // E02 片段×扩展执行器争写闸口：片段声明的 mcp_servers 键不得与
+        // 本次待提交的 Codex App 作用域托管绑定相交。片段保存侧只校验已
+        // 提交的绑定，看不见暂存中的计划，这段竞态窗口由应用时兜底收口。
+        if let Some(message) =
+            fragment_collision_rejection(&state, &pending.commit.binding_upserts)
+        {
+            return Ok(ApplyOutcomeDto {
+                record: None,
+                rejected: Some(message),
+                rolled_back: false,
+            });
         }
 
         // The journal carries the prepared library change (without the
@@ -242,6 +255,45 @@ pub async fn apply_extension_plan(
         }
     })
     .await
+}
+
+/// E02 片段×扩展执行器争写闸口：片段声明的 `mcp_servers` 键与本次待提
+/// 交的 Codex App 作用域托管绑定（含停用绑定——与片段保存侧同口径，它
+/// 的键随时可能被重新启用）相交即拒绝。片段库不可读或片段文本无效时同
+/// 样拒绝（fail-closed：无法证明无冲突就不执行）。项目作用域绑定写的是
+/// 另一份文档，与用户级片段无关，不参与判定。
+fn fragment_collision_rejection(
+    state: &crate::local_state::LocalState,
+    bindings: &[ExtensionBinding],
+) -> Option<String> {
+    let declared = match crate::codex_common::declared_fragment_mcp_keys(state) {
+        Ok(keys) => keys,
+        Err(_) => {
+            return Some(
+                "通用配置片段不可读或无效，无法校验与扩展计划的 mcp_servers 键冲突；请检查通用配置片段后重新预览"
+                    .to_string(),
+            )
+        }
+    };
+    if declared.is_empty() {
+        return None;
+    }
+    let colliding = bindings
+        .iter()
+        .filter(|binding| {
+            binding.target.client() == asb_core::AppKind::Codex
+                && matches!(
+                    binding.target,
+                    asb_core::extensions::contracts::ExtensionTarget::App { .. }
+                )
+        })
+        .filter_map(|binding| binding.native_key.clone())
+        .find(|key| declared.contains(key));
+    colliding.map(|key| {
+        format!(
+            "通用配置片段已声明 mcp_servers.{key}，与待执行的扩展计划冲突：请调整片段或扩展绑定后重新预览"
+        )
+    })
 }
 
 mod restore;

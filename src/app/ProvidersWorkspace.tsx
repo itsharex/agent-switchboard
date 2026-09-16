@@ -33,7 +33,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onSelectApp={providers.selectApp} requestedPreviewId={model.requestedCodexPreviewId}
         onPreviewRequestHandled={model.clearRequestedCodexPreview}
         onImport={() => { switchPreview.retractPreview(); model.setProviderView({ kind: "import" }); }}
-        onOpenClientSettings={() => model.openSettings("client")} onOpenHistory={() => model.openSettings("backups")}
+        onOpenClientSettings={() => model.openClientConfiguration()} onOpenHistory={() => model.openSettings("backups")}
         onDelete={(record) => providers.setDeletePending({ kind: "codexThirdParty", record })}
         onDeleteOfficial={(record) => providers.setDeletePending({ kind: "generic", profile: record.profile })}
         editorSession={codexEditorSession} onNew={providers.newEditor} onEdit={providers.openCodexEditor}
@@ -54,7 +54,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       preview={switchPreview.preview} busy={busy} collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
       onSelectApp={providers.selectApp} onNew={providers.newEditor}
       onImport={() => { switchPreview.retractPreview(); model.setProviderView({ kind: "import" }); }}
-      onOpenClientSettings={() => model.openSettings("client")} onOpenHistory={() => model.openSettings("backups")}
+      onOpenClientSettings={() => model.openClientConfiguration()} onOpenHistory={() => model.openSettings("backups")}
       onCloseEditor={providers.closeEditor} onSave={providers.saveProfile}
       onSwitchClient={providers.newEditorFor}
       onSaveUsageQuery={async (profile, query) => {
@@ -65,7 +65,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         }
         return saved;
       }} onSaveQuotaInterval={providers.saveOfficialQuotaInterval}
-      onSelect={switchPreview.selectProfile} onReorder={providers.dragReorderProfiles}
+      onSelect={switchPreview.selectProfile} onReorder={providers.dragReorderClaudeProfiles}
       onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
       onActivate={switchPreview.activateProfile} onTogglePreview={switchPreview.togglePreviewProfile}
       onEdit={providers.openEditor}

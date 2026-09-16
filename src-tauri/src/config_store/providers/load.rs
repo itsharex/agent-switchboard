@@ -122,6 +122,7 @@ pub(super) fn check_expected_files(
 pub(super) fn record_of(app: AppKind, loaded: &LoadedProvider) -> ProviderRecord {
     ProviderRecord {
         profile: loaded.file.clone().into_profile(app),
+        position: loaded.file.position,
         file_hash: loaded.hash.clone(),
     }
 }

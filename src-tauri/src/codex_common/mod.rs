@@ -6,6 +6,9 @@ use asb_core::{
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, path::Path, sync::Mutex};
+
+mod fragment;
+pub(crate) use fragment::{resolve as resolve_fragment, save as save_fragment};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CommonPolicy {
@@ -26,6 +29,7 @@ pub(crate) struct CommonView {
     pub policy: CommonPolicy,
     pub revision: String,
     pub settings: ClientSettingsSnapshot,
+    pub fragment: fragment::FragmentView,
 }
 static LOCK: Mutex<()> = Mutex::new(());
 fn path(root: &Path) -> std::path::PathBuf {
@@ -54,10 +58,12 @@ pub(crate) fn view(state: &crate::local_state::LocalState) -> Result<CommonView,
         .configuration()
         .get_client_settings(AppKind::Codex)
         .map_err(|e| e.to_string())?;
+    let fragment = fragment::view(state.root())?;
     Ok(CommonView {
         policy,
         revision,
         settings,
+        fragment,
     })
 }
 pub(crate) fn resolve(
@@ -105,6 +111,15 @@ pub(crate) fn extract(target: &Path) -> Result<SettingsValues, String> {
     let text =
         std::fs::read_to_string(target).map_err(|_| "无法读取 Codex 原生配置，请先检查配置文件")?;
     asb_core::adapter::codex::extract_client_settings(&text).map_err(|e| e.to_string())
+}
+/// 通用片段当前声明的 `mcp_servers` 顶层键（空片段为空集）。供扩展执行
+/// 侧的争写闸口读取；片段存储或片段文本不可解析时按 Err 透传，调用方
+/// fail-closed 拒绝——无法证明无冲突就不执行。
+pub(crate) fn declared_fragment_mcp_keys(
+    state: &crate::local_state::LocalState,
+) -> Result<Vec<String>, String> {
+    let fragment = fragment::view(state.root())?;
+    asb_core::adapter::codex::declared_mcp_server_keys(&fragment.text).map_err(|e| e.to_string())
 }
 #[cfg(test)]
 mod tests {

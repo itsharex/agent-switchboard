@@ -24,7 +24,7 @@ function definitionActions(
       targets: clients.map((client) => ({ scope: "app" as const, client })) }],
   });
   const edit = async (item: ExtensionListItem) => {
-    if (item.kind === "skill") nav.showDefinition(item.id, "skill", true);
+    if (item.kind === "skill") nav.openSkillEditor(item.id);
     else {
       const envelope = await ext.loadMcpEdit(item.id);
       if (envelope) nav.setDialog({ type: "mcpEditor", envelope });
@@ -47,7 +47,7 @@ function definitionActions(
     const result = await install(definition.id, hostScoped ? [hostScoped] : EXTENSION_CLIENTS);
     if (result.status !== "applied") toast({
       kind: "warning", title: "Skill 已入库，客户端部署未完成",
-      description: "可从扩展详情重新部署当前版本。",
+      description: "可从列表的“部署与诊断”操作重新部署当前版本。",
     });
     return definition;
   };
@@ -55,8 +55,11 @@ function definitionActions(
     const definition = await ext.saveDefinition(draft);
     if (!definition) return false;
     if (clients.length > 0 && (await install(definition.id, clients)).status !== "applied") {
-      nav.showDefinition(definition.id, "mcp");
-      return false;
+      toast({
+        kind: "warning",
+        title: "MCP 已保存，客户端部署未完成",
+        description: "可从列表的“部署与诊断”操作重新部署当前版本。",
+      });
     }
     nav.closeDialog();
     return true;

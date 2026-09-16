@@ -1,13 +1,11 @@
 use asb_core::ccswitch::{self, CcSwitchRow};
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Raw scan outcome before the store marks duplicates.
 pub(super) struct RawScan {
     pub(super) proposals: Vec<ccswitch::CcSwitchProposal>,
     pub(super) skipped: Vec<ccswitch::CcSwitchSkip>,
-    pub(super) endpoints: BTreeMap<String, Vec<super::claude_endpoints::SourceEndpoint>>,
 }
 
 /// Locates the source database under the user home directory.
@@ -18,7 +16,7 @@ pub(super) fn db_path() -> Result<PathBuf, String> {
 
 pub(super) fn open_read_only(path: &Path) -> Result<Connection, String> {
     if !path.is_file() {
-        return Err("未找到 CC Switch 数据库(需要 CC Switch 3.x 已创建数据)".to_string());
+        return Err("未找到导入源数据库".to_string());
     }
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|error| format!("无法以只读方式打开数据库: {error}"))?;
@@ -118,7 +116,6 @@ pub(super) fn scan_db(path: &Path) -> Result<RawScan, String> {
     Ok(RawScan {
         proposals,
         skipped,
-        endpoints,
     })
 }
 

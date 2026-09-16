@@ -1,9 +1,12 @@
 import { useId, useRef, useState, type ReactNode } from "react";
-import type { AppKind, SettingValue, ConfigFileStatus } from "../api/client";
+import { commitClientConfigurationApply, previewClientConfigurationApply, type AppKind, type ClientConfigurationApplyPreview, type CodexSubagentSettings, type SettingsValues, type SettingValue, type ConfigFileStatus } from "../api/client";
+import { clientSettingsPayload } from "../app/claude-common-settings";
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
 import { Button } from "./Button";
 import { ClientPicker } from "./ClientPicker";
 import { EditableCodePreview } from "./EditableCodePreview";
+import { ConfirmSheet } from "./ConfirmSheet";
+import { PreviewInspector } from "./PreviewInspector";
 import { OfficialSettingsDirectory } from "./OfficialSettingsDirectory";
 import { SettingsFields } from "./SettingsFields";
 
@@ -13,19 +16,15 @@ interface ClientSettingsPanelProps {
   editorState: ClientSettingsEditorState;
   busy: boolean;
   configStatus: ConfigFileStatus | undefined;
-  hasActiveProvider: boolean;
-  previewBlockedReason: string | null;
   onValueChange: (app: AppKind, key: string, value: SettingValue) => void;
-  onResetGroup: (app: AppKind, group: string | null) => void;
-  onSave: (app: AppKind) => void;
-  onSaveAndPreview: (app: AppKind) => void;
-  onOpenProviders: () => void;
+  onApplied: () => void;
   onRetryLoad: (app: AppKind) => void;
   onPreview: (app: AppKind) => void;
   onPreviewContentChange: (app: AppKind, content: string) => void;
   /** Codex's directly-applied subagent resource sits after model behavior,
    * outside the application-owned client-preference store. */
   subagentSettings?: ReactNode;
+  subagentDraft?: CodexSubagentSettings;
 }
 
 function clientConfigStatus(
@@ -35,7 +34,7 @@ function clientConfigStatus(
     case "matchesProfile":
       return `已应用：真实配置与「${configStatus.matchStatus.profileName}」一致`;
     case "externallyModified":
-      return "真实配置已被外部修改，请前往供应商页重新应用";
+      return null;
     case "profileChanged":
       return `供应商「${configStatus.matchStatus.profileName}」或客户端设置已更新，请重新应用`;
     case "restoredBackup":
@@ -48,38 +47,11 @@ function clientConfigStatus(
 }
 
 function actionStatus(props: ClientSettingsPanelProps) {
-  if (props.editorState.parseError) {
-    return { message: "客户端配置片段有错误，修正后才能保存", error: true };
-  }
-  if (props.editorState.parsing) {
-    return { message: "正在同步客户端配置", error: false };
-  }
-  if (
-    props.editorState.phase === "dirty" ||
-    props.editorState.phase === "saveError"
-  ) {
-    return { message: "有未保存修改", error: false };
-  }
-  if (
-    props.editorState.phase === "savedPendingReapply" &&
-    props.configStatus?.matchStatus.kind !== "matchesProfile"
-  ) {
-    return {
-      message: props.hasActiveProvider
-        ? "已保存，预览并确认应用后生效"
-        : "已保存，请在供应商页选择并启用供应商后生效",
-      error: false,
-    };
-  }
+  if (props.editorState.parseError) return { message: "客户端配置片段有错误，修正后才能预览", error: true };
+  if (props.editorState.parsing) return { message: "正在同步客户端配置", error: false };
+  if (props.editorState.phase === "dirty") return { message: "有未应用修改", error: false };
   const message = clientConfigStatus(props.configStatus);
-  if (message)
-    return {
-      message,
-      error: props.configStatus?.matchStatus.kind === "externallyModified",
-    };
-  return props.editorState.phase === "clean"
-    ? { message: "已保存到应用数据", error: false }
-    : null;
+  return message ? { message, error: props.configStatus?.matchStatus.kind === "externallyModified" } : null;
 }
 
 function ClientSettingsPreview({
@@ -121,7 +93,7 @@ function ClientSettingsPreview({
           <EditableCodePreview
             target={state.preview.target}
             content={state.preview.content}
-            disabled={busy || state.phase === "saving"}
+            disabled={busy}
             onChange={(content) => onPreviewContentChange(app, content)}
           />
         </div>
@@ -141,68 +113,68 @@ function ClientSettingsPreview({
 }
 
 function ClientPreferenceActions(props: ClientSettingsPanelProps) {
-  const { editorState: state, app, busy, hasActiveProvider } = props;
+  const { editorState: state, app, busy } = props;
+  const [pending, setPending] = useState<{
+    preview: ClientConfigurationApplyPreview;
+    settings: SettingsValues;
+    subagentSettings?: CodexSubagentSettings;
+  } | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const settings: SettingsValues | null = state.editor && state.draft && !state.parsing && !state.parseError
+    ? clientSettingsPayload(app, state.draft, state.claudeExtra) : null;
+  const subagentSettings = app === "codex" ? props.subagentDraft : undefined;
+  const defaults: SettingsValues | null = settings ? {
+    settings: Object.fromEntries(Object.keys(settings.settings).map((key) => [key, { mode: "automatic" }])),
+  } : null;
+  const defaultSubagent: CodexSubagentSettings | undefined = app === "codex" ? {
+    enabled: { mode: "automatic" },
+    maxConcurrentThreadsPerSession: { mode: "automatic" },
+    interruptMessage: { mode: "automatic" },
+  } : undefined;
+  const prepare = (nextSettings: SettingsValues, nextSubagent = subagentSettings) => {
+    if (busy || applying) return;
+    setApplying(true); setApplyError(null);
+    void previewClientConfigurationApply(app, nextSettings, nextSubagent).then((preview) => {
+      setPending({ preview, settings: nextSettings, subagentSettings: nextSubagent });
+    }).catch((error: { message?: string }) => {
+      setApplyError(error.message ?? "无法生成配置预览");
+    }).finally(() => setApplying(false));
+  };
   const status = actionStatus(props);
-  const canSave = !state.parsing && !state.parseError &&
-    (state.phase === "dirty" || state.phase === "saveError");
-  const providerHelpId = useId();
-  const previewHelp = !hasActiveProvider
-    ? "当前客户端没有已启用的供应商；请前往供应商页选择并启用。"
-    : props.previewBlockedReason;
-  return (
-    <>
-      <div className="asb-settings-actions">
-        <Button
-          variant="secondary"
-          disabled={busy}
-          onClick={() => props.onResetGroup(app, null)}
-        >
-          全部恢复默认值
+  return <>
+    <section className="asb-client-configuration-actions" aria-label="配置操作">
+      <div className="asb-client-configuration-reset">
+        <Button variant="secondary" disabled={!defaults || busy || applying} onClick={() => defaults && prepare(defaults, defaultSubagent)}>
+          {applying ? "正在生成预览" : "恢复通用配置默认值"}
         </Button>
-        <div className="asb-settings-actions-main">
-          {status && (
-            <span
-              className={status.error ? "asb-field-error" : "asb-field-help"}
-              role={status.error ? "alert" : "status"}
-            >
-              {status.message}
-            </span>
-          )}
-          <div className="asb-client-preference-save">
-            <Button
-              variant="secondary"
-              disabled={busy || !canSave}
-              onClick={() => props.onSave(app)}
-            >
-              {state.phase === "saving" ? "正在保存" : "保存客户端设置"}
-            </Button>
-            <Button
-              variant="primary"
-              disabled={busy || state.parsing || Boolean(state.parseError) || previewHelp !== null}
-              aria-describedby={previewHelp ? providerHelpId : undefined}
-              onClick={() => props.onSaveAndPreview(app)}
-            >
-              保存并预览应用
-            </Button>
-          </div>
-        </div>
       </div>
-      {previewHelp && (
-        <div className="asb-client-provider-help">
-          <p id={providerHelpId} className="asb-field-help">
-            {previewHelp}
-          </p>
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={props.onOpenProviders}
-          >
-            前往供应商
-          </Button>
-        </div>
-      )}
-    </>
-  );
+      <div className="asb-client-configuration-notice">
+        {status && <span className={status.error ? "asb-field-error" : "asb-field-help"} role={status.error ? "alert" : "status"}>{status.message}</span>}
+        {applyError && <p className="asb-field-error" role="alert">{applyError}</p>}
+      </div>
+      <div className="asb-client-configuration-commit">
+        <Button variant="primary" disabled={!settings || (app === "codex" && !subagentSettings) || busy || applying}
+          onClick={() => settings && prepare(settings)}>
+          保存并预览应用
+        </Button>
+      </div>
+    </section>
+    {pending && <ConfirmSheet title="确认应用客户端通用配置" details={[
+      `将写入 ${pending.preview.file.preview.target}`,
+      <PreviewInspector filePreview={pending.preview.file} userConfigModel={null} userConfigWarnings={[]} />,
+      app === "codex"
+        ? "写入前会创建备份，并在同一可恢复事务中提交通用配置与子 agent 运行设置。"
+        : "写入前会创建备份，并在同一可恢复事务中提交客户端通用配置。",
+    ]} confirmLabel="确认应用" confirmDisabled={busy || applying} onConfirm={() => {
+      if (busy || applying) return;
+      setApplying(true); setApplyError(null);
+      void commitClientConfigurationApply(app, pending.settings, pending.preview, pending.subagentSettings)
+        .then(() => { setPending(null); props.onApplied(); })
+        .catch((error: { message?: string }) => setApplyError(error.message ?? "应用客户端通用配置失败"))
+        .finally(() => setApplying(false));
+    }} onCancel={() => setPending(null)} />}
+  </>;
 }
 
 function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
@@ -231,7 +203,7 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
       </>
     );
   }
-  const working = busy || state.phase === "saving";
+  const working = busy;
   const modelBehaviorGroups = state.editor.groups.filter((group) => group === "模型行为");
   const remainingGroups = state.editor.groups.filter((group) => group !== "模型行为");
   return (
@@ -242,9 +214,10 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
           groups={modelBehaviorGroups}
           values={state.draft}
           baselineValues={state.editor.settings.settings}
+          actualValues={props.configStatus ? (props.configStatus.clientSettings?.settings ?? {}) : undefined}
           busy={working}
           onChange={(key, value) => props.onValueChange(app, key, value)}
-          onResetGroup={(group) => props.onResetGroup(app, group)}
+          showGroupReset={false}
         />
       )}
       {props.subagentSettings}
@@ -254,17 +227,13 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
           groups={remainingGroups}
           values={state.draft}
           baselineValues={state.editor.settings.settings}
+          actualValues={props.configStatus ? (props.configStatus.clientSettings?.settings ?? {}) : undefined}
           busy={working}
           onChange={(key, value) => props.onValueChange(app, key, value)}
-          onResetGroup={(group) => props.onResetGroup(app, group)}
+          showGroupReset={false}
         />
       )}
       <ClientPreferenceActions {...props} busy={working} />
-      {state.phase === "saveError" && (
-        <p className="asb-field-error" role="alert">
-          保存失败，修改已保留：{state.error?.message ?? "请重试"}
-        </p>
-      )}
       <ClientSettingsPreview {...props} busy={working} />
     </>
   );
@@ -277,7 +246,7 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
   const { app } = props;
   return (
     <div
-      aria-label="偏好设置"
+      aria-label="客户端通用配置"
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !directoryOpen) return;
         event.preventDefault();
@@ -289,7 +258,7 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
         <ClientPicker
           app={app}
           disabled={props.busy}
-          label="偏好设置客户端"
+          label="客户端通用配置客户端"
           onChange={(target) => {
             setDirectoryOpen(false);
             props.onSelectApp(target);
@@ -303,13 +272,15 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
           disabled={!props.editorState.editor}
           onClick={() => setDirectoryOpen(!directoryOpen)}
         >
-          {directoryOpen ? "返回偏好设置" : "官方设置目录"}
+          {directoryOpen ? "返回客户端通用配置" : "官方设置目录"}
         </Button>
       </div>
       <div hidden={directoryOpen}>
-        <p className="asb-field-help asb-client-preferences-note">
-          这里集中记录所选客户端的共享偏好，方便独立调整。保存不会修改、切换或覆盖任何供应商；只有随后预览并确认应用时，才会把当前供应商与这些偏好一起写入客户端配置。
-        </p>
+        {props.configStatus?.clientSettingsError && (
+          <p className="asb-field-error" role="alert">
+            无法提取真实文件中的客户端设置：{props.configStatus.clientSettingsError}
+          </p>
+        )}
         <ClientPreferencesEditor {...props} />
       </div>
       {directoryOpen && (

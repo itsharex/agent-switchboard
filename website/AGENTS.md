@@ -19,6 +19,5 @@
 
 ## 验证与交付
 
-- 在本目录运行 `npm run typecheck`、`npm test`、`npm run build`。
-- 改动配置积木台的核心渲染或生成产物时运行 `npm run verify:assembly`，确认提交的站点产物仍与 Rust 生成器一致。
+- 除非用户在当前请求中明确要求，不运行 `npm run typecheck`、`npm run build`、`npm run verify:assembly` 或任何自动化测试。相关脚本仅在用户明确要求时按最小范围手动执行。
 - 当前 `package.json` 未定义部署脚本；部署设置变动时阅读本目录 `README.md`。

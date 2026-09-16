@@ -5,6 +5,7 @@ import {
   listBackups,
   listCodexProfiles,
   listProfiles,
+  onClientConfigChanged,
   onTrayChanged,
   type AppKind,
   type BackupRecord,
@@ -103,6 +104,25 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
+    void onClientConfigChanged(() => {
+      void refresh();
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch((caught) => {
+        if (!disposed) onError(caught as CommandError);
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [onError, refresh]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
     void onTrayChanged(() => {
       void refresh();
     })
@@ -132,7 +152,6 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
     statuses,
     /** Claude provider files with their storage revisions; the write boundary. */
     records,
-    setRecords,
     /** The Codex official-login record, stored in the same generic boundary. */
     codexOfficialRecords,
     codexRecords,

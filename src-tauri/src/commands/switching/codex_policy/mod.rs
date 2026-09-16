@@ -252,7 +252,7 @@ pub(crate) async fn reset_codex_provider_health(
     .await
 }
 
-/// Read-only CC Switch scan. The proposal it returns is applied only through
+/// Read-only the source application scan. The proposal it returns is applied only through
 /// `prepare_codex_gateway_policy` / `commit_codex_gateway_policy`, so the
 /// source import shares the one preview/confirm transaction and never gains
 /// a second write path.

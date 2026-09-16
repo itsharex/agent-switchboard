@@ -5,6 +5,8 @@ export interface CodexTrafficSettings {
   firstByteTimeoutSeconds: number;
   idleTimeoutSeconds: number;
   totalTimeoutSeconds: number;
+  /** Whole-response deadline for non-streaming requests; 0 means unlimited. */
+  nonStreamingTimeoutSeconds: number;
   failureThreshold: number;
   cooldownSeconds: number;
   successThreshold: number;
@@ -18,6 +20,7 @@ export interface CodexGatewayPolicy {
   providerIds: string[];
   maxRetries: number;
   traffic: CodexTrafficSettings;
+  mediaFallback: boolean;
 }
 export interface CodexPolicyView {
   policy: CodexGatewayPolicy;
@@ -41,3 +44,21 @@ export const discardCodexGatewayPolicy = (expectedConfigHash: string, confirmWri
   invoke("discard_codex_gateway_policy", { expectedConfigHash, confirmWrite });
 export const resetCodexProviderHealth = (profileId: string, confirmWrite: boolean): Promise<CodexPolicyView> =>
   invoke("reset_codex_provider_health", { profileId, confirmWrite });
+export interface CodexFailoverQueueMember {
+  sourceName: string;
+  endpoint: string | null;
+  upstream: "responses" | "chatCompletions" | "anthropicMessages" | null;
+  matchedProfileId: string | null;
+  matchedProfileName: string | null;
+}
+/** Read-only the source application scan; the proposal is applied through the normal preview/commit transaction. */
+export interface CodexFailoverSourceScan {
+  found: boolean;
+  sourceRevision: string;
+  policyRevision: string;
+  members: CodexFailoverQueueMember[];
+  proposal: CodexGatewayPolicy;
+  warnings: string[];
+}
+export const scanCodexFailoverSource = (sourcePath: string): Promise<CodexFailoverSourceScan> =>
+  invoke("scan_codex_failover_source", { sourcePath });

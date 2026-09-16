@@ -14,8 +14,12 @@ pub(super) fn profile(profile: &CodexProviderProfile) -> Result<(), String> {
 }
 
 fn validate_identity(profile: &CodexProviderProfile) -> Result<(), String> {
-    crate::validate::validate_codex_connection(&profile.connection, profile.upstream.protocol(), profile.authentication)
-        .map_err(|error| error.to_string())?;
+    crate::validate::validate_codex_connection(
+        &profile.connection,
+        profile.upstream.protocol(),
+        profile.authentication,
+    )
+    .map_err(|error| error.to_string())?;
     required(&profile.id, "供应商标识")?;
     required(&profile.name, "供应商名称")?;
     required(&profile.api_key, "API 密钥")?;
@@ -51,10 +55,16 @@ fn validate_connection(
     connection: &ProviderConnectionOptions,
     upstream: CodexUpstream,
 ) -> Result<(), String> {
-    if connection.claude_native.is_some() || connection.claude_billing.is_some() || connection.claude_prompt_cache_key.is_some() || connection.claude_models_url.is_some() {
+    if connection.claude_native.is_some()
+        || connection.claude_billing.is_some()
+        || connection.claude_prompt_cache_key.is_some()
+        || connection.claude_models_url.is_some()
+    {
         return Err("Claude 专用连接设置不能进入 Codex 档案".into());
     }
-    if let Some(options) = &connection.codex { options.validate(upstream)?; }
+    if let Some(options) = &connection.codex {
+        options.validate(upstream)?;
+    }
     if let Some(agent) = connection.custom_user_agent.as_deref() {
         if agent.trim().is_empty() || agent.chars().any(char::is_control) {
             return Err("Codex 自定义 User-Agent 无效".to_string());

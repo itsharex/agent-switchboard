@@ -6,30 +6,41 @@ use super::*;
 use tiny_http::Header;
 
 /// Replaces the saved route's placeholder credential with fresh managed
-/// tokens for every attempt. Refresh failures fail the request without ever
+/// tokens for every attempt: official/managed takeover accounts and managed
+/// xAI (SuperGrok) cards. Refresh failures fail the request without ever
 /// being classified as an upstream provider failure.
 pub(super) fn resolve(
     candidate: &ActiveRoute,
     inner: &GatewayInner,
     incoming: Option<&[Header]>,
 ) -> Result<ActiveRoute, (u16, String)> {
-    let Some(bound) = &candidate.codex_account else {
-        return Ok(candidate.clone());
+    let mut route = match &candidate.codex_account {
+        Some(bound) => {
+            if let Some(headers) = incoming {
+                verify_native_identity(headers, candidate, &bound.account_id)?;
+            }
+            let auth_path =
+                crate::local_state::LocalState::codex_auth_path().map_err(|error| (500, error))?;
+            let fresh = crate::codex_auth::projection::resolved_managed_auth(
+                &inner.state_root,
+                &bound.managed_id,
+                &auth_path,
+            )
+            .map_err(|error| (401, error))?;
+            let mut route = candidate.clone();
+            route.api_key = fresh.access_token.clone();
+            route.codex_account = Some(fresh);
+            route
+        }
+        None => candidate.clone(),
     };
-    if let Some(headers) = incoming {
-        verify_native_identity(headers, candidate, &bound.account_id)?;
+    // Managed xAI cards carry no static credential: the pinned upstream only
+    // accepts the bound (or default) SuperGrok account's access token.
+    if route.connection.provider_type.as_deref() == Some("xai_oauth") {
+        let fresh = crate::xai_auth::valid_token_for_profile(&inner.state_root, &route.profile_id)
+            .map_err(|error| (401, error))?;
+        route.api_key = fresh.access_token;
     }
-    let auth_path =
-        crate::local_state::LocalState::codex_auth_path().map_err(|error| (500, error))?;
-    let fresh = crate::codex_auth::projection::resolved_managed_auth(
-        &inner.state_root,
-        &bound.managed_id,
-        &auth_path,
-    )
-    .map_err(|error| (401, error))?;
-    let mut route = candidate.clone();
-    route.api_key = fresh.access_token.clone();
-    route.codex_account = Some(fresh);
     Ok(route)
 }
 

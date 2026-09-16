@@ -97,7 +97,7 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
         <section key={index} className="asb-ext-section">
           <h3 className="asb-section-title">
             {resourceNames.get(entry.definitionId) ?? entry.definitionId}
-            <span className="asb-ext-row-meta"> · {OPERATION_LABELS[entry.operation]}</span>
+            <span className="asb-scope-note"> · {OPERATION_LABELS[entry.operation]}</span>
           </h3>
           {entry.targets.map((target, targetIndex) => (
             <TargetPreview

@@ -23,7 +23,10 @@ mod settings;
 mod subagents;
 #[cfg(test)]
 mod tests;
+mod universal;
 mod usage;
+
+pub use universal::{UniversalProvider, UniversalProviderInput};
 
 pub use codex::{
     codex_model_catalog_document, default_model_limits, official_model_limits, CodexCapabilities,
@@ -31,7 +34,7 @@ pub use codex::{
     CodexChatThinkingParameter, CodexEndpoint, CodexModelRoute, CodexOperation, CodexProviderDraft,
     CodexProviderFile, CodexProviderProfile, CodexProviderRecord, CodexReasoningLevel,
     CodexRouteMode, CodexRouteSnapshot, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION,
-    CODEX_REASONING_LADDER, DEFAULT_CODEX_CAPABILITIES,
+    CODEX_REASONING_LADDER, DEFAULT_CODEX_CAPABILITIES, XAI_API_BASE_URL, XAI_OAUTH_PLACEHOLDER,
 };
 pub use connection::{
     ClaudeApiKeyField, LocalProxyRequestOverrides, ProviderAuthBinding, ProviderConnectionOptions,
@@ -43,8 +46,8 @@ pub use model::{
     ModelOptions,
 };
 pub use plan::{
-    BackupRecord, ChangeKind, ConfigWriteRecord, KeyChange, MatchStatus, RouteState, SwitchPlan,
-    SwitchPreview, WriteOperation,
+    BackupRecord, ChangeKind, CodexCommonFragment, ConfigWriteRecord, KeyChange, MatchStatus,
+    RouteState, SwitchPlan, SwitchPreview, WriteOperation,
 };
 pub use provider::{
     classify_profile_save, codex_official_draft, ProfileSaveKind, ProviderDisplay, ProviderDraft,
@@ -56,8 +59,7 @@ pub use settings::{
     MAX_EXACT_CONFIG_INTEGER,
 };
 pub use subagents::{
-    CodexSubagentKey, CodexSubagentSettings, CodexSubagentSettingsPreview,
-    CodexSubagentSettingsSnapshot, SubagentSettingsPlan,
+    CodexSubagentKey, CodexSubagentSettings, CodexSubagentSettingsSnapshot,
 };
 pub use usage::{
     CodexOfficialQuota, CodexOfficialQuotaReset, CodexOfficialQuotaResetKind,

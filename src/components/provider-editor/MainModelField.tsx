@@ -7,6 +7,8 @@ import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
 import { Input } from "../Input";
 import { ModelPicker } from "../ModelPicker";
+import { Tooltip } from "../Tooltip";
+import { UpdateIcon } from "../icons";
 import { claudeOptions, type ProviderEditorDraft } from "./draft";
 
 interface Props {
@@ -76,14 +78,18 @@ export function MainModelField({
             }))
           }
         />
-        <div className="asb-model-actions">
-          <Button
-            variant="secondary"
-            disabled={busy || modelsBusy || !baseUrl}
-            onClick={() => void fetchModels()}
-          >
-            {modelsBusy ? "获取中…" : "获取模型"}
-          </Button>
+        <div className="asb-provider-model-actions">
+          <Tooltip label={modelsBusy ? "正在获取模型" : "获取模型"}>
+            <Button
+              variant="icon"
+              aria-label={modelsBusy ? "正在获取模型" : "获取模型"}
+              aria-busy={modelsBusy || undefined}
+              disabled={busy || modelsBusy || !baseUrl}
+              onClick={() => void fetchModels()}
+            >
+              <UpdateIcon />
+            </Button>
+          </Tooltip>
         </div>
       </div>
       {userConfigModel && (

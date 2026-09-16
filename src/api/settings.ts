@@ -1,6 +1,7 @@
 import { invoke } from "./client";
 import type { AppKind } from "./shared";
 import type { RuntimeLogLevel } from "./status";
+import type { CodexSubagentSettings } from "./subagent-settings";
 
 /** One backend-resolved global instruction document. Its absolute path never
  * crosses the renderer boundary; the hash protects against stale saves. */
@@ -84,6 +85,13 @@ export interface ClientSettingsSnapshot {
   settingsHash: string;
 }
 
+/** One hash-bound, confirmed application of all client-configuration drafts. */
+export interface ClientConfigurationApplyPreview {
+  file: import("./switching").FilePreview;
+  settingsHash: string;
+  targetExisted: boolean;
+}
+
 export interface ProviderParametersCatalog {
   app: AppKind;
   defaults: SettingsValues;
@@ -131,6 +139,34 @@ export function previewClientSettings(
   return invoke<ClientSettingsPreview>("preview_client_settings", {
     target: app,
     settings,
+  });
+}
+
+export function previewClientConfigurationApply(
+  app: AppKind,
+  settings: SettingsValues,
+  subagentSettings?: CodexSubagentSettings,
+): Promise<ClientConfigurationApplyPreview> {
+  return invoke<ClientConfigurationApplyPreview>("preview_client_configuration_apply", {
+    target: app, settings, subagentSettings,
+  });
+}
+
+export function commitClientConfigurationApply(
+  app: AppKind,
+  settings: SettingsValues,
+  preview: ClientConfigurationApplyPreview,
+  subagentSettings?: CodexSubagentSettings,
+): Promise<void> {
+  return invoke<void>("commit_client_configuration_apply", {
+    target: app,
+    expectedHash: preview.file.contentHash,
+    expectedRenderedHash: preview.file.renderedHash,
+    expectedSettingsHash: preview.settingsHash,
+    expectedTargetExisted: preview.targetExisted,
+    settings,
+    subagentSettings,
+    confirmWrite: true,
   });
 }
 

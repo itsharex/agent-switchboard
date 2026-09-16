@@ -50,7 +50,7 @@
 }
 
 /* ---------------------------------------------------------------------------
- * The one modal skeleton (DESIGN.md §8, user directive 2026-09-11).
+ * The one modal skeleton (DESIGN.md §8).
  *
  * Every modal in the app — confirmation sheet, editor, plan preview, source
  * browser, history — is this structure and nothing else: an h2-only heading
@@ -149,6 +149,15 @@
 .asb-dialog-body > p {
   margin: 0;
 }
+
+/* Grouped local-management tasks replace a long row of feature tabs. */
+.asb-management-group {
+  display: grid;
+  gap: var(--asb-space-5);
+}
+
+.asb-management-section { min-width: 0; }
+.asb-management-section > summary { font: var(--asb-text-section); }
 
 .asb-dialog-footer {
   display: flex;

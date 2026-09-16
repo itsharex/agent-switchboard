@@ -26,6 +26,7 @@ pub mod history;
 pub mod migration;
 pub mod providers;
 pub mod snapshot;
+pub(crate) mod universal_providers;
 
 pub(crate) const SWITCH_INTENT_FILE: &str = "switch-intent.json";
 pub(crate) const PROFILE_PREIMAGE_FILE: &str = "save-before.json";

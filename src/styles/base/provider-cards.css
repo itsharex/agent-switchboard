@@ -52,7 +52,7 @@
 }
 
 /* An unfolded preview turns the card into a reading surface: hover stops
-   tinting it (user directive 2026-09-01). :where keeps this exception at
+   tinting it. :where keeps this exception at
    the base rule's specificity so the is-live card below still wins. */
 .asb-row-item.is-previewing {
   background: var(--asb-content);
@@ -78,7 +78,7 @@
 /* Icon-action cluster — ghost buttons inside the card: no resting fill, so
    solid-ink icons stay readable on white and on the tinted live card; the
    surface only appears on hover. Buttons breathe with an even 12px rhythm
-   (user directive 2026-09-12, cc-switch reference). */
+   to preserve a consistent rhythm. */
 .asb-iconcluster {
   display: inline-flex;
   align-items: center;
@@ -419,7 +419,7 @@
   box-shadow: none;
 }
 
-/* Row actions sit on the compact control tier (user directive 2026-09-12):
+/* Row actions sit on the compact control tier:
    the enable CTA and the icon cluster stay visually secondary to the row's
    name and meta, so they use the same 32px height as segments and pills. */
 .asb-row-line .asb-btn-primary,
@@ -538,15 +538,25 @@
 }
 
 .asb-row-meta {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-unit);
+  min-width: 0;
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
 }
 
-.asb-row-meta-with-usage {
-  white-space: normal;
+.asb-row-model,
+.asb-row-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-row-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-unit);
   overflow-wrap: anywhere;
 }
 

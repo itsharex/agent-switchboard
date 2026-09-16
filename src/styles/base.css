@@ -327,10 +327,10 @@
   translate: var(--asb-switch-thumb-travel) 0;
 }
 
-/* The host is a quiet link, muted until hover: it opens the system browser
-   via the opener plugin (wry blocks in-webview new windows). */
+/* The provider URL uses the dedicated link color and opens in the system
+   browser via the opener plugin (wry blocks in-webview new windows). */
 .asb-row-host {
-  color: inherit;
+  color: var(--asb-link);
   cursor: pointer;
   text-decoration: none;
   transition: color var(--asb-motion-press) var(--asb-easing);

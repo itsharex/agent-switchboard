@@ -243,7 +243,7 @@ fn catalog_entries(
         if catalog_text.is_some() {
             warnings.push("模型目录未包含当前主模型，已补入主模型".into());
         }
-        entries.push(default_entry(default_model));
+        entries.push(CodexCatalogEntry::default_entry(default_model));
     }
     if entries.is_empty() {
         return Err("Codex 模型目录为空".into());
@@ -319,27 +319,6 @@ fn parse_catalog(text: &str, warnings: &mut Vec<String>) -> Result<Vec<CodexCata
         });
     }
     Ok(entries)
-}
-
-fn default_entry(model: &str) -> CodexCatalogEntry {
-    let (context_window, max_output_tokens) = default_model_limits(model);
-    CodexCatalogEntry {
-        id: model.into(),
-        context_window,
-        max_output_tokens,
-        function_tools: true,
-        custom_tools: true,
-        tool_search: true,
-        reasoning: true,
-        default_reasoning_level: CodexReasoningLevel::Medium,
-        supported_reasoning_levels: CODEX_REASONING_LADDER.to_vec(),
-        images: false,
-        compact: true,
-        display_name: None,
-        description: None,
-        base_instructions: None,
-        supports_parallel_tool_calls: None,
-    }
 }
 
 fn reasoning_levels(

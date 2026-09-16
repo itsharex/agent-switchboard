@@ -67,8 +67,8 @@ export function GatewayPane({ operations: op }: { operations: ClaudeOperations }
       <Button variant="secondary" disabled={busy} onClick={() => setStop(null)}>取消停止接管</Button>
       <Button variant="primary" disabled={busy} onClick={() => void run(async () => { const result = await api.stopClaudeGateway(stop, true); setStop(null); accept(await api.getClaudeFailover()); changed("Claude 接管已停止并恢复配置。" + result.warnings.join("；")); })}>确认停止并恢复 Claude 配置</Button>
     </section>}
-    <section aria-label="从 CC Switch 导入故障转移队列" className="asb-provider-section-fields">
-      <label className="asb-field"><span>CC Switch 数据库路径</span><Input value={sourcePath} disabled={busy} placeholder="~/.cc-switch/cc-switch.db" onChange={(e) => { setSourcePath(e.target.value); setSource(null); }} /></label>
+    <section aria-label="从本机导入故障转移队列" className="asb-provider-section-fields">
+      <label className="asb-field"><span>导入源数据库路径</span><Input value={sourcePath} disabled={busy} placeholder="输入源数据库路径" onChange={(e) => { setSourcePath(e.target.value); setSource(null); }} /></label>
       <Button variant="secondary" disabled={busy || !sourcePath.trim()} onClick={() => void run(async () => setSource(await api.scanClaudeFailoverSource(sourcePath.trim())))}>只读扫描 Claude 故障转移队列</Button>
       {source && !source.found && <p role="status">来源没有 Claude 故障转移数据。</p>}
       {source && source.members.length > 0 && <section aria-label="Claude 故障转移队列预览">

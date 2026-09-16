@@ -24,6 +24,7 @@
   --asb-canvas: var(--asb-ice);
   --asb-text: var(--asb-ink);
   --asb-text-muted: rgba(20, 22, 27, 0.62);
+  --asb-link: color-mix(in srgb, var(--asb-action) 68%, var(--asb-text));
   --asb-hairline: rgba(20, 22, 27, 0.12);
   --asb-hairline-strong: rgba(20, 22, 27, 0.2);
   --asb-content: #ffffff;

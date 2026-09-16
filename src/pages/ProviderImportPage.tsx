@@ -46,7 +46,7 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
           <RadioOption name="provider-import-source" checked={source === "local"} disabled={props.busy}
             label="本机配置" onChange={() => setSelectedSource("local")} />
           <RadioOption name="provider-import-source" checked={source === "ccswitch"} disabled={props.busy}
-            label="CC Switch" onChange={() => setSelectedSource("ccswitch")} />
+            label="本机数据库" onChange={() => setSelectedSource("ccswitch")} />
         </div>
       </section>}
       {source === "local" ? <LocalConfigImport app={props.appFilter} discovery={props.discovery} busy={props.busy}

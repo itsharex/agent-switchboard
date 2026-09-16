@@ -48,23 +48,14 @@ function ActivateButton({ name, onActivate }: { name: string; onActivate: () => 
   );
 }
 
-function ProviderMeta({ record }: { record: CodexProviderRecord }) {
-  const model = record.profile.defaultModel;
-  const url = record.websiteUrl;
+function ProviderUrl({ url }: { url: string }) {
   let host = url;
-  if (url) {
-    try { host = new URL(url).host; } catch { /* Display the stored value when it is not a URL. */ }
-  }
+  try { host = new URL(url).host; } catch { /* Display the stored value when it is not a URL. */ }
   return (
-    <>
-      {model}{model && host ? " · " : ""}
-      {url && host && (
-        <a className="asb-row-host" href={url} title={url}
-          onClick={(event) => { event.preventDefault(); void openUrl(url); }}>
-          {host}
-        </a>
-      )}
-    </>
+    <a className="asb-row-host" href={url} title={url}
+      onClick={(event) => { event.preventDefault(); void openUrl(url); }}>
+      {host}
+    </a>
   );
 }
 
@@ -86,7 +77,8 @@ export function CodexProviderRow({ record, ...props }: RowProps & { record: Code
   return (
     <ProviderRowShell id={id} name={name} active={props.active} selected={props.selected}
       previewOpen={props.previewOpen} sortable
-      meta={record.profile.defaultModel || record.websiteUrl ? <ProviderMeta record={record} /> : undefined}
+      model={record.profile.defaultModel}
+      url={record.websiteUrl ? <ProviderUrl url={record.websiteUrl} /> : undefined}
       primaryAction={!props.active ? <ActivateButton name={name} onActivate={() => select(props.onActivate)} /> : undefined}
       actions={
         <RowActions name={name} previewOpen={props.previewOpen}
@@ -118,7 +110,7 @@ function QuotaToggle({ name, id, open, onToggle }: { name: string; id: string; o
   );
 }
 
-/** Official login stays a fixed, non-sortable row with its own login and quota state. */
+/** Official login participates in the Codex provider order while retaining its own login and quota state. */
 export function CodexOfficialRow(props: OfficialRowProps) {
   const { profile } = props.record;
   const [reloginOpen, setReloginOpen] = useState(false);
@@ -127,7 +119,7 @@ export function CodexOfficialRow(props: OfficialRowProps) {
   const loginLabel = reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`;
   return (
     <ProviderRowShell id={profile.id} name={profile.name} active={props.active} selected={props.selected}
-      previewOpen={props.previewOpen} sortable={false} meta={<span>官方登录</span>}
+      previewOpen={props.previewOpen} sortable details="官方登录"
       primaryAction={!props.active ? <ActivateButton name={profile.name} onActivate={() => select(props.onActivate)} /> : undefined}
       secondaryAction={
         <Tooltip label={loginLabel}>

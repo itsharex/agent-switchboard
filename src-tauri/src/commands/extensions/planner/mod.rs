@@ -50,6 +50,29 @@ pub struct PlanRequest {
     operations: Vec<PlanRequestOperation>,
 }
 
+/// Programmable constructor for orchestrators that already know the exact
+/// binding-level intent (the Codex project plan apply): one enable/disable
+/// operation per binding, in the order given. The request type stays private
+/// to this module so no second writer can build plans by hand.
+pub(crate) fn binding_state_request(toggles: Vec<(String, bool)>) -> PlanRequest {
+    PlanRequest {
+        operations: toggles
+            .into_iter()
+            .map(|(binding_id, enable)| PlanRequestOperation {
+                operation: if enable {
+                    PlanOperation::Enable
+                } else {
+                    PlanOperation::Disable
+                },
+                definition_id: None,
+                binding_id: Some(binding_id),
+                targets: Vec::new(),
+                shared_settings: None,
+            })
+            .collect(),
+    }
+}
+
 #[tauri::command]
 pub async fn prepare_extension_plan(
     app: AppHandle,

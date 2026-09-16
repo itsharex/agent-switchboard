@@ -17,7 +17,18 @@ pub struct SwitchPlan {
     codex_model_catalog: Option<String>,
     codex_managed_auth: Option<super::CodexManagedAuth>,
     codex_preserve_official_login: bool,
+    /// Codex-only common-file fragment; Claude plans never carry one.
+    codex_common_fragment: Option<CodexCommonFragment>,
     claude_route_revision: Option<String>,
+}
+
+/// The user's raw common-file TOML snippet plus its per-profile enable
+/// decision. Disabled plans still carry the text so the projection can strip
+/// previously merged keys whose values were not changed by the user.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodexCommonFragment {
+    pub text: String,
+    pub enabled: bool,
 }
 #[derive(Clone, PartialEq, Eq)]
 enum ClientRoute {
@@ -47,6 +58,7 @@ impl SwitchPlan {
             codex_model_catalog: None,
             codex_managed_auth: None,
             codex_preserve_official_login: true,
+            codex_common_fragment: None,
             claude_route_revision: None,
         }
     }
@@ -69,6 +81,7 @@ impl SwitchPlan {
             codex_model_catalog: None,
             codex_managed_auth: None,
             codex_preserve_official_login: true,
+            codex_common_fragment: None,
             claude_route_revision: None,
         }
     }
@@ -103,6 +116,15 @@ impl SwitchPlan {
     pub fn with_codex_managed_auth(mut self, auth: super::CodexManagedAuth) -> Self {
         self.codex_managed_auth = Some(auth);
         self
+    }
+
+    pub fn with_codex_common_fragment(mut self, fragment: CodexCommonFragment) -> Self {
+        self.codex_common_fragment = Some(fragment);
+        self
+    }
+
+    pub fn codex_common_fragment(&self) -> Option<&CodexCommonFragment> {
+        self.codex_common_fragment.as_ref()
     }
 
     pub fn codex_managed_auth(&self) -> Option<&super::CodexManagedAuth> {

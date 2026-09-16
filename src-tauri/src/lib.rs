@@ -1,5 +1,6 @@
 mod app_paths;
 mod ccswitch_source;
+mod client_config_watcher;
 mod claude_auth;
 mod claude_env_conflicts;
 mod claude_integration;
@@ -12,8 +13,10 @@ mod cloud_backup;
 mod codex_auth;
 mod codex_common;
 mod codex_env_conflicts;
+mod codex_history_unify;
 mod codex_metering;
 mod codex_official_quota;
+mod codex_project_plans;
 mod codex_prompts;
 mod codex_reset;
 mod command_registry;
@@ -42,6 +45,7 @@ mod upstream_overrides;
 mod usage_cache;
 mod usage_history;
 mod usage_query;
+mod xai_auth;
 
 pub use commands::local_config_paths;
 
@@ -188,6 +192,15 @@ pub fn run() {
                 runtime_log::set_level(settings.runtime_log_level);
                 let _ = commands::apply_desktop_settings(app.handle(), &settings);
             }
+            let watcher = client_config_watcher::ClientConfigWatcher::start(
+                app.handle().clone(),
+                [
+                    local.target(asb_core::AppKind::Codex).map_err(std::io::Error::other)?,
+                    local.target(asb_core::AppKind::Claude).map_err(std::io::Error::other)?,
+                ],
+            )
+            .map_err(std::io::Error::other)?;
+            app.manage(watcher);
             if let Err(error) = tray::setup(app.handle()) {
                 tray::recover_main(app.handle(), &error);
             }

@@ -13,6 +13,20 @@ fn error(message: String) -> CommandError {
 fn settings(state: &LocalState, id: &str) -> Result<asb_core::SettingsValues, CommandError> {
     crate::codex_common::resolve(state, id).map_err(error)
 }
+/// Status matching replays the full projection, so every matching plan must
+/// carry the common-file fragment exactly like a switching plan would.
+fn attach_fragment(
+    state: &LocalState,
+    profile_id: &str,
+    plan: SwitchPlan,
+) -> Result<SwitchPlan, CommandError> {
+    Ok(
+        match crate::codex_common::resolve_fragment(state.root(), profile_id).map_err(error)? {
+            Some(fragment) => plan.with_codex_common_fragment(fragment),
+            None => plan,
+        },
+    )
+}
 pub(super) fn matching_profile(
     state: &LocalState,
     gateway: Option<&crate::gateway::GatewayController>,
@@ -50,11 +64,15 @@ pub(super) fn matching_profile(
             .map_err(store_error)?;
         let profile = file.client_projection().into_profile(AppKind::Codex);
         let revision = crate::gateway::codex_route_fingerprint(&file).map_err(error)?;
-        let plan = SwitchPlan::direct(profile.clone(), settings(state, &file.profile.id)?)
-            .with_codex_model_catalog(crate::gateway::codex_catalog_file_name(
-                &file.profile.id,
-                &revision,
-            ));
+        let plan = attach_fragment(
+            state,
+            &file.profile.id,
+            SwitchPlan::direct(profile.clone(), settings(state, &file.profile.id)?)
+                .with_codex_model_catalog(crate::gateway::codex_catalog_file_name(
+                    &file.profile.id,
+                    &revision,
+                )),
+        )?;
         if super::report::projection_matches(text, &plan) {
             matches.push(profile);
         }
@@ -76,7 +94,11 @@ pub(super) fn matching_official(
         {
             continue;
         }
-        let plan = SwitchPlan::direct(record.profile.clone(), settings(state, &record.profile.id)?);
+        let plan = attach_fragment(
+            state,
+            &record.profile.id,
+            SwitchPlan::direct(record.profile.clone(), settings(state, &record.profile.id)?),
+        )?;
         if super::report::projection_matches(text, &plan) {
             return Ok(Some(record.profile.clone()));
         }

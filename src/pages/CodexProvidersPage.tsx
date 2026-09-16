@@ -90,9 +90,8 @@ function useCodexProvidersState(props: Props) {
       await props.onRefresh();
     });
   };
-  const reorder = (orderedIds: string[]) => void run(async () => {
-    await reorderCodexProfiles(orderedIds,
-      Object.fromEntries(props.records.map((record) => [record.profile.id, record.fileHash])));
+  const reorder = (orderedIds: string[], expectedFileHashes: Record<string, string>) => void run(async () => {
+    await reorderCodexProfiles(orderedIds, expectedFileHashes);
     await props.onRefresh();
   });
   return { ...switchPreview, selectedId, setSelectedId, quotaOpen, setQuotaOpen,
@@ -104,6 +103,11 @@ type PageState = ReturnType<typeof useCodexProvidersState>;
 function CodexProvidersList({ props, state }: { props: Props; state: PageState }) {
   const { preview } = state;
   const official = props.officialRecord;
+  const rows = [
+    ...(official ? [{ kind: "official" as const, record: official }] : []),
+    ...props.records.map((record) => ({ kind: "provider" as const, record })),
+  ].sort((left, right) => left.record.position - right.record.position
+    || left.record.profile.id.localeCompare(right.record.profile.id));
   const previewSection = preview && (
     <section className="asb-preview-inline" aria-label="变更预览">
       <div className="asb-panel-heading">
@@ -131,23 +135,27 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
   });
   return (
     <>
-      <SortableProviderRows ids={props.records.map((record) => record.profile.id)} onReorder={state.reorder}
-        ariaLabel="Codex 供应商列表" emptyLabel="尚无第三方供应商；官方登录已就绪"
-        leading={official && (
-          <CodexOfficialRow record={official} {...rowProps(official.profile)} quotaOpen={state.quotaOpen}
-            onEdit={() => { state.retractPreview(); props.onEditOfficial(official); }}
-            onDelete={() => props.onDeleteOfficial(official)}
+      <SortableProviderRows
+        ids={rows.map((row) => row.record.profile.id)}
+        onReorder={(orderedIds) => state.reorder(orderedIds,
+          Object.fromEntries(rows.map((row) => [row.record.profile.id, row.record.fileHash])))}
+        ariaLabel="Codex 供应商列表"
+        emptyLabel="尚无 Codex 供应商"
+      >
+        {rows.map((row) => row.kind === "official" ? (
+          <CodexOfficialRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)} quotaOpen={state.quotaOpen}
+            onEdit={() => { state.retractPreview(); props.onEditOfficial(row.record); }}
+            onDelete={() => props.onDeleteOfficial(row.record)}
             onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
             onToggleQuota={() => state.setQuotaOpen((open) => !open)}
             onReloginFinished={() => void props.onRefresh()}>
-            {preview?.profileId === official.profile.id && previewSection}
+            {preview?.profileId === row.record.profile.id && previewSection}
           </CodexOfficialRow>
-        )}>
-        {props.records.map((record) => (
-          <CodexProviderRow key={record.profile.id} record={record} {...rowProps(record.profile)}
-            onEdit={() => { state.retractPreview(); props.onEdit(record); }}
-            onDelete={() => props.onDelete(record)}>
-            {preview?.profileId === record.profile.id && previewSection}
+        ) : (
+          <CodexProviderRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)}
+            onEdit={() => { state.retractPreview(); props.onEdit(row.record); }}
+            onDelete={() => props.onDelete(row.record)}>
+            {preview?.profileId === row.record.profile.id && previewSection}
           </CodexProviderRow>
         ))}
       </SortableProviderRows>

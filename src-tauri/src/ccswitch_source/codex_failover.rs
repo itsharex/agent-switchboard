@@ -1,4 +1,4 @@
-//! Codex-only CC Switch failover import: the source's ordered Codex queue and
+//! Codex-only the source application failover import: the source's ordered Codex queue and
 //! its per-app proxy policy become a proposed `CodexGatewayPolicy`. The scan
 //! is strictly read-only and only proposes; applying the proposal goes
 //! through the existing Codex policy preview/commit transaction, so this

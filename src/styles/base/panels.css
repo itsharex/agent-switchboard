@@ -14,7 +14,7 @@
 
 /* Module section heading — the single step between the page title (h2,
    .asb-panel-title) and body text. Every module/group h3 consumes this class;
-   per-module element selectors are not allowed (user directive 2026-09-11). */
+   per-module element selectors are not allowed. */
 .asb-section-title {
   margin: 0;
   font: var(--asb-text-section);
@@ -59,8 +59,8 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Workspace header — the single page/module header structure (user directive
- * 2026-09-12), owned by WorkspaceHeader.tsx (WorkspaceHeader + ModuleHeader).
+ * Workspace header — the single page/module header structure, owned by
+ * WorkspaceHeader.tsx (WorkspaceHeader + ModuleHeader).
  * Row 1 is the title alone (plus a sub-workspace back button); row 2 pairs
  * left navigation with right page actions; row 3 holds local view controls.
  * `.asb-panel-heading` / `.asb-panel-subheading` below are the rows that make
@@ -134,7 +134,7 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Empty state — the one shape (DESIGN.md §8, user directive 2026-09-11).
+ * Empty state — the one shape (DESIGN.md §8).
  *
  * A glyph, a section-step heading, one line of explanation, at most one
  * action. Every page or section that can be empty renders this and nothing
@@ -350,9 +350,6 @@
 /* Prompt management uses a near-solid work surface rather than another
    frosted layer, keeping editable Markdown high contrast. */
 .asb-prompt-manager {
-  --asb-prompt-editor-min-height: 20rem;
-  --asb-prompt-editor-max-height: clamp(20rem, 58dvh, 40rem);
-
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-3);
@@ -373,14 +370,14 @@
   color: var(--asb-text);
 }
 
-/* The prompt editor's sizing variant hangs off its field wrapper: the
-   Textarea component owns the field classes exclusively, so the parent
-   container owns size — higher specificity than .asb-input, order-independent. */
+/* The global-document editor has a stable local scroll surface. It never
+   grows with the draft, so editing cannot introduce a workspace scrollbar or
+   reflow the surrounding extension view. */
 .asb-prompt-editor-field .asb-textarea {
   inline-size: 100%;
-  height: var(--asb-prompt-editor-min-height);
-  min-height: var(--asb-prompt-editor-min-height);
-  max-height: var(--asb-prompt-editor-max-height);
+  height: clamp(10rem, 42dvh, 16rem);
+  min-height: 0;
+  max-height: none;
   padding: var(--asb-space-3);
   border-color: var(--asb-hairline-strong);
   background: var(--asb-content);
@@ -400,11 +397,6 @@
 }
 
 @media (max-width: 680px) {
-  .asb-prompt-manager {
-    --asb-prompt-editor-min-height: 15rem;
-    --asb-prompt-editor-max-height: clamp(15rem, 56dvh, 32rem);
-  }
-
   .asb-prompt-actions > .asb-btn-primary {
     flex: 1;
   }

@@ -1,9 +1,7 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import type { CodexSubagentSettings, SettingValue } from "../api/client";
 import type { CodexSubagentSettingsEditorState } from "../app/useCodexSubagentSettings";
 import { Button } from "./Button";
-import { CodePreview } from "./CodePreview";
-import { ConfirmSheet } from "./ConfirmSheet";
 import { Input } from "./Input";
 import { RadioOption } from "./RadioOption";
 
@@ -13,10 +11,7 @@ interface Props {
   editorState: CodexSubagentSettingsEditorState;
   busy: boolean;
   onChange: (field: SubagentField, value: SettingValue) => void;
-  onReset: () => void;
   onRetryLoad: () => void;
-  onPreview: () => void;
-  onApplyPreview: () => Promise<boolean>;
 }
 
 const automatic: SettingValue = { mode: "automatic" };
@@ -27,6 +22,12 @@ function explicit(value: boolean | string | number): SettingValue {
 
 function numericValue(value: SettingValue): string {
   return value.mode === "explicit" ? String(value.value) : "";
+}
+
+function actualValueLabel(value: SettingValue): string {
+  if (value.mode === "automatic") return "真实文件：自动";
+  if (typeof value.value === "boolean") return `真实文件：${value.value ? "开启" : "关闭"}`;
+  return `真实文件：${value.value}`;
 }
 
 function draftIssue(settings: CodexSubagentSettings): string | null {
@@ -51,6 +52,7 @@ function BooleanRow({
   detail,
   field,
   value,
+  actualValue,
   disabled,
   onChange,
 }: {
@@ -58,6 +60,7 @@ function BooleanRow({
   detail: string;
   field: SubagentField;
   value: SettingValue;
+  actualValue: SettingValue;
   disabled: boolean;
   onChange: Props["onChange"];
 }) {
@@ -69,6 +72,7 @@ function BooleanRow({
           <span className="asb-checkbox-label">{label}</span>
           <span className="asb-app-setting-detail">{detail}</span>
         </div>
+        <span className="asb-setting-actual" aria-live="polite">{actualValueLabel(actualValue)}</span>
       </div>
       <div className="asb-subagent-controls" role="radiogroup" aria-label={label}>
         <RadioOption name={groupName} checked={value.mode === "automatic"} disabled={disabled}
@@ -84,10 +88,12 @@ function BooleanRow({
 
 function NumberRow({
   value,
+  actualValue,
   disabled,
   onChange,
 }: {
   value: SettingValue;
+  actualValue: SettingValue;
   disabled: boolean;
   onChange: Props["onChange"];
 }) {
@@ -102,6 +108,7 @@ function NumberRow({
           <span className="asb-checkbox-label">最大并发子 agent 线程数</span>
           <span className="asb-app-setting-detail">不设时由 Codex 决定本会话可同时运行的子 agent 数。</span>
         </div>
+        <span className="asb-setting-actual" aria-live="polite">{actualValueLabel(actualValue)}</span>
       </div>
       <div className="asb-subagent-controls" role="radiogroup" aria-label="最大并发子 agent 线程数配置方式">
         <RadioOption name={modeName} checked={!custom} disabled={disabled} label="自动"
@@ -137,16 +144,11 @@ export function CodexSubagentSettingsPanel({
   editorState: state,
   busy,
   onChange,
-  onReset,
   onRetryLoad,
-  onPreview,
-  onApplyPreview,
 }: Props) {
-  const [confirming, setConfirming] = useState(false);
   const headingId = useId();
-  const working = busy || state.phase === "applying";
+  const working = busy;
   const issue = state.draft ? draftIssue(state.draft) : null;
-  const canPreview = (state.phase === "dirty" || state.phase === "applyError") && !state.preview && !state.previewing && !issue && !working;
 
   if (state.phase === "idle" || state.phase === "loading") {
     return (
@@ -173,15 +175,12 @@ export function CodexSubagentSettingsPanel({
     );
   }
 
-  const preview = state.preview;
   return (
     <section className="asb-toggle-group asb-subagent-settings" aria-labelledby={headingId}>
       <div className="asb-toggle-group-head">
         <div className="asb-subagent-heading">
           <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
-          <p className="asb-field-help">这些设置管理 Codex 的全局运行策略；默认模型与推理强度请在对应供应商的“运行参数”中设置。</p>
         </div>
-        <Button variant="secondary" disabled={working} onClick={onReset}>恢复 Codex 默认值</Button>
       </div>
 
       {state.snapshot.deprecatedKeys.length > 0 && (
@@ -195,11 +194,13 @@ export function CodexSubagentSettingsPanel({
         detail="控制 Codex 是否允许主 agent 创建子 agent。"
         field="enabled"
         value={state.draft.enabled}
+        actualValue={state.snapshot.settings.enabled}
         disabled={working}
         onChange={onChange}
       />
       <NumberRow
         value={state.draft.maxConcurrentThreadsPerSession}
+        actualValue={state.snapshot.settings.maxConcurrentThreadsPerSession}
         disabled={working}
         onChange={onChange}
       />
@@ -208,59 +209,12 @@ export function CodexSubagentSettingsPanel({
         detail="控制主 agent 中断子 agent 时是否发送中断说明。"
         field="interruptMessage"
         value={state.draft.interruptMessage}
+        actualValue={state.snapshot.settings.interruptMessage}
         disabled={working}
         onChange={onChange}
       />
 
       {issue && <p className="asb-field-error" role="alert">{issue}</p>}
-      {state.error && state.phase === "applyError" && (
-        <div className="asb-subagent-error-actions" role="alert">
-          <p className="asb-field-error">应用失败，草稿已保留：{state.error.message}</p>
-          <Button variant="secondary" disabled={working} onClick={onRetryLoad}>重新读取</Button>
-        </div>
-      )}
-      {state.previewError && (
-        <div className="asb-subagent-error-actions" role="alert">
-          <p className="asb-field-error">无法生成预览：{state.previewError.message}</p>
-          <Button variant="secondary" disabled={working} onClick={onRetryLoad}>重新读取</Button>
-        </div>
-      )}
-
-      {!preview && (
-        <div className="asb-form-actions">
-          <Button variant="primary" disabled={!canPreview} onClick={onPreview}>
-            {state.previewing ? "正在生成预览" : "生成写入预览"}
-          </Button>
-        </div>
-      )}
-      {preview && (
-        <div className="asb-settings-preview">
-          <CodePreview target={preview.target} content={preview.content} />
-          <div className="asb-form-actions">
-            <Button variant="primary" disabled={working} onClick={() => setConfirming(true)}>
-              应用子 agent 设置
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {confirming && preview && (
-        <ConfirmSheet
-          title="确认应用子 agent 设置"
-          details={[
-            `将写入 ${preview.target}`,
-            "只会变更本模块拥有的三个全局子 agent 键；供应商参数、角色表与其他用户配置保持不变。",
-            <CodePreview target={preview.target} content={preview.content} />,
-            "写入前会创建备份，并在校验后以可恢复事务替换文件。",
-          ]}
-          confirmLabel="确认应用"
-          onConfirm={() => {
-            setConfirming(false);
-            void onApplyPreview();
-          }}
-          onCancel={() => setConfirming(false)}
-        />
-      )}
     </section>
   );
 }

@@ -27,11 +27,12 @@ export function MeteringPane({ operations: { run, busy, changed } }: { operation
   if (!snapshot || !draft) return <p role="status">正在读取 Codex 本地计量…</p>;
   const dirty = JSON.stringify(snapshot.settings) !== JSON.stringify(draft);
   return <div className="asb-provider-section-fields">
-    <p className="asb-scope-note">此账本记录本地网关真实请求，不保存会话正文或凭据。本机会话 token 统计仍在用量工作区单独展示，不与网关重复相加。缺少价格的请求标为未计价，不视为零费用。</p>
+    <p className="asb-scope-note">此账本记录本地网关真实请求与本机会话文件的 token 增量（同一请求经指纹去重，不与网关重复相加），不保存会话正文或凭据。缺少价格的请求标为未计价，不视为零费用。</p>
     <PriceEditor settings={draft} onChange={setDraft} busy={busy} />
     <BillingEditor settings={draft} onChange={setDraft} providers={providers} busy={busy} />
     <div className="asb-form-actions"><Button variant="primary" disabled={busy || !dirty} onClick={() => void run(async () => { const saved = await api.setCodexMetering(draft, snapshot.revision, true); setSnapshot(saved); setDraft(saved.settings); changed("Codex 定价与预算已保存。"); })}>确认保存定价与预算</Button>
-      <Button variant="secondary" disabled={busy || dirty} onClick={() => void run(async () => { const count = await api.repriceCodexRequests(appliedFilter, snapshot.revision, true); await read(appliedFilter, offset); changed(`已按当前价格回填 ${count} 条 Codex 请求。`); })}>确认按当前价格回填筛选结果</Button></div>
+      <Button variant="secondary" disabled={busy || dirty} onClick={() => void run(async () => { const count = await api.repriceCodexRequests(appliedFilter, snapshot.revision, true); await read(appliedFilter, offset); changed(`已按当前价格回填 ${count} 条 Codex 请求。`); })}>确认按当前价格回填筛选结果</Button>
+      <Button variant="secondary" disabled={busy} onClick={() => void run(async () => { const outcome = await api.rebuildCodexSessionUsage(true); await read(appliedFilter, 0); changed(`已重建 Codex 会话用量：导入 ${outcome.report.imported} 条，备份 ${outcome.backupPath ?? "无需备份"}。`); })}>重建会话用量</Button></div>
     <fieldset className="asb-fieldset" disabled={busy}><legend>请求筛选</legend>
       <Select ariaLabel="Codex 账本供应商" value={filter.profileId ?? "all"} options={[{ value: "all", label: "全部供应商" }, ...providers.map((p) => ({ value: p.id, label: p.name }))]} onChange={(id) => setFilter({ ...filter, profileId: id === "all" ? null : id })} />
       <label className="asb-field"><span>实际模型</span><Input value={filter.model ?? ""} onChange={(e) => setFilter({ ...filter, model: e.target.value || null })} /></label>
@@ -43,6 +44,7 @@ export function MeteringPane({ operations: { run, busy, changed } }: { operation
     {summary && <p role="status">请求 {summary.requests} · 失败 {summary.failedRequests} · 输入 {summary.inputTokens} · 输出 {summary.outputTokens} · 估算 ${summary.estimatedUsd} · 未计价 {summary.unpricedRequests}</p>}
     {page && <><Table ariaLabel="Codex 持久请求账本" rows={page.records} rowKey={(record) => record.id} columns={[
       { key: "time", header: "时间", render: (r) => new Date(r.atMs).toLocaleString() },
+      { key: "origin", header: "来源", render: (r) => (r.origin === "session" ? "会话" : "网关") },
       { key: "model", header: "实际模型", render: (r) => r.mappedModel ?? "未记录" },
       { key: "tokens", header: "输入 / 输出 / 缓存", render: (r) => `${r.inputTokens ?? "—"} / ${r.outputTokens ?? "—"} / ${r.cacheReadTokens ?? "—"}` },
       { key: "cost", header: "费用", render: (r) => r.cost ? "$" + r.cost.totalUsd : "未计价" },

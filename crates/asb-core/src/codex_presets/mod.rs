@@ -55,10 +55,17 @@ pub fn prepare(id: &str, api_key: &str) -> Result<CodexPresetPreparation, String
         .into_iter()
         .find(|preset| preset.id == id)
         .ok_or("Codex 预设不存在")?;
-    if preset.authentication() != CodexPresetAuthentication::ApiKey {
-        return Err("该 Codex 预设需要专属登录流程，不能使用 API 密钥创建".into());
+    match preset.authentication() {
+        CodexPresetAuthentication::ApiKey => prepare_source(&preset, api_key),
+        // Managed xAI presets carry the placeholder credential; the real
+        // token is resolved per request from the logged-in xAI account.
+        CodexPresetAuthentication::ManagedXai => {
+            prepare_source(&preset, crate::contracts::XAI_OAUTH_PLACEHOLDER)
+        }
+        CodexPresetAuthentication::NativeOpenAi => {
+            Err("该 Codex 预设需要专属登录流程，不能使用 API 密钥创建".into())
+        }
     }
-    prepare_source(&preset, api_key)
 }
 
 fn prepare_source(preset: &PresetSource, api_key: &str) -> Result<CodexPresetPreparation, String> {

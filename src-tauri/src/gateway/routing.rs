@@ -316,7 +316,8 @@ impl GatewayController {
             client_token: route_token(&identity, AppKind::Codex, &file.profile.id, &fingerprint),
             continuation_key: codex_continuation_key(&identity, &file.profile.id, &fingerprint),
             fingerprint,
-            upstream_base_url: file.profile.endpoint.0.clone(),
+            upstream_base_url: xai_pinned_upstream(&file.profile)
+                .unwrap_or_else(|| file.profile.endpoint.0.clone()),
             connection: file.profile.connection.clone(),
             upstream_protocol: file.profile.upstream.protocol(),
             responses_options: projection.responses_options,
@@ -449,4 +450,13 @@ pub(super) fn config_points_at_gateway(app: AppKind, configuration: &str) -> boo
         AppKind::Codex => asb_core::adapter::codex::is_gateway_base_url(&base_url),
         AppKind::Claude => configuration.contains(CLIENT_TOKEN_PREFIX),
     }
+}
+
+/// Managed xAI (SuperGrok) cards are pinned to the xAI API origin: the
+/// editable provider endpoint is a display fact, never a routing fact.
+pub(super) fn xai_pinned_upstream(
+    profile: &asb_core::contracts::CodexProviderProfile,
+) -> Option<String> {
+    (profile.connection.provider_type.as_deref() == Some("xai_oauth"))
+        .then(|| asb_core::contracts::XAI_API_BASE_URL.to_string())
 }

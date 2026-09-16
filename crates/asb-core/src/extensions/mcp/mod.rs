@@ -33,8 +33,9 @@ pub use import::{
     NativeMcpImportError,
 };
 pub use observe::{
-    read_claude_servers, read_codex_servers, McpCollectionProblem, McpEntryProblem,
-    ObservedMcpDocument, ObservedMcpServer, ObservedTransport,
+    managed_entry_text, managed_entry_unchanged, read_claude_servers, read_codex_servers,
+    McpCollectionProblem, McpEntryProblem, ObservedMcpDocument, ObservedMcpServer,
+    ObservedTransport,
 };
 pub use redaction::{redact_change, redact_rendered_entry};
 pub use render::{

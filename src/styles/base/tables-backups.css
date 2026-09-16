@@ -66,10 +66,31 @@
   margin-top: var(--asb-space-3);
 }
 
-/* The local backup tab owns its scroll region. The page panel fills the
-   workspace, keeping the controls fixed while long backup histories scroll
-   inside the history module instead of extending .asb-main. */
-.asb-panel:has(.asb-backup-local) {
+/* The local backup tab owns the workspace height: page-level controls remain
+   fixed, while long histories scroll inside the table instead of extending
+   the application workspace. This is deliberately scoped to the backup tab;
+   the other settings sections retain their normal page scrolling. */
+.asb-main:has(> .asb-page-stack:not([hidden]) .asb-backup-local:not([hidden])) {
+  overflow: hidden;
+}
+
+.asb-page-stack:has(> .asb-settings-workspace .asb-backup-local:not([hidden])),
+.asb-settings-workspace:has(.asb-backup-local:not([hidden])),
+.asb-settings-workspace:has(.asb-backup-local:not([hidden])) .asb-settings-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.asb-settings-workspace:has(.asb-backup-local:not([hidden])) {
+  align-items: stretch;
+}
+
+.asb-settings-workspace:has(.asb-backup-local:not([hidden])) .asb-settings-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.asb-panel:has(.asb-backup-local:not([hidden])) {
   display: flex;
   flex: 1;
   flex-direction: column;

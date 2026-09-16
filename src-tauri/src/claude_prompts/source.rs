@@ -1,4 +1,4 @@
-//! Read-only CC Switch Claude prompt import. Source activation never authorizes a live write here.
+//! Read-only the source application Claude prompt import. Source activation never authorizes a live write here.
 
 use super::{contracts::*, list, store, transaction};
 use rusqlite::{Connection, OpenFlags};
@@ -107,7 +107,7 @@ pub(crate) fn import(
     }
     let scanned = scan(source)?;
     if scanned.source_revision != source_revision {
-        return Err("CC Switch Claude 提示词来源已改变，请重新扫描".into());
+        return Err("Claude 提示词导入源已改变，请重新扫描".into());
     }
     let (mut library, _) = store::load(root)?;
     let mut imported = 0;
@@ -220,7 +220,7 @@ fn validate_schema(connection: &Connection) -> Result<(), String> {
         "created_at",
     ] {
         if !fields.contains(field) {
-            return Err(format!("来源不是支持的 CC Switch 提示词表：缺少 {field}"));
+            return Err(format!("来源不是支持的提示词表：缺少 {field}"));
         }
     }
     Ok(())

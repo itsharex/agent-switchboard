@@ -38,3 +38,18 @@ pub(crate) async fn set_codex_common_config_enabled(
     })
     .await
 }
+#[tauri::command]
+pub(crate) async fn save_codex_common_fragment(
+    app: AppHandle,
+    text: String,
+    expected_revision: String,
+) -> Result<CommonView, CommandError> {
+    let state = state(&app)?;
+    let gate = app.state::<ConfigWriteGate>().inner().clone();
+    blocking(move || {
+        let _guard = gate.lock().map_err(error)?;
+        codex_common::save_fragment(&state, &text, &expected_revision).map_err(error)?;
+        codex_common::view(&state).map_err(error)
+    })
+    .await
+}

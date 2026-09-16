@@ -196,15 +196,24 @@ fn managed_mcp_diagnostic(
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     if current_hash != *last_document_hash {
-        return Some(DiagnosticSeed {
-            code: DiagnosticCode::ManagedTargetExternalChange,
-            client: binding.target.client(),
-            subject: subject(),
-            message: "托管服务所在的配置文档在本应用上次写入后发生了外部变更".to_string(),
-            remediation: DiagnosticRemediation::Manual {
-                reason: "请先在扩展详情中解决外部变更，再继续管理该文档".to_string(),
-            },
-        });
+        // 文档级哈希只是快路径（E02）：切换投影、片段合并等第一方写入会
+        // 改文档其他部分。只有本应用的条目本身也不再与最后写入一致时，
+        // 才构成需要人工处理的外部变更。
+        let entry_unchanged = matches!(
+            asb_core::extensions::mcp::managed_entry_text(binding, &text, projects),
+            Ok(current) if current == *last_written_value
+        );
+        if !entry_unchanged {
+            return Some(DiagnosticSeed {
+                code: DiagnosticCode::ManagedTargetExternalChange,
+                client: binding.target.client(),
+                subject: subject(),
+                message: "托管服务所在的配置文档在本应用上次写入后发生了外部变更".to_string(),
+                remediation: DiagnosticRemediation::Manual {
+                    reason: "请先在扩展详情中解决外部变更，再继续管理该文档".to_string(),
+                },
+            });
+        }
     }
     None
 }

@@ -66,11 +66,10 @@ function SubagentModelRow({ spec, value, editor, busy }: {
   );
 }
 
-function SubagentSettingsGroup({ specs, editor, busy, onReset, onChange }: {
+function SubagentSettingsGroup({ specs, editor, busy, onChange }: {
   specs: SettingSpec[];
   editor: CodexEditorState;
   busy: boolean;
-  onReset: () => void;
   onChange: (key: string, value: SettingValue) => void;
 }) {
   if (specs.length === 0 || !editor.draft.parameters) return null;
@@ -80,13 +79,12 @@ function SubagentSettingsGroup({ specs, editor, busy, onReset, onChange }: {
     <section className="asb-toggle-group">
       <div className="asb-toggle-group-head">
         <h3 className="asb-section-title">子 agent</h3>
-        <Button variant="secondary" disabled={busy} onClick={onReset}>恢复默认值</Button>
       </div>
       <p className="asb-field-help">默认模型与推理强度随此供应商保存，并在切换到它时应用。</p>
       {model && <SubagentModelRow spec={model} value={settings[model.key]}
         editor={editor} busy={busy} />}
       {specs.filter((spec) => spec.control !== "model").map((spec) => (
-        <SettingsRow key={spec.key} spec={spec} value={settings[spec.key]} busy={busy}
+        <SettingsRow key={spec.key} spec={spec} value={settings[spec.key]} showActual={false} busy={busy}
           onChange={(value) => onChange(spec.key, value)} />
       ))}
     </section>
@@ -98,14 +96,9 @@ export function CodexParametersPage({ editor, busy }: Props) {
   const catalog = parameters.catalog;
   if (!catalog || !draft.parameters) return <ParametersLoadStatus busy={busy}
     ready={parameters.ready} error={parameters.error} retry={parameters.retry} />;
-  const reset = (group: string | null) => setDraft((current) => {
-    if (!current.parameters) return current;
-    const settings = { ...current.parameters.settings };
-    for (const spec of catalog.specs) {
-      if (group === null || spec.group === group) settings[spec.key] = catalog.defaults.settings[spec.key];
-    }
-    return { ...current, parameters: { settings } };
-  });
+  const resetAll = () => setDraft((current) => current.parameters
+    ? { ...current, parameters: { settings: { ...catalog.defaults.settings } } }
+    : current);
   const subagentSpecs = catalog.specs.filter((spec) => spec.group === "子 agent");
   const parameterSpecs = catalog.specs.filter((spec) => spec.group !== "子 agent");
   const parameterGroups = catalog.groups.filter((group) => group !== "子 agent");
@@ -116,11 +109,10 @@ export function CodexParametersPage({ editor, busy }: Props) {
     <div className="asb-form" aria-label="供应商运行参数">
       <p className="asb-field-help">运行参数随此供应商保存，返回编辑后统一保存供应商。模型的上下文窗口在「模型」分区的目录行中配置。</p>
       <SettingsFields specs={parameterSpecs} groups={parameterGroups} values={draft.parameters.settings} busy={busy}
-        onResetGroup={reset} onChange={change} />
-      <SubagentSettingsGroup specs={subagentSpecs} editor={editor} busy={busy}
-        onReset={() => reset("子 agent")} onChange={change} />
+        showGroupReset={false} onChange={change} />
+      <SubagentSettingsGroup specs={subagentSpecs} editor={editor} busy={busy} onChange={change} />
       <div className="asb-settings-actions">
-        <Button variant="secondary" disabled={busy} onClick={() => reset(null)}>全部恢复默认值</Button>
+        <Button variant="secondary" disabled={busy} onClick={resetAll}>恢复运行参数默认值</Button>
       </div>
     </div>
   );

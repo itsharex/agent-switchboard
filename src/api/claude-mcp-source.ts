@@ -1,6 +1,6 @@
 import { invoke } from "./client";
 
-/** One CC Switch `mcp_servers` row as seen by the read-only scan. */
+/** One the source application `mcp_servers` row as seen by the read-only scan. */
 export interface ClaudeSourceMcpServer {
   sourceId: string;
   name: string;

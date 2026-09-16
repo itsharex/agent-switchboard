@@ -140,9 +140,6 @@ export function CloudBackupPanel({
 
   return (
     <section className="asb-cloud-backup">
-      <p className="asb-scope-note">
-        完整的供应商档案（包括端点、模型、运行参数、API 格式、最大输出 token 和 API 密钥；认证请求头会按 API 格式自动推导）、客户端设置与切换记录会先在本机加密，再上传到你自己的 Supabase 项目。不会备份或直接改写 Codex / Claude Code 原始配置；Dashboard 登录凭据和自行设置的备份密码都不会保存。
-      </p>
       <section className="asb-cloud-backup-guide" aria-labelledby="cloud-backup-guide-title">
         <div className="asb-cloud-backup-guide-heading">
           <h3 id="cloud-backup-guide-title" className="asb-cloud-backup-guide-title">

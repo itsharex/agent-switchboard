@@ -7,8 +7,8 @@
 //! explicit delete permanently removes the one local record the backend
 //! itself resolved from the approved roots.
 
+pub(crate) mod codex_titles;
 pub(crate) mod parser;
-mod codex_titles;
 mod resume;
 
 use asb_core::contracts::AppKind;
@@ -140,7 +140,9 @@ pub fn delete_session(app: AppKind, session_id: &str) -> Result<(), String> {
 /// Deletes several records against one scan. Each request resolves and
 /// fails on its own line; a repeated (client, id) pair is answered once.
 /// Only an unreadable root set aborts the batch before anything is removed.
-pub fn delete_sessions(requests: &[SessionDeleteRequest]) -> Result<Vec<SessionDeleteOutcome>, String> {
+pub fn delete_sessions(
+    requests: &[SessionDeleteRequest],
+) -> Result<Vec<SessionDeleteOutcome>, String> {
     let (sources, issues) = scan_sources()?;
     Ok(delete_resolved(&sources, &issues, requests))
 }
@@ -556,14 +558,21 @@ mod tests {
         assert_eq!(outcomes.len(), 4, "重复请求只回答一次");
         assert!(outcomes[0].deleted && outcomes[0].error.is_none());
         assert!(!outcomes[1].deleted);
-        assert!(outcomes[1].error.as_deref().unwrap().contains("找不到指定会话"));
+        assert!(outcomes[1]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("找不到指定会话"));
         assert!(
             !outcomes[2].deleted,
             "同一 ID 属于另一客户端时不得跨客户端删除"
         );
         assert_eq!(outcomes[3].error.as_deref(), Some("会话 ID 无效"));
         assert!(!root.join("one.jsonl").exists());
-        assert!(root.join("two.jsonl").exists(), "未解析到的请求不得影响其他记录");
+        assert!(
+            root.join("two.jsonl").exists(),
+            "未解析到的请求不得影响其他记录"
+        );
     }
 
     #[test]

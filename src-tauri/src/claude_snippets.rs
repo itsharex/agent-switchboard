@@ -1,4 +1,4 @@
-//! Read-only CC Switch shared-snippet import into the local client settings.
+//! Read-only the source application shared-snippet import into the local client settings.
 //! Credentials and provider-owned routing never enter the shared stores; the
 //! write only replaces application state, never a real client file.
 
@@ -71,7 +71,7 @@ pub(crate) fn import(
         return Err("来源没有 Claude 通用配置片段".into());
     };
     if asb_switch::sha256_hex(&snippet) != source_revision {
-        return Err("CC Switch 通用配置片段已改变，请重新扫描".into());
+        return Err("通用配置导入源已改变，请重新扫描".into());
     }
     let current = store
         .get_client_settings(AppKind::Claude)
@@ -105,7 +105,7 @@ pub(crate) fn import(
 
 fn read_parsed(source: &Path) -> Result<(Option<String>, SharedSnippet), String> {
     let connection = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| format!("无法只读打开 CC Switch 数据库：{error}"))?;
+        .map_err(|error| format!("无法只读打开导入源数据库：{error}"))?;
     connection
         .busy_timeout(std::time::Duration::from_secs(3))
         .map_err(|error| error.to_string())?;
@@ -171,7 +171,7 @@ fn validate_schema(connection: &Connection) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     for field in ["key", "value"] {
         if !fields.contains(field) {
-            return Err(format!("来源不是支持的 CC Switch 设置表：缺少 {field}"));
+            return Err(format!("来源不是支持的设置表：缺少 {field}"));
         }
     }
     Ok(())

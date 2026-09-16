@@ -3,6 +3,17 @@
 use super::*;
 
 impl GatewayController {
+    /// Resolves the stored common-file fragment for one profile. Disabled
+    /// profiles still carry the text so the projection can strip previously
+    /// merged keys; an empty fragment resolves to `None`.
+    fn resolve_common_fragment(
+        &self,
+        profile_id: &str,
+    ) -> Result<Option<asb_core::contracts::CodexCommonFragment>, String> {
+        crate::codex_common::resolve_fragment(&self.inner.state_root, profile_id)
+            .map_err(|error| format!("Codex 通用配置片段无效：{error}"))
+    }
+
     /// Projects a current-format Codex profile through the local capability
     /// gateway. Official Codex has no profile and therefore never enters this
     /// path.
@@ -22,6 +33,7 @@ impl GatewayController {
         policy: &codex::policy::CodexGatewayPolicy,
     ) -> Result<GatewayProjection, String> {
         policy.validate()?;
+        let fragment = self.resolve_common_fragment(&file.profile.id)?;
         let preserve = crate::codex_auth::policy::load(&self.inner.state_root)?
             .policy
             .preserve_official_login;
@@ -31,9 +43,12 @@ impl GatewayController {
         if file.profile.route_mode == asb_core::contracts::CodexRouteMode::Direct
             && !policy.takeover
         {
-            let plan = SwitchPlan::direct(profile, client_settings)
-                .with_codex_model_catalog(catalog.file_name.clone())
-                .with_codex_preserve_official_login(preserve);
+            let plan = attach_fragment(
+                SwitchPlan::direct(profile, client_settings)
+                    .with_codex_model_catalog(catalog.file_name.clone())
+                    .with_codex_preserve_official_login(preserve),
+                fragment,
+            );
             asb_core::validate_plan(&plan.profile, &plan.client_settings)
                 .map_err(|error| error.to_string())?;
             return Ok(GatewayProjection {
@@ -55,13 +70,16 @@ impl GatewayController {
             .ok_or_else(|| "本机协议网关当前未在监听，无法写入 Codex 第三方配置".to_string())?;
         let route = self.route_for_codex_file(file)?;
         let catalog = CodexCatalogProjection::from_file(file, &route.fingerprint)?;
-        let plan = SwitchPlan::through_gateway(
-            profile,
-            client_settings,
-            route.client_endpoint(&base_url),
-            route.client_token.clone(),
-        )
-        .with_codex_model_catalog(catalog.file_name.clone());
+        let plan = attach_fragment(
+            SwitchPlan::through_gateway(
+                profile,
+                client_settings,
+                route.client_endpoint(&base_url),
+                route.client_token.clone(),
+            )
+            .with_codex_model_catalog(catalog.file_name.clone()),
+            fragment,
+        );
         asb_core::validate_plan(&plan.profile, &plan.client_settings)
             .map_err(|error| error.to_string())?;
         let warning = if file.profile.request_mode
@@ -104,7 +122,7 @@ impl GatewayController {
             return Ok(None);
         }
         let profile = file.client_projection().into_profile(AppKind::Codex);
-        Ok(Some(
+        Ok(Some(attach_fragment(
             SwitchPlan::through_gateway(
                 profile,
                 client_settings,
@@ -112,7 +130,8 @@ impl GatewayController {
                 route.client_token,
             )
             .with_codex_model_catalog(codex_catalog_file_name(&file.profile.id, &revision)),
-        ))
+            self.resolve_common_fragment(&file.profile.id)?,
+        )))
     }
 
     /// Projects an official Codex switch through the local gateway while the
@@ -183,17 +202,20 @@ impl GatewayController {
             codex_account: Some(auth),
             codex: Some(snapshot),
         };
-        let projected = SwitchPlan::through_gateway(
-            plan.profile,
-            plan.client_settings,
-            route.client_endpoint(&base_url),
-            route.client_token.clone(),
-        )
-        .with_codex_managed_auth(
-            route
-                .codex_account
-                .clone()
-                .expect("official takeover carries its bound account"),
+        let projected = attach_fragment(
+            SwitchPlan::through_gateway(
+                plan.profile.clone(),
+                plan.client_settings.clone(),
+                route.client_endpoint(&base_url),
+                route.client_token.clone(),
+            )
+            .with_codex_managed_auth(
+                route
+                    .codex_account
+                    .clone()
+                    .expect("official takeover carries its bound account"),
+            ),
+            plan.codex_common_fragment().cloned(),
         );
         asb_core::validate_plan(&projected.profile, &projected.client_settings)
             .map_err(|error| error.to_string())?;
@@ -207,5 +229,18 @@ impl GatewayController {
             codex_catalog: None,
             candidate_routes: Vec::new(),
         })
+    }
+}
+
+/// Attaches the resolved common-file fragment to a Codex plan. `None` (no
+/// stored fragment) leaves the plan untouched; the fragment itself carries
+/// its per-profile enable decision.
+fn attach_fragment(
+    plan: SwitchPlan,
+    fragment: Option<asb_core::contracts::CodexCommonFragment>,
+) -> SwitchPlan {
+    match fragment {
+        Some(fragment) => plan.with_codex_common_fragment(fragment),
+        None => plan,
     }
 }

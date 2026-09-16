@@ -21,7 +21,7 @@ pub fn upstream_endpoint(base_url: &str, protocol: UpstreamProtocol) -> Result<S
     append(base_url, protocol, request_path(protocol))
 }
 
-/// Resolves a provider request target while honoring CC Switch's full-URL
+/// Resolves a provider request target while honoring the source application's full-URL
 /// flag. Full URLs are used verbatim after validation; no protocol path is
 /// appended a second time.
 pub fn upstream_endpoint_with_options(

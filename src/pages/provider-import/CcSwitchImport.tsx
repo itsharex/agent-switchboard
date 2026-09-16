@@ -94,11 +94,11 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
   const rows = importRows(props.scan);
   const selectedCount = rows.filter(({ item }) => item && !item.existing && props.selected[item.key]).length;
   return (
-    <section className="asb-panel" aria-label="从 CC Switch 导入">
+    <section className="asb-panel" aria-label="从本机数据库导入">
       <ModuleHeader
-        title="CC Switch"
+        title="本机数据库"
         primaryActions={
-          <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>扫描 CC Switch（只读）</Button>
+          <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>扫描本机数据库（只读）</Button>
         }
       />
       {props.scan ? <div className="asb-ccscan">
@@ -107,9 +107,9 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
             <span className="asb-empty-state-icon" aria-hidden="true">
               <SearchIcon />
             </span>
-            <h3 className="asb-section-title">CC Switch 中没有供应商。</h3>
+            <h3 className="asb-section-title">导入源中没有供应商。</h3>
           </div>
-        ) : <Table columns={importColumns(props)} rows={rows} rowKey={(row) => row.key} ariaLabel="CC Switch 扫描结果" />}
+        ) : <Table columns={importColumns(props)} rows={rows} rowKey={(row) => row.key} ariaLabel="本机数据库扫描结果" />}
         <div className="asb-form-actions">
           <Button variant="primary" disabled={props.busy || selectedCount === 0} onClick={props.onImport}>
             导入所选 {selectedCount} 项

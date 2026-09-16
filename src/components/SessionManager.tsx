@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteSession,
+  deleteSessions,
   getSessionMessages,
   listSessions,
   resumeSession,
+  type SessionDeleteOutcome,
   type SessionIssue,
   type SessionMessage,
   type SessionMeta,
@@ -36,6 +38,9 @@ const SESSION_CACHE_TTL_MS = 30_000;
    accumulate unbounded message memory; the oldest fetched entry is evicted. */
 const MAX_CACHED_TRANSCRIPTS = 16;
 
+const sessionKey = (session: { app: SessionMeta["app"]; sessionId: string }) =>
+  `${session.app}:${session.sessionId}`;
+
 /**
  * Local history browser. Client records remain read-only; an explicit resume
  * action invokes the backend-owned fixed command. Scan and transcript results
@@ -58,6 +63,11 @@ export function SessionManager({ active }: { active: boolean }) {
   const [resuming, setResuming] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<SessionMeta | null>(null);
   const [deleting, setDeleting] = useState(false);
+  /* Batch mode turns list clicks into selection toggles; the detail pane is
+     untouched so a half-built selection never loses the open transcript. */
+  const [selecting, setSelecting] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set());
+  const [pendingBatch, setPendingBatch] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<number>>(() => new Set());
   const [targetMessage, setTargetMessage] = useState<number | null>(null);
   const selectionVersion = useRef(0);
@@ -264,6 +274,58 @@ export function SessionManager({ active }: { active: boolean }) {
     }
   };
 
+  /* Every removed record leaves the list and caches; the ones that stayed
+     are named with their backend reason instead of being summarized away. */
+  const dropDeleted = (outcomes: SessionDeleteOutcome[]) => {
+    const removed = new Set(outcomes.filter((outcome) => outcome.deleted).map(sessionKey));
+    for (const key of removed) messageCache.current.delete(key);
+    setSessions((current) => current?.filter((session) => !removed.has(sessionKey(session))) ?? current);
+    setSelected((current) => (current && removed.has(sessionKey(current)) ? null : current));
+    if (selected && removed.has(sessionKey(selected))) setMessages(null);
+    setChosen((current) => new Set([...current].filter((key) => !removed.has(key))));
+    return removed.size;
+  };
+
+  const runBatchDelete = async () => {
+    if (deleting || chosen.size === 0) return;
+    const targets = (sessions ?? []).filter((session) => chosen.has(sessionKey(session)));
+    setPendingBatch(false);
+    setDeleting(true);
+    try {
+      const outcomes = await deleteSessions(
+        targets.map((session) => ({ app: session.app, sessionId: session.sessionId })),
+      );
+      const removed = dropDeleted(outcomes);
+      const failed = outcomes.filter((outcome) => !outcome.deleted);
+      if (removed > 0) toast({ kind: "success", title: `已删除 ${removed} 个会话` });
+      if (failed.length > 0) {
+        const titleOf = (outcome: SessionDeleteOutcome) =>
+          targets.find((session) => sessionKey(session) === sessionKey(outcome))?.title ?? outcome.sessionId;
+        toast({
+          kind: "error",
+          title: `${failed.length} 个会话未能删除`,
+          description: failed.map((outcome) => `${titleOf(outcome)}：${outcome.error ?? "未知原因"}`).join("；"),
+        });
+      }
+    } catch (caught) {
+      toast({ kind: "error", title: (caught as { message?: string }).message ?? "无法批量删除会话" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleChosen = (session: SessionMeta) => {
+    const key = sessionKey(session);
+    setChosen((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const chosenSessions = (sessions ?? []).filter((session) => chosen.has(sessionKey(session)));
+
   const jumpToMessage = useCallback((index: number) => {
     const node = transcriptRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`);
     /* Instant, not smooth: on multi-thousand-line transcripts the animation
@@ -295,6 +357,35 @@ export function SessionManager({ active }: { active: boolean }) {
             <Button variant="secondary" disabled={scanning} onClick={() => void refresh()}>
               刷新会话
             </Button>
+            <Button
+              variant="secondary"
+              aria-pressed={selecting}
+              disabled={deleting}
+              onClick={() => {
+                setSelecting((current) => !current);
+                setChosen(new Set());
+              }}
+            >
+              {selecting ? "退出批量选择" : "批量选择"}
+            </Button>
+            {selecting && (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={deleting || filtered.length === 0}
+                  onClick={() => setChosen(new Set(filtered.map(sessionKey)))}
+                >
+                  全选筛选结果
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={deleting || chosen.size === 0}
+                  onClick={() => setPendingBatch(true)}
+                >
+                  删除所选（{chosen.size}）
+                </Button>
+              </>
+            )}
           </>
         }
       />
@@ -327,13 +418,14 @@ export function SessionManager({ active }: { active: boolean }) {
             <div className="asb-session-items">
               {filtered.map((session) => {
                 const active = selected?.app === session.app && selected.sessionId === session.sessionId;
+                const picked = selecting && chosen.has(sessionKey(session));
                 return (
                   <Button
                     variant="unstyled"
-                    className={`asb-session-item${active ? " is-active" : ""}`}
+                    className={`asb-session-item${active ? " is-active" : ""}${picked ? " is-selected" : ""}`}
                     key={`${session.app}-${session.sessionId}`}
-                    aria-pressed={active}
-                    onClick={() => void selectSession(session)}
+                    aria-pressed={selecting ? picked : active}
+                    onClick={() => (selecting ? toggleChosen(session) : void selectSession(session))}
                   >
                     <span className="asb-session-item-title">
                       <ClientLogo app={session.app} className="asb-session-logo" />
@@ -475,6 +567,21 @@ export function SessionManager({ active }: { active: boolean }) {
           destructive
           onConfirm={() => void runDelete()}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+      {pendingBatch && chosenSessions.length > 0 && (
+        <ConfirmSheet
+          title="批量删除会话"
+          details={[
+            `将永久删除 ${chosenSessions.length} 个本地会话`,
+            ...chosenSessions.slice(0, 3).map((session) => `${clientFullName(session.app)}「${session.title}」`),
+            ...(chosenSessions.length > 3 ? [`以及另外 ${chosenSessions.length - 3} 个会话`] : []),
+            "此操作不可恢复；每个会话的删除结果会单独报告。",
+          ]}
+          confirmLabel="确认批量删除"
+          destructive
+          onConfirm={() => void runBatchDelete()}
+          onCancel={() => setPendingBatch(false)}
         />
       )}
     </div>

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
 
 const FILE: &str = "claude-pricing.json";
-const SOURCE: &str = "CC Switch d695a2d / 本地参考价，非账单";
+const SOURCE: &str = "本地参考价，非账单";
 /// The seed generation a file was last filled from. Version 1 files predate
 /// the full vendor table and are filled on load; version 2 files are the
 /// user's own state and load exactly as stored.

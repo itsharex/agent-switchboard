@@ -21,6 +21,8 @@ pub enum ValidationError {
     BadFullUrl(String),
     #[error("必须填写 API 密钥")]
     EmptyApiKey,
+    #[error("xAI 托管卡不能携带静态 API 密钥；凭据由登录的 xAI 账号按次提供")]
+    XaiManagedCardRejectsStaticKey,
     #[error("API 密钥不能包含换行或其他控制字符")]
     InvalidApiKeyCharacters,
     #[error("自定义供应商必须选择上游 API 格式")]

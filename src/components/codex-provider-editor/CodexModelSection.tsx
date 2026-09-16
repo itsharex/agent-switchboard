@@ -5,6 +5,8 @@ import { Checkbox } from "../Checkbox";
 import { ChevronDownIcon, PlusIcon, TrashIcon } from "../icons";
 import { Input } from "../Input";
 import { Select } from "../Select";
+import { Tooltip } from "../Tooltip";
+import { UpdateIcon } from "../icons";
 import {
   REASONING_LEVELS,
   REASONING_LEVEL_LABELS,
@@ -65,15 +67,17 @@ function CatalogRow({ editor, busy, entry, index }: {
           <Input code aria-label={`模型标识 ${index + 1}`} value={entry.id} required disabled={busy}
             onChange={(event) => update({ id: event.target.value })} />
         </label>
-        <Button variant="danger" aria-label={`删除模型 ${entry.id || index + 1}`} disabled={busy}
-          onClick={() => setDraft((current) => ({
-            ...current,
-            catalog: current.catalog.filter((_, itemIndex) => itemIndex !== index),
-            modelRoutes: current.modelRoutes.filter((route) => route.clientModel !== entry.id),
-            defaultModel: current.defaultModel === entry.id ? "" : current.defaultModel,
-          }))}>
-          <TrashIcon />删除
-        </Button>
+        <Tooltip label={`删除模型 ${entry.id || index + 1}`}>
+          <Button variant="icon" aria-label={`删除模型 ${entry.id || index + 1}`} disabled={busy}
+            onClick={() => setDraft((current) => ({
+              ...current,
+              catalog: current.catalog.filter((_, itemIndex) => itemIndex !== index),
+              modelRoutes: current.modelRoutes.filter((route) => route.clientModel !== entry.id),
+              defaultModel: current.defaultModel === entry.id ? "" : current.defaultModel,
+            }))}>
+            <TrashIcon />
+          </Button>
+        </Tooltip>
       </div>
       <div className="asb-provider-field-grid">
         <label className="asb-field">
@@ -173,15 +177,17 @@ function ModelMapping({ editor, busy }: { editor: CodexEditorState; busy: boolea
             </div>
           ))}
         </div>
-        <div className="asb-model-actions">
-          <Button variant="secondary" disabled={busy || draft.catalog.length === 0}
-            onClick={() => setDraft((current) => ({
-              ...current,
-              modelRoutes: [...current.modelRoutes,
-                { clientModel: current.catalog[0]?.id ?? "", upstreamModel: "" }],
-            }))}>
-            <PlusIcon />添加映射
-          </Button>
+        <div className="asb-provider-model-actions asb-provider-model-actions-end">
+          <Tooltip label="添加映射">
+            <Button variant="icon" aria-label="添加映射" disabled={busy || draft.catalog.length === 0}
+              onClick={() => setDraft((current) => ({
+                ...current,
+                modelRoutes: [...current.modelRoutes,
+                  { clientModel: current.catalog[0]?.id ?? "", upstreamModel: "" }],
+              }))}>
+              <PlusIcon />
+            </Button>
+          </Tooltip>
         </div>
       </div>
     </details>
@@ -202,33 +208,40 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
     <section className="asb-provider-section" aria-label="模型">
       <h3 className="asb-section-title">模型</h3>
       <div className="asb-provider-section-fields">
-        <div className="asb-provider-field-grid">
+        <div className="asb-provider-model-toolbar">
           <label className="asb-field">
             <span>默认模型</span>
             <Select ariaLabel="默认模型" value={draft.defaultModel || null} disabled={busy}
               placeholder={draft.catalog.length === 0 ? "请先添加模型" : "选择默认模型"}
               options={draft.catalog.map((entry) => ({ value: entry.id, label: entry.id }))}
               onChange={(value) => setDraft((current) => ({ ...current, defaultModel: value }))} />
-            <p className="asb-scope-note">客户端未指定模型时使用；请求映射与压缩能力都以目录为准。</p>
           </label>
+          <div className="asb-provider-model-actions" aria-label="模型目录操作">
+            <Tooltip label={connection.modelsBusy ? "正在获取模型" : "获取模型"}>
+              <Button variant="icon" aria-label={connection.modelsBusy ? "正在获取模型" : "获取模型"}
+                aria-busy={connection.modelsBusy || undefined}
+                disabled={busy || connection.modelsBusy || !connection.baseUrl}
+                onClick={() => void fetchIntoCatalog()}>
+                <UpdateIcon />
+              </Button>
+            </Tooltip>
+            <Tooltip label="添加模型">
+              <Button variant="icon" aria-label="添加模型" disabled={busy}
+                onClick={() => setDraft((current) => ({
+                  ...current,
+                  catalog: [...current.catalog, emptyCatalogEntry(current.capabilities)],
+                }))}>
+                <PlusIcon />
+              </Button>
+            </Tooltip>
+          </div>
         </div>
+        <p className="asb-scope-note">客户端未指定模型时使用；请求映射与压缩能力都以目录为准。</p>
         {userConfigModel && <p className="asb-scope-note">当前用户级配置模型：{userConfigModel}</p>}
         {userConfigWarnings.map((warning) => (
           <p key={warning} className="asb-scope-note asb-warn-text">{warning}</p>
         ))}
-        <div className="asb-model-actions">
-          <Button variant="secondary" disabled={busy || connection.modelsBusy || !connection.baseUrl}
-            onClick={() => void fetchIntoCatalog()}>
-            {connection.modelsBusy ? "获取中…" : "获取模型"}
-          </Button>
-          <Button variant="secondary" disabled={busy} onClick={() => setDraft((current) => ({
-            ...current,
-            catalog: [...current.catalog, emptyCatalogEntry(current.capabilities)],
-          }))}>
-            <PlusIcon />添加模型
-          </Button>
-          {connection.modelsError && <span className="asb-warn-text">{connection.modelsError}</span>}
-        </div>
+        {connection.modelsError && <span className="asb-warn-text">{connection.modelsError}</span>}
         <p className="asb-scope-note">「获取模型」按已声明的供应商能力生成目录行；上下文窗口与输出上限留空即按官方参数（无则按通用默认值）保存，能力声明本身不会被推断。</p>
         <div className="asb-provider-catalog">
           {draft.catalog.map((entry, index) => (

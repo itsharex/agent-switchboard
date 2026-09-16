@@ -55,8 +55,13 @@ export function TrayPanel() {
           // A failed resize must still reveal the recovery controls. Only the
           // latest committed layout may complete the initial native handshake.
           if (!disposed && request === revision && initialized && !readySent.current) {
-            readySent.current = true;
-            try { await trayReady(); }
+            try {
+              await trayReady();
+              // Marking sent only after success keeps a one-off handshake
+              // failure retryable; marking it before the await would leave
+              // the native side never-ready and the panel could never open.
+              readySent.current = true;
+            }
             catch (caught) { if (mounted.current) setActionError(trayError(caught)); }
           }
         }

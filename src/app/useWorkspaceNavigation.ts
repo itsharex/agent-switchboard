@@ -19,6 +19,10 @@ export function useWorkspaceNavigation() {
     if (diagnostic) setDiagnosticSection(diagnostic);
     changePage("设置");
   }, [page]);
+  const openClientConfiguration = useCallback(() => {
+    setSettingsReturnToProviders(false);
+    changePage("客户端通用配置");
+  }, []);
   const returnToProviders = useCallback(() => setPage("供应商"), [setPage]);
   const openQuota = useCallback(() => {
     setUsageSection("quota");
@@ -26,5 +30,5 @@ export function useWorkspaceNavigation() {
   }, [setPage]);
   return { page, setPage, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
     extensionSection, setExtensionSection, usageSection, setUsageSection, settingsReturnToProviders,
-    openSettings, returnToProviders, openQuota };
+    openSettings, openClientConfiguration, returnToProviders, openQuota };
 }

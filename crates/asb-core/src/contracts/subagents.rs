@@ -105,35 +105,6 @@ pub struct CodexSubagentSettingsSnapshot {
     pub deprecated_keys: Vec<String>,
 }
 
-/// A side-effect-free rendering of the complete candidate file with secrets
-/// removed. It shows the whole document, not just the managed keys, because
-/// the write replaces the file.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexSubagentSettingsPreview {
-    pub app: AppKind,
-    pub target: String,
-    pub content: String,
-    /// Hash of the current file the candidate was rendered against.
-    pub config_hash: String,
-    /// Hash of the exact, unredacted candidate. Application refuses a plan
-    /// whose candidate no longer matches the previewed text.
-    pub rendered_hash: String,
-}
-
-/// One confirmed sub-agent write. This is the only transaction shape this
-/// module accepts: it carries no generic patch, no target path, and no
-/// provider reference.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SubagentSettingsPlan {
-    pub settings: CodexSubagentSettings,
-    /// Hash of the file as it was when the preview was produced.
-    pub expected_hash: String,
-    pub expected_target_existed: bool,
-    /// Hash of the exact candidate the user confirmed.
-    pub rendered_hash: String,
-}
 
 #[cfg(test)]
 mod tests {
@@ -206,22 +177,5 @@ mod tests {
         );
     }
 
-    #[test]
-    fn plans_reject_unknown_members() {
-        let plan = SubagentSettingsPlan {
-            settings: CodexSubagentSettings::automatic(),
-            expected_hash: "hash".to_string(),
-            expected_target_existed: true,
-            rendered_hash: "rendered".to_string(),
-        };
-        let json = serde_json::to_string(&plan).expect("serialize");
-        assert_eq!(
-            serde_json::from_str::<SubagentSettingsPlan>(&json).expect("deserialize"),
-            plan
-        );
-        assert!(serde_json::from_str::<SubagentSettingsPlan>(
-            r#"{"settings":null,"expectedHash":"h","expectedTargetExisted":true,"renderedHash":"r","extra":1}"#
-        )
-        .is_err());
-    }
+
 }

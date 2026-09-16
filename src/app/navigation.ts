@@ -1,6 +1,6 @@
 import type { ProviderProfile } from "../api/client";
 
-export const PAGES = ["供应商", "扩展", "会话", "用量", "设置"] as const;
+export const PAGES = ["供应商", "客户端通用配置", "扩展", "会话", "用量", "设置"] as const;
 export type Page = (typeof PAGES)[number];
 export type ProviderView =
   | { kind: "list" }
@@ -9,7 +9,6 @@ export type ProviderView =
 
 export const SETTINGS_SECTIONS = [
   { value: "application", label: "应用偏好" },
-  { value: "client", label: "偏好设置" },
   { value: "backups", label: "备份与恢复" },
   { value: "diagnostics", label: "诊断" },
   { value: "about", label: "关于与更新" },

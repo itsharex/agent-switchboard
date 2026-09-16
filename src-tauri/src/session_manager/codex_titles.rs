@@ -39,7 +39,7 @@ fn load_from(index: &Path, databases: &[PathBuf]) -> HashMap<String, String> {
 /// The root database plus, when Codex keeps SQLite state elsewhere, that
 /// copy too. `config.toml` takes precedence over the environment, matching
 /// the Codex resolver.
-fn state_db_paths(
+pub(crate) fn state_db_paths(
     codex_root: &Path,
     config_text: &str,
     sqlite_home_env: Option<&Path>,
@@ -48,7 +48,13 @@ fn state_db_paths(
     let configured = config_text
         .parse::<toml_edit::DocumentMut>()
         .ok()
-        .and_then(|document| document.get("sqlite_home")?.as_str().map(str::trim).map(String::from))
+        .and_then(|document| {
+            document
+                .get("sqlite_home")?
+                .as_str()
+                .map(str::trim)
+                .map(String::from)
+        })
         .filter(|value| !value.is_empty())
         .map(|value| expand_home(&value))
         .or_else(|| {
@@ -112,7 +118,8 @@ fn from_state_db(path: &Path) -> HashMap<String, String> {
     if !path.is_file() {
         return HashMap::new();
     }
-    let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let flags =
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let Ok(connection) = rusqlite::Connection::open_with_flags(path, flags) else {
         return HashMap::new();
     };
@@ -201,7 +208,10 @@ mod tests {
             ],
         );
         let titles = load_from(&index, &[database]);
-        assert_eq!(titles.get("thread-1").map(String::as_str), Some("SQLite name"));
+        assert_eq!(
+            titles.get("thread-1").map(String::as_str),
+            Some("SQLite name")
+        );
         assert_eq!(
             titles.get("thread-2").map(String::as_str),
             Some("Legacy fallback"),

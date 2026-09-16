@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-/// A source-compatible endpoint entry imported from CC Switch.
+/// A source-compatible endpoint entry imported from the source application.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProviderEndpoint {
@@ -215,7 +215,7 @@ impl ProviderConnectionOptions {
 
     /// Returns the stable URL spelling used by endpoint maps and routing.
     ///
-    /// Endpoint metadata comes from both CC Switch imports and the local
+    /// Endpoint metadata comes from both the source application imports and the local
     /// editor. Treating a trailing slash as significant would create duplicate
     /// candidates for the same upstream and would make route fingerprints
     /// change during harmless normalization.
@@ -253,7 +253,7 @@ impl ProviderConnectionOptions {
 
     /// The configured primary URL followed by source-managed custom targets.
     /// Duplicate URLs are removed while preserving the primary-first order.
-    /// Custom targets use the same stable preference order as CC Switch:
+    /// Custom targets use the same stable preference order as the source application:
     /// recently used targets first, then newer targets, then URL order.
     pub fn endpoint_candidates(&self, base_url: &str) -> Vec<String> {
         let mut candidates: Vec<String> = Vec::new();

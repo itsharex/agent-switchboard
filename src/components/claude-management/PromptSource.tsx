@@ -11,8 +11,8 @@ export function PromptSource({ fileHash, disabled, operations: op, onImported }:
   const [path, setPath] = useState("");
   const [source, setSource] = useState<api.ClaudePromptSource | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  return <section aria-label="导入 CC Switch Claude Prompt" className="asb-provider-section-fields">
-    <label className="asb-field"><span>CC Switch 数据库路径</span><Input value={path} disabled={disabled} onChange={(e) => { setPath(e.target.value); setSource(null); setSelected([]); }} /></label>
+  return <section aria-label="导入本机 Claude Prompt" className="asb-provider-section-fields">
+    <label className="asb-field"><span>导入源数据库路径</span><Input value={path} disabled={disabled} onChange={(e) => { setPath(e.target.value); setSource(null); setSelected([]); }} /></label>
     <Button variant="secondary" disabled={disabled || !path.trim()} onClick={() => void op.run(async () => {
       setSource(null); setSelected([]); setSource(await api.scanClaudePromptSource(path.trim()));
     })}>只读扫描 Claude Prompt</Button>

@@ -1,4 +1,4 @@
-//! Claude-only CC Switch failover import: the source queue order and proxy
+//! Claude-only the source application failover import: the source queue order and proxy
 //! policy become this application's Claude failover policy. Source health
 //! rows are never imported — health is computed live here — and the source's
 //! current-provider marker is ignored, because the local route is observed
@@ -81,7 +81,7 @@ pub(crate) fn import(
     let connection = open_read_only(source)?;
     let facts = read_facts(&connection)?;
     if facts.revision != source_revision {
-        return Err("CC Switch 故障转移数据已改变，请重新扫描".into());
+        return Err("故障转移导入源已改变，请重新扫描".into());
     }
     if policy_revision(state)? != expected_policy_hash {
         return Err("Claude 故障转移策略已更新，请重新读取后再导入".into());

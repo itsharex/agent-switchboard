@@ -35,12 +35,25 @@ pub(crate) fn validate_connection(
         .auth_binding
         .as_ref()
         .is_some_and(|binding| binding.source == "managed_account")
-        || connection.provider_type.as_deref() == Some("xai_oauth")
     {
         return Err(error(
             "Codex 第三方托管认证尚未实现，不能回退为静态 API 密钥；官方账号请使用独立绑定".into(),
         ));
     }
+    if connection.provider_type.as_deref() == Some("xai_oauth") {
+        if protocol != UpstreamProtocol::Responses {
+            return Err(error("xAI 托管账号只能以原生 Responses 上游使用".into()));
+        }
+        if authentication.is_some_and(|scheme| scheme != AuthenticationScheme::Bearer) {
+            return Err(error("xAI 托管账号固定使用 Bearer 认证".into()));
+        }
+        // Managed xAI cards carry no static credential: the gateway resolves
+        // the account token per request.
+        return Ok(true);
+    }
+    connection
+        .validate_request_overrides()
+        .map_err(|message| error(message))?;
     Ok(false)
 }
 
@@ -61,6 +74,54 @@ mod tests {
             assert_eq!(profile.authentication, Some(scheme));
         }
     }
+
+    #[test]
+    fn request_overrides_are_validated_at_save_time() {
+        use crate::contracts::{LocalProxyRequestOverrides, ProviderConnectionOptions};
+        use std::collections::BTreeMap;
+        let mut headers = BTreeMap::new();
+        headers.insert("x-provider-tag".to_string(), "override".to_string());
+        let mut options = ProviderConnectionOptions {
+            custom_user_agent: Some("fixture/1.0".to_string()),
+            local_proxy_request_overrides: Some(LocalProxyRequestOverrides {
+                headers,
+                body: serde_json::json!({"model": "m"}),
+            }),
+            ..Default::default()
+        };
+        assert!(options.validate_request_overrides().is_ok());
+        assert!(
+            validate_connection(&options, UpstreamProtocol::ChatCompletions, None).is_ok(),
+            "valid overrides pass the codex connection validation"
+        );
+        let mut protected = options.clone();
+        protected
+            .local_proxy_request_overrides
+            .as_mut()
+            .unwrap()
+            .headers
+            .insert("authorization".to_string(), "Bearer blocked".to_string());
+        assert!(protected.validate_request_overrides().is_err());
+        let mut bad_name = options.clone();
+        bad_name
+            .local_proxy_request_overrides
+            .as_mut()
+            .unwrap()
+            .headers
+            .insert("bad name".to_string(), "v".to_string());
+        assert!(bad_name.validate_request_overrides().is_err());
+        let mut bad_body = options.clone();
+        bad_body
+            .local_proxy_request_overrides
+            .as_mut()
+            .unwrap()
+            .body = serde_json::json!([1, 2, 3]);
+        assert!(bad_body.validate_request_overrides().is_err());
+        let mut bad_ua = options;
+        bad_ua.custom_user_agent = Some("ua\u{7}control".to_string());
+        assert!(bad_ua.validate_request_overrides().is_err());
+    }
+
     #[test]
     fn claude_only_authentication_is_not_accepted_by_the_codex_projection() {
         assert!(validate_connection(

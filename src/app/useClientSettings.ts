@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { clientSettingsPayload, sameClaudeExtra, type ClaudeExtraSettings } from "./claude-common-settings";
 import {
-  getClientSettingsEditor, parseClientSettings, previewClientSettings, saveClientSettings,
+  getClientSettingsEditor, parseClientSettings, previewClientSettings,
   type AppKind, type CommandError, type ClientSettingsEditor, type ClientSettingsPreview,
   type SettingValue,
 } from "../api/client";
 
-export type ClientSettingsPhase = "idle" | "loading" | "loadError" | "clean" | "dirty" | "saving" | "saveError" | "savedPendingReapply";
+export type ClientSettingsPhase = "idle" | "loading" | "loadError" | "clean" | "dirty";
 
 export interface ClientSettingsEditorState {
   phase: ClientSettingsPhase;
@@ -25,11 +25,6 @@ interface ClientSettingsDeps {
   app: AppKind;
   busy: boolean;
   active: boolean;
-  onError: (error: CommandError) => void;
-  clearError: () => void;
-  invalidateSwitchCandidates: () => void;
-  refresh: () => Promise<void>;
-  setBusy: (busy: boolean) => void;
 }
 type States = Record<AppKind, ClientSettingsEditorState>;
 type SetStates = Dispatch<SetStateAction<States>>;
@@ -43,9 +38,9 @@ function sameValues(left: Record<string, SettingValue>, right: Record<string, Se
   });
 }
 
-function phaseForDraft(editor: ClientSettingsEditor, draft: Record<string, SettingValue>, prior: ClientSettingsPhase, extra: ClaudeExtraSettings): ClientSettingsPhase {
-  if (!sameValues(draft, editor.settings.settings) || !sameClaudeExtra(extra, editor.settings.claudeExtra)) return "dirty";
-  return prior === "savedPendingReapply" ? "savedPendingReapply" : "clean";
+function phaseForDraft(editor: ClientSettingsEditor, draft: Record<string, SettingValue>, extra: ClaudeExtraSettings): ClientSettingsPhase {
+  return !sameValues(draft, editor.settings.settings) || !sameClaudeExtra(extra, editor.settings.claudeExtra)
+    ? "dirty" : "clean";
 }
 
 function changedState(state: ClientSettingsEditorState, draft: Record<string, SettingValue>, extra: ClaudeExtraSettings = state.claudeExtra): ClientSettingsEditorState {
@@ -53,7 +48,7 @@ function changedState(state: ClientSettingsEditorState, draft: Record<string, Se
     ...state,
     draft,
     claudeExtra: extra,
-    phase: phaseForDraft(state.editor!, draft, state.phase, extra),
+    phase: phaseForDraft(state.editor!, draft, extra),
     error: undefined,
     previewing: false,
     previewError: undefined,
@@ -74,7 +69,7 @@ function useLoadClientSettings(active: boolean, app: AppKind, states: States, se
       const prior = current[target];
       const draft = preserveDraft && prior.draft ? prior.draft : editor.settings.settings;
       const claudeExtra = preserveDraft && prior.draft ? prior.claudeExtra : editor.settings.claudeExtra;
-      return { ...current, [target]: { phase: phaseForDraft(editor, draft, prior.phase, claudeExtra), editor, draft, claudeExtra } };
+      return { ...current, [target]: { phase: phaseForDraft(editor, draft, claudeExtra), editor, draft, claudeExtra } };
     })).catch((caught) => setStates((current) => ({
       ...current, [target]: { ...current[target], phase: "loadError", error: caught as CommandError },
     }))).finally(() => {
@@ -86,48 +81,6 @@ function useLoadClientSettings(active: boolean, app: AppKind, states: States, se
     if (active && states[app].phase === "idle") void load(app);
   }, [active, app, load, states]);
   return load;
-}
-
-function useSaveClientSettings(deps: ClientSettingsDeps, states: States, setStates: SetStates) {
-  const { busy, clearError, invalidateSwitchCandidates, onError, refresh, setBusy } = deps;
-  return useCallback(async (app: AppKind) => {
-    const current = states[app];
-    if (busy || !current.editor || !current.draft || current.parsing || current.parseError) return false;
-    if (current.phase === "clean" || current.phase === "savedPendingReapply") return true;
-    if (current.phase !== "dirty" && current.phase !== "saveError") return false;
-    setStates((all) => ({ ...all, [app]: { ...all[app], phase: "saving", error: undefined } }));
-    setBusy(true);
-    clearError();
-    try {
-      const saved = await saveClientSettings(app, clientSettingsPayload(app, current.draft, current.claudeExtra), current.editor.settingsHash);
-      invalidateSwitchCandidates();
-      await refresh().catch((caught) => onError(caught as CommandError));
-      setStates((all) => {
-        const latest = all[app];
-        return {
-          ...all,
-          [app]: {
-            ...latest,
-            phase: "savedPendingReapply",
-            editor: { ...latest.editor!, settings: saved.settings, settingsHash: saved.settingsHash },
-            draft: saved.settings.settings,
-            claudeExtra: saved.settings.claudeExtra,
-            error: undefined,
-            parsing: false,
-            parseError: undefined,
-          },
-        };
-      });
-      return true;
-    } catch (caught) {
-      const error = caught as CommandError;
-      setStates((all) => ({ ...all, [app]: { ...all[app], phase: "saveError", error } }));
-      onError(error);
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, clearError, invalidateSwitchCandidates, onError, refresh, setBusy, setStates, states]);
 }
 
 function useClientSettingsFragment(busy: boolean, states: States, setStates: SetStates) {
@@ -159,11 +112,11 @@ function useClientSettingsFragment(busy: boolean, states: States, setStates: Set
   const edit = useCallback((app: AppKind, content: string) => {
     if (busy) return;
     const state = states[app];
-    if (!state.editor || !state.draft || !state.preview || state.phase === "saving") return;
+    if (!state.editor || !state.draft || !state.preview) return;
     const revision = nextRevision(app);
     setStates((current) => {
       const latest = current[app];
-      if (!latest.preview || latest.phase === "saving") return current;
+      if (!latest.preview) return current;
       return {
         ...current,
         [app]: {
@@ -191,7 +144,7 @@ function useClientSettingsFragment(busy: boolean, states: States, setStates: Set
           ...latest,
           draft: parsed.settings,
           claudeExtra: parsed.claudeExtra,
-          phase: phaseForDraft(latest.editor, parsed.settings, latest.phase, parsed.claudeExtra),
+          phase: phaseForDraft(latest.editor, parsed.settings, parsed.claudeExtra),
           parsing: false,
           parseError: undefined,
         },
@@ -211,7 +164,6 @@ export function useClientSettings(deps: ClientSettingsDeps) {
   const { active, app, busy } = deps;
   const [states, setStates] = useState<States>({ codex: { phase: "idle" }, claude: { phase: "idle" } });
   const load = useLoadClientSettings(active, app, states, setStates);
-  const saveSettings = useSaveClientSettings(deps, states, setStates);
   const fragment = useClientSettingsFragment(busy, states, setStates);
   const previewSettings = useCallback((app: AppKind) => {
     const state = states[app];
@@ -221,39 +173,26 @@ export function useClientSettings(deps: ClientSettingsDeps) {
   const changeValue = useCallback((app: AppKind, key: string, value: SettingValue) => {
     if (busy) return;
     const state = states[app];
-    if (!state.editor || !state.draft || state.phase === "saving") return;
+    if (!state.editor || !state.draft) return;
     const draft = { ...state.draft, [key]: value };
     setStates((current) => {
       const latest = current[app];
-      if (!latest.editor || !latest.draft || latest.phase === "saving") return current;
+      if (!latest.editor || !latest.draft) return current;
       return { ...current, [app]: changedState(latest, draft) };
     });
     if (state.preview) fragment.render(app, draft, state.claudeExtra);
   }, [busy, fragment, setStates, states]);
-  const resetGroupToDefaults = useCallback((app: AppKind, group: string | null) => {
-    if (busy) return;
-    const state = states[app];
-    if (!state.editor || !state.draft || state.phase === "saving") return;
-    const draft = { ...state.draft };
-    for (const spec of state.editor.specs) {
-      if (group === null || spec.group === group) draft[spec.key] = { mode: "automatic" };
-    }
-    setStates((current) => {
-      const latest = current[app];
-      if (!latest.editor || !latest.draft || latest.phase === "saving") return current;
-      return { ...current, [app]: changedState(latest, draft, group === null ? {} : latest.claudeExtra) };
-    });
-    if (state.preview) fragment.render(app, draft, group === null ? {} : state.claudeExtra);
-  }, [busy, fragment, setStates, states]);
   const retryLoad = useCallback((app: AppKind) => {
     if (!busy) void load(app, states[app].draft !== undefined);
   }, [busy, load, states]);
+  const reloadFromStored = useCallback((app: AppKind) => {
+    if (!busy) void load(app);
+  }, [busy, load]);
   return {
     editorState: states[app],
     changeValue,
-    resetGroupToDefaults,
-    saveSettings,
     retryLoad,
+    reloadFromStored,
     previewSettings,
     changePreviewContent: fragment.edit,
   };
