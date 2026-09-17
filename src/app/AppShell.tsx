@@ -5,7 +5,7 @@ import { PinTopButton } from "../components/PinTopButton";
 import { UpdateButton } from "../components/UpdateButton";
 import { Button } from "../components/Button";
 import { WindowControls } from "../components/WindowControls";
-import appIcon from "../assets/app-icon.png";
+import appIcon from "../assets/app-icon.svg";
 import { isBrowserDevelopment } from "../lib/runtime";
 
 interface AppShellProps {

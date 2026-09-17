@@ -86,7 +86,7 @@ try {
   New-Item -ItemType Directory -Path $intermediateDirectory -Force | Out-Null
 
   $fileVersion = ($version -split '[-+]')[0] + '.0'
-  $buildInfo = Join-Path $buildDirectory 'InstallerBuildInfo.cs'
+  $buildInfo = [IO.Path]::GetFullPath((Join-Path $buildDirectory 'InstallerBuildInfo.cs'))
   $buildInfoSource = @"
 using System.Reflection;
 [assembly: AssemblyVersion("$fileVersion")]

@@ -302,7 +302,7 @@ function useProviderSaves(
 }
 
 function useProviderMetadata(deps: ProvidersDeps) {
-  const { appFilter, busy, clearError, onError, records, refresh, setBusy } = deps;
+  const { busy, clearError, onError, records, refresh, setBusy } = deps;
   const dragReorderClaudeProfiles = useCallback(async (orderedIds: string[]) => {
     if (busy) return;
     const expectedFileHashes = Object.fromEntries(records.map((record) => [record.profile.id, record.fileHash]));

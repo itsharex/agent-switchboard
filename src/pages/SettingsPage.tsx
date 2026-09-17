@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
-import appIcon from "../assets/app-icon.png";
+import appIcon from "../assets/app-icon.svg";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { AppSettingsForm } from "../components/AppSettingsForm";

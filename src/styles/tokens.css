@@ -291,10 +291,6 @@
     --asb-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
-@media (prefers-reduced-motion: reduce)
-
-@media (prefers-reduced-motion: reduce)
-
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-motion="system"]) {
     --asb-motion-press: 0ms;

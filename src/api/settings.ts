@@ -112,6 +112,9 @@ export interface CurrentClientConfiguration {
   target: string;
   exists: boolean;
   content: string;
+  contentHash: string;
+  syntaxOk: boolean;
+  syntaxError: string | null;
 }
 
 /** Reads the stored client-preference values plus the catalog that can edit

@@ -25,7 +25,7 @@ npm run verify:assembly
 
 ## Vercel 部署（Git 集成，无需令牌与脚本）
 
-1. 在 vercel.com 导入 GitHub 仓库 `y4Nkk/agent-switchboard`。
+1. 在 vercel.com 导入 GitHub 仓库 `<GitHub 用户名>/agent-switchboard`。
 2. 项目设置：
    - **Root Directory**：`website`
    - **Framework Preset**：Vite（或 Other，构建命令相同）
@@ -38,5 +38,7 @@ npm run verify:assembly
 
 链接契约：
 
-- 源码：`https://github.com/y4Nkk/agent-switchboard`
-- 下载：`https://github.com/y4Nkk/agent-switchboard/releases/latest`
+以下示例中的 `<GitHub 用户名>` 是占位符，使用时替换为实际仓库所有者。
+
+- 源码：`https://github.com/<GitHub 用户名>/agent-switchboard`
+- 下载：`https://github.com/<GitHub 用户名>/agent-switchboard/releases/latest`

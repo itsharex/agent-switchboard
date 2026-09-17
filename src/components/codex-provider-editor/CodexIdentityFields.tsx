@@ -40,7 +40,7 @@ export function CodexAccessMode({ busy, onSwitchAccessMode }: AccessModeProps) {
   );
 }
 
-function ClientField({ draft, busy, editing, onSwitchClient }: IdentityProps) {
+function ClientField({ busy, editing, onSwitchClient }: IdentityProps) {
   if (editing) {
     return <>
       <div className="asb-field"><span>客户端</span>

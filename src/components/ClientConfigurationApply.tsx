@@ -160,9 +160,9 @@ function extraConfigurationCount(extra: Record<string, unknown> | undefined): nu
   const count = (value: unknown): number => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return 1;
     const entries = Object.values(value);
-    return entries.length === 0 ? 0 : entries.reduce((total, child) => total + count(child), 0);
+    return entries.length === 0 ? 0 : entries.reduce<number>((total, child) => total + count(child), 0);
   };
-  return Object.values(extra).reduce((total, value) => total + count(value), 0);
+  return Object.values(extra).reduce<number>((total, value) => total + count(value), 0);
 }
 
 type ResetState<T> = Record<ClientConfigurationResetKind, T>;

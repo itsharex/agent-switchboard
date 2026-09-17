@@ -17,9 +17,9 @@
 }
 
 .asb-row-line {
-  /* The action rail stays fixed while the data tracks share the remaining
-     width, so a supported window size keeps every value on one horizontal rail. */
-  --asb-provider-grid: var(--asb-touch-target) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .75fr) var(--asb-provider-row-action-width);
+  /* The action rail stays fixed while the primary data tracks share the
+     remaining width, preserving their one-line scan rail. */
+  --asb-provider-grid: var(--asb-touch-target) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) var(--asb-provider-row-action-width);
   display: grid;
   grid-template-columns: var(--asb-provider-grid);
   align-items: center;
@@ -42,8 +42,8 @@
     border-color var(--asb-motion-press) var(--asb-easing);
 }
 
-/* The primary data rail is a fixed-height line. Expanded usage, login, and
-   preview surfaces live below it, so no row action or summary can stretch the model cell. */
+/* The primary model rail is fixed-height. Summary, expanded usage, login, and
+   preview surfaces live below it, so none can stretch the model cell. */
 .asb-row-line {
   --asb-row-line-height: var(--asb-provider-row-line-height);
   height: var(--asb-row-line-height);
@@ -82,8 +82,7 @@
 .asb-row-identity-copy,
 .asb-row-identity-heading,
 .asb-row-model,
-.asb-row-endpoint,
-.asb-row-summary {
+.asb-row-endpoint {
   min-width: 0;
 }
 
@@ -125,13 +124,15 @@
   white-space: inherit;
 }
 
-/* The summary is reduced to one compact fact and stays on the fixed data
-   rail. There is no ellipsis and no wrapping that could alter model height. */
+/* The optional summary is a sibling of the fixed primary rail, so complete
+   script output can wrap without changing the model row or crossing actions. */
 .asb-row-summary {
-  overflow: hidden;
+  min-width: 0;
+  margin-inline-start: calc(var(--asb-touch-target) + var(--asb-space-2));
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .asb-row-usage-summary {

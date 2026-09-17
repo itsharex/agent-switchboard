@@ -17,7 +17,7 @@ function serialized(extra: Record<string, unknown> | undefined): string {
 function leafCount(value: unknown): number {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 1;
   const entries = Object.values(value);
-  return entries.length === 0 ? 0 : entries.reduce((total, child) => total + leafCount(child), 0);
+  return entries.length === 0 ? 0 : entries.reduce<number>((total, child) => total + leafCount(child), 0);
 }
 
 export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props) {
@@ -28,7 +28,7 @@ export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props)
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const revision = useRef(0);
-  const count = Object.values(extra ?? {}).reduce((total, value) => total + leafCount(value), 0);
+  const count = Object.values(extra ?? {}).reduce<number>((total, value) => total + leafCount(value), 0);
 
   useEffect(() => {
     if (!editing) setDraft(source);

@@ -76,7 +76,10 @@ interface ControlProps {
   clientApp?: AppKind;
 }
 
-function SettingControl({ spec, value, busy, onChange }: ControlProps) {
+type SettingControlProps = Pick<ControlProps, "spec" | "value" | "busy" | "onChange">;
+type ProviderParameterRowProps = Pick<ControlProps, "spec" | "value" | "baselineValue" | "busy" | "onChange">;
+
+function SettingControl({ spec, value, busy, onChange }: SettingControlProps) {
   if (spec.control === "slider") {
     return (
       <div className="asb-slider-control">
@@ -209,7 +212,7 @@ function ClientPreferenceRow({ spec, value, baselineValue, actualValue, showActu
   );
 }
 
-function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: ControlProps) {
+function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: ProviderParameterRowProps) {
   const baseline = baselineValue ?? automatic;
   const changed = !sameSettingValue(baseline, value);
   return (
@@ -245,8 +248,8 @@ export function SettingsRow({
   if (spec.control === "model") return null;
   if (presentation === "client") return <ClientPreferenceRow spec={spec} value={value} baselineValue={baselineValue}
     actualValue={actualValue} showActual={showActual} busy={busy} onChange={onChange} clientApp={clientApp} />;
-  if (presentation === "provider") return <ProviderParameterRow spec={spec} value={value} baselineValue={baselineValue}
-    actualValue={actualValue} showActual={showActual} busy={busy} onChange={onChange} />;
+  if (presentation === "provider") return <ProviderParameterRow spec={spec} value={value}
+    baselineValue={baselineValue} busy={busy} onChange={onChange} />;
   const change = settingChange(spec, baselineValue, value);
   return (
     <div className="asb-toggle-row asb-choice-row">

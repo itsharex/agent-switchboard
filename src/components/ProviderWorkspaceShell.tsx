@@ -157,7 +157,7 @@ interface ProviderRowShellProps {
   model?: ReactNode;
   /** The provider host or official route, rendered in the connection zone. */
   endpoint?: ReactNode;
-  /** Usage or account state, rendered in the compact summary zone. */
+  /** Usage or account state, rendered beneath the fixed primary data rail. */
   summary?: ReactNode;
   /** Primary action for an inactive profile (启用). */
   primaryAction?: ReactNode;
@@ -170,9 +170,9 @@ interface ProviderRowShellProps {
 }
 
 /**
- * One provider row with a stable scan order: identity, model, connection,
- * summary, then actions. The active marker belongs to the identity zone so
- * the model itself can stay the actual value instead of a prose sentence.
+ * One provider row keeps identity, model, connection, and actions on a
+ * fixed scan rail. Its optional full-width summary lives below that rail,
+ * leaving the model value as an unambiguous single-line fact.
  */
 export function ProviderRowShell({
   id,
@@ -193,6 +193,7 @@ export function ProviderRowShell({
     disabled: !sortable,
   });
   const initial = name.trim().charAt(0).toUpperCase() || "?";
+  const hasSummary = summary !== undefined && summary !== null;
   return (
     <li
       ref={setNodeRef}
@@ -226,13 +227,13 @@ export function ProviderRowShell({
           <span className="asb-row-model-value">{model ?? "默认模型"}</span>
         </span>
         <span className="asb-row-endpoint">{endpoint}</span>
-        <span className="asb-row-summary">{summary}</span>
         <span className="asb-row-controls">
           {primaryAction}
           {secondaryAction}
           {actions && <span className="asb-iconcluster" role="group" aria-label={`${name} 操作`}>{actions}</span>}
         </span>
       </div>
+      {hasSummary && <div className="asb-row-summary">{summary}</div>}
       {children}
     </li>
   );

@@ -1,6 +1,33 @@
-# Agent Switchboard
+<h1 align="center">Agent Switchboard</h1>
 
-Agent Switchboard 是面向 **Codex** 与 **Claude Code** 的本地配置控制台。它将供应商档案、配置预览、可恢复切换、扩展管理和本机状态收束在一个桌面应用中，避免直接手改客户端配置文件。
+<p align="center">
+  面向 <strong>Codex</strong> 与 <strong>Claude Code</strong> 的本地配置控制台。<br>
+  用供应商档案、类型化预览与可恢复切换，替代直接手改客户端配置文件。
+</p>
+
+Agent Switchboard 将供应商档案、客户端通用配置、扩展管理和本机状态收束在同一桌面应用中。真实配置只有在明确确认后才会由唯一的切换执行器写入；每次可恢复写入均可观察、备份、校验和恢复。
+
+## 当前界面（隔离演示数据）
+
+<p align="center">
+  <img src="docs/screenshots/providers.png" width="100%" alt="当前 Agent Switchboard 供应商工作区：Codex 与 Claude Code 当前连接卡片、三个 README 沙箱供应商档案及启用操作">
+</p>
+
+<p align="center"><sub>供应商工作区：当前源码实际渲染，展示已应用的「README 沙箱 · 主路由」以及两个可切换的虚构档案。</sub></p>
+
+<p align="center">
+  <img src="docs/screenshots/client-configuration.png" width="100%" alt="当前 Agent Switchboard 客户端通用配置工作区：Codex 通用设置和受控配置操作">
+</p>
+
+<p align="center"><sub>客户端通用配置：在隔离客户端根目录中读取和编辑受控设置，保持真实界面的分组、状态与操作结构。</sub></p>
+
+<p align="center">
+  <img src="docs/screenshots/switch-preview.png" width="100%" alt="当前 Agent Switchboard 的供应商切换确认界面：README 沙箱备用档案的脱敏配置差异、候选文件和确认操作">
+</p>
+
+<p align="center"><sub>切换预览：对「README 沙箱 · 备用」生成的真实类型化预览；只有点击确认后才会写入隔离沙箱。</sub></p>
+
+> **截图数据说明**：截图由当前源码启动的实际前端与同一 Tauri 本机后端生成。运行过程将 `APPDATA`、`LOCALAPPDATA`、`USERPROFILE`、`CODEX_HOME` 和 `CLAUDE_CONFIG_DIR` 全部重定向到隔离临时目录；档案名、模型、密钥占位、服务地址和配置内容均为虚构的 README 沙箱数据（仅使用 `*.sandbox.example` / `example.com`）。没有读取、写入或截图真实用户的 Codex / Claude Code 配置、凭据、账号、会话、服务地址或文件。
 
 ## 产品范围
 
@@ -44,6 +71,13 @@ Agent Switchboard 是面向 **Codex** 与 **Claude Code** 的本地配置控制�
 - 每次可恢复写入都会创建记录；可以从操作历史查看结果并执行恢复。
 - 外部编辑、配置缺失、语法错误、文件替换和恢复失败都会显示明确状态，不会静默覆盖或虚构结果。
 
+## 使用方式
+
+1. 新建供应商档案，或从本机已有配置导入。
+2. 填写模型与连接信息；需要时调整客户端通用配置、子 agent 设置或全局指令。
+3. 打开类型化预览，检查脱敏差异、候选文件和备份位置后再确认应用。
+4. 如果结果不符合预期，从操作历史选择相应备份执行恢复。
+
 ## 从源码运行
 
 准备好 [Tauri 的平台依赖](https://v2.tauri.app/start/prerequisites/)、Node.js 和 Rust 后，在仓库根目录执行：
@@ -53,8 +87,7 @@ npm ci
 npm run dev:desktop
 ```
 
-Windows 自绘安装器由 `installer/AgentSwitchboard.Installer.csproj` 构建；执行 `npm run tauri:build:windows` 还需要 MSBuild 和 .NET Framework 4.8.1 targeting pack（Visual Studio 或 Visual Studio Build Tools）。
-前端开发可使用：
+Windows 自绘安装器由 `installer/AgentSwitchboard.Installer.csproj` 构建；执行 `npm run tauri:build:windows` 还需要 MSBuild 和 .NET Framework 4.8.1 targeting pack（Visual Studio 或 Visual Studio Build Tools）。前端开发可使用：
 
 ```bash
 npm run dev:frontend

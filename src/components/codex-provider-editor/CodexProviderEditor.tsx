@@ -4,6 +4,7 @@ import type { CodexEditorSource } from "../../app/useProviders";
 import { Button } from "../Button";
 import { ProviderConnectionTest } from "../provider-editor/ProviderConnectionTest";
 import { ProviderEditorFrame } from "../provider-editor/ProviderEditorFrame";
+import { ProviderAdvancedSettings } from "../provider-editor/ProviderAdvancedSettings";
 import { ProviderNotesField } from "../provider-editor/ProviderIdentityFields";
 import { ParametersLoadStatus } from "../provider-editor/ProviderParametersPage";
 import { ResponsesOptionsFields } from "../provider-editor/ResponsesOptionsFields";

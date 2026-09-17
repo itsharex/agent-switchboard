@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, LogOut } from "lucide-react";
 import { hideTray, openTrayMain, quitTray, resizeTray, switchTrayProvider, trayReady } from "../api/client";
-import appIcon from "../assets/app-icon.png";
+import appIcon from "../assets/app-icon.svg";
 import { Button } from "@/components/Button";
 import { ClientLogo } from "@/components/ClientLogo";
 import { Time } from "@/components/Time";

@@ -90,7 +90,7 @@ function ClientField({ editor, busy, editing, onSwitchClient }: IdentityProps) {
 }
 
 export function ProviderIdentityFields(props: IdentityProps) {
-  const { editor, busy, editing } = props;
+  const { editor, busy } = props;
   const { draft, setDraft } = editor;
   return (
     <section className="asb-provider-section" aria-label="基本资料">

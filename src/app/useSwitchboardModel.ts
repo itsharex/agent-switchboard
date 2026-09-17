@@ -40,7 +40,7 @@ function useTrayEvents(setPage: (page: Page) => void, reportError: (error: Comma
 /** Composes domain hooks; each domain owns its state and typed operations. */
 export function useSwitchboardModel() {
   const navigation = useWorkspaceNavigation();
-  const { page, setPage, settingsSection } = navigation;
+  const { page, setPage } = navigation;
   const [appFilter, setAppFilter] = useState<AppKind>("codex");
   const frame = useOperationFrame();
   const { busy, reportError, clearError, setBusy } = frame;
