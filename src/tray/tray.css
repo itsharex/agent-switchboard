@@ -54,7 +54,7 @@ html, body, #root { background: transparent; overflow: hidden; }
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
-.tray-client-logo { width: 20px; height: 20px; padding: var(--asb-space-hairline); border-radius: var(--asb-radius-check); background: var(--asb-text-on-action); }
+.tray-client-logo { width: 20px; height: 20px; padding: var(--asb-space-hairline); border-radius: var(--asb-radius); background: var(--asb-text-on-action); }
 .tray-provider.asb-btn {
   display: flex;
   align-items: center;

@@ -5,7 +5,7 @@ import {
   type ConfigFileStatus, type LockStatus, type ProviderDraft, type ProviderProfile, type ProviderRecord,
 } from "../api/client";
 import type { CodexEditorSource } from "../app/useProviders";
-import { useSwitchPreview } from "../app/useSwitchPreview";
+import { useProviderSwitchFlow } from "../app/useProviderSwitchFlow";
 import { Button } from "../components/Button";
 import { CodexOfficialRow, CodexProviderRow } from "../components/CodexProviderRows";
 import { CodexProviderEditor } from "../components/codex-provider-editor/CodexProviderEditor";
@@ -25,11 +25,7 @@ interface Props {
   onError: (error: CommandError) => void;
   onRefresh: () => Promise<void>;
   onSelectApp: (app: AppKind) => void;
-  requestedPreviewId: string | null;
-  onPreviewRequestHandled: () => void;
   onImport: () => void;
-  onOpenClientSettings: () => void;
-  onOpenHistory: () => void;
   /** Routes the destructive delete through the shared confirmation sheet. */
   onDelete: (record: CodexProviderRecord) => void;
   /** Official-login removal goes through the same sheet as a Claude profile. */
@@ -59,10 +55,9 @@ interface Props {
 }
 
 function useCodexProvidersState(props: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [quotaOpen, setQuotaOpen] = useState(false);
-  const switchPreview = useSwitchPreview({ busy: props.busy, setSelectedId, onError: props.onError });
-  const { retractPreview, previewProfile, preview } = switchPreview;
+  const providerSwitch = useProviderSwitchFlow({ busy: props.busy, onError: props.onError });
+  const { activationCandidate, clearCandidates, requestActivation } = providerSwitch;
   const run = useCallback(async (action: () => Promise<void>) => {
     if (props.busy) return;
     props.onBusy(true);
@@ -72,21 +67,16 @@ function useCodexProvidersState(props: Props) {
   }, [props.busy, props.onBusy, props.onError]);
 
   useEffect(() => {
-    if (!props.active || props.editorSession) retractPreview();
-  }, [props.active, props.editorSession, retractPreview]);
-  useEffect(() => {
-    if (!props.active || props.busy || !props.requestedPreviewId || props.editorSession) return;
-    props.onPreviewRequestHandled();
-    void previewProfile({ id: props.requestedPreviewId });
-  }, [previewProfile, props.active, props.busy, props.requestedPreviewId,
-    props.onPreviewRequestHandled, props.editorSession]);
+    if (!props.active || props.editorSession) clearCandidates();
+  }, [props.active, props.editorSession, clearCandidates]);
 
-  const apply = () => {
-    if (!preview) return;
+  const confirmActivation = () => {
+    const candidate = activationCandidate;
+    if (!candidate) return;
     void run(async () => {
-      await executeSwitch(preview.profileId, preview.file.contentHash,
-        preview.file.renderedHash, true, preview.file);
-      retractPreview();
+      await executeSwitch(candidate.profileId, candidate.file.contentHash,
+        candidate.file.renderedHash, true, candidate.file);
+      clearCandidates();
       await props.onRefresh();
     });
   };
@@ -94,44 +84,49 @@ function useCodexProvidersState(props: Props) {
     await reorderCodexProfiles(orderedIds, expectedFileHashes);
     await props.onRefresh();
   });
-  return { ...switchPreview, selectedId, setSelectedId, quotaOpen, setQuotaOpen,
-    run, apply, reorder };
+  return {
+    activationCandidate,
+    clearCandidates,
+    quotaOpen,
+    setQuotaOpen,
+    requestActivation,
+    run,
+    confirmActivation,
+    reorder,
+  };
 }
 
 type PageState = ReturnType<typeof useCodexProvidersState>;
 
 function CodexProvidersList({ props, state }: { props: Props; state: PageState }) {
-  const { preview } = state;
+  const { activationCandidate } = state;
   const official = props.officialRecord;
   const rows = [
     ...(official ? [{ kind: "official" as const, record: official }] : []),
     ...props.records.map((record) => ({ kind: "provider" as const, record })),
   ].sort((left, right) => left.record.position - right.record.position
     || left.record.profile.id.localeCompare(right.record.profile.id));
-  const previewSection = preview && (
-    <section className="asb-preview-inline" aria-label="变更预览">
+  const confirmationSection = activationCandidate && (
+    <section className="asb-preview-inline" aria-label="确认切换">
       <div className="asb-panel-heading">
-        <h3 className="asb-section-title">变更预览</h3>
+        <h3 className="asb-section-title">确认切换</h3>
         <div className="asb-panel-actions">
-          <Button variant="secondary" disabled={props.busy} onClick={state.retractPreview}>
-            取消
+          <Button variant="secondary" disabled={props.busy} onClick={state.clearCandidates}>
+            取消切换
           </Button>
-          <Button variant="primary" disabled={props.busy} onClick={state.apply}>
+          <Button variant="primary" disabled={props.busy} onClick={state.confirmActivation}>
             确认切换
           </Button>
         </div>
       </div>
-      <PreviewInspector filePreview={preview.file}
+      <PreviewInspector filePreview={activationCandidate.file}
         userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
     </section>
   );
   const rowProps = (profile: { id: string }) => ({
     active: props.activeProfileId === profile.id,
-    selected: state.selectedId === profile.id,
-    previewOpen: preview?.profileId === profile.id,
-    onSelect: () => state.setSelectedId(profile.id),
-    onActivate: () => void state.activateProfile(profile),
-    onTogglePreview: () => state.togglePreviewProfile(profile),
+    confirmationOpen: activationCandidate?.profileId === profile.id,
+    onActivate: () => void state.requestActivation(profile),
   });
   return (
     <>
@@ -144,18 +139,18 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
       >
         {rows.map((row) => row.kind === "official" ? (
           <CodexOfficialRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)} quotaOpen={state.quotaOpen}
-            onEdit={() => { state.retractPreview(); props.onEditOfficial(row.record); }}
+            onEdit={() => { state.clearCandidates(); props.onEditOfficial(row.record); }}
             onDelete={() => props.onDeleteOfficial(row.record)}
             onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
             onToggleQuota={() => state.setQuotaOpen((open) => !open)}
             onReloginFinished={() => void props.onRefresh()}>
-            {preview?.profileId === row.record.profile.id && previewSection}
+            {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
           </CodexOfficialRow>
         ) : (
           <CodexProviderRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)}
-            onEdit={() => { state.retractPreview(); props.onEdit(row.record); }}
+            onEdit={() => { state.clearCandidates(); props.onEdit(row.record); }}
             onDelete={() => props.onDelete(row.record)}>
-            {preview?.profileId === row.record.profile.id && previewSection}
+            {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
           </CodexProviderRow>
         ))}
       </SortableProviderRows>
@@ -166,7 +161,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
 export function CodexProvidersPage(props: Props) {
   const state = useCodexProvidersState(props);
   if (props.editorSession) return (
-    <div hidden={!props.active}>
+    <div className="asb-provider-editor-route" hidden={!props.active}>
       <CodexProviderEditor active={props.active} source={props.editorSession.source} busy={props.busy}
         userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings}
         onSave={props.onSave} onSaveOfficial={props.onSaveOfficial}
@@ -178,8 +173,8 @@ export function CodexProvidersPage(props: Props) {
   return (
       <ProviderWorkspaceShell ariaLabel="Codex 供应商" app="codex" onSelectApp={props.onSelectApp}
       busy={props.busy} statuses={props.statuses} profiles={props.profiles} locks={props.locks}
-      onOpenClientSettings={props.onOpenClientSettings} onOpenHistory={props.onOpenHistory}
-      onImport={props.onImport} onNew={() => { state.retractPreview(); props.onNew(); }}>
+      onImport={() => { state.clearCandidates(); props.onImport(); }}
+      onNew={() => { state.clearCandidates(); props.onNew(); }}>
       <CodexProvidersList props={props} state={state} />
     </ProviderWorkspaceShell>
   );

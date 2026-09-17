@@ -15,8 +15,9 @@ impl CodexProviderDraft {
             profile: CodexProviderProfile {
                 id,
                 name: self.name,
-                route_mode: CodexRouteMode::for_connection(
+                route_mode: CodexRouteMode::for_profile(
                     self.upstream,
+                    self.request_mode,
                     &self.connection,
                     self.authentication,
                 ),
@@ -135,5 +136,48 @@ impl CodexProviderFile {
             usage_query: self.usage_query.clone(),
             official_quota_refresh_interval_minutes: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::{
+        AppKind, CodexCatalogEntry, CodexEndpoint, CodexProviderDraft,
+        ResponsesRequestMode, DEFAULT_CODEX_CAPABILITIES,
+    };
+
+    fn draft(request_mode: ResponsesRequestMode) -> CodexProviderDraft {
+        CodexProviderDraft {
+            name: "Relay".into(),
+            endpoint: CodexEndpoint("https://relay.example/v1".into()),
+            api_key: "secret".into(),
+            authentication: None,
+            connection: Default::default(),
+            upstream: super::CodexUpstream::Responses,
+            request_mode,
+            default_model: "relay-model".into(),
+            catalog: vec![CodexCatalogEntry::default_entry("relay-model")],
+            model_routes: Vec::new(),
+            capabilities: DEFAULT_CODEX_CAPABILITIES,
+            parameters: crate::ownership::default_provider_parameters(AppKind::Codex),
+            notes: None,
+            website_url: None,
+            usage_query: None,
+        }
+    }
+
+    #[test]
+    fn minimal_responses_persist_as_a_gateway_route() {
+        let file = draft(ResponsesRequestMode::Minimal).into_file("profile".into(), 1);
+        assert_eq!(file.profile.route_mode, super::CodexRouteMode::Gateway);
+        assert!(file.validate().is_ok());
+    }
+
+    #[test]
+    fn minimal_responses_reject_a_stale_direct_route() {
+        let mut file = draft(ResponsesRequestMode::Minimal).into_file("profile".into(), 1);
+        file.profile.route_mode = super::CodexRouteMode::Direct;
+        assert!(file.validate().is_err());
     }
 }

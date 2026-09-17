@@ -1,9 +1,8 @@
 import { Button } from "../../components/Button";
 import { SearchIcon } from "../../components/icons";
 import { Server, Sparkles } from "lucide-react";
-import { ExtensionCountBar } from "./ExtensionCountBar";
 import { ExtensionList } from "./ExtensionList";
-import { ExtensionSearch } from "./ExtensionToolbar";
+import { ExtensionClientSummary, ExtensionSearch } from "./ExtensionToolbar";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 /** The library's empty state: the one shape from panels.css, with the heading
@@ -53,20 +52,23 @@ export function ExtensionLibraryPanel({ workspace }: { workspace: ExtensionWorks
     );
   const filtered = workspace.visible.length !== workspace.kindItems.length;
   return (
-    <>
-      <ExtensionCountBar workspace={workspace} />
-      <ExtensionSearch kind={workspace.nav.kind} search={workspace.nav.search} onSearch={workspace.nav.setSearch} />
+    <section className="asb-ext-library-panel" aria-label="扩展库">
+      <ExtensionSearch
+        kind={workspace.nav.kind}
+        search={workspace.nav.search}
+        onSearch={workspace.nav.setSearch}
+        summary={<ExtensionClientSummary workspace={workspace} />}
+      />
       <div className="asb-ext-library-scroll">
         {workspace.visible.length > 0 ? (
           <ExtensionList workspace={workspace} />
         ) : (
           <EmptyLibrary workspace={workspace} />
         )}
-        <p className="asb-ext-result-count" role="status">
-          共 {workspace.kindItems.length} 项
-          {filtered && ` · 显示 ${workspace.visible.length} 项`}
-        </p>
+        {filtered && (
+          <p className="asb-ext-result-count" role="status">显示 {workspace.visible.length} 项</p>
+        )}
       </div>
-    </>
+    </section>
   );
 }

@@ -22,7 +22,7 @@ interface CcImportDeps {
   records: ProviderRecord[];
   codexRecords: CodexProviderRecord[];
   preferredApp: AppKind;
-  selectProfile: (id: string) => void;
+  setTargetProfile: (id: string) => void;
   setAppFilter: (app: AppKind) => void;
 }
 
@@ -40,7 +40,7 @@ export function useCcImport({
   records,
   codexRecords,
   preferredApp,
-  selectProfile,
+  setTargetProfile,
   setAppFilter,
 }: CcImportDeps) {
   const [ccScan, setCcScan] = useState<CcSwitchScan | null>(null);
@@ -96,7 +96,7 @@ export function useCcImport({
         const selected = added.find((record) => record.app === preferredApp) ?? added[0];
         if (selected) {
           setAppFilter(selected.app);
-          selectProfile(selected.id);
+          setTargetProfile(selected.id);
         }
       }
       return nextInventory !== undefined && result.notImported.length === 0;
@@ -107,7 +107,7 @@ export function useCcImport({
       setBusy(false);
     }
   }, [busy, ccScan, ccSelected, clearError, invalidateCandidates, onError, refresh, setBusy,
-    records, codexRecords, preferredApp, selectProfile, setAppFilter]);
+    records, codexRecords, preferredApp, setTargetProfile, setAppFilter]);
 
   return { ccScan, ccSelected, setCcSelected, ccResult, runCcScan, runCcImport };
 }

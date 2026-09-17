@@ -114,10 +114,7 @@ export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> 
  * their public surface so consumers keep importing from "./api/client". */
 export * from "./shared";
 export * from "./usage";
-export * from "./claude-ledger";
 export * from "./providers";
-export * from "./codex-management";
-export * from "./codex-gateway";
 export * from "./provider-request";
 export * from "./switching";
 export * from "./status";
@@ -257,6 +254,3 @@ export function onWindowResized(handler: () => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return getCurrentWindow().onResized(() => handler());
 }
-
-export * from "./claude-gateway";
-

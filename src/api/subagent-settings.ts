@@ -15,7 +15,6 @@ export interface CodexSubagentSettingsSnapshot {
   settings: CodexSubagentSettings;
   configHash: string;
   fileExists: boolean;
-  deprecatedKeys: string[];
 }
 
 export function getCodexSubagentSettings(): Promise<CodexSubagentSettingsSnapshot> {

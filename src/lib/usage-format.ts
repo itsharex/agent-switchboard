@@ -34,17 +34,40 @@ export function usageProgress(reading: UsageReading): number | null {
   return (used / reading.total) * 100;
 }
 
-/** Keep plans and units separate; a balance alone cannot imply a percentage. */
+function compactUsageValue(value: number, unit: string | null): string {
+  return appendUnit(compactValueFormatter.format(value), unit);
+}
+
+function usageReadingValues(
+  reading: UsageReading,
+  formatValue: (value: number, unit: string | null) => string,
+): string[] {
+  const values: string[] = [];
+  if (reading.remaining !== null) values.push(`余额 ${formatValue(reading.remaining, reading.unit)}`);
+  if (reading.used !== null) values.push(`已用 ${formatValue(reading.used, reading.unit)}`);
+  if (reading.total !== null) values.push(`总量 ${formatValue(reading.total, reading.unit)}`);
+  return values;
+}
+
+/** The primary row reflects non-null fields returned by the first script
+ * reading. It does not derive a percentage or invent a missing value. */
+export function formatUsageHighlight(summary: UsageSummary): string {
+  const reading = summary.readings[0];
+  if (!reading) return "暂无额度读数";
+
+  const name = reading.planName?.trim();
+  const values = usageReadingValues(reading, compactUsageValue);
+  return [...(name ? [name] : []), ...values].join(" · ") || "暂无额度读数";
+}
+
+/** Full row/tray text preserves every non-null field returned by the
+ * query. It never derives a display value that the script did not return. */
 export function formatUsageSummary(summary: UsageSummary): string {
   if (summary.readings.length === 0) return "暂无额度读数";
-  return summary.readings.map((reading, index) => {
-    const usedPercent = usageProgress(reading);
-    const parts: string[] = [];
-    if (usedPercent !== null) parts.push(`剩余 ${exactValueFormatter.format(100 - usedPercent)}%`);
-    if (reading.remaining !== null) parts.push(`余额 ${formatUsageValue(reading.remaining, reading.unit)}`);
-    else if (usedPercent === null && reading.used !== null) parts.push(`已用 ${formatUsageValue(reading.used, reading.unit)}`);
-    if (parts.length === 0) parts.push("暂无额度读数");
-    const name = reading.planName?.trim() || (summary.readings.length > 1 ? `额度 ${index + 1}` : "");
-    return `${name ? `${name}：` : ""}${parts.join(" · ")}`;
+  return summary.readings.map((reading) => {
+    const name = reading.planName?.trim();
+    const values = usageReadingValues(reading, (value, unit) => formatUsageValue(value, unit));
+    const text = values.join(" · ") || "暂无额度读数";
+    return name ? `${name}：${text}` : text;
   }).join("；");
 }

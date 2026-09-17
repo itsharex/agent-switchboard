@@ -129,8 +129,8 @@ pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
         key: "env.ANTHROPIC_DEFAULT_FABLE_MODEL_NAME",
         value_type: SettingValueType::String,
     },
-    // Deprecated by Claude, but still actively removed by a provider
-    // projection so it cannot survive a switch as a hidden model mapping.
+    // Historical provider-owned key retained only for one-way cleanup by a
+    // projection; it is never read into the current model contract.
     ProviderSettingSpec {
         app: AppKind::Claude,
         key: "env.ANTHROPIC_SMALL_FAST_MODEL",

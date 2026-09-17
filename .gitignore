@@ -3,6 +3,8 @@ dist/
 src-tauri/target/
 target/
 target-*/
+installer/bin/
+installer/obj/
 .zcode/
 .playwright-mcp/
 .tmp/

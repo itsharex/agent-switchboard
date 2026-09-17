@@ -22,7 +22,6 @@
 .asb-request-footer { justify-content: space-between; }
 .asb-request-panel, .asb-connectivity-test { display: grid; gap: var(--asb-space-3); min-width: 0; }
 .asb-test-address { margin: 0; font: var(--asb-text-code); overflow-wrap: anywhere; }
-.asb-provider-tests > .asb-segments { justify-self: start; }
 .asb-request-note { margin: 0; color: var(--asb-text-muted); line-height: 1.6; }
 
 .asb-request-target {
@@ -31,7 +30,7 @@
   gap: var(--asb-space-4);
   margin: 0;
   padding: var(--asb-space-3);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
 }
 
@@ -48,7 +47,7 @@
   min-height: var(--asb-receipt-min-height);
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   overflow-wrap: anywhere;
 }
 
@@ -83,7 +82,7 @@
   margin: var(--asb-space-1) 0 0;
   padding: var(--asb-space-2);
   overflow: auto;
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

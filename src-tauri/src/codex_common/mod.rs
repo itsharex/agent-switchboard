@@ -122,6 +122,31 @@ pub(crate) fn declared_fragment_mcp_keys(
     asb_core::adapter::codex::declared_mcp_server_keys(&fragment.text).map_err(|e| e.to_string())
 }
 #[cfg(test)]
+pub(crate) fn test_draft() -> asb_core::contracts::CodexProviderDraft {
+    use asb_core::contracts::{
+        CodexCatalogEntry, CodexEndpoint, CodexProviderDraft, CodexUpstream,
+        ResponsesRequestMode, DEFAULT_CODEX_CAPABILITIES,
+    };
+    CodexProviderDraft {
+        name: "Relay".into(),
+        endpoint: CodexEndpoint("https://relay.example/v1".into()),
+        api_key: "fixture-key".into(),
+        authentication: None,
+        connection: Default::default(),
+        upstream: CodexUpstream::Responses,
+        request_mode: ResponsesRequestMode::Standard,
+        default_model: "relay-model".into(),
+        catalog: vec![CodexCatalogEntry::default_entry("relay-model")],
+        model_routes: Vec::new(),
+        capabilities: DEFAULT_CODEX_CAPABILITIES,
+        parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
+        notes: None,
+        website_url: None,
+        usage_query: None,
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     #[test]
@@ -131,9 +156,7 @@ mod tests {
         let file = state
             .configuration()
             .create_codex_provider(
-                asb_core::codex_presets::prepare("codex-preset-02", "isolated-key")
-                    .unwrap()
-                    .draft,
+                test_draft(),
             )
             .unwrap();
         let initial = view(&state).unwrap();

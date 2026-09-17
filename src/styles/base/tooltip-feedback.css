@@ -14,7 +14,7 @@
   z-index: 60;
   max-width: min(var(--asb-tooltip-max-width), calc(100vw - 2rem));
   padding: var(--asb-space-unit) var(--asb-tooltip-padding-inline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-ink);
   color: var(--asb-canvas);
   font: var(--asb-text-label);
@@ -29,7 +29,7 @@
   margin: 0;
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
 }
 
 .asb-fieldset legend {

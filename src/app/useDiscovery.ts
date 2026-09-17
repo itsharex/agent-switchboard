@@ -19,7 +19,7 @@ interface DiscoveryDeps {
   setBusy: (busy: boolean) => void;
   invalidateCandidates: () => void;
   refresh: () => Promise<ProviderInventory | undefined>;
-  selectProfile: (profileId: string) => Promise<void> | void;
+  setTargetProfile: (profileId: string) => Promise<void> | void;
   setAppFilter: (app: AppKind) => void;
   setPage: (page: "供应商") => void;
 }
@@ -37,7 +37,7 @@ export function useDiscovery({
   setBusy,
   invalidateCandidates,
   refresh,
-  selectProfile,
+  setTargetProfile,
   setAppFilter,
   setPage,
 }: DiscoveryDeps) {
@@ -104,7 +104,7 @@ export function useDiscovery({
         if (!refreshed) return false;
         setAppFilter(app);
         setPage("供应商");
-        await selectProfile("profile" in result ? result.profile.id : result.id);
+        await setTargetProfile("profile" in result ? result.profile.id : result.id);
         return true;
       } catch (caught) {
         onError(caught as CommandError);
@@ -120,7 +120,7 @@ export function useDiscovery({
       invalidateCandidates,
       onError,
       refresh,
-      selectProfile,
+      setTargetProfile,
       setAppFilter,
       setBusy,
       setPage,

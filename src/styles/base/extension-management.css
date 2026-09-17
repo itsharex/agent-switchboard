@@ -105,7 +105,7 @@
   gap: var(--asb-space-2);
   padding: var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
 }
 .asb-ext-binding > .asb-checkbox { min-width: 0; }
@@ -123,6 +123,21 @@
   border-top: 1px solid var(--asb-hairline);
 }
 .asb-ext-section > .asb-ext-disclosure { border-top: 0; }
+
+/* Optional capability and install-target blocks are complete work surfaces,
+   not bare details elements embedded between unrelated editor sections. */
+.asb-ext-capabilities,
+.asb-ext-install-targets {
+  padding: 0 var(--asb-space-3) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-ext-capabilities > summary,
+.asb-ext-install-targets > summary {
+  min-height: var(--asb-touch-target);
+}
 .asb-ext-disclosure > summary {
   display: flex;
   align-items: center;
@@ -160,6 +175,10 @@
   flex-direction: column;
   gap: var(--asb-space-2);
   min-width: 0;
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
 }
 .asb-ext-env-row {
   display: flex;
@@ -302,7 +321,7 @@
   gap: var(--asb-space-2);
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   overflow-wrap: anywhere;
 }

@@ -33,9 +33,6 @@ impl ProviderRequestConnection {
         {
             return Err(invalid());
         }
-        if self.app == asb_core::AppKind::Codex && self.connection.claude_models_url.is_some() {
-            return Err(invalid());
-        }
         if self.api_key.trim().is_empty()
             || reqwest::header::HeaderValue::from_str(&self.api_key).is_err()
             || (self.upstream_protocol == UpstreamProtocol::Responses)

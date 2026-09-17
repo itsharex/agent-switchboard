@@ -2,7 +2,7 @@
 .asb-panel {
   background: var(--asb-content);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-panel);
+  border-radius: var(--asb-radius);
   padding: var(--asb-space-4);
   min-width: 0;
 }
@@ -220,10 +220,11 @@
   align-items: center;
   gap: var(--asb-space-hairline);
   align-self: flex-start;
+  inline-size: fit-content;
   margin-bottom: var(--asb-space-3);
   padding: var(--asb-space-concentric);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-surface-rail);
 }
 
@@ -231,7 +232,7 @@
   min-height: var(--asb-control-height-compact);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
-  border-radius: var(--asb-radius-control-inner);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -258,30 +259,22 @@
   margin-bottom: var(--asb-space-4);
   padding: var(--asb-space-4);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
 }
 
-.asb-official-directory-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--asb-space-3);
-}
-
 .asb-official-directory-title,
-.asb-official-directory-note,
 .asb-official-directory-paths,
 .asb-official-directory-detail {
   margin: 0;
 }
 
 .asb-official-directory-title {
-  font: var(--asb-text-body);
+  color: var(--asb-text);
+  font: var(--asb-text-section);
   font-weight: 700;
 }
 
-.asb-official-directory-note,
 .asb-official-directory-detail {
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
@@ -337,26 +330,9 @@
 }
 
 @media (max-width: 680px) {
-  .asb-official-directory-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .asb-official-directory-entry {
     border-right: 0;
   }
-}
-
-/* Prompt management uses a near-solid work surface rather than another
-   frosted layer, keeping editable Markdown high contrast. */
-.asb-prompt-manager {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-4);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-code-bg);
 }
 
 .asb-prompt-editor-field {
@@ -370,9 +346,8 @@
   color: var(--asb-text);
 }
 
-/* The global-document editor has a stable local scroll surface. It never
-   grows with the draft, so editing cannot introduce a workspace scrollbar or
-   reflow the surrounding extension view. */
+/* The global-document editor has a stable local scroll surface. Draft growth
+   stays inside the editor instead of extending the client configuration page. */
 .asb-prompt-editor-field .asb-textarea {
   inline-size: 100%;
   height: clamp(10rem, 42dvh, 16rem);

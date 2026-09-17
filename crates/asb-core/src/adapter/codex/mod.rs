@@ -23,10 +23,10 @@ pub use legacy::{
     normalize_legacy_codex_configuration, CodexLegacyMigration, RETIRED_CODEX_PROVIDER_IDS,
 };
 pub(crate) use preview::preview;
-pub(crate) use render::{render, render_client_settings, render_client_settings_into_file, render_gateway_base_url};
+pub(crate) use render::{render, render_client_settings_into_file, render_gateway_base_url};
 pub(crate) use state::{matches_provider_settings, owned_diff};
 pub use state::{route_state, OFFICIAL_PROVIDER};
-pub use subagents::{deprecated_subagent_keys, read_subagent_settings, render_subagent_settings};
+pub use subagents::{read_subagent_settings, render_subagent_settings};
 
 fn validate_projection(
     plan: &crate::contracts::SwitchPlan,

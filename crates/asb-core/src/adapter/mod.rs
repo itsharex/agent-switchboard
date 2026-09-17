@@ -7,11 +7,8 @@
 //! structurally because these functions take `&str` and return `String`.
 
 pub mod claude;
-mod client_settings;
 pub mod codex;
 mod parameters;
-
-pub use client_settings::parse_client_settings;
 
 /// Reads only catalog-owned client preferences from a complete live client
 /// configuration. Provider, credential, extension, and host-owned keys never
@@ -131,26 +128,6 @@ pub fn render_gateway_base_url(
     }
 }
 
-/// Renders only the current client's explicit settings as a
-/// self-contained TOML or JSON fragment. This is an editable client-settings
-/// fragment, not a candidate client file: provider and host-owned
-/// configuration remain intentionally absent.
-pub fn render_client_settings(
-    app: AppKind,
-    client_settings: &SettingsValues,
-) -> Result<String, AdapterError> {
-    client_settings
-        .validate_client_settings(app)
-        .map_err(|error| AdapterError {
-            message: scrub_message(error.to_string()),
-            line: None,
-        })?;
-    match app {
-        AppKind::Codex => codex::render_client_settings(client_settings),
-        AppKind::Claude => claude::render_client_settings(client_settings),
-    }
-}
-
 /// Applies only client-owned visual settings to an existing real client
 /// document. Automatic values remove their owned key; all other content is
 /// preserved by the app-specific document editor.
@@ -249,9 +226,6 @@ pub(crate) fn diff_owned_maps(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{ConfigValue, SettingValue};
-    use crate::ownership::default_client_settings;
-
     #[test]
     fn scrub_message_removes_token_shaped_values() {
         let secret = "sk-live-0123456789abcdefghij";
@@ -268,31 +242,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn client_fragment_contains_only_explicit_client_values() {
-        let mut settings = default_client_settings(AppKind::Codex);
-        settings.settings.insert(
-            "tui.animations".to_string(),
-            SettingValue::Explicit {
-                value: ConfigValue::Bool(true),
-            },
-        );
-
-        let rendered = render_client_settings(AppKind::Codex, &settings).expect("fragment");
-
-        assert!(rendered.contains("animations = true"));
-        assert!(!rendered.contains("experimental_bearer_token"));
-    }
-
-    #[test]
-    fn client_fragment_keeps_claude_automatic_values_empty() {
-        let settings = default_client_settings(AppKind::Claude);
-
-        assert_eq!(
-            render_client_settings(AppKind::Claude, &settings).expect("fragment"),
-            "{}"
-        );
-    }
 
     #[test]
     fn gateway_endpoint_renderer_changes_only_the_endpoint_slot() {

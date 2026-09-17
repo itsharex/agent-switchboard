@@ -1,8 +1,6 @@
-import type { AppKind, OfficialSettingDirectoryEntry } from "../api/client";
-import { clientName } from "../lib/client-name";
+import type { OfficialSettingDirectoryEntry } from "../api/client";
 
 interface Props {
-  app: AppKind;
   entries: OfficialSettingDirectoryEntry[];
 }
 
@@ -18,15 +16,10 @@ const dispositionLabel: Record<OfficialSettingDirectoryEntry["disposition"], str
  * boundary inspectable before a user expects a project, policy, or login
  * resource to be changed by a supplier activation.
  */
-export function OfficialSettingsDirectory({ app, entries }: Props) {
+export function OfficialSettingsDirectory({ entries }: Props) {
   return (
     <section className="asb-official-directory" aria-label="官方设置目录">
-      <div className="asb-official-directory-heading">
-        <h3 className="asb-official-directory-title">官方设置目录</h3>
-        <p className="asb-official-directory-note">
-          {clientName(app)} 的用户级设置、独立资源与项目/受管状态按真实所有权列出。
-        </p>
-      </div>
+      <h3 className="asb-official-directory-title">官方设置目录</h3>
       <div className="asb-official-directory-list">
         {entries.map((entry) => (
           <article className="asb-official-directory-entry" key={`${entry.title}:${entry.paths.join("|")}`}>

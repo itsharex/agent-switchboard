@@ -26,11 +26,11 @@ pub(crate) fn validate_connection(
     if connection.claude_native.is_some()
         || connection.claude_billing.is_some()
         || connection.claude_prompt_cache_key.is_some()
-        || connection.claude_models_url.is_some()
         || connection.api_key_field.is_some()
     {
         return Err(error("Claude 专用连接选项不能进入 Codex 档案".into()));
     }
+    connection.validate_models_url().map_err(|message| error(message))?;
     if connection
         .auth_binding
         .as_ref()
@@ -60,12 +60,34 @@ pub(crate) fn validate_connection(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn draft() -> crate::contracts::CodexProviderDraft {
+        use crate::contracts::{
+            CodexCatalogEntry, CodexEndpoint, CodexProviderDraft, CodexUpstream,
+            ResponsesRequestMode, DEFAULT_CODEX_CAPABILITIES,
+        };
+        CodexProviderDraft {
+            name: "Relay".into(),
+            endpoint: CodexEndpoint("https://relay.example/v1".into()),
+            api_key: "fixture-key".into(),
+            authentication: None,
+            connection: Default::default(),
+            upstream: CodexUpstream::Responses,
+            request_mode: ResponsesRequestMode::Standard,
+            default_model: "relay-model".into(),
+            catalog: vec![CodexCatalogEntry::default_entry("relay-model")],
+            model_routes: Vec::new(),
+            capabilities: DEFAULT_CODEX_CAPABILITIES,
+            parameters: crate::ownership::default_provider_parameters(crate::AppKind::Codex),
+            notes: None,
+            website_url: None,
+            usage_query: None,
+        }
+    }
+
     #[test]
     fn codex_authentication_is_independent_of_claude_and_survives_client_projection() {
         for scheme in [AuthenticationScheme::Bearer, AuthenticationScheme::XApiKey] {
-            let mut draft = crate::codex_presets::prepare("codex-preset-02", "isolated-key")
-                .unwrap()
-                .draft;
+            let mut draft = draft();
             draft.authentication = Some(scheme);
             let file = draft.into_file("fixture".into(), 1);
             file.validate().unwrap();

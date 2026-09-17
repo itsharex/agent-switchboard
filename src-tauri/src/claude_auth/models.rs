@@ -1,7 +1,7 @@
 //! Model discovery for Claude managed upstreams. The token never crosses the command boundary.
 
 use super::{http::json_request, request::headers, ResolvedAccount};
-use crate::probe::ProviderModel;
+use crate::probe::{image_input_from_entry, ProviderModel};
 use asb_core::{claude_auth::ClaudeAuthProvider, UpstreamProtocol};
 use serde_json::Value;
 
@@ -55,6 +55,7 @@ fn parse(response: &Value) -> Result<Vec<ProviderModel>, String> {
                         .or_else(|| entry.get("vendor"))
                         .and_then(Value::as_str)
                         .map(str::to_string),
+                    image_input: image_input_from_entry(entry),
                 });
             }
         }

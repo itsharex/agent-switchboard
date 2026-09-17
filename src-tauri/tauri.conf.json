@@ -17,7 +17,7 @@
         "width": 1180,
         "height": 780,
         "center": true,
-        "minWidth": 940,
+        "minWidth": 1080,
         "minHeight": 640,
         "decorations": false
       },
@@ -64,7 +64,11 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxRkQ5NkNENTQwQjEyNzkKUldSNUVndFV6WmI5c2F4dXlmcjlrbGN1bnBQQzhUN0xXWE0vZzZqYjQ0a01ZZDQ1cERQeWFDYkgK",
       "endpoints": [
         "https://github.com/y4Nkk/agent-switchboard/releases/latest/download/latest.json"
-      ]
+      ],
+      "windows": {
+        "installMode": "passive",
+        "installerArgs": []
+      }
     }
   }
 }

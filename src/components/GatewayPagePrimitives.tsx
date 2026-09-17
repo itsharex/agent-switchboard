@@ -55,11 +55,22 @@ export function GatewayPanel({ children, aside }: { children: ReactNode; aside?:
   );
 }
 
-export function GatewayStatTile({ label, value }: { label: string; value: number | string }) {
+export function GatewayStatTile({
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  label: string;
+  value: number | string;
+  detail: string;
+  tone?: "default" | "warning";
+}) {
   return (
-    <div role="group" aria-label={label} className="asb-gateway-tile">
+    <div role="group" aria-label={label} className={`asb-gateway-tile is-${tone}`}>
       <p className="asb-gateway-tile-label">{label}</p>
       <p className="asb-gateway-tile-value">{value}</p>
+      <p className="asb-gateway-tile-detail">{detail}</p>
     </div>
   );
 }

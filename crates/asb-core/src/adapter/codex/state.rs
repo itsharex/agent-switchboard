@@ -39,7 +39,10 @@ fn collect_owned_scalars(
             format!("{prefix}.{key}")
         };
         if let Some(value) = item_repr(item) {
-            if is_owned(AppKind::Codex, &path) {
+            // `agents.max_threads` is not a current setting and never enters
+            // the editor contract. It remains diff-owned solely so its one-way
+            // cleanup is explicit in every candidate that removes it.
+            if is_owned(AppKind::Codex, &path) || path == "agents.max_threads" {
                 out.insert(path.clone(), value);
             }
         }
@@ -129,5 +132,19 @@ pub fn route_state(text: &str) -> RouteState {
         opus_model: None,
         available_models: None,
         scope_warnings: scope_warnings(&doc),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retired_max_threads_appears_as_an_explicit_removal_in_the_diff() {
+        let changes = owned_diff("", "[agents]\nmax_threads = 4\n").expect("diff");
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].key, "agents.max_threads");
+        assert_eq!(changes[0].after, None);
     }
 }

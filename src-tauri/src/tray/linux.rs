@@ -19,10 +19,21 @@ struct StatusNotifierItem {
 }
 
 impl StatusNotifierItem {
-    fn toggle(&self, x: i32, y: i32) {
+    fn open_main(&self) {
         let app = self.app.clone();
         if let Err(error) = self.app.run_on_main_thread(move || {
-            if let Err(error) = super::popup::toggle(
+            if let Err(error) = super::tray_open_main(app, false) {
+                log::warn!("无法通过 Linux 托盘打开主窗口: {error}");
+            }
+        }) {
+            log::warn!("无法调度 Linux 主窗口恢复: {error}");
+        }
+    }
+
+    fn open_panel(&self, x: i32, y: i32) {
+        let app = self.app.clone();
+        if let Err(error) = self.app.run_on_main_thread(move || {
+            if let Err(error) = super::popup::open(
                 &app,
                 None,
                 Some(PhysicalPosition::new(f64::from(x), f64::from(y))),
@@ -30,23 +41,19 @@ impl StatusNotifierItem {
                 super::recover_main(&app, &error);
             }
         }) {
-            log::warn!("无法调度 Linux 托盘浮层: {error}");
+            log::warn!("无法调度 Linux 托盘面板: {error}");
         }
     }
 }
 
 #[zbus::interface(name = "org.kde.StatusNotifierItem")]
 impl StatusNotifierItem {
-    fn activate(&self, x: i32, y: i32) {
-        self.toggle(x, y);
+    fn activate(&self, _x: i32, _y: i32) {
+        self.open_main();
     }
 
     fn context_menu(&self, x: i32, y: i32) {
-        self.toggle(x, y);
-    }
-
-    fn secondary_activate(&self, x: i32, y: i32) {
-        self.toggle(x, y);
+        self.open_panel(x, y);
     }
 
     #[zbus(property)]

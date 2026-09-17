@@ -8,7 +8,7 @@ use toml_edit::{DocumentMut, Item, Value as TomlValue};
 
 fn redact_json_content(rendered: &str) -> String {
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(rendered) else {
-        return redact::redact("content", rendered);
+        return redact::REDACTED.to_string();
     };
     redact_json_value(&mut value, "");
     serde_json::to_string_pretty(&value).unwrap_or_else(|_| redact::redact("content", rendered))
@@ -88,7 +88,7 @@ fn redact_toml_content(rendered: &str) -> String {
     document.to_string()
 }
 
-pub(crate) fn display_content(app: AppKind, rendered: &str) -> String {
+pub fn display_content(app: AppKind, rendered: &str) -> String {
     match app {
         AppKind::Claude => redact_json_content(rendered),
         AppKind::Codex => redact_toml_content(rendered),

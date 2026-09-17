@@ -3,36 +3,32 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { CodexProviderRecord, ProviderProfile, ProviderRecord } from "../api/client";
 import { Button } from "./Button";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
-import { EditIcon, EyeOffIcon, PlayIcon, PreviewIcon, UsageIcon } from "./icons";
+import { EditIcon, PlayIcon, TrashIcon, UsageIcon } from "./icons";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
-import { ProviderMoreActions } from "./ProviderMoreActions";
 import { ProviderRowShell } from "./ProviderWorkspaceShell";
 import { Tooltip } from "./Tooltip";
 
 interface RowActionsProps {
   name: string;
-  previewOpen: boolean;
   onEdit: () => void;
-  onPreview: () => void;
   onDelete?: () => void;
   children?: ReactNode;
 }
 
-function RowActions({ name, previewOpen, onEdit, onPreview, onDelete, children }: RowActionsProps) {
-  const previewLabel = previewOpen ? `收起 ${name} 预览` : `预览 ${name} 变更`;
+function RowActions({ name, onEdit, onDelete, children }: RowActionsProps) {
   return (
     <>
       <Tooltip label={`编辑 ${name}`}>
         <Button variant="icon" aria-label={`编辑 ${name}`} onClick={onEdit}><EditIcon /></Button>
       </Tooltip>
-      <Tooltip label={previewLabel}>
-        <Button variant="icon" className={previewOpen ? "is-active" : undefined}
-          aria-label={previewLabel} aria-expanded={previewOpen} onClick={onPreview}>
-          {previewOpen ? <EyeOffIcon /> : <PreviewIcon />}
-        </Button>
-      </Tooltip>
       {children}
-      {onDelete && <ProviderMoreActions name={name} onDelete={onDelete} />}
+      {onDelete && (
+        <Tooltip label={`删除 ${name}`}>
+          <Button variant="icon" aria-label={`删除 ${name}`} onClick={onDelete}>
+            <TrashIcon />
+          </Button>
+        </Tooltip>
+      )}
     </>
   );
 }
@@ -48,24 +44,23 @@ function ActivateButton({ name, onActivate }: { name: string; onActivate: () => 
   );
 }
 
+function hostLabel(url: string): string {
+  try { return new URL(url).host; } catch { return url; }
+}
+
 function ProviderUrl({ url }: { url: string }) {
-  let host = url;
-  try { host = new URL(url).host; } catch { /* Display the stored value when it is not a URL. */ }
   return (
     <a className="asb-row-host" href={url} title={url}
       onClick={(event) => { event.preventDefault(); void openUrl(url); }}>
-      {host}
+      {hostLabel(url)}
     </a>
   );
 }
 
 interface RowProps {
   active: boolean;
-  selected: boolean;
-  previewOpen: boolean;
-  onSelect: () => void;
+  confirmationOpen: boolean;
   onActivate: () => void;
-  onTogglePreview: () => void;
   onEdit: () => void;
   onDelete: () => void;
   children?: ReactNode;
@@ -73,17 +68,15 @@ interface RowProps {
 
 export function CodexProviderRow({ record, ...props }: RowProps & { record: CodexProviderRecord }) {
   const { id, name } = record.profile;
-  const select = (action: () => void) => { props.onSelect(); action(); };
   return (
-    <ProviderRowShell id={id} name={name} active={props.active} selected={props.selected}
-      previewOpen={props.previewOpen} sortable
+    <ProviderRowShell id={id} name={name} active={props.active}
+      confirmationOpen={props.confirmationOpen} sortable
       model={record.profile.defaultModel}
-      url={record.websiteUrl ? <ProviderUrl url={record.websiteUrl} /> : undefined}
-      primaryAction={!props.active ? <ActivateButton name={name} onActivate={() => select(props.onActivate)} /> : undefined}
+      endpoint={record.websiteUrl ? <ProviderUrl url={record.websiteUrl} /> : <span title={record.profile.endpoint}>{hostLabel(record.profile.endpoint)}</span>}
+      primaryAction={!props.active ? <ActivateButton name={name} onActivate={props.onActivate} /> : undefined}
       actions={
-        <RowActions name={name} previewOpen={props.previewOpen}
-          onEdit={() => select(props.onEdit)} onPreview={() => select(props.onTogglePreview)}
-          onDelete={props.active ? undefined : () => select(props.onDelete)} />
+        <RowActions name={name} onEdit={props.onEdit}
+          onDelete={props.active ? undefined : props.onDelete} />
       }>
       {props.children}
     </ProviderRowShell>
@@ -115,27 +108,25 @@ export function CodexOfficialRow(props: OfficialRowProps) {
   const { profile } = props.record;
   const [reloginOpen, setReloginOpen] = useState(false);
   const [quotaNonce, setQuotaNonce] = useState(0);
-  const select = (action: () => void) => { props.onSelect(); action(); };
   const loginLabel = reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`;
   return (
-    <ProviderRowShell id={profile.id} name={profile.name} active={props.active} selected={props.selected}
-      previewOpen={props.previewOpen} sortable details="官方登录"
-      primaryAction={!props.active ? <ActivateButton name={profile.name} onActivate={() => select(props.onActivate)} /> : undefined}
+    <ProviderRowShell id={profile.id} name={profile.name} active={props.active}
+      confirmationOpen={props.confirmationOpen} sortable model={profile.model ?? "默认模型"} summary="官方登录"
+      primaryAction={!props.active ? <ActivateButton name={profile.name} onActivate={props.onActivate} /> : undefined}
       secondaryAction={
         <Tooltip label={loginLabel}>
           <Button variant="secondary" className={`asb-row-activate${reloginOpen ? " is-active" : ""}`}
             aria-label={loginLabel} aria-expanded={reloginOpen}
-            onClick={() => select(() => setReloginOpen((open) => !open))}>
+            onClick={() => setReloginOpen((open) => !open)}>
             {reloginOpen ? "收起登录" : "重新登录"}
           </Button>
         </Tooltip>
       }
       actions={
-        <RowActions name={profile.name} previewOpen={props.previewOpen}
-          onEdit={() => select(props.onEdit)} onPreview={() => select(props.onTogglePreview)}
-          onDelete={() => select(props.onDelete)}>
+        <RowActions name={profile.name} onEdit={props.onEdit}
+          onDelete={props.onDelete}>
           <QuotaToggle name={profile.name} id={profile.id} open={props.quotaOpen}
-            onToggle={() => select(props.onToggleQuota)} />
+            onToggle={props.onToggleQuota} />
         </RowActions>
       }>
       {reloginOpen && (

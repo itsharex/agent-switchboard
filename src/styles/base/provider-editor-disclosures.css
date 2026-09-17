@@ -1,0 +1,218 @@
+/* Native details elements keep their semantic disclosure behavior while the
+   body remains mounted long enough to animate height, opacity, and offset. */
+.asb-provider-disclosure {
+  display: grid;
+  grid-template-rows: auto 0fr;
+  min-width: 0;
+  border-bottom: 1px solid var(--asb-hairline);
+  transition: grid-template-rows var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-provider-disclosure[open] { grid-template-rows: auto 1fr; }
+
+.asb-provider-disclosure summary {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-touch-target);
+  padding-block: var(--asb-space-3);
+  list-style: none;
+  font: var(--asb-text-label);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.asb-provider-disclosure summary::-webkit-details-marker { display: none; }
+.asb-provider-disclosure summary > svg {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--asb-text-muted);
+  transition: transform var(--asb-motion-fast) var(--asb-easing);
+}
+.asb-provider-disclosure[open] > summary > svg { transform: rotate(180deg); }
+.asb-provider-disclosure-value { color: var(--asb-text-muted); font-weight: 400; overflow-wrap: anywhere; }
+
+.asb-provider-disclosure > :not(summary) {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--asb-space-unit)));
+  transition:
+    visibility 0s linear var(--asb-motion-node),
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-provider-disclosure[open] > :not(summary) {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    visibility 0s linear 0s,
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-provider-disclosure-body {
+  display: grid;
+  min-width: 0;
+  padding-bottom: 0;
+  transition: padding-bottom var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-provider-disclosure[open] > .asb-provider-disclosure-body {
+  padding-bottom: var(--asb-space-4);
+}
+
+.asb-provider-section-fields > .asb-provider-disclosure { border-bottom: 0; }
+.asb-provider-section-fields > .asb-provider-disclosure > .asb-provider-disclosure-body { padding-bottom: 0; }
+
+/* The editor starts with the facts needed to connect. Optional protocol and
+   profile controls live behind one explicit disclosure instead of extending
+   the first-save path. */
+.asb-provider-identity-value {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-height: var(--asb-control-height);
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-body);
+}
+
+/* Advanced settings is one top-level disclosure. Once open, each independent
+   concern remains a separate shallow module rather than a continuous list. */
+.asb-provider-advanced > .asb-provider-section-fields > .asb-provider-disclosure {
+  border-bottom: 0;
+}
+
+.asb-provider-advanced > .asb-provider-section-fields > .asb-provider-disclosure > summary {
+  min-height: var(--asb-control-height);
+  padding-top: 0;
+}
+
+.asb-provider-advanced-content {
+  display: grid;
+  gap: var(--asb-space-3);
+}
+
+.asb-provider-advanced-content > .asb-provider-disclosure {
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-provider-advanced-content > .asb-provider-disclosure > summary {
+  padding: var(--asb-space-3);
+}
+
+.asb-provider-advanced-content > .asb-provider-disclosure > .asb-provider-disclosure-body {
+  padding-inline: var(--asb-space-3);
+}
+
+.asb-provider-advanced-content > .asb-provider-disclosure[open] > .asb-provider-disclosure-body {
+  padding-bottom: var(--asb-space-3);
+}
+
+.asb-provider-advanced-content > .asb-provider-advanced-action,
+.asb-provider-advanced-content > .asb-provider-advanced-group,
+.asb-provider-advanced-content > .asb-field-error,
+.asb-provider-advanced-content > .asb-field-help {
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-provider-advanced-content > .asb-field-help {
+  margin: 0;
+}
+
+.asb-provider-advanced-content > .asb-field-error {
+  display: grid;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-advanced-content > .asb-field-error > p {
+  margin: 0;
+}
+
+.asb-provider-advanced-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+}
+
+.asb-provider-advanced-action > div {
+  display: grid;
+  gap: var(--asb-space-unit);
+  min-width: 0;
+}
+
+.asb-provider-advanced-action strong { font: var(--asb-text-label); font-weight: 600; }
+.asb-provider-advanced-action span { color: var(--asb-text-muted); font: var(--asb-text-label); }
+.asb-provider-advanced-group { display: grid; gap: var(--asb-space-2); }
+
+.asb-provider-test-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-test-action .asb-field-help { margin: 0; }
+
+.asb-provider-test-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--asb-space-unit)));
+  transition:
+    grid-template-rows var(--asb-motion-node) var(--asb-easing),
+    visibility 0s linear var(--asb-motion-node),
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-provider-test-disclosure.is-open {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    grid-template-rows var(--asb-motion-node) var(--asb-easing),
+    visibility 0s linear 0s,
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-provider-test-disclosure > .asb-provider-tests {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-provider-disclosure,
+  .asb-provider-disclosure > :not(summary),
+  .asb-provider-disclosure-body,
+  .asb-provider-disclosure summary > svg,
+  .asb-provider-test-disclosure {
+    transition: none;
+  }
+
+  .asb-provider-disclosure > :not(summary),
+  .asb-provider-test-disclosure {
+    transform: none;
+  }
+}

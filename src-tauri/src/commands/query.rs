@@ -16,7 +16,8 @@ pub(crate) struct ProviderEndpointsRequest {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProviderEndpoints {
     request_url: String,
-    models_url: String,
+    models_url: Option<String>,
+    models_error: Option<String>,
 }
 
 /// Resolves draft addresses without reading configuration or making a request.
@@ -30,34 +31,34 @@ pub fn resolve_provider_endpoints(
             .map_err(|error| CommandError::new("provider-endpoint-invalid", error))?;
         return Ok(ProviderEndpoints {
             request_url: "由 Claude 原生云 SDK 按模型构造".into(),
-            models_url: "使用云服务的模型目录；不发送普通 /models 请求".into(),
+            models_url: None,
+            models_error: Some("使用云服务的模型目录；不发送普通 /models 请求".into()),
         });
     }
     let invalid = |error| CommandError::new("provider-endpoint-invalid", error);
-    Ok(ProviderEndpoints {
-        request_url: if request.upstream_protocol
-            == asb_core::UpstreamProtocol::GeminiGenerateContent
-        {
-            asb_core::claude_gemini::request_preview(
-                &request.base_url,
-                request.connection.is_full_url,
-                None,
-            )
-        } else {
-            asb_core::endpoint::upstream_endpoint_with_options(
-                &request.base_url,
-                request.upstream_protocol,
-                request.connection.is_full_url,
-            )
-        }
-        .map_err(invalid)?,
-        models_url: asb_core::endpoint::models_endpoint_for_connection(
+    let request_url = if request.upstream_protocol == asb_core::UpstreamProtocol::GeminiGenerateContent {
+        asb_core::claude_gemini::request_preview(
+            &request.base_url,
+            request.connection.is_full_url,
+            None,
+        )
+    } else {
+        asb_core::endpoint::upstream_endpoint_with_options(
             &request.base_url,
             request.upstream_protocol,
-            &request.connection,
+            request.connection.is_full_url,
         )
-        .map_err(invalid)?,
-    })
+    }
+    .map_err(invalid)?;
+    let (models_url, models_error) = match asb_core::endpoint::models_endpoint_for_connection(
+        &request.base_url,
+        request.upstream_protocol,
+        &request.connection,
+    ) {
+        Ok(url) => (Some(url), None),
+        Err(error) => (None, Some(error)),
+    };
+    Ok(ProviderEndpoints { request_url, models_url, models_error })
 }
 
 #[tauri::command]
@@ -93,17 +94,13 @@ pub async fn fetch_provider_models(
     blocking(move || fetch_models(&local, request)).await
 }
 
-fn fetch_models(
-    local: &crate::local_state::LocalState,
-    request: ProviderModelsRequest,
-) -> Result<Vec<crate::probe::ProviderModel>, CommandError> {
+fn validate_model_fetch_request(request: &ProviderModelsRequest) -> Result<(), CommandError> {
     if request.app == asb_core::AppKind::Codex
-        && (request.connection.claude_models_url.is_some()
-            || request.upstream_protocol == asb_core::UpstreamProtocol::GeminiGenerateContent)
+        && request.upstream_protocol == asb_core::UpstreamProtocol::GeminiGenerateContent
     {
         return Err(CommandError::new(
             "provider-endpoint-invalid",
-            "Claude 模型列表覆盖不能用于 Codex",
+            "Gemini Native 不能用于 Codex 模型列表",
         ));
     }
     if request.connection.claude_native.is_some() {
@@ -112,18 +109,38 @@ fn fetch_models(
             "原生云 SDK 不提供此通用 HTTP 模型接口，请填写云服务已开通的模型 ID",
         ));
     }
-    if request.app == asb_core::AppKind::Claude {
-        let account = crate::claude_auth::ClaudeAuth::shared(local.root())
-            .resolve(&request.connection)
-            .map_err(|message| CommandError::new("claude-account-unavailable", message))?;
-        if let Some(account) = account {
-            return crate::claude_auth::models::fetch_for_provider(
-                &account,
-                request.upstream_protocol,
-                &request.connection,
-            )
-            .map_err(|message| CommandError::new("models-fetch-failed", message));
-        }
+    Ok(())
+}
+
+fn fetch_managed_claude_models(
+    local: &crate::local_state::LocalState,
+    request: &ProviderModelsRequest,
+) -> Result<Option<Vec<crate::probe::ProviderModel>>, CommandError> {
+    if request.app != asb_core::AppKind::Claude {
+        return Ok(None);
+    }
+    let account = crate::claude_auth::ClaudeAuth::shared(local.root())
+        .resolve(&request.connection)
+        .map_err(|message| CommandError::new("claude-account-unavailable", message))?;
+    let Some(account) = account else {
+        return Ok(None);
+    };
+    crate::claude_auth::models::fetch_for_provider(
+        &account,
+        request.upstream_protocol,
+        &request.connection,
+    )
+    .map(Some)
+    .map_err(|message| CommandError::new("models-fetch-failed", message))
+}
+
+fn fetch_models(
+    local: &crate::local_state::LocalState,
+    request: ProviderModelsRequest,
+) -> Result<Vec<crate::probe::ProviderModel>, CommandError> {
+    validate_model_fetch_request(&request)?;
+    if let Some(models) = fetch_managed_claude_models(local, &request)? {
+        return Ok(models);
     }
     crate::probe::fetch_models(
         &request.url,
@@ -223,7 +240,27 @@ mod endpoint_tests {
             result.request_url,
             "https://example.test/openai/v2/responses"
         );
-        assert_eq!(result.models_url, "https://example.test/openai/v2/models");
+        assert_eq!(result.models_url.as_deref(), Some("https://example.test/openai/v2/models"));
+        assert_eq!(result.models_error, None);
+    }
+
+    #[test]
+    fn full_request_url_reports_missing_model_list_url_without_invalidating_request_preview() {
+        let result = resolve_provider_endpoints(ProviderEndpointsRequest {
+            base_url: "https://example.test/v1/responses".into(),
+            upstream_protocol: asb_core::contracts::UpstreamProtocol::Responses,
+            connection: ProviderConnectionOptions {
+                is_full_url: true,
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        assert_eq!(result.request_url, "https://example.test/v1/responses");
+        assert_eq!(result.models_url, None);
+        assert_eq!(
+            result.models_error.as_deref(),
+            Some("完整请求 URL 不能推导模型列表地址；请填写模型列表 URL"),
+        );
     }
 
     #[test]

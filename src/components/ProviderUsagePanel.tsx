@@ -1,5 +1,4 @@
 import type { ProviderProfile } from "../api/client";
-import { ProviderUsageTrend } from "./ProviderUsageTrend";
 import { Button } from "./Button";
 import { Time } from "./Time";
 import { UsageReadingsTable } from "./UsageReadingsTable";
@@ -12,10 +11,9 @@ interface Props {
   onConfigure?: (profile: ProviderProfile) => void;
 }
 
-/** One configured provider's default-visible usage table. Configuration
- * still returns to the dedicated workspace through the supplied callback. */
+/** The containing row mounts this panel only while its usage disclosure is open. */
 export function ProviderUsagePanel({ id, profile, usage, onConfigure }: Props) {
-  const { data: summary, querying, error, run, history } = usage;
+  const { data: summary, querying, error, run } = usage;
 
   return (
     <section id={id} className="asb-provider-usage" aria-label={`${profile.name} 用量`}>
@@ -45,17 +43,8 @@ export function ProviderUsagePanel({ id, profile, usage, onConfigure }: Props) {
         </div>
       </header>
 
-      <ProviderUsageTrend
-        providerName={profile.name}
-        series={history.series}
-        loading={history.loading}
-        error={history.error}
-      />
       {summary ? (
-        <UsageReadingsTable
-          readings={summary.readings}
-          ariaLabel={`${profile.name} 用量读数`}
-        />
+        <UsageReadingsTable readings={summary.readings} ariaLabel={`${profile.name} 用量读数`} />
       ) : (
         !error && <p className="asb-provider-usage-state" role="status">正在读取已配置的用量…</p>
       )}

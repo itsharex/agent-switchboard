@@ -1,0 +1,70 @@
+/* Shared skeleton for the one client-owned feature rendered in each tab.
+ * It gives Codex and Claude the same header, scope note, control rhythm, and
+ * confirmation boundaries without turning either workflow into a nested card. */
+.asb-client-management-module,
+.asb-client-management-module-content,
+.asb-client-management-group {
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+/* The module owns its spacing through the grid gap rather than stacking the
+ * header's default bottom margin with another layout gap. */
+.asb-client-management-module > .asb-module-header,
+.asb-client-management-module > .asb-scope-note,
+.asb-client-management-group > .asb-scope-note,
+.asb-client-management-group > .asb-warn-text,
+.asb-client-management-module-content > .asb-warn-text {
+  margin: 0;
+}
+
+/* A divider is only used when a workflow reveals a locally confirmable step
+ * or an independent client marker; it is not a second work surface. */
+.asb-client-management-group {
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+/* Codex keeps its high-impact action clear by giving apply a full row, then
+ * places reversible maintenance controls in a compact two-column grid. */
+.asb-project-plan-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-project-plan-action-grid > .asb-btn {
+  width: 100%;
+}
+
+.asb-project-plan-apply-action {
+  grid-column: 1 / -1;
+}
+
+.asb-project-plan-delete-confirmation {
+  display: grid;
+  gap: var(--asb-space-2);
+}
+
+.asb-project-plan-delete-confirmation > .asb-warn-text {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .asb-project-plan-action-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asb-project-plan-apply-action {
+    grid-column: auto;
+  }
+
+  .asb-project-plan-delete-confirmation .asb-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .asb-project-plan-delete-confirmation .asb-btn {
+    width: 100%;
+  }
+}

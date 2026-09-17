@@ -21,17 +21,10 @@ struct Lifecycle {
     ready: bool,
     requested: bool,
     visible: bool,
-    focus_hidden_at: Option<Instant>,
     shown_at: Option<Instant>,
 }
 
 impl Lifecycle {
-    fn suppress_click(&mut self, now: Instant) -> bool {
-        self.focus_hidden_at
-            .take()
-            .is_some_and(|at| now.saturating_duration_since(at) < Duration::from_millis(250))
-    }
-
     /// Consumes the show stamp so only the first focus loss after a show is
     /// eligible for the grace; later dismissals stay immediate.
     fn within_show_grace(&mut self, now: Instant) -> bool {
@@ -133,18 +126,11 @@ fn apply_window_outline(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-pub fn toggle(
+pub fn open(
     app: &AppHandle,
     rect: Option<Rect>,
     point: Option<PhysicalPosition<f64>>,
 ) -> Result<(), String> {
-    let close = with_state(app, |state| {
-        let suppress = state.lifecycle.suppress_click(Instant::now());
-        state.lifecycle.visible || state.lifecycle.requested || suppress
-    })?;
-    if close {
-        return hide(app, false);
-    }
     let point = point.or_else(|| app.cursor_position().ok());
     let scale = point
         .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
@@ -176,7 +162,7 @@ pub fn toggle(
         state.generation
     })?;
     if app.get_webview_window(LABEL).is_none() {
-        let _ = hide(app, false);
+        let _ = hide(app);
         spawn_rebuild(app);
         return Ok(());
     }
@@ -198,7 +184,7 @@ pub fn toggle(
                     })
                     .unwrap_or(false);
                     if timed_out {
-                        let _ = hide(&handle, false);
+                        let _ = hide(&handle);
                         if let Some(window) = handle.get_webview_window(LABEL) {
                             if let Err(error) = window.reload() {
                                 log::warn!("托盘界面重新加载失败: {error}");
@@ -306,7 +292,7 @@ fn show(app: &AppHandle) -> Result<(), String> {
         .and_then(|()| window.show().map_err(|error| error.to_string()))
         .and_then(|()| window.set_focus().map_err(|error| error.to_string()));
     if let Err(error) = result {
-        let _ = hide(app, false);
+        let _ = hide(app);
         super::recover_main(app, &error);
         return Err(error);
     }
@@ -338,26 +324,11 @@ pub fn resize(app: &AppHandle, height: f64) -> Result<(), String> {
     Ok(())
 }
 
-pub fn hide(app: &AppHandle, focus_lost: bool) -> Result<(), String> {
-    let cursor = focus_lost.then(|| app.cursor_position().ok()).flatten();
+pub fn hide(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(LABEL) {
         window.hide().map_err(|error| error.to_string())?;
     }
     with_state(app, |state| {
-        // Only a loss of focus on the actual tray anchor can belong to the
-        // same icon click. Clicking another window never suppresses reopening.
-        if focus_lost && state.lifecycle.visible {
-            state.lifecycle.focus_hidden_at = state
-                .anchor
-                .zip(cursor)
-                .filter(|(anchor, p)| {
-                    p.x >= anchor.x
-                        && p.y >= anchor.y
-                        && p.x <= anchor.x + anchor.width
-                        && p.y <= anchor.y + anchor.height
-                })
-                .map(|_| Instant::now());
-        }
         state.lifecycle.visible = false;
         state.lifecycle.requested = false;
         state.lifecycle.shown_at = None;
@@ -373,7 +344,7 @@ pub fn window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     let result = match event {
         tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
-            hide(app, false)
+            hide(app)
         }
         tauri::WindowEvent::Focused(false) => {
             let fresh = with_state(app, |state| state.lifecycle.within_show_grace(Instant::now()))
@@ -384,7 +355,7 @@ pub fn window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
                 // instantly hiding a panel the user just opened.
                 window.set_focus().map_err(|error| error.to_string())
             } else if with_state(app, |state| state.lifecycle.visible).unwrap_or(false) {
-                hide(app, true)
+                hide(app)
             } else {
                 Ok(())
             }
@@ -409,17 +380,6 @@ pub fn window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn icon_click_after_focus_loss_does_not_reopen_same_panel() {
-        let now = Instant::now();
-        let mut lifecycle = Lifecycle {
-            focus_hidden_at: Some(now),
-            ..Lifecycle::default()
-        };
-        assert!(lifecycle.suppress_click(now + Duration::from_millis(40)));
-        assert!(!lifecycle.suppress_click(now + Duration::from_millis(60)));
-    }
 
     #[test]
     fn fresh_show_grace_covers_only_the_first_focus_loss() {

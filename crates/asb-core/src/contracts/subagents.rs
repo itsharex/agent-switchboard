@@ -99,10 +99,6 @@ pub struct CodexSubagentSettingsSnapshot {
     /// differ in `file_exists`.
     pub config_hash: String,
     pub file_exists: bool,
-    /// Retired concurrency keys still present in the host file. They are never
-    /// read, mapped, or converted; an explicit concurrency value is refused
-    /// until the user removes them by hand.
-    pub deprecated_keys: Vec<String>,
 }
 
 

@@ -3,7 +3,11 @@ import { Button } from "../Button";
 import { SettingsFields } from "../SettingsFields";
 import type { ProviderEditorState } from "./useProviderEditor";
 
-interface Props { editor: ProviderEditorState; busy: boolean }
+interface Props {
+  editor: ProviderEditorState;
+  busy: boolean;
+  baselineValues?: Record<string, SettingValue>;
+}
 
 export function ParametersLoadStatus({ ready, error, retry, busy }: {
   ready: boolean;
@@ -20,11 +24,12 @@ export function ParametersLoadStatus({ ready, error, retry, busy }: {
   ) : <p className="asb-field-help" role="status">正在读取运行参数</p>;
 }
 
-export function ProviderParametersPage({ editor, busy }: Props) {
+export function ProviderParametersPage({ editor, busy, baselineValues }: Props) {
   const { draft, setDraft, parameters } = editor;
   const catalog = parameters.catalog;
   if (!catalog || !draft.parameters) return <ParametersLoadStatus busy={busy}
     ready={parameters.ready} error={parameters.error} retry={parameters.retry} />;
+  const baseline = baselineValues ?? catalog.defaults.settings;
   const resetAll = () => setDraft((current) => current.parameters
     ? { ...current, parameters: { settings: { ...catalog.defaults.settings } } }
     : current);
@@ -32,10 +37,10 @@ export function ProviderParametersPage({ editor, busy }: Props) {
     ? { ...current, parameters: { settings: { ...current.parameters.settings, [key]: value } } }
     : current);
   return (
-    <div className="asb-form" aria-label="供应商运行参数">
-      <p className="asb-field-help">运行参数随此供应商保存，返回编辑后统一保存供应商。</p>
-      <SettingsFields specs={catalog.specs} groups={catalog.groups} values={draft.parameters.settings} busy={busy}
-        showGroupReset={false} onChange={change} />
+    <div className="asb-form asb-provider-parameters" aria-label="供应商运行参数">
+      <p className="asb-field-help">运行参数随此供应商保存；当前设置来自已保存的供应商档案，新建供应商从默认值开始。修改会在返回编辑后统一保存。</p>
+      <SettingsFields specs={catalog.specs} groups={catalog.groups} values={draft.parameters.settings}
+        baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />
       <div className="asb-settings-actions">
         <Button variant="secondary" disabled={busy} onClick={resetAll}>恢复运行参数默认值</Button>
       </div>

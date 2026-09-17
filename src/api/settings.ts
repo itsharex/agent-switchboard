@@ -85,12 +85,15 @@ export interface ClientSettingsSnapshot {
   settingsHash: string;
 }
 
-/** One hash-bound, confirmed application of all client-configuration drafts. */
+/** One hash-bound client-configuration file candidate. */
 export interface ClientConfigurationApplyPreview {
   file: import("./switching").FilePreview;
   settingsHash: string;
   targetExisted: boolean;
 }
+
+/** A backend-owned client-configuration reset scope. */
+export type ClientConfigurationResetKind = "nativeDefaults" | "clearExtraConfiguration";
 
 export interface ProviderParametersCatalog {
   app: AppKind;
@@ -103,10 +106,11 @@ export function getProviderParametersCatalog(app: AppKind): Promise<ProviderPara
   return invoke<ProviderParametersCatalog>("get_provider_parameters_catalog", { target: app });
 }
 
-/** An editable rendering of the current draft's shared settings only. */
-export interface ClientSettingsPreview {
+/** A redacted snapshot of the actual client configuration file. */
+export interface CurrentClientConfiguration {
   app: AppKind;
   target: string;
+  exists: boolean;
   content: string;
 }
 
@@ -130,16 +134,10 @@ export function saveClientSettings(
   });
 }
 
-/** Renders the current client-preference draft without reading or writing a
- * real client file. */
-export function previewClientSettings(
-  app: AppKind,
-  settings: SettingsValues,
-): Promise<ClientSettingsPreview> {
-  return invoke<ClientSettingsPreview>("preview_client_settings", {
-    target: app,
-    settings,
-  });
+/** Reads a redacted copy of the actual local client configuration. Manual
+ * edits retain redacted source values only through the confirmed backend executor. */
+export function getCurrentClientConfiguration(app: AppKind): Promise<CurrentClientConfiguration> {
+  return invoke<CurrentClientConfiguration>("get_current_client_configuration", { target: app });
 }
 
 export function previewClientConfigurationApply(
@@ -149,6 +147,80 @@ export function previewClientConfigurationApply(
 ): Promise<ClientConfigurationApplyPreview> {
   return invoke<ClientConfigurationApplyPreview>("preview_client_configuration_apply", {
     target: app, settings, subagentSettings,
+  });
+}
+
+/** Previews one backend-owned reset without accepting configuration values from the UI. */
+export function previewClientConfigurationReset(
+  app: AppKind,
+  resetKind: ClientConfigurationResetKind,
+): Promise<ClientConfigurationApplyPreview> {
+  return invoke<ClientConfigurationApplyPreview>("preview_client_configuration_reset", {
+    target: app, resetKind,
+  });
+}
+
+export interface ClientConfigurationRepairPreview {
+  file: import("./switching").FilePreview;
+  targetExisted: boolean;
+}
+
+export function previewClientConfigurationRepair(
+  app: AppKind,
+  expectedSourceHash: string,
+): Promise<ClientConfigurationRepairPreview> {
+  return invoke<ClientConfigurationRepairPreview>("preview_client_configuration_repair", {
+    target: app, expectedSourceHash,
+  });
+}
+
+export function commitClientConfigurationRepair(
+  app: AppKind,
+  expectedSourceHash: string,
+  expectedRenderedHash: string,
+  expectedTargetExisted: boolean,
+): Promise<void> {
+  return invoke<void>("commit_client_configuration_repair", {
+    target: app,
+    expectedSourceHash,
+    expectedRenderedHash,
+    expectedTargetExisted,
+    confirmWrite: true,
+  });
+}
+
+export function previewManualClientConfiguration(
+  app: AppKind,
+  expectedSourceHash: string,
+  displayContent: string,
+  settings: SettingsValues,
+  subagentSettings?: CodexSubagentSettings,
+): Promise<ClientConfigurationApplyPreview> {
+  return invoke<ClientConfigurationApplyPreview>("preview_manual_client_configuration", {
+    target: app, expectedSourceHash, displayContent, settings, subagentSettings,
+  });
+}
+
+export function commitManualClientConfiguration(
+  app: AppKind,
+  expectedSourceHash: string,
+  expectedRenderedHash: string,
+  expectedSettingsHash: string,
+  expectedTargetExisted: boolean,
+  displayContent: string,
+  settings: SettingsValues,
+  subagentSettings?: CodexSubagentSettings,
+): Promise<void> {
+  return invoke<void>("commit_manual_client_configuration", {
+    target: app,
+    expectedSourceHash,
+    expectedRenderedHash,
+    expectedSettingsHash,
+    expectedTargetExisted,
+    displayContent,
+    settings,
+    subagentSettings,
+    confirmWrite: true,
   });
 }
 
@@ -170,16 +242,26 @@ export function commitClientConfigurationApply(
   });
 }
 
-/** Parses a manually edited client fragment without reading or writing a real
- * client file. Missing keys become automatic settings. */
-export function parseClientSettings(
+/** Commits the exact reset candidate that was previously previewed. */
+export function commitClientConfigurationReset(
   app: AppKind,
-  content: string,
-): Promise<SettingsValues> {
-  return invoke<SettingsValues>("parse_client_settings", {
+  resetKind: ClientConfigurationResetKind,
+  preview: ClientConfigurationApplyPreview,
+): Promise<void> {
+  return invoke<void>("commit_client_configuration_reset", {
     target: app,
-    content,
+    resetKind,
+    expectedHash: preview.file.contentHash,
+    expectedRenderedHash: preview.file.renderedHash,
+    expectedSettingsHash: preview.settingsHash,
+    expectedTargetExisted: preview.targetExisted,
+    confirmWrite: true,
   });
+}
+
+/** Parses the dedicated Claude extra-configuration editor. */
+export function parseClaudeExtraConfiguration(content: string): Promise<Record<string, unknown>> {
+  return invoke<Record<string, unknown>>("parse_claude_extra_configuration", { content });
 }
 
 export function getGlobalPromptDocument(app: AppKind): Promise<GlobalPromptDocument> {

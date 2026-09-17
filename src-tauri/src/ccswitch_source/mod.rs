@@ -7,7 +7,6 @@
 //! entirely inside the backend through the batch command.
 
 mod claude_endpoints;
-pub(crate) mod claude_failover;
 mod claude_order;
 pub(crate) mod codex_failover;
 mod db;

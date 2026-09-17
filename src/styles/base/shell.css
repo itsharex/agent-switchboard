@@ -76,7 +76,7 @@
   flex: 0 0 auto;
   padding: var(--asb-space-unit) var(--asb-space-2);
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -98,7 +98,7 @@
   height: var(--asb-touch-target);
   padding: 0;
   border: 0;
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text-muted);
 }

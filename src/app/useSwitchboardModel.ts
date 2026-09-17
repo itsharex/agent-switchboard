@@ -12,7 +12,7 @@ import { useOperationFrame } from "./useOperationFrame";
 import { usePromptDocuments } from "./usePromptDocuments";
 import { useProviders } from "./useProviders";
 import { latestOverall, useSwitchOperations } from "./useSwitchOperations";
-import { useSwitchPreview } from "./useSwitchPreview";
+import { useProviderSwitchFlow } from "./useProviderSwitchFlow";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 
@@ -40,62 +40,64 @@ function useTrayEvents(setPage: (page: Page) => void, reportError: (error: Comma
 /** Composes domain hooks; each domain owns its state and typed operations. */
 export function useSwitchboardModel() {
   const navigation = useWorkspaceNavigation();
-  const { page, setPage, settingsSection, extensionSection } = navigation;
+  const { page, setPage, settingsSection } = navigation;
   const [appFilter, setAppFilter] = useState<AppKind>("codex");
-  const [requestedCodexPreviewId, setRequestedCodexPreviewId] = useState<string | null>(null);
   const frame = useOperationFrame();
   const { busy, reportError, clearError, setBusy } = frame;
   useTrayEvents(setPage, reportError);
   const operationContext = { busy, onError: reportError, clearError, setBusy };
   const snapshot = useConfigSnapshot({ onError: reportError });
-  const { selectedId, setSelectedId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
+  const { targetProfileId, setTargetProfileId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
   const refresh = useCallback(async () => { await refreshSnapshot(); }, [refreshSnapshot]);
-  const switchPreview = useSwitchPreview({ ...operationContext, setSelectedId });
-  const { invalidateSwitchCandidates: invalidateCandidates, selectProfile } = switchPreview;
+  const providerSwitch = useProviderSwitchFlow({
+    busy,
+    onError: reportError,
+    clearError,
+    onTargetProfileChange: setTargetProfileId,
+  });
+  const { invalidateCandidates, setTargetProfile } = providerSwitch;
   const clientSettings = useClientSettings({
-    ...operationContext, app: appFilter, active: page === "客户端通用配置",
-    invalidateSwitchCandidates: invalidateCandidates, refresh,
+    app: appFilter,
+    busy,
+    active: page === "客户端通用配置",
   });
   const codexSubagentSettings = useCodexSubagentSettings({
-    ...operationContext,
     active: page === "客户端通用配置" && appFilter === "codex",
-    invalidateSwitchCandidates: invalidateCandidates,
-    refresh,
+    busy,
+    onError: reportError,
   });
   const promptDocuments = usePromptDocuments({
-    ...operationContext, active: page === "扩展" && extensionSection === "instructions",
+    ...operationContext, active: page === "客户端通用配置",
   });
   const appSettingsState = useAppSettings(operationContext);
   const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });
   const updateCheck = useUpdateCheck({ onError: reportError });
   const discoveryState = useDiscovery({
-    ...operationContext, app: appFilter, invalidateCandidates, refresh: refreshSnapshot, selectProfile, setAppFilter, setPage,
+    ...operationContext, app: appFilter, invalidateCandidates, refresh: refreshSnapshot, setTargetProfile, setAppFilter, setPage,
   });
   const ccImport = useCcImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
-    records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, selectProfile, setAppFilter });
-  const selectedRecord = records.find((record) => record.profile.id === selectedId) ?? null;
-  const selectedProfile = selectedRecord?.profile ?? null;
+    records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, setTargetProfile, setAppFilter });
+  const targetRecord = records.find((record) => record.profile.id === targetProfileId) ?? null;
+  const targetProfile = targetRecord?.profile ?? null;
   const operations = useSwitchOperations({
-    ...operationContext, switchCandidate: switchPreview.switchCandidate, retractPreview: switchPreview.retractPreview,
-    invalidateCandidates, selectProfile, selectedId, selectedProfile, refresh,
+    ...operationContext, activationCandidate: providerSwitch.activationCandidate, clearCandidates: providerSwitch.clearCandidates,
+    invalidateCandidates, setTargetProfile, targetProfileId, targetProfile, refresh,
     refreshDiscoveryOrAppend: discoveryState.refreshDiscoveryOrAppend,
   });
   const providers = useProviders({
     ...operationContext, appFilter, setAppFilter, records,
-    codexOfficialRecords: snapshot.codexOfficialRecords, selectedId,
-    invalidateCandidates, retractPreview: switchPreview.retractPreview, refresh, selectProfile,
-    setSelectedId,
+    codexOfficialRecords: snapshot.codexOfficialRecords, targetProfileId,
+    invalidateCandidates, clearCandidates: providerSwitch.clearCandidates, refresh, setTargetProfile,
+    setTargetProfileId,
   });
   const lastSwitchOverall = useMemo(() => latestOverall(snapshot.statuses ?? []), [snapshot.statuses]);
   const openBackupFolder = useCallback(
     () => openBackupDir().catch((caught) => reportError(caught as CommandError)), [reportError],
   );
-  const clearRequestedCodexPreview = useCallback(() => setRequestedCodexPreviewId(null), []);
 
-  return { ...navigation, appFilter, ...frame, snapshot, activeProfileId, switchPreview,
+  return { ...navigation, appFilter, ...frame, snapshot, activeProfileId, providerSwitch,
     clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
-    ccImport, selectedProfile, operations, providers, lastSwitchOverall, openBackupFolder, requestedCodexPreviewId,
-    clearRequestedCodexPreview };
+    ccImport, targetProfile, operations, providers, lastSwitchOverall, openBackupFolder };
 }
 
 export type SwitchboardModel = ReturnType<typeof useSwitchboardModel>;

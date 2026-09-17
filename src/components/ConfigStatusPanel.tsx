@@ -75,9 +75,15 @@ function ConfigStatusDetails({ status, profiles, lock }: {
         <StatusField label="匹配状态">{matchLabel(status.matchStatus)}</StatusField>
       </>}
       {status.lastSwitch && (
-        <StatusField label="上次切换">
+        <StatusField label="上次写入">
           <Time iso={status.lastSwitch.at} />
-          {status.lastSwitch.profileName ? ` · ${status.lastSwitch.profileName}` : " · 已恢复备份"}
+          {status.lastSwitch.operation === "restore"
+            ? " · 已恢复备份"
+            : status.lastSwitch.operation === "gatewayPortChange"
+              ? " · 已修改网关监听端口"
+              : status.lastSwitch.profileName
+                ? ` · 已投影供应商「${status.lastSwitch.profileName}」`
+                : " · 已写入客户端通用配置"}
         </StatusField>
       )}
       {(status.route?.scopeWarnings.length ?? 0) > 0 && (

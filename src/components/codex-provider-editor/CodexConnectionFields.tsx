@@ -136,6 +136,16 @@ export function CodexConnectionFields({ editor, busy }: Props) {
         <ProviderCredentialField busy={busy} value={draft.apiKey} protocol={draft.upstream}
           authentication={draft.authentication}
           onChange={(value) => setDraft((current) => ({ ...current, apiKey: value }))} />
+        <label className="asb-field">
+          <span>模型列表 URL</span>
+          <Input type="url" value={draft.connection.modelsUrl ?? ""} disabled={busy}
+            placeholder={draft.connection.isFullUrl ? "完整请求 URL 必填" : "（可选）"}
+            onChange={(event) => setDraft((current) => ({
+              ...current,
+              connection: { ...current.connection, modelsUrl: event.target.value.trim() || null },
+            }))} />
+          <p className="asb-scope-note">仅用于“获取模型”。完整请求 URL 必须填写；不会改变实际请求地址。</p>
+        </label>
         <div className="asb-provider-route-note">
           {gatewayRoute
             ? <p className="asb-scope-note asb-warn-text">{connection.gatewayRouteWarning}</p>

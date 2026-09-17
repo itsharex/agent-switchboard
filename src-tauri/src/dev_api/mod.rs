@@ -7,6 +7,7 @@
 mod claude_dispatch;
 mod codex_dispatch;
 mod dispatch;
+mod extensions_dispatch;
 mod http;
 
 #[cfg(all(test, target_os = "windows"))]

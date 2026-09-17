@@ -13,13 +13,16 @@ pub mod executor;
 pub mod extensions;
 pub mod io;
 pub mod lockfile;
+mod manual_configuration;
 pub mod pids;
 mod prompt_documents;
 mod restore;
 mod subagent_settings;
 
+pub use display::display_content;
+pub use manual_configuration::{rehydrate_display_content, repair_invalid_configuration};
 pub use executor::{
-    execute, execute_codex, execute_rendered, preview_rendered, read_preview, restore, restore_projected,
+    execute, execute_codex, execute_rendered, preview_rendered, preview_repair_rendered, read_preview, restore, restore_projected,
     sha256_digest, sha256_hex, FilePreview, RecoveryOutcome, RenderedWriteOutcome,
     RenderedWriteRequest, RestoreOutcome, SwitchError, SwitchOutcome, SwitchRequest,
 };

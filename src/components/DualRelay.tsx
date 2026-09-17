@@ -2,6 +2,7 @@ import type { AppKind, ConfigFileStatus, LockStatus, ProviderProfile, RouteState
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
 import { ClientLogo } from "./ClientLogo";
+import { MatrixStarlightCanvas } from "./experience/MatrixStarlightCanvas";
 import "../styles/base/route-cards.css";
 
 interface RouteCardProps {
@@ -53,6 +54,7 @@ function RouteCard({
   if (lockWarning) notes.push(lockWarning);
   return (
     <section className={`asb-route-card${route ? " is-on" : ""}`} data-app={app} aria-label={`${clientName(app)} 当前连接`}>
+      <MatrixStarlightCanvas variant={route ? "route-active" : "route-idle"} />
       <div className="asb-route-card-body">
         <div>
           <div className="asb-route-ident">
@@ -91,11 +93,11 @@ interface DualRelayProps {
 /** Both cards describe observed client files, independently of list selection. */
 export function DualRelay({ statuses, profiles, locks }: DualRelayProps) {
   return (
-    <div className="asb-route-cards" role="group" aria-label="当前启用配置">
-      {(["codex", "claude"] as const).map((app) => (
-        <RouteCard key={app} app={app} status={statuses?.find((status) => status.app === app)}
-          profiles={profiles} lock={locks[app]} />
-      ))}
-    </div>
+    <>
+      <RouteCard app="codex" status={statuses?.find((status) => status.app === "codex")}
+        profiles={profiles} lock={locks.codex} />
+      <RouteCard app="claude" status={statuses?.find((status) => status.app === "claude")}
+        profiles={profiles} lock={locks.claude} />
+    </>
   );
 }

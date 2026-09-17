@@ -58,15 +58,6 @@ pub fn apply(text: &str, extra: &Extra) -> Result<String, String> {
 pub fn apply_profile(text: &str, fragment: &Extra) -> Result<String, String> {
     apply_with(text, fragment, PROFILE_MANIFEST)
 }
-pub fn fragment(text: &str, extra: &Extra) -> Result<String, String> {
-    validate(extra)?;
-    let mut root = parse(text)?;
-    for (path, value) in leaves(&Value::Object(extra.clone()))? {
-        pointer::set(&mut root, &pointer::decode(&path)?, value)?;
-    }
-    serde_json::to_string_pretty(&root).map_err(|_| "Claude 通用片段无法编码".to_string())
-}
-
 /// Rejects one path claimed by both the client's shared extra and the active
 /// profile's fragment. Ownership would otherwise flip between the two stores
 /// on every switch.

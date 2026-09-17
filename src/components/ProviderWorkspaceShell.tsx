@@ -27,7 +27,7 @@ import { ClientPicker } from "./ClientPicker";
 import { DualRelay } from "./DualRelay";
 import { GripIcon, PlusIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
-import { ModuleHeader, WorkspaceHeader } from "./WorkspaceHeader";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import "../styles/base/provider-workspace.css";
 
 interface ProviderWorkspaceShellProps {
@@ -40,8 +40,6 @@ interface ProviderWorkspaceShellProps {
   statuses: ConfigFileStatus[] | null;
   profiles: ProviderProfile[];
   locks: Partial<Record<AppKind, LockStatus>>;
-  onOpenClientSettings: () => void;
-  onOpenHistory: () => void;
   onImport: () => void;
   onNew: () => void;
   /** App-specific actions appended between 导入 and 新建供应商. */
@@ -61,8 +59,6 @@ export function ProviderWorkspaceShell({
   statuses,
   profiles,
   locks,
-  onOpenClientSettings,
-  onOpenHistory,
   onImport,
   onNew,
   extraActions,
@@ -70,10 +66,7 @@ export function ProviderWorkspaceShell({
 }: ProviderWorkspaceShellProps) {
   return (
     <section className="asb-provider-workspace" aria-label={ariaLabel}>
-      <section className="asb-panel asb-provider-connection-panel" aria-label="当前连接">
-        <ModuleHeader title="当前连接" />
-        <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
-      </section>
+      <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
       <section className="asb-panel asb-provider-list-panel" aria-label="供应商列表">
         <WorkspaceHeader
           title="供应商"
@@ -87,12 +80,6 @@ export function ProviderWorkspaceShell({
           }
           primaryActions={
             <>
-              <Button variant="secondary" onClick={onOpenClientSettings}>
-                客户端通用配置
-              </Button>
-              <Button variant="secondary" onClick={onOpenHistory}>
-                切换历史
-              </Button>
               <Button variant="secondary" disabled={busy} onClick={onImport}>
                 导入
               </Button>
@@ -164,41 +151,38 @@ interface ProviderRowShellProps {
   id: string;
   name: string;
   active: boolean;
-  selected: boolean;
-  previewOpen: boolean;
+  confirmationOpen: boolean;
   sortable: boolean;
-  /** Selected model, shown above the provider URL. */
+  /** The configured model, rendered in the row's dedicated model zone. */
   model?: ReactNode;
-  /** Provider URL, always rendered on its own line. */
-  url?: ReactNode;
-  /** Additional status or usage information below the model and URL. */
-  details?: ReactNode;
-  /** Primary action before the status pill (启用). */
+  /** The provider host or official route, rendered in the connection zone. */
+  endpoint?: ReactNode;
+  /** Usage or account state, rendered in the compact summary zone. */
+  summary?: ReactNode;
+  /** Primary action for an inactive profile (启用). */
   primaryAction?: ReactNode;
-  /** Action after the status pill (official 重新登录). */
+  /** Secondary explicit action, such as official re-login. */
   secondaryAction?: ReactNode;
-  /** Icon-cluster actions; the cluster renders only when non-null. */
+  /** Secondary icon actions; hidden until hover or keyboard focus on pointer devices. */
   actions?: ReactNode;
-  /** Expansion blocks rendered under the row line (panels, inline preview). */
+  /** Expansion blocks rendered below the data row. */
   children?: ReactNode;
 }
 
-/** The one provider row layout: grip, avatar, name, meta line, primary
- * action, status pill, and the icon cluster. Both clients compose their rows
- * on this shell so the list UI stays a single visual language. The identity
- * bar (avatar, name, meta) is display-only: only
- * the action buttons are clickable, and the pages select the row from those
- * buttons so the bar keeps its selected highlight afterwards. */
+/**
+ * One provider row with a stable scan order: identity, model, connection,
+ * summary, then actions. The active marker belongs to the identity zone so
+ * the model itself can stay the actual value instead of a prose sentence.
+ */
 export function ProviderRowShell({
   id,
   name,
   active,
-  selected,
-  previewOpen,
+  confirmationOpen,
   sortable,
   model,
-  url,
-  details,
+  endpoint,
+  summary,
   primaryAction,
   secondaryAction,
   actions,
@@ -209,31 +193,14 @@ export function ProviderRowShell({
     disabled: !sortable,
   });
   const initial = name.trim().charAt(0).toUpperCase() || "?";
-  const identity = (
-    <>
-      <span className="asb-avatar" aria-hidden="true">
-        {initial}
-      </span>
-      <span className="asb-row-main">
-        <span className="asb-row-name">{name}</span>
-        {(model || url || details) && (
-          <span className="asb-row-meta">
-            {model && <span className="asb-row-model">{model}</span>}
-            {url && <span className="asb-row-url">{url}</span>}
-            {details && <span className="asb-row-details">{details}</span>}
-          </span>
-        )}
-      </span>
-    </>
-  );
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`asb-row-item${active ? " is-live" : ""}${selected ? " is-selected" : ""}${isDragging ? " is-dragging" : ""}${previewOpen ? " is-previewing" : ""}`}
+      className={`asb-row-item${active ? " is-live" : ""}${isDragging ? " is-dragging" : ""}${confirmationOpen ? " is-confirming" : ""}`}
     >
       <div className="asb-row-line">
-        {sortable && (
+        {sortable ? (
           <Tooltip label={`拖动调整 ${name} 的顺序`}>
             <Button
               variant="unstyled"
@@ -245,15 +212,26 @@ export function ProviderRowShell({
               <GripIcon />
             </Button>
           </Tooltip>
-        )}
-        <div className="asb-row">{identity}</div>        {primaryAction}
-        {active && <span className="asb-pill-status">使用中</span>}
-        {secondaryAction}
-        {actions && (
-          <span className="asb-iconcluster" role="group" aria-label={`${name} 操作`}>
-            {actions}
+        ) : <span className="asb-row-grip-spacer" aria-hidden="true" />}
+        <div className="asb-row">
+          <span className="asb-avatar" aria-hidden="true">{initial}</span>
+          <span className="asb-row-identity-copy">
+            <span className="asb-row-identity-heading">
+              <span className="asb-row-name" title={name}>{name}</span>
+              {active && <span className="asb-pill-status">已应用</span>}
+            </span>
           </span>
-        )}
+        </div>
+        <span className="asb-row-model">
+          <span className="asb-row-model-value">{model ?? "默认模型"}</span>
+        </span>
+        <span className="asb-row-endpoint">{endpoint}</span>
+        <span className="asb-row-summary">{summary}</span>
+        <span className="asb-row-controls">
+          {primaryAction}
+          {secondaryAction}
+          {actions && <span className="asb-iconcluster" role="group" aria-label={`${name} 操作`}>{actions}</span>}
+        </span>
       </div>
       {children}
     </li>

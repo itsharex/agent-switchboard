@@ -98,7 +98,7 @@ impl GatewayInner {
             return;
         };
         let store = crate::config_store::ConfigStore::new(self.state_root.clone());
-        match store.mark_provider_endpoint_used(&route.profile_id, &route.upstream_base_url) {
+        match store.mark_claude_endpoint_used(&route.profile_id, &route.upstream_base_url) {
             Ok(true) => self.prioritize_endpoint(route),
             Ok(false) => {}
             Err(error) => log::warn!("无法记录 Claude 供应商端点使用时间: {error}"),

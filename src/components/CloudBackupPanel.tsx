@@ -323,30 +323,32 @@ export function CloudBackupPanel({
       {pending === "upload" && (
         <ConfirmSheet
           title="确认上传加密云端备份"
-          details={[
-            "将加密当前供应商档案、客户端设置和切换记录。",
-            "将替换此 Supabase 账户已有的云端备份。",
-            "项目 Auth 登录密码和备份密码不会保存。",
-          ]}
           confirmLabel="确认备份"
           onConfirm={() => void confirm()}
           onCancel={() => setPending(null)}
-        />
+        >
+          <ul className="asb-dialog-details">
+            <li>将加密当前供应商档案、客户端设置和切换记录。</li>
+            <li>将替换此 Supabase 账户已有的云端备份。</li>
+            <li>项目 Auth 登录密码和备份密码不会保存。</li>
+          </ul>
+        </ConfirmSheet>
       )}
       {pending === "restore" && (
         <ConfirmSheet
           title="确认从云端恢复"
-          details={[
-            "将以云端加密备份替换本机供应商档案、客户端设置和切换记录，包含运行参数、API 格式和最大输出 token；认证请求头会按 API 格式自动推导。",
-            "若备份来自三协议升级前的版本，会先升级并重新加密保存到云端。",
-            "不会修改 Codex 或 Claude Code 当前实际配置，也不会删除本地文件备份。",
-            "恢复后需要重新预览，才能把任一档案应用到客户端配置。",
-          ]}
           confirmLabel="确认恢复"
           destructive
           onConfirm={() => void confirm()}
           onCancel={() => setPending(null)}
-        />
+        >
+          <ul className="asb-dialog-details">
+            <li>将以云端加密备份替换本机供应商档案、客户端设置和切换记录，包含运行参数、API 格式和最大输出 token；认证请求头会按 API 格式自动推导。</li>
+            <li>若备份来自三协议升级前的版本，会先升级并重新加密保存到云端。</li>
+            <li>不会修改 Codex 或 Claude Code 当前实际配置，也不会删除本地文件备份。</li>
+            <li>恢复后需要重新预览，才能把任一档案应用到客户端配置。</li>
+          </ul>
+        </ConfirmSheet>
       )}
     </section>
   );

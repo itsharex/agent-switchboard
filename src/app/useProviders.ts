@@ -47,55 +47,56 @@ interface ProvidersDeps {
   records: ProviderRecord[];
   /** The Codex official-login record, stored in the same generic boundary. */
   codexOfficialRecords: ProviderRecord[];
-  selectedId: string | null;
+  targetProfileId: string | null;
   onError: (error: CommandError) => void;
   clearError: () => void;
   setBusy: (busy: boolean) => void;
   invalidateCandidates: () => void;
-  retractPreview: () => void;
+  clearCandidates: () => void;
   refresh: () => Promise<void>;
-  selectProfile: (profileId: string) => Promise<void> | void;
-  setSelectedId: (id: string | null) => void;
+  setTargetProfile: (profileId: string) => Promise<void> | void;
+  setTargetProfileId: (id: string | null) => void;
 }
 
 function useProviderEditorSession(deps: ProvidersDeps) {
-  const { appFilter, records, retractPreview, setAppFilter, setSelectedId } = deps;
+  const { appFilter, records, clearCandidates, setAppFilter, setTargetProfileId } = deps;
   const [editorSession, setEditorSession] = useState<ProviderEditorSession | null>(null);
 
   const openEditor = useCallback(
     (profile: ProviderProfile) => {
       const record = records.find((item) => item.profile.id === profile.id);
       if (!record) return;
-      retractPreview();
-      setSelectedId(profile.id);
+      clearCandidates();
+      setTargetProfileId(profile.id);
       setEditorSession({ app: "claude", record });
     },
-    [records, retractPreview, setSelectedId],
+    [records, clearCandidates, setTargetProfileId],
   );
   const openCodexEditor = useCallback(
     (record: CodexProviderRecord) => {
-      retractPreview();
-      setSelectedId(record.profile.id);
+      clearCandidates();
+      setTargetProfileId(record.profile.id);
       setEditorSession({ app: "codex", source: { kind: "record", record } });
     },
-    [retractPreview, setSelectedId],
+    [clearCandidates, setTargetProfileId],
   );
   /** Opens the Codex editor on the client's official-login record. A null
    * record creates it; the record itself is never a third-party draft. */
   const openCodexOfficialEditor = useCallback(
     (record: ProviderRecord | null) => {
-      retractPreview();
-      setSelectedId(record?.profile.id ?? null);
+      clearCandidates();
+      setTargetProfileId(record?.profile.id ?? null);
       setAppFilter("codex");
       setEditorSession({ app: "codex", source: { kind: "official", record } });
     },
-    [retractPreview, setAppFilter, setSelectedId],
+    [clearCandidates, setAppFilter, setTargetProfileId],
   );
   /** Switches an open Codex editor between its two access modes by replacing
    * the session; a third-party draft never mutates into an official record. */
   const switchCodexAccessMode = useCallback(
     (official: boolean, existing: ProviderRecord | null) => {
-      setSelectedId(existing?.profile.id ?? null);
+      clearCandidates();
+      setTargetProfileId(existing?.profile.id ?? null);
       setEditorSession({
         app: "codex",
         source: official
@@ -103,38 +104,38 @@ function useProviderEditorSession(deps: ProvidersDeps) {
           : null,
       });
     },
-    [setSelectedId],
+    [clearCandidates, setTargetProfileId],
   );
   const newEditor = useCallback(() => {
-    retractPreview();
+    clearCandidates();
     setEditorSession(
       appFilter === "codex"
         ? { app: "codex", source: null }
         : { app: "claude", record: null },
     );
-  }, [appFilter, retractPreview]);
+  }, [appFilter, clearCandidates]);
   /** Cross-contract client switch: replace the session instead of mutating
    * one contract's draft into the other's. */
   const newEditorFor = useCallback((app: AppKind) => {
-    retractPreview();
+    clearCandidates();
     setAppFilter(app);
-    setSelectedId(null);
+    setTargetProfileId(null);
     setEditorSession(
       app === "codex"
         ? { app: "codex", source: null }
         : { app: "claude", record: null },
     );
-  }, [retractPreview, setAppFilter, setSelectedId]);
+  }, [clearCandidates, setAppFilter, setTargetProfileId]);
   const closeEditor = useCallback(() => setEditorSession(null), []);
 
-  /** Changing the list client clears its selection and preview, not the editor session. */
+  /** Changing the list client clears the execution target and both preview states, not the editor session. */
   const selectApp = useCallback(
     (app: AppKind) => {
-      retractPreview();
+      clearCandidates();
       setAppFilter(app);
-      setSelectedId(null);
+      setTargetProfileId(null);
     },
-    [retractPreview, setAppFilter, setSelectedId],
+    [clearCandidates, setAppFilter, setTargetProfileId],
   );
 
   return { editorSession, setEditorSession, openEditor, openCodexEditor, openCodexOfficialEditor,
@@ -154,7 +155,7 @@ interface PendingSave {
 function useProviderSaves(
   deps: ProvidersDeps, editorSession: ProviderEditorSession | null, setEditorSession: SetEditorSession,
 ) {
-  const { busy, clearError, invalidateCandidates, onError, refresh, selectProfile, setAppFilter, setBusy } = deps;
+  const { busy, clearError, invalidateCandidates, onError, refresh, setTargetProfile, setAppFilter, setBusy } = deps;
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const saveProfile = useCallback(async (draft: ProviderDraft) => {
     if (busy || !editorSession || editorSession.app !== "claude") return;
@@ -181,14 +182,14 @@ function useProviderSaves(
       setAppFilter(saved.profile.app);
       setEditorSession(null);
       await refresh();
-      await selectProfile(saved.profile.id);
+      await setTargetProfile(saved.profile.id);
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
   }, [busy, clearError, editorSession, invalidateCandidates, onError, refresh,
-    selectProfile, setAppFilter, setBusy, setEditorSession]);
+    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
 
   /** Codex saves never migrate through the generic transaction: creation
    * (blank or an import seed) writes the specialized store directly; an edit
@@ -206,7 +207,7 @@ function useProviderSaves(
         setAppFilter("codex");
         setEditorSession(null);
         await refresh();
-        await selectProfile(created.profile.id);
+        await setTargetProfile(created.profile.id);
         return;
       }
       const prepared = await prepareCodexProfileSave(
@@ -228,14 +229,14 @@ function useProviderSaves(
       setAppFilter("codex");
       setEditorSession(null);
       await refresh();
-      await selectProfile(saved.profile.id);
+      await setTargetProfile(saved.profile.id);
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
   }, [busy, clearError, editorSession, invalidateCandidates, onError, refresh,
-    selectProfile, setAppFilter, setBusy, setEditorSession]);
+    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
 
   /** The Codex official-login record is an ordinary generic-boundary record:
    * it saves through the same prepare/commit transaction as a Claude profile,
@@ -266,14 +267,14 @@ function useProviderSaves(
       setAppFilter("codex");
       setEditorSession(null);
       await refresh();
-      await selectProfile(saved.profile.id);
+      await setTargetProfile(saved.profile.id);
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
   }, [busy, clearError, editorSession, invalidateCandidates, onError, refresh,
-    selectProfile, setAppFilter, setBusy, setEditorSession]);
+    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
 
   const runPendingSave = useCallback(async () => {
     if (busy || !pendingSave) return;
@@ -289,14 +290,14 @@ function useProviderSaves(
       setAppFilter(pending.app);
       setEditorSession(null);
       await refresh();
-      await selectProfile(saved.profile.id);
+      await setTargetProfile(saved.profile.id);
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
   }, [busy, clearError, invalidateCandidates, onError, pendingSave, refresh,
-    selectProfile, setAppFilter, setBusy, setEditorSession]);
+    setTargetProfile, setAppFilter, setBusy, setEditorSession]);
   return { pendingSave, setPendingSave, saveProfile, saveCodexProfile, saveCodexOfficialProfile, runPendingSave };
 }
 
@@ -372,7 +373,7 @@ export type PendingProviderRemoval =
 
 function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSession) {
   const { busy, clearError, codexOfficialRecords, invalidateCandidates, onError, records, refresh,
-    selectedId, setBusy, setSelectedId } = deps;
+    targetProfileId, setBusy, setTargetProfileId } = deps;
   const [deletePending, setDeletePending] = useState<PendingProviderRemoval | null>(null);
   const [resetStorePending, setResetStorePending] = useState(false);
   const runDelete = useCallback(async () => {
@@ -408,8 +409,8 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
     clearError();
     try {
       await deleteProfile(id, record.fileHash);
-      if (selectedId === id) {
-        setSelectedId(null);
+      if (targetProfileId === id) {
+        setTargetProfileId(null);
       }
       setEditorSession((current) =>
         current?.app === "codex" && current.source?.kind === "official"
@@ -425,7 +426,7 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
       setBusy(false);
     }
   }, [busy, clearError, codexOfficialRecords, deletePending, invalidateCandidates, onError, records,
-    refresh, selectedId, setBusy, setSelectedId, setEditorSession]);
+    refresh, targetProfileId, setBusy, setTargetProfileId, setEditorSession]);
 
   const runResetStore = useCallback(async () => {
     if (busy || !resetStorePending) return;
@@ -433,7 +434,7 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
     invalidateCandidates();
     setBusy(true);
     clearError();
-    setSelectedId(null);
+    setTargetProfileId(null);
     setEditorSession(null);
     try {
       await resetProfileStore(true);
@@ -444,7 +445,7 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
       setBusy(false);
     }
   }, [busy, clearError, invalidateCandidates, onError, refresh,
-    resetStorePending, setBusy, setSelectedId, setEditorSession]);
+    resetStorePending, setBusy, setTargetProfileId, setEditorSession]);
   return { deletePending, setDeletePending, resetStorePending, setResetStorePending, runDelete, runResetStore };
 }
 

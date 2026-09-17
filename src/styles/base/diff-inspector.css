@@ -20,7 +20,7 @@
   gap: var(--asb-space-hairline);
   padding: var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -45,7 +45,7 @@
 .asb-diff-remove {
   display: inline-block;
   padding: 0 var(--asb-space-1);
-  border-radius: var(--asb-radius-check);
+  border-radius: var(--asb-radius);
   overflow-wrap: anywhere;
 }
 

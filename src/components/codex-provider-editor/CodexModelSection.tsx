@@ -24,11 +24,109 @@ interface Props {
   userConfigWarnings: string[];
 }
 
+type CatalogUpdate = (patch: Partial<EditableCodexCatalogEntry>) => void;
+
+function imageInputLabel(entry: EditableCodexCatalogEntry): string {
+  if (entry.imageInputEvidence === false) return "图片输入（不支持）";
+  return !entry.images && entry.imageInputEvidence === null ? "图片输入（未确认）" : "图片输入";
+}
+
+function imageInputNote(entry: EditableCodexCatalogEntry): string {
+  if (entry.imageInputEvidence === false) return "模型列表已明确声明不支持图片输入。";
+  if (entry.images) return "当前档案会将此模型声明为支持图片输入。";
+  if (entry.imageInputEvidence === true) return "模型列表已声明支持图片输入；当前档案未启用。";
+  return "模型列表未返回图片输入能力；默认不发送图片。确认支持后可勾选。";
+}
+
+function CatalogCapabilities({ entry, capabilities, busy, update, toggleReasoning }: {
+  entry: EditableCodexCatalogEntry;
+  capabilities: CodexEditorState["draft"]["capabilities"];
+  busy: boolean;
+  update: CatalogUpdate;
+  toggleReasoning: (reasoning: boolean) => void;
+}) {
+  const imageInputUnknown = !entry.images && entry.imageInputEvidence === null;
+  return <>
+    <div className="asb-provider-catalog-row-flags" role="group" aria-label={`${entry.id || "模型"} 能力`}>
+      <Checkbox label="函数工具" ariaLabel={`${entry.id || "模型"} 函数工具`} checked={entry.functionTools}
+        disabled={busy || !capabilities.functionTools}
+        onChange={(checked) => update({ functionTools: checked && capabilities.functionTools })} />
+      <Checkbox label="自定义工具" ariaLabel={`${entry.id || "模型"} 自定义工具`} checked={entry.customTools}
+        disabled={busy || !capabilities.customTools}
+        onChange={(checked) => update({ customTools: checked && capabilities.customTools })} />
+      <Checkbox label="工具搜索" ariaLabel={`${entry.id || "模型"} 工具搜索`} checked={entry.toolSearch}
+        disabled={busy || !capabilities.toolSearch}
+        onChange={(checked) => update({ toolSearch: checked && capabilities.toolSearch })} />
+      <Checkbox label="推理" ariaLabel={`${entry.id || "模型"} 推理`} checked={entry.reasoning}
+        disabled={busy || !capabilities.reasoning}
+        onChange={(checked) => toggleReasoning(checked && capabilities.reasoning)} />
+      <Checkbox label={imageInputLabel(entry)} ariaLabel={`${entry.id || "模型"} ${imageInputLabel(entry)}`} checked={entry.images}
+        indeterminate={imageInputUnknown} disabled={busy || entry.imageInputEvidence === false}
+        onChange={(checked) => update({
+          images: checked,
+          imageInputEvidence: checked ? true : entry.imageInputEvidence,
+        })} />
+      <Checkbox label="压缩" ariaLabel={`${entry.id || "模型"} 压缩`} checked={entry.compact}
+        disabled={busy || !capabilities.compact}
+        onChange={(checked) => update({ compact: checked && capabilities.compact })} />
+    </div>
+    <p className="asb-scope-note">{imageInputNote(entry)}</p>
+  </>;
+}
+
 /** Parses a limit input: a positive integer is stored as-is, anything else
  * (including empty) means "use the model's default". */
 function parseLimitInput(raw: string): number | null {
   const parsed = Number(raw.trim());
   return raw.trim() && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function CatalogLimits({ entry, busy, defaults, update, toggleLevel }: {
+  entry: EditableCodexCatalogEntry;
+  busy: boolean;
+  defaults: ReturnType<typeof defaultModelLimits>;
+  update: CatalogUpdate;
+  toggleLevel: (level: CodexReasoningLevel) => void;
+}) {
+  return <>
+    <div className="asb-provider-field-grid">
+      <label className="asb-field">
+        <span>上下文窗口</span>
+        <Input aria-label={`${entry.id || "模型"} 上下文窗口`} type="number" min="1" step="1"
+          placeholder={`默认 ${defaults.contextWindow.toLocaleString("en-US")}`}
+          value={entry.contextWindow?.toString() ?? ""} disabled={busy}
+          onChange={(event) => update({ contextWindow: parseLimitInput(event.target.value) })} />
+      </label>
+      <label className="asb-field">
+        <span>输出上限</span>
+        <Input aria-label={`${entry.id || "模型"} 输出上限`} type="number" min="1" step="1"
+          placeholder={`默认 ${defaults.maxOutputTokens.toLocaleString("en-US")}`}
+          value={entry.maxOutputTokens?.toString() ?? ""} disabled={busy}
+          onChange={(event) => update({ maxOutputTokens: parseLimitInput(event.target.value) })} />
+      </label>
+      <label className="asb-field">
+        <span>默认推理档位</span>
+        <Select ariaLabel={`${entry.id || "模型"} 默认推理档位`} disabled={busy}
+          value={entry.defaultReasoningLevel}
+          options={entry.supportedReasoningLevels.map((level) => ({
+            value: level, label: REASONING_LEVEL_LABELS[level],
+          }))}
+          onChange={(value) => update({ defaultReasoningLevel: value as CodexReasoningLevel })} />
+      </label>
+    </div>
+    <div className="asb-provider-catalog-row-levels">
+      <span className="asb-catalog-levels-label">支持推理档位</span>
+      <div className="asb-catalog-levels-options" role="group" aria-label={`${entry.id || "模型"} 支持推理档位`}>
+        {REASONING_LEVELS.map((level) => (
+          <Checkbox key={level} label={REASONING_LEVEL_LABELS[level]}
+            ariaLabel={`${entry.id || "模型"} 支持${REASONING_LEVEL_LABELS[level]}档位`}
+            checked={entry.supportedReasoningLevels.includes(level)}
+            disabled={busy || !entry.reasoning}
+            onChange={() => toggleLevel(level)} />
+        ))}
+      </div>
+    </div>
+  </>;
 }
 
 function CatalogRow({ editor, busy, entry, index }: {
@@ -79,61 +177,10 @@ function CatalogRow({ editor, busy, entry, index }: {
           </Button>
         </Tooltip>
       </div>
-      <div className="asb-provider-field-grid">
-        <label className="asb-field">
-          <span>上下文窗口</span>
-          <Input aria-label={`${entry.id || "模型"} 上下文窗口`} type="number" min="1" step="1"
-            placeholder={`默认 ${defaults.contextWindow.toLocaleString("en-US")}`}
-            value={entry.contextWindow?.toString() ?? ""} disabled={busy}
-            onChange={(event) => update({ contextWindow: parseLimitInput(event.target.value) })} />
-        </label>
-        <label className="asb-field">
-          <span>输出上限</span>
-          <Input aria-label={`${entry.id || "模型"} 输出上限`} type="number" min="1" step="1"
-            placeholder={`默认 ${defaults.maxOutputTokens.toLocaleString("en-US")}`}
-            value={entry.maxOutputTokens?.toString() ?? ""} disabled={busy}
-            onChange={(event) => update({ maxOutputTokens: parseLimitInput(event.target.value) })} />
-        </label>
-        <label className="asb-field">
-          <span>默认推理档位</span>
-          <Select ariaLabel={`${entry.id || "模型"} 默认推理档位`} disabled={busy}
-            value={entry.defaultReasoningLevel}
-            options={entry.supportedReasoningLevels.map((level) => ({
-              value: level, label: REASONING_LEVEL_LABELS[level],
-            }))}
-            onChange={(value) => update({ defaultReasoningLevel: value as CodexReasoningLevel })} />
-        </label>
-      </div>
-      <div className="asb-provider-catalog-row-levels">
-        <span className="asb-catalog-levels-label">支持推理档位</span>
-        <div className="asb-catalog-levels-options" role="group" aria-label={`${entry.id || "模型"} 支持推理档位`}>
-          {REASONING_LEVELS.map((level) => (
-            <Checkbox key={level} label={REASONING_LEVEL_LABELS[level]}
-              ariaLabel={`${entry.id || "模型"} 支持${REASONING_LEVEL_LABELS[level]}档位`}
-              checked={entry.supportedReasoningLevels.includes(level)}
-              disabled={busy || !entry.reasoning}
-              onChange={() => toggleLevel(level)} />
-          ))}
-        </div>
-      </div>
-      <div className="asb-provider-catalog-row-flags" role="group" aria-label={`${entry.id || "模型"} 能力`}>
-        <Checkbox label="函数工具" ariaLabel={`${entry.id || "模型"} 函数工具`} checked={entry.functionTools}
-          disabled={busy || !capabilities.functionTools}
-          onChange={(checked) => update({ functionTools: checked && capabilities.functionTools })} />
-        <Checkbox label="自定义工具" ariaLabel={`${entry.id || "模型"} 自定义工具`} checked={entry.customTools}
-          disabled={busy || !capabilities.customTools}
-          onChange={(checked) => update({ customTools: checked && capabilities.customTools })} />
-        <Checkbox label="工具搜索" ariaLabel={`${entry.id || "模型"} 工具搜索`} checked={entry.toolSearch}
-          disabled={busy || !capabilities.toolSearch}
-          onChange={(checked) => update({ toolSearch: checked && capabilities.toolSearch })} />
-        <Checkbox label="推理" ariaLabel={`${entry.id || "模型"} 推理`} checked={entry.reasoning} disabled={busy || !capabilities.reasoning}
-          onChange={(checked) => toggleReasoning(checked && capabilities.reasoning)} />
-        <Checkbox label="图像" ariaLabel={`${entry.id || "模型"} 图像`} checked={entry.images} disabled={busy}
-          onChange={(checked) => update({ images: checked })} />
-        <Checkbox label="压缩" ariaLabel={`${entry.id || "模型"} 压缩`} checked={entry.compact}
-          disabled={busy || !capabilities.compact}
-          onChange={(checked) => update({ compact: checked && capabilities.compact })} />
-      </div>
+      <CatalogLimits entry={entry} busy={busy} defaults={defaults}
+        update={update} toggleLevel={toggleLevel} />
+      <CatalogCapabilities entry={entry} capabilities={capabilities} busy={busy}
+        update={update} toggleReasoning={toggleReasoning} />
       {entry.reasoning && !capabilities.reasoning && (
         <p className="asb-scope-note asb-warn-text">供应商能力未声明推理。</p>
       )}
@@ -217,10 +264,10 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
               onChange={(value) => setDraft((current) => ({ ...current, defaultModel: value }))} />
           </label>
           <div className="asb-provider-model-actions" aria-label="模型目录操作">
-            <Tooltip label={connection.modelsBusy ? "正在获取模型" : "获取模型"}>
-              <Button variant="icon" aria-label={connection.modelsBusy ? "正在获取模型" : "获取模型"}
+            <Tooltip label={connection.modelsBusy ? "正在获取模型" : connection.modelsEndpointError ?? "获取模型"}>
+              <Button variant="icon" aria-label={connection.modelsBusy ? "正在获取模型" : connection.modelsEndpointError ?? "获取模型"}
                 aria-busy={connection.modelsBusy || undefined}
-                disabled={busy || connection.modelsBusy || !connection.baseUrl}
+                disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
                 onClick={() => void fetchIntoCatalog()}>
                 <UpdateIcon />
               </Button>
@@ -241,8 +288,9 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
         {userConfigWarnings.map((warning) => (
           <p key={warning} className="asb-scope-note asb-warn-text">{warning}</p>
         ))}
-        {connection.modelsError && <span className="asb-warn-text">{connection.modelsError}</span>}
-        <p className="asb-scope-note">「获取模型」按已声明的供应商能力生成目录行；上下文窗口与输出上限留空即按官方参数（无则按通用默认值）保存，能力声明本身不会被推断。</p>
+        {connection.modelsEndpointError && <span className="asb-warn-text">{connection.modelsEndpointError}</span>}
+        {connection.modelsError && connection.modelsError !== connection.modelsEndpointError && <span className="asb-warn-text">{connection.modelsError}</span>}
+        <p className="asb-scope-note">「获取模型」按已声明的供应商能力生成目录行；仅当上游明确返回 input_modalities 时自动确认图片输入，未返回时显示“未确认”并默认关闭。上下文窗口与输出上限留空即按官方参数（无则按通用默认值）保存，能力声明本身不会被推断。</p>
         <div className="asb-provider-catalog">
           {draft.catalog.map((entry, index) => (
             <CatalogRow key={index} editor={editor} busy={busy} entry={entry} index={index} />

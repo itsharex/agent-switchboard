@@ -8,20 +8,22 @@ namespace AgentSwitchboard.Installer
         [STAThread]
         private static int Main(string[] args)
         {
-            bool silent = Array.IndexOf(args, "/S") >= 0;
             try
             {
-                var options = InstallOptions.Parse(Environment.CommandLine);
-                if (options.Directory == null) options.Directory = InstallerEngine.DetectDirectory();
-                if (options.Silent) return InstallerEngine.Run(options).GetAwaiter().GetResult().ExitCode;
+                var invocation = InstallerInvocation.Parse(args);
                 var application = new Application();
-                var window = new InstallerWindow(options, InstallerEngine.Package[1]);
+                var window = new InstallerWindow(invocation);
                 application.Run(window);
                 return window.ExitCode;
             }
             catch (Exception error)
             {
-                if (!silent) MessageBox.Show(error.Message, "Agent Switchboard", MessageBoxButton.OK, MessageBoxImage.Error);
+                var text = new InstallerText();
+                MessageBox.Show(
+                    text.StartupFailure(error),
+                    text.WindowTitle,
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return 2;
             }
         }

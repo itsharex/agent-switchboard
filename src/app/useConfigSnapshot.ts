@@ -29,7 +29,7 @@ export interface ProviderInventory {
 
 /**
  * The observable client snapshot: file statuses, provider files, backups, and
- * locks, plus the selected profile id. One versioned `refresh` keeps late
+ * locks, plus the target profile id. One versioned `refresh` keeps late
  * responses from overwriting newer ones.
  */
 export function useConfigSnapshot({ onError }: SnapshotDeps) {
@@ -40,7 +40,7 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [locks, setLocks] = useState<Partial<Record<AppKind, LockStatus>>>({});
   const [loginBlocker, setLoginBlocker] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [targetProfileId, setTargetProfileId] = useState<string | null>(null);
   const refreshVersion = useRef(0);
 
   const profiles = useMemo(() => records.map((record) => record.profile), [records]);
@@ -77,7 +77,7 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
       setBackups(nextBackups);
       setLocks({ codex: codexLock, claude: claudeLock });
       setLoginBlocker(nextLoginBlocker);
-      setSelectedId((current) =>
+      setTargetProfileId((current) =>
         current && (nextRecords.some((record) => record.profile.id === current)
           || nextCodexOfficial.some((record) => record.profile.id === current)
           || nextCodexRecords.some((record) => record.profile.id === current))
@@ -162,8 +162,8 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
     locks,
     /** Why third-party Codex switching is currently blocked, or null. */
     loginBlocker,
-    selectedId,
-    setSelectedId,
+    targetProfileId,
+    setTargetProfileId,
     refresh,
     activeProfileId,
   };

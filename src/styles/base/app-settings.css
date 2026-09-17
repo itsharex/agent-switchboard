@@ -20,7 +20,7 @@
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -79,7 +79,6 @@
     white-space: normal;
   }
 
-  .asb-app-setting-row .asb-segments,
   .asb-app-setting-row .asb-switch {
     justify-self: start;
   }
@@ -90,6 +89,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-4);
+}
+
+:where(.asb-client-settings-panel, .asb-provider-parameters) {
+  --asb-settings-module-bg: var(--asb-content-muted);
+  --asb-settings-module-border: var(--asb-hairline-strong);
+  --asb-settings-row-bg: var(--asb-content);
+  --asb-settings-row-border: var(--asb-hairline);
 }
 
 .asb-toggle-group {
@@ -120,7 +126,7 @@
   min-height: var(--asb-touch-target);
   padding: 0 var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -151,8 +157,9 @@
   white-space: nowrap;
 }
 
-/* Client preferences provide their saved values as a baseline. A changed
-   control owns its compact diff directly below the control surface. */
+/* Compact parameter rows provide a saved baseline. Their changed-control
+   diff remains directly below the control surface. Client preferences render
+   their corresponding change inside the official-file code module instead. */
 .asb-setting-diff {
   grid-column: 1 / -1;
   margin-top: var(--asb-space-1);
@@ -174,5 +181,67 @@
   justify-self: end;
   font: var(--asb-text-caption);
   color: var(--asb-text-muted);
+}
+
+/* Client preferences and provider parameters share the decision-row anatomy.
+   Client preferences add their own on-demand official-file code evidence. */
+.asb-setting-pending {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--asb-action);
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+.asb-client-setting-code {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border-top: 1px solid var(--asb-hairline);
+}
+.asb-client-setting-code > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--asb-control-height-compact);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  cursor: pointer;
+  list-style: none;
+}
+.asb-client-setting-code > summary::-webkit-details-marker { display: none; }
+.asb-client-setting-code > summary::before {
+  content: "›";
+  margin-right: var(--asb-space-1);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-title);
+  line-height: 1;
+  transition: transform var(--asb-motion-press) var(--asb-easing);
+}
+.asb-client-setting-code[open] > summary::before { transform: rotate(90deg); }
+.asb-client-setting-code > code {
+  display: block;
+  max-height: 12rem;
+  margin-bottom: var(--asb-space-2);
+  overflow: auto;
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.asb-client-setting-code-old,
+.asb-client-setting-code-new {
+  display: block;
+  white-space: pre-wrap;
+}
+.asb-client-setting-code-old {
+  color: var(--asb-danger);
+  background: var(--asb-diff-remove-bg);
+}
+.asb-client-setting-code-new {
+  color: var(--asb-diff-add-text);
+  background: var(--asb-diff-add-bg);
 }
 

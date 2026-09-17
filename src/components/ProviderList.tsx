@@ -1,11 +1,9 @@
 import type { ProviderProfile, ProviderRequestTarget } from "../api/client";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ConnectivityIcon,
   EditIcon,
-  EyeOffIcon,
-  PreviewIcon,
   TrashIcon,
   UsageIcon,
 } from "./icons";
@@ -15,7 +13,7 @@ import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderRowShell, SortableProviderRows } from "./ProviderWorkspaceShell";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
-import { formatUsageSummary } from "../lib/usage-format";
+import { formatUsageHighlight, formatUsageSummary } from "../lib/usage-format";
 import { Tooltip } from "./Tooltip";
 import { ProviderTestPanel } from "./ProviderTestPanel";
 
@@ -25,13 +23,9 @@ interface Props {
   activeProfileId: string | null;
   /** Model read from the displayed client's user-level configuration file. */
   userConfigModel: string | null;
-  selectedId: string | null;
-  /** Profile whose preview is currently unfolded under the list. */
-  openPreviewId?: string | null;
   /** Persisted profile ids whose usage panel is collapsed; every other
    * configured panel stays expanded. */
   collapsedUsageIds?: string[];
-  onSelect: (id: string) => void;
   /** Persists a new display order for the visible client's profiles. */
   onReorder?: (orderedIds: string[]) => void;
   /** Persists the flipped usage-panel state for the profile. */
@@ -40,14 +34,10 @@ interface Props {
   onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   /** Requests a fresh candidate and the explicit write confirmation. */
   onActivate?: (profile: ProviderProfile) => void;
-  onPreview?: (profile: ProviderProfile) => void;
   onEdit?: (profile: ProviderProfile) => void;
   /** Opens the dedicated usage-query workspace for this profile. */
   onConfigureUsage?: (profile: ProviderProfile) => void;
   onDelete?: (profile: ProviderProfile) => void;
-  /** Expansion content rendered inside the previewed row's own card, under
-   * the row line. Ownership stays with the caller; the list only places it. */
-  renderPreview?: (profile: ProviderProfile) => ReactNode;
 }
 
 function hostLabel(url: string): string {
@@ -62,23 +52,18 @@ interface RowProps {
   profile: ProviderProfile;
   active: boolean;
   userConfigModel: string | null;
-  selected: boolean;
-  previewOpen: boolean;
   usageOpen: boolean;
   /** Official Codex rows: whether the subscription-quota ledger is unfolded,
    * persisted through the same collapsed-usage owner as `usageOpen`. */
   quotaOpen: boolean;
   sortable: boolean;
-  onSelect: (id: string) => void;
   onToggleUsage: (profile: ProviderProfile) => void;
   /** Persists the official Codex quota panel's auto-refresh interval. */
   onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   onActivate?: (profile: ProviderProfile) => void;
-  onPreview?: (profile: ProviderProfile) => void;
   onEdit?: (profile: ProviderProfile) => void;
   onConfigureUsage?: (profile: ProviderProfile) => void;
   onDelete?: (profile: ProviderProfile) => void;
-  renderPreview?: (profile: ProviderProfile) => ReactNode;
 }
 
 function ConfiguredProviderRow(props: RowProps) {
@@ -93,20 +78,15 @@ function ProviderRow({
   profile,
   active,
   userConfigModel,
-  selected,
-  previewOpen,
   usageOpen,
   quotaOpen,
   sortable,
-  onSelect,
   onToggleUsage,
   onSaveQuotaInterval,
   onActivate,
-  onPreview,
   onEdit,
   onConfigureUsage,
   onDelete,
-  renderPreview,
   usage,
 }: RowProps & { usage?: ProviderUsage }) {
   const baseUrl = profile.baseUrl;
@@ -121,9 +101,10 @@ function ProviderRow({
   const official = profile.routeMode === "official";
   const officialQuota = official && profile.app === "codex";
   const displayedModel = active ? userConfigModel : profile.model;
-  const modelText = active
-    ? `当前用户级配置模型：${displayedModel ?? "默认模型"}`
-    : displayedModel;
+  const modelText = displayedModel ?? "默认模型";
+  const modelTitle = active
+    ? `从实际用户级配置读取：${modelText}`
+    : `档案模型：${modelText}`;
   const hasUsageQuery = profile.usageQuery !== null && profile.usageQuery !== undefined;
   const usageLabel = hasUsageQuery
     ? usageOpen
@@ -140,18 +121,21 @@ function ProviderRow({
       hasUsageQuery ||
       officialQuota ||
       (!official && onConfigureUsage) ||
-      onPreview ||
       onEdit ||
       onDelete,
   );
-  const details = !official && !(usage && !usageOpen) ? undefined : (
+  const details = !official && !usage ? undefined : (
     <>
       {official && <span>官方登录</span>}
-      {usage && !usageOpen && (
-        <span aria-label={`${profile.name} 用量摘要`} title={usage.error ?? undefined}>
-          {usage.data ? formatUsageSummary(usage.data) : usage.error ? "用量查询失败" : "用量读取中…"}
-          {usage.data && usage.error && "（更新失败，显示上次读数）"}
-          {usage.data && usage.querying && "（更新中…）"}
+      {usage && (
+        <span
+          className="asb-row-usage-summary"
+          aria-label={`${profile.name} 用量摘要`}
+          title={usage.data ? formatUsageSummary(usage.data) : usage.error ?? undefined}
+        >
+          {usage.data ? formatUsageHighlight(usage.data) : usage.error ? "用量查询失败" : "正在读取用量"}
+          {usage.data && usage.error && " · 更新失败"}
+          {usage.data && usage.querying && " · 更新中"}
         </span>
       )}
     </>
@@ -177,19 +161,18 @@ function ProviderRow({
       id={profile.id}
       name={profile.name}
       active={active}
-      selected={selected}
-      previewOpen={previewOpen}
+      confirmationOpen={false}
       sortable={sortable}
-      model={modelText}
-      url={providerUrl}
-      details={details}
-      primaryAction={onActivate ? (
+      model={<span title={modelTitle}>{modelText}</span>}
+      endpoint={providerUrl}
+      summary={details}
+      primaryAction={!active && onActivate ? (
         <Tooltip label={`启用 ${profile.name}`}>
           <Button
             variant="primary"
             className="asb-row-activate"
             aria-label={`启用 ${profile.name}`}
-            onClick={() => { onSelect(profile.id); onActivate(profile); }}
+            onClick={() => onActivate(profile)}
           >
             启用
           </Button>
@@ -202,7 +185,7 @@ function ProviderRow({
             className={`asb-row-activate${reloginOpen ? " is-active" : ""}`}
             aria-label={reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`}
             aria-expanded={reloginOpen}
-            onClick={() => { onSelect(profile.id); setReloginOpen((open) => !open); }}
+            onClick={() => setReloginOpen((open) => !open)}
           >
             {reloginOpen ? "收起登录" : "重新登录"}
           </Button>
@@ -215,22 +198,9 @@ function ProviderRow({
               <Button
                 variant="icon"
                 aria-label={`编辑 ${profile.name}`}
-                onClick={() => { onSelect(profile.id); onEdit(profile); }}
+                onClick={() => onEdit(profile)}
               >
                 <EditIcon />
-              </Button>
-            </Tooltip>
-          )}
-          {onPreview && (
-            <Tooltip label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}>
-              <Button
-                variant="icon"
-                className={previewOpen ? "is-active" : undefined}
-                aria-label={previewOpen ? `收起 ${profile.name} 预览` : `预览 ${profile.name} 变更`}
-                aria-expanded={previewOpen}
-                onClick={() => { onSelect(profile.id); onPreview(profile); }}
-              >
-                {previewOpen ? <EyeOffIcon /> : <PreviewIcon />}
               </Button>
             </Tooltip>
           )}
@@ -243,7 +213,7 @@ function ProviderRow({
                 aria-label={testLabel}
                 aria-controls={testId}
                 aria-expanded={testOpen}
-                onClick={() => { onSelect(profile.id); setTestOpen((open) => !open); }}
+                onClick={() => setTestOpen((open) => !open)}
               >
                 <ConnectivityIcon />
               </Button>
@@ -257,7 +227,7 @@ function ProviderRow({
                 aria-label={quotaLabel}
                 aria-controls={`codex-official-quota-${profile.id}`}
                 aria-expanded={quotaOpen}
-                onClick={() => { onSelect(profile.id); onToggleUsage(profile); }}
+                onClick={() => onToggleUsage(profile)}
               >
                 <UsageIcon />
               </Button>
@@ -269,10 +239,9 @@ function ProviderRow({
                 variant="icon"
                 className={usageOpen ? "is-active" : undefined}
                 aria-label={usageLabel}
-                aria-controls={hasUsageQuery ? `provider-usage-${profile.id}` : undefined}
+                aria-controls={hasUsageQuery && usageOpen ? `provider-usage-${profile.id}` : undefined}
                 aria-expanded={hasUsageQuery ? usageOpen : undefined}
                 onClick={() => {
-                  onSelect(profile.id);
                   if (hasUsageQuery) onToggleUsage(profile);
                   else onConfigureUsage?.(profile);
                 }}
@@ -286,7 +255,7 @@ function ProviderRow({
               <Button
                 variant="icon"
                 aria-label={`删除 ${profile.name}`}
-                onClick={() => { onSelect(profile.id); onDelete(profile); }}
+                onClick={() => onDelete(profile)}
               >
                 <TrashIcon />
               </Button>
@@ -299,7 +268,7 @@ function ProviderRow({
         <ProviderTestPanel id={testId} name={profile.name} url={baseUrl} target={target}
           onClose={() => { setTestOpen(false); testTriggerRef.current?.focus(); }} />
       )}
-      {usageOpen && usage && (
+      {hasUsageQuery && usageOpen && usage && (
         <ProviderUsagePanel
           id={`provider-usage-${profile.id}`}
           profile={profile}
@@ -325,7 +294,6 @@ function ProviderRow({
           onSaveInterval={(minutes) => onSaveQuotaInterval(profile, minutes)}
         />
       )}
-      {previewOpen && renderPreview && renderPreview(profile)}
     </ProviderRowShell>
   );
 }
@@ -334,19 +302,14 @@ export function ProviderList({
   profiles,
   activeProfileId,
   userConfigModel,
-  selectedId,
-  openPreviewId,
   collapsedUsageIds = [],
-  onSelect,
   onReorder,
   onToggleUsage,
   onSaveQuotaInterval,
   onActivate,
-  onPreview,
   onEdit,
   onConfigureUsage,
   onDelete,
-  renderPreview,
 }: Props) {
   const ids = profiles.map((profile) => profile.id);
   return (
@@ -358,8 +321,6 @@ export function ProviderList({
           profile={profile}
           active={profile.id === activeProfileId}
           userConfigModel={userConfigModel}
-          selected={selectedId === profile.id}
-          previewOpen={profile.id === openPreviewId}
           usageOpen={Boolean(profile.usageQuery) && !collapsedUsageIds.includes(profile.id)}
           quotaOpen={
             profile.routeMode === "official" &&
@@ -367,15 +328,12 @@ export function ProviderList({
             !collapsedUsageIds.includes(profile.id)
           }
           sortable={Boolean(onReorder)}
-          onSelect={onSelect}
           onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
           onSaveQuotaInterval={onSaveQuotaInterval}
           onActivate={onActivate}
-          onPreview={onPreview}
           onEdit={onEdit}
           onConfigureUsage={onConfigureUsage}
           onDelete={onDelete}
-          renderPreview={renderPreview}
         />;
       })}
     </SortableProviderRows>

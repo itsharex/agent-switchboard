@@ -19,6 +19,7 @@ interface Props {
   models: ProviderModel[] | null;
   modelsBusy: boolean;
   modelsError: string | null;
+  modelsEndpointError: string | null;
   userConfigModel: string | null;
   userConfigWarnings: string[];
   fetchModels: () => Promise<unknown> | void;
@@ -47,6 +48,7 @@ export function MainModelField({
   models,
   modelsBusy,
   modelsError,
+  modelsEndpointError,
   userConfigModel,
   userConfigWarnings,
   fetchModels,
@@ -79,12 +81,12 @@ export function MainModelField({
           }
         />
         <div className="asb-provider-model-actions">
-          <Tooltip label={modelsBusy ? "正在获取模型" : "获取模型"}>
+          <Tooltip label={modelsBusy ? "正在获取模型" : modelsEndpointError ?? "获取模型"}>
             <Button
               variant="icon"
-              aria-label={modelsBusy ? "正在获取模型" : "获取模型"}
+              aria-label={modelsBusy ? "正在获取模型" : modelsEndpointError ?? "获取模型"}
               aria-busy={modelsBusy || undefined}
-              disabled={busy || modelsBusy || !baseUrl}
+              disabled={busy || modelsBusy || !baseUrl || !!modelsEndpointError}
               onClick={() => void fetchModels()}
             >
               <UpdateIcon />
@@ -100,7 +102,8 @@ export function MainModelField({
           {warning}
         </p>
       ))}
-      {modelsError && <span className="asb-warn-text">{modelsError}</span>}
+      {modelsEndpointError && <span className="asb-warn-text">{modelsEndpointError}</span>}
+      {modelsError && modelsError !== modelsEndpointError && <span className="asb-warn-text">{modelsError}</span>}
     </div>
   );
 }

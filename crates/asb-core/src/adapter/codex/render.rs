@@ -48,16 +48,6 @@ pub(crate) fn render_client_settings_into_file(
     render_entries(current, client_settings_overlay(client_settings))
 }
 
-pub(crate) fn render_client_settings(
-    client_settings: &SettingsValues,
-) -> Result<String, AdapterError> {
-    let rendered = render_entries("", client_settings_overlay(client_settings))?;
-    Ok(if rendered.trim().is_empty() {
-        "# 所有客户端设置均为自动\n".to_string()
-    } else {
-        rendered
-    })
-}
 
 pub(crate) fn render_entries(
     current: &str,
@@ -76,5 +66,8 @@ pub(crate) fn render_entries(
             }
         }
     }
+    // A retired ASB-owned alias is cleaned by every Codex configuration write,
+    // not only by the subagent settings form.
+    super::subagents::remove_retired_keys(&mut doc)?;
     Ok(doc.to_string())
 }

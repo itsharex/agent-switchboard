@@ -1,6 +1,6 @@
 import type { ExtensionListItem, McpEditViewEnvelope } from "../../api/client";
 import type { SkillUpdatePreparation } from "../../app/extensions/extension-ops";
-import { ExtensionDialog } from "../../components/extensions/ExtensionDialog";
+import { AppDialog } from "../../components/AppDialog";
 import { McpEditForm } from "../../components/extensions/McpEditForm";
 import { SkillWorkbench } from "../../components/extensions/SkillWorkbench";
 import { toast } from "../../components/use-toast";
@@ -36,7 +36,7 @@ export function McpEditorDialog({
   envelope: McpEditViewEnvelope;
 }) {
   return (
-    <ExtensionDialog title={`编辑 MCP · ${envelope.name}`} busy={w.busy} onClose={w.nav.closeDialog} wide>
+    <AppDialog title={`编辑 MCP · ${envelope.name}`} busy={w.busy} onClose={w.nav.closeDialog} wide>
       <McpEditForm
         envelope={envelope}
         busy={w.writeBlocked}
@@ -48,7 +48,7 @@ export function McpEditorDialog({
           return deployUpdatedDefinition(w, result);
         }}
       />
-    </ExtensionDialog>
+    </AppDialog>
   );
 }
 
@@ -60,7 +60,7 @@ export function SkillEditorDialog({
   item: Extract<ExtensionListItem, { kind: "skill" }>;
 }) {
   return (
-    <ExtensionDialog title={`编辑 Skill · ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog} wide>
+    <AppDialog title={`编辑 Skill · ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog} wide>
       <SkillWorkbench
         item={item}
         mcpOptions={w.items
@@ -85,6 +85,6 @@ export function SkillEditorDialog({
         }
         onClose={w.nav.closeDialog}
       />
-    </ExtensionDialog>
+    </AppDialog>
   );
 }

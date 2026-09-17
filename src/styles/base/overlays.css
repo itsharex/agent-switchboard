@@ -6,7 +6,7 @@
   gap: var(--asb-space-3);
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-2) var(--asb-space-3);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   font: var(--asb-text-body);
   /* Elevated floating status: near-solid backdrop + modal shadow keep the
      text readable over scrolling content. */
@@ -93,7 +93,7 @@
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-panel);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
 }
@@ -149,15 +149,6 @@
 .asb-dialog-body > p {
   margin: 0;
 }
-
-/* Grouped local-management tasks replace a long row of feature tabs. */
-.asb-management-group {
-  display: grid;
-  gap: var(--asb-space-5);
-}
-
-.asb-management-section { min-width: 0; }
-.asb-management-section > summary { font: var(--asb-text-section); }
 
 .asb-dialog-footer {
   display: flex;
@@ -236,7 +227,7 @@
   padding: var(--asb-space-2) var(--asb-space-2) var(--asb-space-2) var(--asb-space-3);
   pointer-events: auto;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-panel);
+  border-radius: var(--asb-radius);
   background: var(--asb-surface-menu);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
   color: var(--asb-text);

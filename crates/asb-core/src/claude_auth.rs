@@ -52,7 +52,7 @@ pub fn managed_auth(
     if selected.is_some()
         && (options.is_full_url
             || !options.custom_endpoints.is_empty()
-            || options.claude_models_url.is_some())
+            || options.models_url.is_some())
     {
         return Err("Claude 托管账号的请求与模型端点由授权服务确定，不能使用完整 URL、自定义端点或模型地址覆盖".into());
     }
@@ -154,9 +154,9 @@ mod endpoint_tests {
         };
         assert!(managed_auth(&options).is_err());
         options.is_full_url = false;
-        options.claude_models_url = Some("https://other.example/models".into());
+        options.models_url = Some("https://other.example/models".into());
         assert!(managed_auth(&options).is_err());
-        options.claude_models_url = None;
+        options.models_url = None;
         options.custom_user_agent = Some("ASB custom client".into());
         assert!(managed_auth(&options).is_ok());
     }

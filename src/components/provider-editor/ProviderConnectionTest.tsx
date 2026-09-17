@@ -30,25 +30,36 @@ export function ProviderConnectionTest({
   const [open, setOpen] = useState(false);
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
-  const valid = upstreamProtocol === "responses"
-    ? responsesOptions !== null
-    : responsesOptions === null;
+  const valid = upstreamProtocol === "responses" ? responsesOptions !== null : responsesOptions === null;
   const target = useMemo<ProviderRequestTarget | null>(() =>
     baseUrl?.trim() && (apiKey.trim() || (app === "claude" && usesClaudeManagedAuth(connection))) && upstreamProtocol && valid ? {
-      kind: "draft", connection: { app, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(),
+      kind: "draft",
+      connection: {
+        app,
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
         ...(authentication ? { authentication } : {}),
         connection: connection ?? {},
-        upstreamProtocol, responsesOptions, defaultModel: defaultModel?.trim() || null },
-    } : null, [app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, valid]);
+        upstreamProtocol,
+        responsesOptions,
+        defaultModel: defaultModel?.trim() || null,
+      },
+    } : null,
+  [app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, valid]);
   return <section className="asb-provider-section" aria-label="连接测试">
     <h3 className="asb-section-title">连接测试</h3>
     <div className="asb-provider-section-fields">
-      <div><Button ref={trigger} variant="secondary" disabled={busy} aria-expanded={open && active}
-        aria-controls={id} onClick={() => setOpen((value) => !value)}>
-        <ConnectivityIcon />{open ? "收起测试" : "测试供应商"}
-      </Button></div>
-      {open && active && <ProviderTestPanel id={id} name="当前草稿" url={baseUrl?.trim() || null} target={target}
-        onClose={() => { setOpen(false); trigger.current?.focus(); }} />}
+      <div className="asb-provider-test-action">
+        <Button ref={trigger} variant="secondary" disabled={busy} aria-expanded={open && active}
+          aria-controls={id} onClick={() => setOpen((value) => !value)}>
+          <ConnectivityIcon />{open ? "收起测试" : "测试供应商"}
+        </Button>
+        <span className="asb-field-help">{open ? "测试工具已展开" : target ? "准备就绪" : "请先完成连接字段"}</span>
+      </div>
+      {active && <div className={`asb-provider-test-disclosure${open ? " is-open" : ""}`} aria-hidden={!open}>
+        <ProviderTestPanel id={id} name="当前草稿" url={baseUrl?.trim() || null} target={target}
+          onClose={() => { setOpen(false); trigger.current?.focus(); }} />
+      </div>}
     </div>
   </section>;
 }

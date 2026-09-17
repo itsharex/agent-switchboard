@@ -1,5 +1,4 @@
 use super::*;
-use crate::commands::claude_env as env;
 use crate::commands::claude_integration as integration;
 
 pub(super) async fn dispatch(
@@ -27,43 +26,6 @@ pub(super) async fn dispatch(
             argument(&request.args, "preview")?,
             argument(&request.args, "confirmWrite")?
         )),
-        "scan_claude_env_conflicts" => command!(env::scan_claude_env_conflicts()),
-        "remove_claude_env_conflicts" => command!(env::remove_claude_env_conflicts(
-            app.clone(),
-            argument(&request.args, "selections")?,
-            argument(&request.args, "expectedRevision")?,
-            argument(&request.args, "confirmWrite")?
-        )),
-        "list_claude_env_backups" => command!(env::list_claude_env_backups(app.clone())),
-        "restore_claude_env_backup" => command!(env::restore_claude_env_backup(
-            app.clone(),
-            argument(&request.args, "fileName")?,
-            argument(&request.args, "confirmWrite")?
-        )),
-        "get_claude_session_usage" => {
-            command!(crate::commands::claude_session_usage::get_claude_session_usage(app.clone()))
-        }
-        "scan_claude_mcp_source" => {
-            command!(crate::commands::claude_mcp_import::scan_claude_mcp_source(
-                app.clone(),
-                argument(&request.args, "sourcePath")?
-            ))
-        }
-        "import_claude_mcp_source" => command!(
-            crate::commands::claude_mcp_import::import_claude_mcp_source(
-                app.clone(),
-                argument(&request.args, "sourcePath")?,
-                argument(&request.args, "sourceIds")?,
-                argument(&request.args, "sourceRevision")?,
-                argument(&request.args, "confirmWrite")?
-            )
-        ),
-        "rebuild_claude_session_usage" => command!(
-            crate::commands::claude_session_usage::rebuild_claude_session_usage(
-                app.clone(),
-                argument(&request.args, "confirmWrite")?
-            )
-        ),
         _ => return Ok(None),
     };
     result.map(Some)

@@ -11,8 +11,6 @@ pub mod claude_common;
 pub mod claude_gemini;
 mod claude_model;
 pub mod claude_native;
-pub mod claude_presets;
-pub mod codex_presets;
 pub mod contracts;
 pub mod discovery;
 pub mod endpoint;
@@ -30,7 +28,7 @@ pub use ccswitch::{map_row, CcSwitchProposal, CcSwitchProviderDraft, CcSwitchRow
 pub use adapter::{preview, render, route_state, validate_syntax, AdapterError};
 pub use contracts::{
     codex_official_draft, AppKind, AuthenticationScheme, BackupRecord, ChangeKind,
-    ClaudeModelSettings, ClientSettingsPreview, ClientSettingsSnapshot, CodexCapabilities,
+    ClaudeModelSettings, ClientSettingsSnapshot, CodexCapabilities,
     CodexCatalogEntry, CodexEndpoint, CodexModelRoute, CodexModelSettings, CodexOperation,
     CodexProviderDraft, CodexProviderFile, CodexProviderProfile, CodexProviderRecord,
     CodexRouteMode, CodexRouteSnapshot, CodexSubagentKey, CodexSubagentSettings,

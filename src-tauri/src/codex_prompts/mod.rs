@@ -212,7 +212,7 @@ pub(crate) fn recover(root: &Path, target: &Path) -> Result<PromptsView, String>
 
 pub(crate) fn ensure_ready(root: &Path) -> Result<(), String> {
     if transaction::pending(root).exists() {
-        return Err("Codex 指令预设有未完成事务，请先在 Codex 本地功能管理中恢复".into());
+        return Err("Codex 指令预设有未完成事务，当前版本不再管理预设事务".into());
     }
     Ok(())
 }

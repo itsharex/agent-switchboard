@@ -90,6 +90,18 @@ pub(crate) fn respond_upstream(
 /// Buffers one non-streaming success before conversion so a provider that
 /// returns an error envelope with HTTP 2xx can participate in failover. The
 /// returned response keeps the original bytes for the normal responder.
+// Claude keeps its existing candidate preflight behavior. Codex native
+// Responses are restored for strict upstream dialects immediately before final
+// rendering, so only Codex cross-protocol responses are safe to preflight
+// against their client protocol here.
+fn requires_non_stream_preflight(
+    app: asb_core::contracts::AppKind,
+    upstream_protocol: UpstreamProtocol,
+) -> bool {
+    app == asb_core::contracts::AppKind::Claude
+        || upstream_protocol != UpstreamProtocol::native_for(app)
+}
+
 pub(crate) fn prepare_non_stream_response(
     mut upstream: UpstreamResponse,
     route: &ActiveRoute,
@@ -109,16 +121,17 @@ pub(crate) fn prepare_non_stream_response(
     {
         return Err(error);
     }
-    if route.app == asb_core::contracts::AppKind::Claude {
+    let client_protocol = UpstreamProtocol::native_for(route.app);
+    if requires_non_stream_preflight(route.app, route.upstream_protocol) {
         let reasoning = ReasoningTransport::from_continuation_key(route.continuation_key);
         convert_response(
             route.upstream_protocol,
-            UpstreamProtocol::AnthropicMessages,
+            client_protocol,
             &body,
             Some(&reasoning),
         )
         .map_err(|error| {
-            diagnostic.message = format!("Claude 上游响应无效：{error}");
+            diagnostic.message = format!("上游响应无法转换为客户端协议：{error}");
             diagnostic.clone()
         })?;
     }
@@ -375,4 +388,93 @@ pub(in crate::gateway::server) fn read_decoded(
         )
     })?;
     Ok((encoded, body))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+    use tokio::sync::{mpsc, watch};
+
+    fn codex_route(upstream_protocol: UpstreamProtocol) -> ActiveRoute {
+        ActiveRoute {
+            app: asb_core::contracts::AppKind::Codex,
+            profile_id: "test".into(),
+            fingerprint: "test".into(),
+            client_token: "client-token".into(),
+            continuation_key: [0; 32],
+            upstream_base_url: "https://vendor.example/v1".into(),
+            connection: Default::default(),
+            upstream_protocol,
+            responses_options: None,
+            max_output_tokens: None,
+            api_key: "provider-key".into(),
+            authentication: asb_core::AuthenticationScheme::Bearer,
+            claude_primary_model: None,
+            claude_model_options: None,
+            claude_account: None,
+            codex_account: None,
+            claude_fragment: Default::default(),
+            codex: None,
+        }
+    }
+
+    fn json_response(body: &'static [u8]) -> UpstreamResponse {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        let (sender, receiver) = mpsc::channel(1);
+        sender
+            .try_send(Ok(Bytes::from_static(body)))
+            .unwrap();
+        drop(sender);
+        let (cancellation, _) = watch::channel(false);
+        UpstreamResponse::new(
+            reqwest::StatusCode::OK,
+            headers,
+            reqwest::Url::parse("https://vendor.example/v1/chat/completions").unwrap(),
+            true,
+            receiver,
+            cancellation,
+        )
+    }
+
+    #[test]
+    fn codex_cross_protocol_response_is_preflighted() {
+        assert!(requires_non_stream_preflight(
+            asb_core::contracts::AppKind::Codex,
+            UpstreamProtocol::ChatCompletions,
+        ));
+        assert!(requires_non_stream_preflight(
+            asb_core::contracts::AppKind::Codex,
+            UpstreamProtocol::AnthropicMessages,
+        ));
+    }
+
+    #[test]
+    fn malformed_codex_chat_response_fails_before_candidate_delivery() {
+        let result = prepare_non_stream_response(
+            json_response(br#"{"id":"chat-1","model":"relay"}"#),
+            &codex_route(UpstreamProtocol::ChatCompletions),
+        );
+        assert!(matches!(
+            result,
+            Err(ProviderDiagnostic {
+                kind: ProviderFailureKind::ResponseParse,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn codex_native_response_waits_for_final_restoration() {
+        assert!(!requires_non_stream_preflight(
+            asb_core::contracts::AppKind::Codex,
+            UpstreamProtocol::Responses,
+        ));
+        assert!(requires_non_stream_preflight(
+            asb_core::contracts::AppKind::Claude,
+            UpstreamProtocol::AnthropicMessages,
+        ));
+    }
 }

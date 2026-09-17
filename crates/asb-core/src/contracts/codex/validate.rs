@@ -23,13 +23,14 @@ fn validate_identity(profile: &CodexProviderProfile) -> Result<(), String> {
     required(&profile.id, "供应商标识")?;
     required(&profile.name, "供应商名称")?;
     required(&profile.api_key, "API 密钥")?;
-    let expected_route = CodexRouteMode::for_connection(
+    let expected_route = CodexRouteMode::for_profile(
         profile.upstream,
+        profile.request_mode,
         &profile.connection,
         profile.authentication,
     );
     if profile.route_mode != expected_route {
-        return Err("Codex 路由模式与上游协议、认证或连接覆盖不一致".to_string());
+        return Err("Codex 路由模式与上游协议、请求模式、认证或连接覆盖不一致".to_string());
     }
     validate_endpoint(
         &profile.endpoint.0,
@@ -58,7 +59,6 @@ fn validate_connection(
     if connection.claude_native.is_some()
         || connection.claude_billing.is_some()
         || connection.claude_prompt_cache_key.is_some()
-        || connection.claude_models_url.is_some()
     {
         return Err("Claude 专用连接设置不能进入 Codex 档案".into());
     }
@@ -234,4 +234,36 @@ fn validate_model_routes(profile: &CodexProviderProfile) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::ResponsesRequestMode;
+
+    #[test]
+    fn minimal_responses_requires_the_gateway() {
+        assert_eq!(
+            CodexRouteMode::for_profile(
+                CodexUpstream::Responses,
+                ResponsesRequestMode::Minimal,
+                &ProviderConnectionOptions::default(),
+                None,
+            ),
+            CodexRouteMode::Gateway,
+        );
+    }
+
+    #[test]
+    fn standard_native_responses_remains_direct() {
+        assert_eq!(
+            CodexRouteMode::for_profile(
+                CodexUpstream::Responses,
+                ResponsesRequestMode::Standard,
+                &ProviderConnectionOptions::default(),
+                None,
+            ),
+            CodexRouteMode::Direct,
+        );
+    }
 }

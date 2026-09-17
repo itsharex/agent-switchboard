@@ -5,9 +5,7 @@ import { ConfigStatusPanel, type ConfigStatusPanelProps } from "../components/Co
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { RuntimeOverviewPanel } from "../components/RuntimeOverviewPanel";
 import { Tabs } from "../components/Tabs";
-import { GatewayPage } from "./GatewayPage";
 import { LogsPage } from "./LogsPage";
-import { LocalManagementLauncher } from "../components/local-management/LocalManagementLauncher";
 
 interface DiagnosticsPageProps extends ConfigStatusPanelProps {
   active: boolean;
@@ -39,11 +37,7 @@ export function DiagnosticsPage(props: DiagnosticsPageProps) {
           <ConfigStatusPanel statuses={props.statuses} profiles={profiles} locks={props.locks}
             busy={busy} onRefresh={props.onRefresh} onRecoverLock={props.onRecoverLock} />
           <RuntimeOverviewPanel />
-          <LocalManagementLauncher onChanged={props.onRefresh} />
         </div>}
-      </div>
-      <div id="diagnostics-gateway-panel" role="tabpanel" aria-labelledby="diagnostics-gateway-tab" hidden={section !== "gateway"}>
-        <GatewayPage active={active && section === "gateway"} profiles={profiles} />
       </div>
       <div id="diagnostics-logs-panel" role="tabpanel" aria-labelledby="diagnostics-logs-tab" hidden={section !== "logs"}>
         {opened("logs") && <LogsPage logLevel={props.logLevel} busy={busy} onLogLevelChange={props.onLogLevelChange} />}

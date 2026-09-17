@@ -166,12 +166,18 @@ pub(crate) fn read_http_diagnostic(
     diagnostic
 }
 
-pub(crate) fn network_diagnostic(endpoint: &str, error: &reqwest::Error) -> ProviderDiagnostic {
-    let kind = if error.is_timeout() {
-        ProviderFailureKind::Timeout
-    } else {
-        network_failure_kind(error)
-    };
+/// One transport diagnostic for both request failures and response-body read
+/// failures. `reqwest::Error` contributes its exact timeout fact; all other
+/// transport errors use the same causal-chain classifier.
+pub(crate) fn network_diagnostic(
+    endpoint: &str,
+    error: &(dyn Error + 'static),
+) -> ProviderDiagnostic {
+    let kind = error
+        .downcast_ref::<reqwest::Error>()
+        .filter(|request_error| request_error.is_timeout())
+        .map(|_| ProviderFailureKind::Timeout)
+        .unwrap_or_else(|| network_failure_kind(error));
     ProviderDiagnostic::new(kind, endpoint, failure_message(kind))
 }
 

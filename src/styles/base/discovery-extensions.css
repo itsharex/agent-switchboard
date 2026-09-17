@@ -1,3 +1,19 @@
+/* Discovery is an intake workbench: search stays separate from the scan
+   batch, which carries its status, warnings, candidates and commit action. */
+.asb-ext-discovery-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  padding-bottom: var(--asb-space-4);
+}
+
+.asb-ext-discovery-panel > .asb-ext-toolbar {
+  margin: 0;
+  padding-bottom: var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
 /* Discovery scan results reuse the overview status-card grid; each client's
    import proposal lands in the card that produced it. */
 .asb-discovery-import {
@@ -54,7 +70,7 @@
 .asb-discovery-diagnostic {
   padding: var(--asb-space-2) var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   display: flex;
   flex-direction: column;
@@ -118,14 +134,31 @@
 }
 
 /* Native imports are a selection list, not an administration table. */
-.asb-ext-import { display: flex; flex-direction: column; gap: var(--asb-space-3); min-height: 0; }
-.asb-ext-import-scan { display: flex; align-items: center; justify-content: space-between; gap: var(--asb-space-2); }
+.asb-ext-import {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-height: 0;
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-ext-import-scan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+  padding-bottom: var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+}
 .asb-ext-import-list {
   margin: 0;
   padding: 0;
   list-style: none;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   overflow: hidden;
 }

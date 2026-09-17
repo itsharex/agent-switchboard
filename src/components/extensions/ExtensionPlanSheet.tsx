@@ -8,7 +8,7 @@ import type {
 import { Button } from "../Button";
 import { DiffView } from "../DiffView";
 import { Select } from "../Select";
-import { ExtensionDialog } from "./ExtensionDialog";
+import { AppDialog } from "../AppDialog";
 import { OPERATION_LABELS, targetLabel } from "./labels";
 
 interface Props {
@@ -69,7 +69,7 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
     view.operations[0]?.operation ??
     "update";
   return (
-    <ExtensionDialog
+    <AppDialog
       title={`确认${OPERATION_LABELS[operation]}（写入敏感数据）`}
       busy={busy}
       onClose={onCancel}
@@ -108,7 +108,7 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
           ))}
         </section>
       ))}
-    </ExtensionDialog>
+    </AppDialog>
   );
 }
 
@@ -127,7 +127,7 @@ export function ExtensionRemoveSheet({
 }) {
   const bound = item.bindings.length > 0;
   return (
-    <ExtensionDialog
+    <AppDialog
       title="删除扩展定义"
       busy={busy}
       onClose={onCancel}
@@ -150,7 +150,7 @@ export function ExtensionRemoveSheet({
       ) : (
         <p>此操作不改动任何客户端配置文件。</p>
       )}
-    </ExtensionDialog>
+    </AppDialog>
   );
 }
 
@@ -168,7 +168,7 @@ export function SkillDisableScopeSheet({
   onCancel: () => void;
 }) {
   return (
-    <ExtensionDialog
+    <AppDialog
       title="选择 Claude 项目 Skill 停用范围"
       busy={busy}
       onClose={onCancel}
@@ -198,6 +198,6 @@ export function SkillDisableScopeSheet({
           disabled={busy}
         />
       </label>
-    </ExtensionDialog>
+    </AppDialog>
   );
 }

@@ -15,20 +15,6 @@ pub(super) async fn dispatch(
     request: &InvokeRequest,
 ) -> Result<Option<Value>, CommandError> {
     match request.command.as_str() {
-        "get_codex_common_config" => {
-            command!(commands::codex_common::get_codex_common_config(app.clone()))
-        }
-        "extract_codex_common_config" => command!(
-            commands::codex_common::extract_codex_common_config(app.clone())
-        ),
-        "set_codex_common_config_enabled" => {
-            command!(commands::codex_common::set_codex_common_config_enabled(
-                app.clone(),
-                argument(&request.args, "profileId")?,
-                argument(&request.args, "enabled")?,
-                argument(&request.args, "expectedRevision")?
-            ))
-        }
         "get_codex_subagent_settings" => {
             command!(commands::subagent_settings::get_codex_subagent_settings(
                 app.clone(),
@@ -51,9 +37,6 @@ pub(super) async fn dispatch(
         "codex_login_blocker" => {
             command!(commands::official_login::codex_login_blocker(app.clone()))
         }
-        "ensure_codex_official_record" => command!(
-            commands::official_login::ensure_codex_official_record(app.clone())
-        ),
         _ => Ok(None),
     }
 }

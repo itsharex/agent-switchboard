@@ -16,7 +16,7 @@ interface GlobalPromptManagerProps {
 /**
  * Direct editor for the two supported user-global instruction files. It has
  * no prompt-template store: the file itself is the single source of truth.
- * The edited client follows the page-level client tabs.
+ * The edited client follows the page-level client selection.
  */
 export function GlobalPromptManager({
   document,
@@ -30,7 +30,7 @@ export function GlobalPromptManager({
 }: GlobalPromptManagerProps) {
   const fileName = document?.fileName ?? "全局文档";
   return (
-    <section className="asb-prompt-manager" aria-label="全局指令">
+    <>
       <label className="asb-prompt-editor-field">
         <span className="asb-prompt-file-name">{fileName}</span>
         <Textarea
@@ -59,6 +59,6 @@ export function GlobalPromptManager({
           {busy ? "保存中" : `保存 ${fileName}`}
         </Button>
       </div>
-    </section>
+    </>
   );
 }

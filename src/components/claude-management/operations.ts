@@ -1,8 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-export function claudeError(cause: unknown): string {
-  return cause && typeof cause === "object" && "message" in cause && typeof cause.message === "string"
-    ? cause.message : String(cause);
-}
+
 export function useClaudeOperations(onChanged: () => void) {
   const running = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -12,7 +9,7 @@ export function useClaudeOperations(onChanged: () => void) {
     if (running.current) return undefined;
     running.current = true; setBusy(true); setError(null); setNotice(null);
     try { return await action(); }
-    catch (cause) { setError(claudeError(cause)); return undefined; }
+    catch (cause) { setError(cause && typeof cause === "object" && "message" in cause && typeof cause.message === "string" ? cause.message : String(cause)); return undefined; }
     finally { running.current = false; setBusy(false); }
   }, []);
   const changed = useCallback((message: string) => { setNotice(message); onChanged(); }, [onChanged]);

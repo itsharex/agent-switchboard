@@ -36,7 +36,7 @@
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-2);
   border: 1px solid transparent;
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text-muted);
   font: var(--asb-text-body);
@@ -64,6 +64,7 @@
 }
 
 .asb-client-preferences-toolbar,
+.asb-client-preferences-toolbar-actions,
 .asb-client-provider-help,
 .asb-client-preference-save {
   display: flex;
@@ -74,6 +75,77 @@
 
 .asb-client-preferences-toolbar {
   justify-content: space-between;
+  margin-bottom: var(--asb-space-4);
+}
+
+/* Client configuration uses the shared subagent material: muted-gray modules
+   establish groups, while editable rows stay white. The save footer remains
+   on the page surface so it is the only unwrapped operation area. */
+.asb-client-settings-panel .asb-toggle-group,
+.asb-client-settings-panel .asb-subagent-settings,
+.asb-client-settings-panel .asb-client-configuration-review,
+.asb-client-settings-panel .asb-client-settings-reset-preview,
+.asb-client-settings-panel .asb-official-directory,
+.asb-client-settings-panel .asb-client-settings-disclosure.is-instructions .asb-client-settings-disclosure-content {
+  border-color: var(--asb-settings-module-border);
+  background: var(--asb-settings-module-bg);
+}
+
+.asb-client-settings-panel .asb-toggle-group {
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-settings-module-border);
+  border-radius: var(--asb-radius);
+}
+
+.asb-client-settings-panel .asb-toggle-row,
+.asb-client-settings-panel .asb-official-directory-entry {
+  border-color: var(--asb-settings-row-border);
+  background: var(--asb-settings-row-bg);
+}
+
+.asb-client-settings-panel .asb-client-settings-disclosure.is-instructions .asb-client-settings-disclosure-content {
+  display: grid;
+  gap: var(--asb-space-3);
+  margin-bottom: var(--asb-space-4);
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-settings-module-border);
+  border-radius: var(--asb-radius);
+}
+
+.asb-client-settings-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-height: 0;
+  overflow: clip;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--asb-motion-node) var(--asb-easing),
+    opacity var(--asb-motion-fast) var(--asb-easing),
+    visibility 0s linear var(--asb-motion-node);
+}
+
+.asb-client-settings-disclosure[data-open="true"] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  opacity: 1;
+  transition:
+    grid-template-rows var(--asb-motion-node) var(--asb-easing),
+    opacity var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-client-settings-disclosure-content {
+  min-height: 0;
+  overflow: hidden;
+  transform: translateY(calc(-1 * var(--asb-space-1)));
+  transition: transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-client-settings-disclosure[data-open="true"] .asb-client-settings-disclosure-content {
+  transform: translateY(0);
+}
+
+.asb-client-settings-disclosure .asb-prompt-actions {
   margin-bottom: var(--asb-space-4);
 }
 
@@ -90,23 +162,15 @@
   justify-content: flex-end;
 }
 
-/* The client configuration page has one compact decision bar: status stays
-   adjacent to the action it qualifies instead of becoming a second footer. */
+/* The reset action belongs with the top-level client tools. The footer keeps
+   only save feedback and the save action. */
 .asb-client-configuration-actions {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
-  grid-template-areas: "reset notice commit";
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-areas: "notice commit";
   align-items: center;
   gap: var(--asb-space-3);
   margin-top: var(--asb-space-4);
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
-  background: var(--asb-code-bg);
-}
-
-.asb-client-configuration-reset {
-  grid-area: reset;
 }
 
 .asb-client-configuration-notice {
@@ -119,6 +183,183 @@
 .asb-client-configuration-notice .asb-field-help,
 .asb-client-configuration-notice .asb-field-error {
   margin: 0;
+}
+
+/* The toolbar-owned reset preview lists removals on a shared surface instead
+   of nesting preview cards inside the expanded section. */
+.asb-client-settings-reset-preview {
+  display: grid;
+  gap: var(--asb-space-3);
+  margin: 0 0 var(--asb-space-4);
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-settings-module-border);
+  border-radius: var(--asb-radius);
+}
+
+.asb-client-settings-reset-preview > p {
+  margin: 0;
+}
+
+.asb-client-settings-reset-lead {
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-client-settings-reset-target {
+  display: grid;
+  gap: var(--asb-space-hairline);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-client-settings-reset-target code {
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+  overflow-wrap: anywhere;
+}
+
+
+.asb-client-settings-reset-preview > .asb-section-title,
+.asb-client-settings-reset-scope > p,
+.asb-client-extra-configuration .asb-section-title,
+.asb-client-extra-configuration .asb-field-help {
+  margin: 0;
+}
+
+.asb-client-settings-reset-scope {
+  display: grid;
+  gap: var(--asb-space-1);
+}
+
+.asb-client-settings-reset-scope-label {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-client-settings-reset-scope ul {
+  display: grid;
+  gap: var(--asb-space-hairline);
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.asb-client-settings-reset-back {
+  margin-right: auto;
+}
+
+.asb-client-extra-configuration {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-3);
+  margin: 0 0 var(--asb-space-4);
+  padding: var(--asb-space-3) 0 0;
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-client-extra-configuration > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--asb-space-1);
+}
+
+.asb-client-settings-reset-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-settings-reset-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+  margin: 0 0 var(--asb-space-4);
+}
+
+.asb-client-settings-reset-error .asb-field-error {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+
+.asb-client-configuration-review-heading,
+.asb-client-configuration-review-scope {
+  display: grid;
+  gap: var(--asb-space-1);
+}
+
+.asb-client-configuration-review-heading .asb-section-title,
+.asb-client-configuration-review-heading .asb-field-help,
+.asb-client-configuration-review-scope .asb-section-title,
+.asb-client-configuration-review-scope .asb-field-help {
+  margin: 0;
+}
+
+.asb-client-configuration-review-scope {
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-settings-row-border);
+  border-radius: var(--asb-radius);
+  background: var(--asb-settings-row-bg);
+}
+
+.asb-client-manual-configuration,
+.asb-client-claude-extra-editor {
+  display: grid;
+  gap: var(--asb-space-3);
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-client-manual-configuration-heading,
+.asb-client-manual-configuration-actions,
+.asb-client-claude-extra-editor-heading,
+.asb-client-claude-extra-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-manual-configuration-heading > div,
+.asb-client-claude-extra-editor-heading > div {
+  min-width: 0;
+}
+
+.asb-client-manual-configuration-heading .asb-section-title,
+.asb-client-manual-configuration-heading .asb-field-help,
+.asb-client-manual-configuration > .asb-field-help,
+.asb-client-manual-configuration > .asb-field-error,
+.asb-client-claude-extra-editor-heading .asb-section-title,
+.asb-client-claude-extra-editor-heading .asb-field-help,
+.asb-client-claude-extra-editor > .asb-field-help,
+.asb-client-claude-extra-editor > .asb-field-error {
+  margin: 0;
+}
+
+.asb-client-manual-configuration-actions,
+.asb-client-claude-extra-editor-actions {
+  justify-content: flex-end;
+}
+
+.asb-client-settings-reset-changes {
+  min-width: 0;
+}
+
+.asb-client-settings-reset-changes .asb-diff {
+  gap: 0;
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-client-settings-reset-changes .asb-diff-row {
+  padding: var(--asb-space-2) 0;
+  border: 0;
+  border-bottom: 1px solid var(--asb-hairline);
+  border-radius: 0;
+  background: transparent;
 }
 
 .asb-client-configuration-blocker,
@@ -138,29 +379,33 @@
   justify-content: flex-end;
 }
 
-.asb-client-configuration-reset .asb-btn,
 .asb-client-configuration-commit .asb-btn {
   min-width: 8.5rem;
   justify-content: center;
 }
 
-/* Codex subagent defaults form one direct-write resource between model
-   behavior and the remaining application-owned client preferences. */
+/* Codex subagent runtime is the [agents] section of the same user-level
+   config.toml. Its module header makes the section boundary explicit, while
+   its controls reuse the shared client-preference row anatomy. */
 .asb-subagent-settings {
-  margin: var(--asb-space-4) 0;
-}
-
-.asb-subagent-heading {
   display: grid;
-  gap: var(--asb-space-1);
+  gap: var(--asb-space-3);
+  margin: var(--asb-space-4) 0;
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+.asb-subagent-heading {
   min-width: 0;
 }
-
-.asb-subagent-heading .asb-field-help,
-.asb-subagent-error-actions .asb-field-error {
-  margin: 0;
+.asb-subagent-setting-list {
+  display: grid;
+  gap: var(--asb-space-2);
 }
-
+.asb-subagent-settings .asb-subagent-row {
+  background: var(--asb-content);
+}
 .asb-subagent-controls {
   grid-column: 1 / -1;
   display: flex;
@@ -169,17 +414,18 @@
   flex-wrap: wrap;
   gap: var(--asb-space-2);
 }
-
+.asb-subagent-controls > .asb-segments {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
 .asb-subagent-input {
   flex: 1 1 16rem;
   min-width: 0;
   max-width: 28rem;
 }
-
 .asb-subagent-input .asb-input {
   width: 100%;
 }
-
 .asb-subagent-error-actions {
   display: flex;
   align-items: center;
@@ -187,6 +433,7 @@
   flex-wrap: wrap;
   gap: var(--asb-space-2);
 }
+
 
 .asb-settings-content .asb-settings-actions-main {
   flex-wrap: wrap;
@@ -253,7 +500,6 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "notice"
-      "reset"
       "commit";
     align-items: stretch;
   }

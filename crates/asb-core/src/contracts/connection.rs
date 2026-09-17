@@ -44,8 +44,10 @@ pub struct ProviderConnectionOptions {
     pub claude_billing: Option<super::ClaudeBilling>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_prompt_cache_key: Option<String>,
+    /// Explicit model-list endpoint used only by discovery. It never changes
+    /// the request route or the active-provider routing identity.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub claude_models_url: Option<String>,
+    pub models_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -176,6 +178,16 @@ impl ProviderConnectionOptions {
 
     /// Validates the custom User-Agent and the request overrides so invalid
     /// values fail at save/import time instead of being dropped at egress.
+    /// Validates the independent model-discovery endpoint. A full request URL
+    /// cannot safely imply a GET model-list endpoint, so callers must use this
+    /// explicit field when discovery needs a different URL.
+    pub fn validate_models_url(&self) -> Result<(), String> {
+        if let Some(url) = &self.models_url {
+            crate::endpoint::validate_full_url(url)?;
+        }
+        Ok(())
+    }
+
     pub fn validate_request_overrides(&self) -> Result<(), String> {
         if let Some(user_agent) = &self.custom_user_agent {
             let user_agent = user_agent.trim();

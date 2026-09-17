@@ -2,7 +2,7 @@
 //! preferences. Provider parameters are saved only with their provider draft.
 
 use super::error::{blocking, operation_error, state, store_error, CommandError};
-use asb_core::contracts::{AppKind, ClientSettingsPreview, ClientSettingsSnapshot, SettingsValues};
+use asb_core::contracts::{AppKind, ClientSettingsSnapshot, SettingsValues};
 use asb_core::ownership::{
     self, ChoiceControl, OfficialSettingDisposition, SettingControl, SettingOwner,
 };
@@ -15,6 +15,21 @@ use tauri::AppHandle;
 pub struct SettingChoiceOption {
     pub value: String,
     pub label: String,
+}
+
+/// A redacted snapshot of the current client file. The renderer may edit this
+/// display copy only through the manual-configuration executor, which restores
+/// retained secret markers on the backend and never exposes the raw document.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentClientConfiguration {
+    pub app: AppKind,
+    pub target: String,
+    pub exists: bool,
+    pub content: String,
+    pub content_hash: String,
+    pub syntax_ok: bool,
+    pub syntax_error: Option<String>,
 }
 
 /// One editor-safe projection of the ownership directory. The renderer never
@@ -201,43 +216,52 @@ pub async fn save_client_settings(
     .await
 }
 
-/// Renders the editor's current draft as an application-owned client-settings
-/// fragment. It is pure: no client file is read or written, and no provider
-/// data can enter this preview.
+/// Reads the actual client configuration and returns only a redacted display
+/// snapshot. The renderer cannot use this result as a write target.
 #[tauri::command]
-pub async fn preview_client_settings(
+pub async fn get_current_client_configuration(
+    app: AppHandle,
     target: AppKind,
-    settings: SettingsValues,
-) -> Result<ClientSettingsPreview, CommandError> {
+) -> Result<CurrentClientConfiguration, CommandError> {
+    let state = state(&app)?;
     blocking(move || {
-        let content =
-            asb_core::adapter::render_client_settings(target, &settings).map_err(|error| {
-                CommandError::new("client-settings-preview-failed", error.to_string())
-            })?;
-        Ok(ClientSettingsPreview {
+        let path = state
+            .target(target)
+            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+        let (exists, raw) = match std::fs::read_to_string(&path) {
+            Ok(content) => (true, content),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (false, String::new()),
+            Err(_) => return Err(CommandError::new("client-configuration-unreadable", "无法读取真实客户端配置文件")),
+        };
+        let source = if raw.is_empty() && target == AppKind::Claude { "{}" } else { &raw };
+        let syntax = asb_core::adapter::validate_syntax(target, source);
+        let syntax_ok = syntax.is_ok();
+        let syntax_error = syntax.err().map(|error| error.message);
+        Ok(CurrentClientConfiguration {
             app: target,
-            target: format!("{} 客户端配置片段", target.config_label()),
-            content,
+            target: path.to_string_lossy().into_owned(),
+            exists,
+            content: syntax_ok.then(|| asb_switch::display_content(target, source)).unwrap_or_default(),
+            content_hash: asb_switch::sha256_hex(&raw),
+            syntax_ok,
+            syntax_error,
         })
-    })
-    .await
+    }).await
 }
 
-/// Parses an editable client-settings fragment back into the application
-/// preference contract. This is pure: it cannot read or write a real client
-/// configuration file, and provider or host-owned keys are rejected.
+/// Parses the dedicated Claude extra-configuration editor. Visual client
+/// settings, provider settings, credentials, and extension fields are
+/// rejected; the returned map is the complete ASB-managed extra contract.
 #[tauri::command]
-pub async fn parse_client_settings(
-    target: AppKind,
+pub async fn parse_claude_extra_configuration(
     content: String,
-) -> Result<SettingsValues, CommandError> {
+) -> Result<asb_core::claude_common::Extra, CommandError> {
     blocking(move || {
-        asb_core::adapter::parse_client_settings(target, &content)
-            .map_err(|error| CommandError::new("client-settings-parse-failed", error.to_string()))
+        asb_core::claude_common::parse_extra(&content)
+            .map_err(|error| CommandError::new("claude-extra-configuration-parse-failed", error))
     })
     .await
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +305,20 @@ mod tests {
     }
 
     #[test]
+    fn claude_extra_editor_accepts_only_extra_fields() {
+        let parsed = tauri::async_runtime::block_on(parse_claude_extra_configuration(
+            r#"{"permissions":{"allow":["Read"]}}"#.to_string(),
+        ))
+        .expect("extra configuration");
+        assert_eq!(parsed["permissions"]["allow"], serde_json::json!(["Read"]));
+
+        let error = tauri::async_runtime::block_on(parse_claude_extra_configuration(
+            r#"{"spinnerTipsEnabled":true}"#.to_string(),
+        ))
+        .expect_err("visual setting must stay in the form");
+        assert_eq!(error.code, "claude-extra-configuration-parse-failed");
+    }
+    #[test]
     fn editor_has_no_client_file_projection_data() {
         let editor = editor_from_snapshot(
             AppKind::Codex,
@@ -302,30 +340,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn preview_renders_only_the_client_settings_fragment() {
-        let settings = ownership::default_client_settings(AppKind::Codex);
-        let preview =
-            tauri::async_runtime::block_on(preview_client_settings(AppKind::Codex, settings))
-                .expect("preview");
-        assert_eq!(preview.app, AppKind::Codex);
-        assert!(preview.target.contains("config.toml"));
-        assert!(preview.content.contains("所有客户端设置均为自动"));
-    }
-
-    #[test]
-    fn parser_returns_a_complete_client_draft_without_touching_client_files() {
-        let parsed = tauri::async_runtime::block_on(parse_client_settings(
-            AppKind::Claude,
-            r#"{"spinnerTipsEnabled":true}"#.to_string(),
-        ))
-        .expect("parse");
-        assert_eq!(
-            parsed.settings["spinnerTipsEnabled"],
-            asb_core::contracts::SettingValue::Explicit {
-                value: asb_core::contracts::ConfigValue::Bool(true),
-            }
-        );
-        assert!(parsed.settings.contains_key("autoScrollEnabled"));
-    }
 }

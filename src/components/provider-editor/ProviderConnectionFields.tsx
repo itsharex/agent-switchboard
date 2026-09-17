@@ -2,6 +2,7 @@ import { usesClaudeManagedAuth } from "../../api/claude-accounts";
 import type { UpstreamProtocol } from "../../api/client";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
+import { Input } from "../Input";
 import { Select } from "../Select";
 import { ProviderCredentialField } from "./ProviderCredentialField";
 import { ProviderEndpointField } from "./ProviderEndpointField";
@@ -65,6 +66,16 @@ export function ProviderConnectionFields({ editor, busy }: Props) {
           authentication={draft.authentication}
           required={!usesClaudeManagedAuth(draft.connection) && !draft.connection?.claudeNative}
           onChange={(value) => setDraft((current) => ({ ...current, apiKey: value }))} />
+        {!draft.connection?.claudeNative && !usesClaudeManagedAuth(draft.connection) && <label className="asb-field">
+          <span>模型列表 URL</span>
+          <Input type="url" value={draft.connection?.modelsUrl ?? ""} disabled={busy}
+            placeholder={draft.connection?.isFullUrl ? "完整请求 URL 必填" : "（可选）"}
+            onChange={(event) => setDraft((current) => ({
+              ...current,
+              connection: { ...current.connection, modelsUrl: event.target.value.trim() || null },
+            }))} />
+          <p className="asb-scope-note">仅用于“获取模型”。完整请求 URL 必须填写；不会改变实际请求地址。</p>
+        </label>}
         <RouteNotice editor={editor} />
       </div>
     </section>

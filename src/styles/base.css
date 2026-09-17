@@ -9,12 +9,15 @@
 @import "./base/buttons.css";
 @import "./base/panels.css";
 @import "./base/provider-cards.css";
+@import "./base/provider-list.css";
+@import "./base/provider-usage.css";
 @import "./base/provider-request.css";
 @import "./base/diff-inspector.css";
 @import "./base/configuration-status.css";
 @import "./base/app-settings.css";
 @import "./base/settings-preview.css";
 @import "./base/settings-workspace.css";
+@import "./base/client-management.css";
 @import "./base/forms.css";
 @import "./base/tooltip-feedback.css";
 @import "./base/usage-workspace.css";
@@ -22,12 +25,12 @@
 @import "./base/logs-and-usage.css";
 @import "./base/sessions.css";
 @import "./base/gateway.css";
+@import "./base/gateway-telemetry.css";
 @import "./base/overlays.css";
 @import "./base/behavior-responsive.css";
 @import "./base/discovery-extensions.css";
 @import "./base/extension-library.css";
 @import "./base/extension-management.css";
-@import "./base/extension-instructions.css";
 @import "./base/mcp-form.css";
 @import "./base/skill-source-browser.css";
 
@@ -57,7 +60,7 @@
   min-height: var(--asb-touch-target);
   padding: 0 var(--asb-space-2);
   border: 0;
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text-muted);
   font: var(--asb-text-body);
@@ -109,10 +112,12 @@
 .asb-segments {
   display: inline-flex;
   align-items: center;
+  /* An explicit inline size prevents flex/grid placement from stretching the rail. */
+  inline-size: fit-content;
   gap: var(--asb-space-hairline);
   padding: var(--asb-space-concentric);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -126,7 +131,7 @@
   min-height: var(--asb-control-height-compact);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
-  border-radius: var(--asb-radius-action-inner);
+  border-radius: var(--asb-radius);
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
   cursor: pointer;
@@ -160,6 +165,18 @@
    larger mark a tab carried. */
 .asb-seg-logo {
   display: block;
+  width: var(--asb-icon-size-sm);
+  height: var(--asb-icon-size-sm);
+  object-fit: contain;
+}
+
+.asb-client-management-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-unit);
+}
+
+.asb-client-management-tab-logo {
   width: var(--asb-icon-size-sm);
   height: var(--asb-icon-size-sm);
   object-fit: contain;
@@ -210,7 +227,7 @@
   width: var(--asb-icon-size-lg);
   height: var(--asb-icon-size-lg);
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-check);
+  border-radius: var(--asb-radius);
   background: var(--asb-canvas);
   color: var(--asb-text-on-action);
   box-shadow: var(--asb-inset-highlight);

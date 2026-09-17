@@ -1,5 +1,30 @@
+/* Source discovery has three deliberate levels: source controls, results,
+   and repository maintenance. Each gets one work surface instead of a stack
+   of unrelated borders. */
 .asb-skill-source-browser {
+  display: grid;
+  align-content: start;
+  gap: var(--asb-space-4);
   min-width: 0;
+  padding-bottom: var(--asb-space-4);
+}
+
+.asb-skill-source-browser > .asb-skill-source-form,
+.asb-skill-source-browser > .asb-skill-source-results,
+.asb-skill-source-browser > .asb-skill-repository-manager,
+.asb-skill-source-browser > .asb-skill-source-empty {
+  margin: 0;
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+}
+
+.asb-skill-source-browser > .asb-skill-source-error {
+  margin: 0;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border-left: 2px solid var(--asb-warning);
+  background: var(--asb-content-muted);
 }
 
 .asb-skill-source-form {
@@ -7,7 +32,6 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--asb-space-3);
-  margin-bottom: var(--asb-space-4);
 }
 
 .asb-skill-source-input-row,
@@ -56,13 +80,11 @@
 }
 
 .asb-skill-source-results {
-  border-top: 1px solid var(--asb-hairline);
-  padding-top: var(--asb-space-4);
+  min-width: 0;
 }
 
 .asb-skill-repository-manager {
-  border-top: 1px solid var(--asb-hairline);
-  padding-top: var(--asb-space-4);
+  min-width: 0;
 }
 
 .asb-skill-repository-manager-heading {
@@ -122,7 +144,7 @@
   min-width: 0;
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   overflow-wrap: anywhere;
 }

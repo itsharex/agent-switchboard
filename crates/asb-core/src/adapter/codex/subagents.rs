@@ -16,11 +16,6 @@ use crate::contracts::{
     CodexSubagentKey, CodexSubagentSettings, ConfigValue, SettingValue, MAX_EXACT_CONFIG_INTEGER,
 };
 
-/// Retired concurrency keys that must never be aliased or converted. They are
-/// reported so the user can clean them by hand; two concurrency fields taking
-/// effect at once would be ambiguous.
-const DEPRECATED_CONCURRENCY_KEYS: &[&str] = &["agents.max_threads"];
-
 fn conflict(message: String) -> AdapterError {
     AdapterError {
         message,
@@ -34,17 +29,6 @@ fn bad_current_type(key: CodexSubagentKey, expected: &str) -> AdapterError {
         key.path(),
         expected
     ))
-}
-
-/// Retired keys present in the host document. They are surfaced, never read
-/// into the contract and never converted.
-pub fn deprecated_subagent_keys(text: &str) -> Result<Vec<String>, AdapterError> {
-    let doc = parse(text)?;
-    Ok(DEPRECATED_CONCURRENCY_KEYS
-        .iter()
-        .filter(|key| item_at(&doc, key).is_some())
-        .map(|key| key.to_string())
-        .collect())
 }
 
 fn read_bool(key: CodexSubagentKey, item: Option<&Item>) -> Result<SettingValue, AdapterError> {
@@ -112,21 +96,11 @@ pub fn read_subagent_settings(text: &str) -> Result<CodexSubagentSettings, Adapt
     })
 }
 
-fn check_deprecated_conflicts(
-    doc: &toml_edit::DocumentMut,
-    settings: &CodexSubagentSettings,
-) -> Result<(), AdapterError> {
-    if settings.max_concurrent_threads_per_session == SettingValue::Automatic {
-        return Ok(());
-    }
-    for key in DEPRECATED_CONCURRENCY_KEYS {
-        if item_at(doc, key).is_some() {
-            return Err(conflict(format!(
-                "存在已弃用键 {key}，需先由用户手动清理；本模块不读取、不转换该键，也不会让两个并发字段同时生效"
-            )));
-        }
-    }
-    Ok(())
+/// Removes historical ASB-owned keys without reading or mapping them into
+/// the current settings contract. Every Codex renderer calls this same helper
+/// so a stale alias cannot survive any confirmed configuration write.
+pub(crate) fn remove_retired_keys(doc: &mut toml_edit::DocumentMut) -> Result<(), AdapterError> {
+    remove_path(doc, "agents.max_threads")
 }
 
 /// Renders the complete candidate document. Automatic removes the canonical
@@ -142,7 +116,7 @@ pub fn render_subagent_settings(
         .validate()
         .map_err(|error| conflict(crate::adapter::scrub_message(error.to_string())))?;
     let mut doc = parse(current)?;
-    check_deprecated_conflicts(&doc, settings)?;
+    remove_retired_keys(&mut doc)?;
     for key in CodexSubagentKey::ALL {
         let path = key.path();
         match settings.get(key) {
@@ -363,36 +337,22 @@ mod tests {
     }
 
     #[test]
-    fn a_deprecated_max_threads_key_blocks_an_explicit_concurrency_value() {
-        let error = render_subagent_settings("[agents]\nmax_threads = 4\n", &full())
-            .expect_err("deprecated key must conflict");
-        assert!(error.message.contains("max_threads"));
-        assert!(error.message.contains("手动清理"));
-    }
-
-    #[test]
-    fn a_deprecated_max_threads_key_is_never_mapped_or_read() {
+    fn retired_max_threads_is_removed_without_being_mapped() {
         let settings = read_subagent_settings("[agents]\nmax_threads = 4\n").expect("read");
-        assert_eq!(
-            settings.max_concurrent_threads_per_session,
-            SettingValue::Automatic
-        );
-        assert_eq!(
-            deprecated_subagent_keys("[agents]\nmax_threads = 4\n").expect("scan"),
-            vec!["agents.max_threads".to_string()]
-        );
-        assert!(deprecated_subagent_keys("[agents]\nenabled = true\n")
-            .expect("scan")
-            .is_empty());
+        assert_eq!(settings, CodexSubagentSettings::automatic());
+        let rendered = render("[agents]\nmax_threads = 4\n", &full());
+        assert!(!rendered.contains("max_threads"));
+        assert!(rendered.contains("max_concurrent_threads_per_session = 3"));
     }
 
     #[test]
-    fn automatic_concurrency_still_clears_a_deprecated_free_file() {
+    fn retired_max_threads_is_removed_with_automatic_values() {
         let rendered = render(
-            "[agents]\nmax_threads = 4\n",
+            "[agents]\nmax_threads = 4\nunknown_member = \"keep\"\n",
             &CodexSubagentSettings::automatic(),
         );
-        assert!(rendered.contains("max_threads = 4"));
+        assert!(!rendered.contains("max_threads"));
+        assert!(rendered.contains("unknown_member = \"keep\""));
     }
 
     #[test]

@@ -40,7 +40,7 @@
   padding: var(--asb-space-2) var(--asb-space-3);
   margin: 0;
   border: 1px solid var(--asb-warning);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
   list-style: none;
 }
@@ -53,7 +53,7 @@
   --asb-session-layout-min-height: 520px;
   min-height: var(--asb-session-layout-min-height);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   overflow: hidden;
   background: var(--asb-content-muted);
 }
@@ -113,7 +113,7 @@
   width: 100%;
   padding: var(--asb-space-2);
   border: 1px solid transparent;
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text);
   text-align: left;
@@ -236,7 +236,7 @@
   align-items: center;
   padding: var(--asb-space-1) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -304,7 +304,7 @@
   min-height: var(--asb-control-height-micro);
   padding: var(--asb-space-1) var(--asb-space-2);
   border: 0;
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -352,7 +352,7 @@
 .asb-session-message {
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -389,7 +389,7 @@
   min-height: var(--asb-control-height-micro);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text-muted);
   font: var(--asb-text-label);

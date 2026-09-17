@@ -1,5 +1,7 @@
 import { BackupsPage } from "../pages/BackupsPage";
+import { ClientManagementPage } from "../pages/ClientManagementPage";
 import { DiagnosticsPage } from "../pages/DiagnosticsPage";
+import { GatewayPage } from "../pages/GatewayPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
@@ -11,6 +13,8 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
       backups={<BackupsPage records={snapshot.backups} busy={busy} lastSwitch={model.lastSwitchOverall}
         cloudBackup={model.cloudBackup} onRestore={operations.runRestore} onUndo={operations.requestUndo}
         onOpenDir={model.openBackupFolder} />}
+      gateway={<GatewayPage active={active && model.settingsSection === "gateway"} profiles={snapshot.profiles} />}
+      clientManagement={<ClientManagementPage onChanged={() => void snapshot.refresh()} />}
       diagnostics={<DiagnosticsPage active={active && model.settingsSection === "diagnostics"}
         section={model.diagnosticSection} onSectionChange={model.setDiagnosticSection}
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks} busy={busy}

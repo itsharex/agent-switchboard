@@ -1,14 +1,15 @@
+import { useId, useState } from "react";
 import type { AppKind, CodexProviderDraft, ProviderDraft, ProviderRecord } from "../../api/client";
 import type { CodexEditorSource } from "../../app/useProviders";
 import { Button } from "../Button";
 import { ProviderConnectionTest } from "../provider-editor/ProviderConnectionTest";
+import { ProviderEditorFrame } from "../provider-editor/ProviderEditorFrame";
 import { ProviderNotesField } from "../provider-editor/ProviderIdentityFields";
 import { ParametersLoadStatus } from "../provider-editor/ProviderParametersPage";
-import { RadioOption } from "../RadioOption";
 import { ResponsesOptionsFields } from "../provider-editor/ResponsesOptionsFields";
 import { CodexCapabilitiesSection } from "./CodexCapabilitiesSection";
 import { CodexConnectionFields } from "./CodexConnectionFields";
-import { CodexIdentityFields } from "./CodexIdentityFields";
+import { CodexAccessMode, CodexIdentityFields } from "./CodexIdentityFields";
 import { CodexModelSection } from "./CodexModelSection";
 import { CodexOfficialProviderForm } from "./CodexOfficialProviderForm";
 import { CodexParametersPage } from "./CodexParametersPage";
@@ -33,131 +34,110 @@ interface Props {
   onSwitchClient: (app: AppKind) => void;
 }
 
-function CodexProviderForm({ editor, ...props }: Props & { editor: CodexEditorState }) {
-  const { draft, setDraft } = editor;
-  const { busy, onCancel, onSave } = props;
+type OfficialProps = Omit<Props, "source"> & {
+  source: Extract<CodexEditorSource, { kind: "official" }>;
+};
+
+function CodexProviderForm({ editor, formId, ...props }: Props & { editor: CodexEditorState; formId: string }) {
+  const { draft, setDraft, parameters, setParametersOpen, triggerRef } = editor;
+  const { busy, onSave } = props;
   const editing = props.source?.kind === "record";
   return (
-    <form className="asb-provider-form" aria-label={editing ? "编辑 Codex 供应商" : "新建 Codex 供应商"}
+    <form id={formId} className="asb-provider-form" aria-label={editing ? "编辑 Codex 供应商" : "新建 Codex 供应商"}
       onSubmit={(event) => { event.preventDefault(); editor.save(onSave); }}>
+      {!editing && <CodexAccessMode busy={busy}
+        onSwitchAccessMode={(official) => props.onSwitchAccessMode(official, null)} />}
       <CodexIdentityFields draft={draft} busy={busy} editing={editing}
-        setDraft={setDraft} onSwitchClient={props.onSwitchClient}
-        onSwitchAccessMode={(official) => props.onSwitchAccessMode(official, null)} />
+        setDraft={setDraft} onSwitchClient={props.onSwitchClient} />
       <CodexConnectionFields key={`connection-${draft.upstream}`} editor={editor} busy={busy} />
-      <CodexModelSection editor={editor} busy={busy}
-        userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
-      {draft.upstream === "responses" && (
-        <ResponsesOptionsFields busy={busy} options={{ requestMode: draft.requestMode }}
-          onChange={(next) => setDraft((current) => ({ ...current, requestMode: next.requestMode }))} />
-      )}
-      <CodexCapabilitiesSection editor={editor} busy={busy} />
       <ProviderConnectionTest app="codex" busy={busy} active={props.active && !editor.parametersOpen}
         baseUrl={draft.endpoint} apiKey={draft.apiKey} upstreamProtocol={draft.upstream}
         connection={draft.connection} authentication={draft.authentication}
         responsesOptions={draft.upstream === "responses" ? { requestMode: draft.requestMode } : null}
         defaultModel={draft.defaultModel} />
-      <ProviderNotesField busy={busy} value={draft.notes}
-        onChange={(value) => setDraft((current) => ({ ...current, notes: value }))} />
-      <ParametersLoadStatus busy={busy} ready={editor.parameters.ready}
-        error={editor.parameters.error} retry={editor.parameters.retry} />
-      {editor.problems.length > 0 && (
-        <div className="asb-field-error" role="alert">
-          {editor.problems.map((problem) => <p key={problem}>{problem}</p>)}
+      <CodexModelSection editor={editor} busy={busy}
+        userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
+      <ProviderAdvancedSettings>
+        {draft.upstream === "responses" && <ResponsesOptionsFields busy={busy}
+          options={{ requestMode: draft.requestMode }}
+          onChange={(next) => setDraft((current) => ({ ...current, requestMode: next.requestMode }))} />}
+        <CodexCapabilitiesSection editor={editor} busy={busy} />
+        <div className="asb-provider-advanced-action">
+          <div><strong>运行参数</strong><span>随此供应商保存，不直接写入客户端配置。</span></div>
+          <Button ref={triggerRef} variant="secondary" disabled={busy || !parameters.ready}
+            onClick={() => setParametersOpen(true)}>配置运行参数 <span aria-hidden="true">→</span></Button>
         </div>
-      )}
-      <footer className="asb-provider-form-footer">
-        <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
-        <Button type="submit" variant="primary" disabled={!editor.canSave}>保存供应商</Button>
-      </footer>
+        <ParametersLoadStatus busy={busy} ready={parameters.ready}
+          error={parameters.error} retry={parameters.retry} />
+        <ProviderNotesField busy={busy} value={draft.notes}
+          onChange={(value) => setDraft((current) => ({ ...current, notes: value }))} />
+      </ProviderAdvancedSettings>
+      {editor.problems.length > 0 && <div className="asb-field-error" role="alert">
+        {editor.problems.map((problem) => <p key={problem}>{problem}</p>)}
+      </div>}
     </form>
   );
 }
 
 function CodexProviderEditorSession(props: Props) {
   const editor = useCodexProviderEditor(props.source, props.busy);
+  const formId = useId();
+  const parametersOpen = editor.parametersOpen;
   const editing = props.source?.kind === "record";
-  const title = editor.parametersOpen
-    ? "运行参数"
-    : editing ? "编辑 Codex 供应商" : "新建 Codex 供应商";
-  return (
-    <div className="asb-edit-view asb-provider-editor">
-      <div className="asb-panel-heading">
-        <div className="asb-panel-heading-main">
-          <Button variant="back" disabled={props.busy}
-            aria-label={editor.parametersOpen ? "返回供应商编辑" : "返回供应商列表"}
-            onClick={() => editor.parametersOpen ? editor.setParametersOpen(false) : props.onCancel()}>←</Button>
-          <h2 ref={editor.headingRef} tabIndex={-1} className="asb-panel-title">{title}</h2>
-        </div>
-        {!editor.parametersOpen && (
-          <Button ref={editor.triggerRef} variant="secondary" disabled={props.busy}
-            onClick={() => editor.setParametersOpen(true)}>配置运行参数 <span aria-hidden="true">→</span></Button>
-        )}
-      </div>
-      <section className="asb-panel asb-edit-panel">
-        <div hidden={editor.parametersOpen}><CodexProviderForm {...props} editor={editor} /></div>
-        {editor.parametersOpen && <CodexParametersPage editor={editor} busy={props.busy} />}
-      </section>
-    </div>
-  );
+  const title = parametersOpen ? "运行参数" : editing ? "编辑 Codex 供应商" : "新建 Codex 供应商";
+  const backLabel = parametersOpen ? "返回编辑" : "返回供应商";
+  const goBack = () => parametersOpen ? editor.setParametersOpen(false) : props.onCancel();
+  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel}
+    busy={props.busy} onBack={goBack} onCancel={props.onCancel} formId={formId} canSave={editor.canSave}>
+    <div hidden={parametersOpen}><CodexProviderForm {...props} editor={editor} formId={formId} /></div>
+    {parametersOpen && <CodexParametersPage editor={editor} busy={props.busy}
+      baselineValues={props.source?.kind === "record" ? props.source.record.parameters.settings : undefined} />}
+  </ProviderEditorFrame>;
 }
 
-function CodexOfficialSession(props: Props) {
-  // The official arm reuses the third-party editor's parameter loader so both
-  // arms save the same complete parameter catalog.
+function CodexOfficialSession(props: OfficialProps) {
   const editor = useCodexProviderEditor(null, props.busy);
-  if (props.source?.kind !== "official") return null;
+  const formId = useId();
   const record = props.source.record;
+  const [name, setName] = useState(record?.profile.name ?? "Codex 官方登录");
+  const [websiteUrl, setWebsiteUrl] = useState(record?.profile.websiteUrl ?? "");
+  const [notes, setNotes] = useState(record?.profile.notes ?? "");
+  const [quotaMinutes, setQuotaMinutes] = useState(record?.profile.officialQuotaRefreshIntervalMinutes ?? 0);
   const parameters = editor.draft.parameters;
+  const title = record ? "编辑 Codex 官方登录" : "新建 Codex 官方登录";
   if (!editor.parameters.ready || parameters === null) {
-    return (
-      <div className="asb-edit-view asb-provider-editor">
-        <section className="asb-panel asb-edit-panel">
-          <ParametersLoadStatus busy={props.busy} ready={false} error={editor.parameters.error}
-            retry={editor.parameters.retry} />
-        </section>
-      </div>
-    );
+    return <ProviderEditorFrame title={title} backLabel="返回供应商" busy={props.busy}
+      onBack={props.onCancel} onCancel={props.onCancel} canSave={false}>
+      <ParametersLoadStatus busy={props.busy} ready={false} error={editor.parameters.error}
+        retry={editor.parameters.retry} />
+    </ProviderEditorFrame>;
   }
-  return (
-    <div className="asb-edit-view asb-provider-editor">
-      <div className="asb-panel-heading">
-        <div className="asb-panel-heading-main">
-          <Button variant="back" disabled={props.busy} aria-label="返回供应商列表"
-            onClick={props.onCancel}>←</Button>
-          <h2 className="asb-panel-title">
-            {record ? "编辑 Codex 官方登录" : "新建 Codex 官方登录"}
-          </h2>
-        </div>
-      </div>
-      <section className="asb-panel asb-edit-panel">
-        <section className="asb-provider-section" aria-label="基本资料">
-          <h3 className="asb-section-title">基本资料</h3>
-          <div className="asb-provider-section-fields">
-            <div className="asb-provider-field-grid">
-              <div className="asb-field">
-                <span>接入方式</span>
-                <div className="asb-segments" role="radiogroup" aria-label="接入方式">
-                  <RadioOption name="codex-access-mode" checked={false} label="第三方服务"
-                    disabled={props.busy} onChange={() => props.onSwitchAccessMode(false, record)} />
-                  <RadioOption name="codex-access-mode" checked label="官方登录"
-                    disabled={props.busy} onChange={() => props.onSwitchAccessMode(true, record)} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-        <CodexOfficialProviderForm busy={props.busy} record={record} parameters={parameters}
-          onSave={props.onSaveOfficial} onCancel={props.onCancel} />
-      </section>
-    </div>
-  );
+  const canSave = Boolean(name.trim());
+  const save = () => {
+    if (props.busy || !canSave) return;
+    props.onSaveOfficial({
+      app: "codex", routeMode: "official", name: name.trim(), baseUrl: null, apiKey: "", upstreamProtocol: null,
+      responsesOptions: null, maxOutputTokens: null, model: null, modelOptions: null, parameters,
+      notes: notes.trim() || null, websiteUrl: websiteUrl.trim() || null,
+      officialQuotaRefreshIntervalMinutes: quotaMinutes > 0 ? quotaMinutes : null,
+    });
+  };
+  return <ProviderEditorFrame title={title} backLabel="返回供应商" busy={props.busy}
+    onBack={props.onCancel} onCancel={props.onCancel} formId={formId} canSave={canSave}>
+    <CodexOfficialProviderForm formId={formId} busy={props.busy} editing={Boolean(record)}
+      name={name} websiteUrl={websiteUrl} notes={notes} quotaMinutes={quotaMinutes}
+      onNameChange={setName} onWebsiteChange={setWebsiteUrl} onNotesChange={setNotes}
+      onQuotaMinutesChange={setQuotaMinutes} onSubmit={save}
+      onSwitchAccessMode={() => props.onSwitchAccessMode(false, record)} />
+  </ProviderEditorFrame>;
 }
 
 /** One Codex editor owns one session per access mode: a third-party draft and
  * an official-login record never convert into each other. */
 export function CodexProviderEditor(props: Props) {
   if (props.source?.kind === "official") {
-    return <CodexOfficialSession key={props.source.record?.profile.id ?? "new-codex-official"} {...props} />;
+    return <CodexOfficialSession key={props.source.record?.profile.id ?? "new-codex-official"}
+      {...props} source={props.source} />;
   }
   const source = props.source;
   const key = source?.kind === "record" ? source.record.profile.id : "new-codex";

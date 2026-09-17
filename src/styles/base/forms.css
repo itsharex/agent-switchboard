@@ -83,7 +83,7 @@
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-1) var(--asb-space-2);
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-canvas);
   color: var(--asb-text);
   font: var(--asb-text-body);
@@ -117,7 +117,7 @@
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-1) var(--asb-space-2);
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-canvas);
   color: var(--asb-text);
   font: var(--asb-text-body);
@@ -160,7 +160,7 @@
   max-height: min(24rem, var(--radix-select-content-available-height));
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-surface-menu);
   color: var(--asb-text);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
@@ -179,7 +179,7 @@
   align-items: center;
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-1) var(--asb-space-4) var(--asb-space-1) var(--asb-space-2);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   font: var(--asb-text-body);
   color: var(--asb-text);
   cursor: pointer;
@@ -254,7 +254,7 @@
   width: min(22rem, calc(100vw - 3rem));
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-surface-menu);
   color: var(--asb-text);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
@@ -269,7 +269,7 @@
   margin: var(--asb-space-1);
   padding: 0 var(--asb-space-2);
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-canvas);
   transition: border-color var(--asb-motion-press) var(--asb-easing);
 }
@@ -323,7 +323,7 @@
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-1) var(--asb-space-2);
   border: none;
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text);
   cursor: pointer;
@@ -389,7 +389,7 @@
   width: var(--asb-touch-target);
   height: var(--asb-touch-target);
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-canvas);
   color: var(--asb-text-muted);
   cursor: pointer;

@@ -1,0 +1,74 @@
+/* Provider usage is mounted only while its row is open. Keeping the closed
+   disclosure out of the row removes its otherwise-empty flex gap, so every
+   collapsed provider keeps the same fixed primary data rail. */
+.asb-provider-usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-provider-usage-head,
+.asb-provider-usage-actions,
+.asb-provider-usage-title {
+  display: flex;
+  align-items: center;
+}
+
+.asb-provider-usage-head {
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-usage-title {
+  min-width: 0;
+  gap: var(--asb-space-2);
+}
+
+.asb-provider-usage-actions {
+  flex: none;
+  gap: var(--asb-space-2);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-provider-usage-refresh,
+.asb-provider-usage-configure {
+  min-height: var(--asb-touch-target);
+  padding: 0 var(--asb-space-2);
+  border: 1px solid var(--asb-hairline-strong);
+  border-radius: var(--asb-radius);
+  background: transparent;
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
+
+.asb-provider-usage-refresh {
+  color: var(--asb-action);
+}
+
+.asb-provider-usage-configure {
+  color: var(--asb-text-muted);
+}
+
+.asb-provider-usage-refresh:hover:not(:disabled),
+.asb-provider-usage-configure:hover:not(:disabled) {
+  background: var(--asb-row-selected);
+  color: var(--asb-action);
+}
+
+.asb-provider-usage-state {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+
+@media (max-width: 720px) {
+  .asb-provider-usage-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

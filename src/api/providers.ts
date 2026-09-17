@@ -3,7 +3,6 @@ import type { AppKind, AuthenticationScheme, ModelOptions, ResponsesOptions, Ups
 import type { UsageQuery } from "./usage";
 import type { FilePreview } from "./switching";
 import type { SettingsValues } from "./settings";
-import type { ClaudeBilling } from "./claude-gateway";
 
 export interface ProviderEndpoint {
   url: string;
@@ -23,6 +22,12 @@ export interface LocalProxyRequestOverrides {
 }
 
 export interface ClaudeNativeConfiguration { kind: "bedrock" | "vertex" | "foundry"; environment: Record<string, string> }
+export interface ClaudeBilling {
+  costMultiplier: string;
+  modelSource: "response" | "manual";
+  dailyLimitUsd: string | null;
+  monthlyLimitUsd: string | null;
+}
 export interface ProviderConnectionOptions {
   claudeNative?: ClaudeNativeConfiguration | null;
   codex?: import("./codex-request-options").CodexRequestOptions | null;
@@ -36,7 +41,7 @@ export interface ProviderConnectionOptions {
   apiKeyField?: "ANTHROPIC_AUTH_TOKEN" | "ANTHROPIC_API_KEY" | null;
   claudeBilling?: ClaudeBilling | null;
   claudePromptCacheKey?: string | null;
-  claudeModelsUrl?: string | null;
+  modelsUrl?: string | null;
 }
 
 /** Source display columns; application-side metadata that never reaches any
@@ -359,7 +364,8 @@ export function probeEndpoint(url: string): Promise<ProbeResult> {
 
 export interface ProviderEndpoints {
   requestUrl: string;
-  modelsUrl: string;
+  modelsUrl: string | null;
+  modelsError: string | null;
 }
 
 /** Pure backend resolution, without contacting the provider or reading credentials. */
@@ -373,13 +379,14 @@ export function resolveProviderEndpoints(
   });
 }
 
-/** One model from the provider's configured models endpoint; the
- * optional vendor groups the editor's model picker. */
+/** One model from the provider's configured models endpoint. `imageInput` is
+ * true or false only when the source explicitly reports `input_modalities`;
+ * null means the source provided no image-input fact. */
 export interface ProviderModel {
   id: string;
   ownedBy: string | null;
+  imageInput: boolean | null;
 }
-
 /** Models from the provider's configured API root. */
 export function fetchProviderModels(
   app: AppKind,

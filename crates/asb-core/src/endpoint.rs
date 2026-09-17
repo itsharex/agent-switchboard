@@ -65,30 +65,22 @@ pub fn models_endpoint(base_url: &str, protocol: UpstreamProtocol) -> Result<Str
     append(base_url, protocol, suffix)
 }
 
-/// Resolves the model-list target using the same full-URL semantics as the
-/// request endpoint. A full URL is intentionally not guessed or rewritten.
+/// Resolves the one explicit model-discovery endpoint. A full request URL is
+/// never guessed or reused as a model-list URL: it must have `models_url`.
 pub fn models_endpoint_for_connection(
     base_url: &str,
     protocol: UpstreamProtocol,
     connection: &crate::contracts::ProviderConnectionOptions,
 ) -> Result<String, String> {
-    if let Some(url) = &connection.claude_models_url {
+    if let Some(url) = &connection.models_url {
         validate_full_url(url)?;
         return Ok(url.clone());
     }
-    if protocol == UpstreamProtocol::GeminiGenerateContent {
-        return crate::claude_gemini::models_endpoint(base_url, connection.is_full_url);
+    if connection.is_full_url {
+        return Err("完整请求 URL 不能推导模型列表地址；请填写模型列表 URL".into());
     }
-    models_endpoint_with_options(base_url, protocol, connection.is_full_url)
-}
-
-pub fn models_endpoint_with_options(
-    base_url: &str,
-    protocol: UpstreamProtocol,
-    is_full_url: bool,
-) -> Result<String, String> {
-    if is_full_url {
-        return parse_full_url(base_url);
+    if protocol == UpstreamProtocol::GeminiGenerateContent {
+        return crate::claude_gemini::models_endpoint(base_url, false);
     }
     models_endpoint(base_url, protocol)
 }
@@ -277,14 +269,26 @@ mod tests {
             .unwrap(),
             "https://example.test/custom/messages"
         );
+        let full_url = "https://example.test/custom/messages";
+        let connection = crate::contracts::ProviderConnectionOptions {
+            is_full_url: true,
+            ..Default::default()
+        };
+        assert!(models_endpoint_for_connection(
+            full_url,
+            UpstreamProtocol::AnthropicMessages,
+            &connection,
+        )
+        .is_err());
+        let connection = crate::contracts::ProviderConnectionOptions {
+            is_full_url: true,
+            models_url: Some("https://example.test/v1/models".into()),
+            ..Default::default()
+        };
         assert_eq!(
-            models_endpoint_with_options(
-                "https://example.test/custom/messages",
-                UpstreamProtocol::AnthropicMessages,
-                true,
-            )
-            .unwrap(),
-            "https://example.test/custom/messages"
+            models_endpoint_for_connection(full_url, UpstreamProtocol::AnthropicMessages, &connection)
+                .unwrap(),
+            "https://example.test/v1/models"
         );
     }
 

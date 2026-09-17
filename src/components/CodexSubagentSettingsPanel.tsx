@@ -25,9 +25,9 @@ function numericValue(value: SettingValue): string {
 }
 
 function actualValueLabel(value: SettingValue): string {
-  if (value.mode === "automatic") return "真实文件：自动";
-  if (typeof value.value === "boolean") return `真实文件：${value.value ? "开启" : "关闭"}`;
-  return `真实文件：${value.value}`;
+  if (value.mode === "automatic") return "自动";
+  if (typeof value.value === "boolean") return value.value ? "开启" : "关闭";
+  return String(value.value);
 }
 
 function draftIssue(settings: CodexSubagentSettings): string | null {
@@ -72,7 +72,7 @@ function BooleanRow({
           <span className="asb-checkbox-label">{label}</span>
           <span className="asb-app-setting-detail">{detail}</span>
         </div>
-        <span className="asb-setting-actual" aria-live="polite">{actualValueLabel(actualValue)}</span>
+        <span className="asb-setting-actual" aria-live="polite">当前配置：{actualValueLabel(actualValue)}</span>
       </div>
       <div className="asb-subagent-controls" role="radiogroup" aria-label={label}>
         <RadioOption name={groupName} checked={value.mode === "automatic"} disabled={disabled}
@@ -83,6 +83,14 @@ function BooleanRow({
           disabled={disabled} label="关闭" onChange={() => onChange(field, explicit(false))} />
       </div>
     </div>
+  );
+}
+
+function SubagentModuleHeader({ headingId }: { headingId: string }) {
+  return (
+    <header className="asb-subagent-heading">
+      <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
+    </header>
   );
 }
 
@@ -108,7 +116,7 @@ function NumberRow({
           <span className="asb-checkbox-label">最大并发子 agent 线程数</span>
           <span className="asb-app-setting-detail">不设时由 Codex 决定本会话可同时运行的子 agent 数。</span>
         </div>
-        <span className="asb-setting-actual" aria-live="polite">{actualValueLabel(actualValue)}</span>
+        <span className="asb-setting-actual" aria-live="polite">当前配置：{actualValueLabel(actualValue)}</span>
       </div>
       <div className="asb-subagent-controls" role="radiogroup" aria-label="最大并发子 agent 线程数配置方式">
         <RadioOption name={modeName} checked={!custom} disabled={disabled} label="自动"
@@ -152,23 +160,19 @@ export function CodexSubagentSettingsPanel({
 
   if (state.phase === "idle" || state.phase === "loading") {
     return (
-      <section className="asb-toggle-group asb-subagent-settings" aria-labelledby={headingId}>
-        <div className="asb-toggle-group-head">
-          <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
-        </div>
-        <p className="asb-empty">正在读取 Codex 子 agent 设置</p>
+      <section className="asb-subagent-settings" aria-labelledby={headingId}>
+        <SubagentModuleHeader headingId={headingId} />
+        <p className="asb-empty">正在读取子 agent 运行配置</p>
       </section>
     );
   }
 
   if (state.phase === "loadError" || !state.snapshot || !state.draft) {
     return (
-      <section className="asb-toggle-group asb-subagent-settings" aria-labelledby={headingId}>
-        <div className="asb-toggle-group-head">
-          <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
-        </div>
+      <section className="asb-subagent-settings" aria-labelledby={headingId}>
+        <SubagentModuleHeader headingId={headingId} />
         <div className="asb-empty" role="alert">
-          <p>无法读取 Codex 子 agent 设置：{state.error?.message ?? "用户级配置不可用"}</p>
+          <p>无法读取子 agent 运行配置：{state.error?.message ?? "用户级配置不可用"}</p>
           <Button variant="secondary" disabled={busy} onClick={onRetryLoad}>重新读取</Button>
         </div>
       </section>
@@ -176,43 +180,36 @@ export function CodexSubagentSettingsPanel({
   }
 
   return (
-    <section className="asb-toggle-group asb-subagent-settings" aria-labelledby={headingId}>
-      <div className="asb-toggle-group-head">
-        <div className="asb-subagent-heading">
-          <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
-        </div>
+    <section className="asb-subagent-settings" aria-labelledby={headingId}>
+      <SubagentModuleHeader headingId={headingId} />
+
+
+      <div className="asb-subagent-setting-list">
+        <BooleanRow
+          label="启用子 agent"
+          detail="控制 Codex 是否允许主 agent 创建子 agent。"
+          field="enabled"
+          value={state.draft.enabled}
+          actualValue={state.snapshot.settings.enabled}
+          disabled={working}
+          onChange={onChange}
+        />
+        <NumberRow
+          value={state.draft.maxConcurrentThreadsPerSession}
+          actualValue={state.snapshot.settings.maxConcurrentThreadsPerSession}
+          disabled={working}
+          onChange={onChange}
+        />
+        <BooleanRow
+          label="中断时发送消息"
+          detail="控制主 agent 中断子 agent 时是否发送中断说明。"
+          field="interruptMessage"
+          value={state.draft.interruptMessage}
+          actualValue={state.snapshot.settings.interruptMessage}
+          disabled={working}
+          onChange={onChange}
+        />
       </div>
-
-      {state.snapshot.deprecatedKeys.length > 0 && (
-        <p className="asb-field-error" role="alert">
-          检测到已弃用的 {state.snapshot.deprecatedKeys.join("、")}。ASB 不会读取、转换或写入它；若要指定最大并发，请先在 Codex 中手动删除该键。
-        </p>
-      )}
-
-      <BooleanRow
-        label="启用子 agent"
-        detail="控制 Codex 是否允许主 agent 创建子 agent。"
-        field="enabled"
-        value={state.draft.enabled}
-        actualValue={state.snapshot.settings.enabled}
-        disabled={working}
-        onChange={onChange}
-      />
-      <NumberRow
-        value={state.draft.maxConcurrentThreadsPerSession}
-        actualValue={state.snapshot.settings.maxConcurrentThreadsPerSession}
-        disabled={working}
-        onChange={onChange}
-      />
-      <BooleanRow
-        label="中断时发送消息"
-        detail="控制主 agent 中断子 agent 时是否发送中断说明。"
-        field="interruptMessage"
-        value={state.draft.interruptMessage}
-        actualValue={state.snapshot.settings.interruptMessage}
-        disabled={working}
-        onChange={onChange}
-      />
 
       {issue && <p className="asb-field-error" role="alert">{issue}</p>}
     </section>

@@ -19,7 +19,7 @@ button:disabled {
   gap: calc(var(--asb-space-unit) + var(--asb-space-hairline));
   min-height: var(--asb-touch-target);
   padding: 0 var(--asb-space-3);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
 }
 
 :where(.asb-btn:not(.asb-btn-unstyled):not(.asb-btn-icon):not(.asb-btn-back)) {
@@ -62,7 +62,7 @@ button:disabled {
   height: var(--asb-touch-target);
   padding: 0;
   border: 0;
-  border-radius: var(--asb-radius-check);
+  border-radius: var(--asb-radius);
   background: transparent;
   color: var(--asb-text);
 }
@@ -103,17 +103,17 @@ button:disabled {
   background: color-mix(in srgb, var(--asb-action) 88%, var(--asb-text));
 }
 
-/* Page-level back icon button in the provider editor header. */
+/* Page-level back control. Arrow-only uses stay square; provider editors add
+   a text label so the fixed editor header always states the destination. */
 .asb-btn-back {
   min-width: 0;
   width: var(--asb-touch-target);
   height: var(--asb-touch-target);
   padding: 0;
   border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   color: var(--asb-text);
   font-size: 1.25rem;
   line-height: 1;
 }
-

@@ -13,13 +13,13 @@ pub(super) fn validate_connection(
     api_key: &str,
 ) -> Result<bool, ValidationError> {
     let error = ValidationError::ClaudeProviderOptions;
+    connection.validate_models_url().map_err(error)?;
     if app != AppKind::Claude {
         if protocol == UpstreamProtocol::GeminiGenerateContent {
             return Err(error("Gemini Native 是 Claude 专用上游".into()));
         }
         if connection.claude_billing.is_some()
             || connection.claude_prompt_cache_key.is_some()
-            || connection.claude_models_url.is_some()
         {
             return Err(error("Claude 专用连接设置不能用于 Codex".into()));
         }
@@ -37,9 +37,6 @@ pub(super) fn validate_connection(
         if key.trim().is_empty() || key.len() > 512 || key.chars().any(char::is_control) {
             return Err(error("Claude 提示缓存键格式无效".into()));
         }
-    }
-    if let Some(url) = &connection.claude_models_url {
-        crate::endpoint::validate_full_url(url).map_err(error)?;
     }
     let managed = crate::claude_auth::managed_auth(connection).map_err(error)?;
     if let Some((provider, _)) = managed {
@@ -77,7 +74,7 @@ pub(super) fn validate_native(
     }
     if connection.requires_gateway()
         || connection.auth_binding.is_some()
-        || connection.claude_models_url.is_some()
+        || connection.models_url.is_some()
         || !connection.custom_endpoints.is_empty()
     {
         return Err(error(

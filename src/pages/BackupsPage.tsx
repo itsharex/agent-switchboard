@@ -64,7 +64,7 @@ export function BackupsPage({
                     disabled={busy}
                     onClick={() => onUndo(lastSwitch)}
                   >
-                    撤回上一次切换
+                    {lastSwitch.profileName ? "撤回上一次切换" : "撤回上一次配置写入"}
                   </Button>
                 )}
                 <Button variant="secondary" onClick={onOpenDir}>
@@ -77,11 +77,11 @@ export function BackupsPage({
                 上次操作：{clientName(lastSwitch.app)}
                 {lastSwitch.operation === "projection" && lastSwitch.profileName
                   ? ` 已投影供应商「${lastSwitch.profileName}」`
-                  : lastSwitch.operation === "restore"
-                    ? " 恢复了备份"
-                    : lastSwitch.operation === "gatewayPortChange"
-                      ? " 已修改网关监听端口"
-                    : " 已应用配置投影"}
+                  : lastSwitch.operation === "projection"
+                    ? " 已写入客户端通用配置"
+                    : lastSwitch.operation === "restore"
+                      ? " 恢复了备份"
+                      : " 已修改网关监听端口"}
                 ，<Time iso={lastSwitch.at} />。
               </p>
             )}

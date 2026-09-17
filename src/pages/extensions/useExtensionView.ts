@@ -32,17 +32,11 @@ export function useExtensionView({ section, onSectionChange }: ExtensionNavigati
   };
   const changeSection = (nextSection: ExtensionSection) => {
     onSectionChange(nextSection);
-    if (nextSection === "instructions") {
-      setSourceBrowser(false);
-      setDiscoveryOpen(false);
-      setDialog(null);
-    } else if (nextSection !== "skill") {
-      setSourceBrowser(false);
-    }
+    if (nextSection !== "skill") setSourceBrowser(false);
   };
   return {
     section,
-    kind: section === "instructions" ? null : section,
+    kind: section,
     changeSection,
     search,
     setSearch,

@@ -51,7 +51,7 @@ fn read_roles(
     source: ModelSource,
 ) -> Result<ClaudeModelSettings, String> {
     let field = |key: &str| text(env.and_then(|env| env.get(key)), key);
-    let haiku = field("ANTHROPIC_DEFAULT_HAIKU_MODEL")?.or(field("ANTHROPIC_SMALL_FAST_MODEL")?);
+    let haiku = field("ANTHROPIC_DEFAULT_HAIKU_MODEL")?;
     let (haiku_model, haiku_one_m) = source.decode(haiku, "Haiku", true)?;
     let (sonnet_model, sonnet_one_m) =
         source.decode(field("ANTHROPIC_DEFAULT_SONNET_MODEL")?, "Sonnet", true)?;

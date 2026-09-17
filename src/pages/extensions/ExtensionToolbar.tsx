@@ -1,28 +1,43 @@
+import type { ReactNode } from "react";
 import { Button as MenuButton, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
+import type { AppKind } from "../../api/client";
 import { EXTENSION_SECTIONS } from "../../app/navigation";
+import { clientDeployState } from "../../app/extensions/deployment-state";
+import { clientName } from "../../lib/client-name";
 import { Button } from "../../components/Button";
+import { ClientLogo } from "../../components/ClientLogo";
 import { Input } from "../../components/Input";
 import { Tabs } from "../../components/Tabs";
 import { WorkspaceHeader } from "../../components/WorkspaceHeader";
-import { CloseIcon, MoreIcon, PlusIcon, SearchIcon } from "../../components/icons";
+import { CloseIcon, PlusIcon, SearchIcon, UpdateIcon } from "../../components/icons";
 import { Download, History, RefreshCw } from "lucide-react";
 import { Tooltip } from "../../components/Tooltip";
+import { MANAGEMENT_CLIENTS } from "../../components/extensions/client-presentation";
+import { pendingDeployment } from "./pending-deployment";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
-const EXTENSION_TOOLBAR_TABS = EXTENSION_SECTIONS.map((tab) => ({
-  ...tab,
-  controls: `ext-workspace-${tab.value}-panel`,
-}));
+function extensionTabs(workspace: ExtensionWorkspace) {
+  return EXTENSION_SECTIONS.map((tab) => ({
+    ...tab,
+    label: (
+      <>
+        <span>{tab.label}</span>
+        <span className="asb-ext-tab-count asb-num">
+          {workspace.items.filter((item) => item.kind === tab.value).length}
+        </span>
+      </>
+    ),
+    controls: `ext-workspace-${tab.value}-panel`,
+  }));
+}
 
-/**
- * The search row: one search
- * field directly above the list, inside the content column. The library-wide
- * count bar (deploy toggles, update-all) owns the row above it.
- */
-export function ExtensionSearch({ kind, search, onSearch }: {
+/** The library filter row optionally carries the deployment summaries,
+ * keeping search and the counts that qualify it in one operational control. */
+export function ExtensionSearch({ kind, search, onSearch, summary }: {
   kind: "skill" | "mcp";
   search: string;
   onSearch: (value: string) => void;
+  summary?: ReactNode;
 }) {
   return (
     <div className="asb-ext-toolbar" role="search">
@@ -54,6 +69,42 @@ export function ExtensionSearch({ kind, search, onSearch }: {
           </Button>
         )}
       </div>
+      {summary && <div className="asb-ext-toolbar-summary">{summary}</div>}
+    </div>
+  );
+}
+
+export function ExtensionClientSummary({ workspace }: { workspace: ExtensionWorkspace }) {
+  const { kindItems, writeBlocked } = workspace;
+  return (
+    <div className="asb-ext-client-summary" role="group" aria-label="客户端部署数量">
+      {MANAGEMENT_CLIENTS.map((client: AppKind) => {
+        const state = clientDeployState(kindItems, client);
+        const action = `${state.all ? "停用" : "启用"}全部扩展的 ${clientName(client)} 部署`;
+        return (
+          <Tooltip
+            key={client}
+            label={state.applicable === 0 ? "没有支持此客户端的扩展" : `${action}，包含当前搜索结果以外的条目`}
+          >
+            <Button
+              variant="unstyled"
+              role="checkbox"
+              className="asb-ext-client-summary-item"
+              data-client={client}
+              data-state={state.all ? "all" : state.partial ? "partial" : "none"}
+              aria-checked={state.partial ? "mixed" : state.all}
+              aria-busy={kindItems.some((item) => pendingDeployment(workspace.applies.pendingOperations, item, client))}
+              aria-label={`${action}（当前 ${state.enabled} 项）`}
+              disabled={writeBlocked || state.applicable === 0}
+              onClick={() => void workspace.toggleAll(client)}
+            >
+              <ClientLogo app={client} className="asb-ext-client-summary-logo" />
+              <span>{clientName(client)}</span>
+              <span className="asb-ext-client-summary-value asb-num">{state.enabled}</span>
+            </Button>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }
@@ -62,8 +113,8 @@ function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
   const { nav, writeBlocked } = workspace;
   return (
     <MenuTrigger>
-      <MenuButton className="asb-btn asb-btn-icon" aria-label="更多扩展操作">
-        <MoreIcon />
+      <MenuButton className="asb-btn asb-btn-secondary" aria-label="更多扩展操作">
+        更多
       </MenuButton>
       <Popover placement="bottom end" className="asb-ext-menu">
         <Menu aria-label="更多扩展操作" className="asb-ext-menu-items">
@@ -105,6 +156,16 @@ function ExtensionResourceActions({ workspace }: { workspace: ExtensionWorkspace
   if (nav.kind === null || alternateView) return null;
   return (
     <>
+      {nav.kind === "skill" && updates.updatable.length > 0 && (
+        <Button
+          variant="secondary"
+          disabled={writeBlocked}
+          onClick={() => void updates.update(updates.updatable)}
+        >
+          <UpdateIcon />
+          全部更新（{updates.updatable.length}）
+        </Button>
+      )}
       {nav.kind === "skill" && !nav.sourceBrowser && (
         <Tooltip label="检查更新">
           <Button variant="icon" aria-label="检查更新"
@@ -157,7 +218,7 @@ export function ExtensionToolbar({ workspace }: { workspace: ExtensionWorkspace 
       ) : undefined}
       primary={
         <Tabs value={nav.section} onChange={nav.changeSection}
-          tabs={EXTENSION_TOOLBAR_TABS} scope="ext-workspace" label="扩展内容" />
+          tabs={extensionTabs(workspace)} scope="ext-workspace" label="扩展内容" />
       }
       primaryActions={nav.kind !== null ? <ExtensionResourceActions workspace={workspace} /> : undefined}
     />

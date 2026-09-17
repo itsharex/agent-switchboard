@@ -262,10 +262,10 @@ impl ConfigStore {
         })
     }
 
-    /// Records successful use of a custom endpoint without changing the
+    /// Records successful use of a Claude custom endpoint without changing the
     /// provider's routing identity. `false` means the URL is the primary
     /// endpoint or is not a configured custom target.
-    pub fn mark_provider_endpoint_used(
+    pub fn mark_claude_endpoint_used(
         &self,
         id: &str,
         url: &str,

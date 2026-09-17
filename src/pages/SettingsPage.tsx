@@ -13,6 +13,8 @@ interface SettingsPageProps {
   onSectionChange: (section: SettingsSection) => void;
   onReturnToProviders?: () => void;
   backups: ReactNode;
+  gateway: ReactNode;
+  clientManagement: ReactNode;
   diagnostics: ReactNode;
   settings: AppSettings | null;
   /** Why settings could not load; null while loading or after success. */
@@ -123,6 +125,8 @@ export function SettingsPage(props: SettingsPageProps) {
       <div className="asb-settings-content">
         <SettingsPanel section="application" selected={section}><ApplicationSettings {...props} /></SettingsPanel>
         {section === "backups" && props.backups}
+        <div hidden={section !== "gateway"}>{props.gateway}</div>
+        {section === "client-management" && props.clientManagement}
         <div hidden={section !== "diagnostics"}>{props.diagnostics}</div>
         <SettingsPanel section="about" selected={section}><AboutSettings {...props} /></SettingsPanel>
       </div>

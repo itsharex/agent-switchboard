@@ -1,9 +1,23 @@
 //! Claude's Google model discovery; never probes a Codex endpoint or cache.
-use super::ProviderModel;
+use super::{models::diagnostic_secrets, ProviderModel};
 use crate::provider_diagnostics::{network_diagnostic, read_http_diagnostic};
 use asb_core::{contracts::ProviderConnectionOptions, AuthenticationScheme, UpstreamProtocol};
 use serde_json::Value;
 use std::{collections::BTreeSet, io::Read, time::Duration};
+
+fn google_diagnostic_secrets(
+    raw_key: &str,
+    resolved_key: &str,
+    connection: &ProviderConnectionOptions,
+) -> Vec<String> {
+    let mut secrets = diagnostic_secrets(raw_key, connection);
+    if resolved_key != raw_key {
+        secrets.push(resolved_key.to_string());
+        secrets.sort();
+        secrets.dedup();
+    }
+    secrets
+}
 
 pub(super) fn fetch(
     base: &str,
@@ -24,6 +38,8 @@ pub(super) fn fetch(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| "无法初始化 Google 模型列表请求")?;
+    let secrets = google_diagnostic_secrets(raw_key, &key, connection);
+    let secret_refs = secrets.iter().map(String::as_str).collect::<Vec<_>>();
     let mut models = Vec::new();
     let mut tokens = BTreeSet::new();
     let mut next: Option<String> = None;
@@ -52,18 +68,9 @@ pub(super) fn fetch(
             .execute(request)
             .map_err(|error| network_diagnostic(url.as_str(), &error).summary())?;
         if !response.status().is_success() {
-            return Err(read_http_diagnostic(response, &[raw_key, &key]).summary());
+            return Err(read_http_diagnostic(response, &secret_refs).summary());
         }
-        let mut bytes = Vec::new();
-        response
-            .take(2 * 1024 * 1024 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| "读取 Google 模型列表失败")?;
-        if bytes.len() > 2 * 1024 * 1024 {
-            return Err("Google 模型列表超过大小限制".into());
-        }
-        let value: Value =
-            serde_json::from_slice(&bytes).map_err(|_| "Google 模型列表不是有效 JSON")?;
+        let value = read_page(response)?;
         let (page, token) = parse_page(&value)?;
         for model in page {
             if !models.iter().any(|old: &ProviderModel| old.id == model.id) {
@@ -84,6 +91,18 @@ pub(super) fn fetch(
         }
     }
     Err("Google 模型列表超过分页上限，请缩小模型列表范围".into())
+}
+
+fn read_page(response: reqwest::blocking::Response) -> Result<Value, String> {
+    let mut bytes = Vec::new();
+    response
+        .take(2 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "读取 Google 模型列表失败")?;
+    if bytes.len() > 2 * 1024 * 1024 {
+        return Err("Google 模型列表超过大小限制".into());
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "Google 模型列表不是有效 JSON".into())
 }
 
 fn parse_page(value: &Value) -> Result<(Vec<ProviderModel>, Option<String>), String> {
@@ -118,6 +137,7 @@ fn parse_page(value: &Value) -> Result<(Vec<ProviderModel>, Option<String>), Str
         models.push(ProviderModel {
             id: id.into(),
             owned_by: Some("Google".into()),
+            image_input: None,
         });
     }
     let token = value

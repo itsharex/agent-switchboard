@@ -1,8 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-export function messageFor(error: unknown): string {
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message;
-  return String(error);
-}
+
 export function useCodexOperations(onChanged: () => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,7 +9,7 @@ export function useCodexOperations(onChanged: () => void) {
     if (running.current) return undefined;
     running.current = true; setBusy(true); setError(null); setNotice(null);
     try { return await action(); }
-    catch (cause) { setError(messageFor(cause)); return undefined; }
+    catch (cause) { setError(cause && typeof cause === "object" && "message" in cause && typeof cause.message === "string" ? cause.message : String(cause)); return undefined; }
     finally { running.current = false; setBusy(false); }
   }, []);
   const changed = useCallback((message: string) => { setNotice(message); onChanged(); }, [onChanged]);

@@ -13,7 +13,7 @@
   min-width: 0;
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -40,7 +40,7 @@
   gap: var(--asb-space-unit);
   padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   font: var(--asb-text-label);
   font-weight: 700;
@@ -101,7 +101,7 @@
   min-width: 0;
   padding: var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
 }
 
@@ -129,7 +129,7 @@
   min-height: var(--asb-control-height-micro);
   padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -151,7 +151,7 @@
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
 }
 

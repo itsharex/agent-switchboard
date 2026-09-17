@@ -11,7 +11,7 @@
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   font: var(--asb-text-body);
 }
@@ -38,19 +38,19 @@
 }
 
 .asb-table th:first-child {
-  border-top-left-radius: calc(var(--asb-radius-control) - 1px);
+  border-top-left-radius: calc(var(--asb-radius) - 1px);
 }
 
 .asb-table th:last-child {
-  border-top-right-radius: calc(var(--asb-radius-control) - 1px);
+  border-top-right-radius: calc(var(--asb-radius) - 1px);
 }
 
 .asb-table tbody tr:last-child td:first-child {
-  border-bottom-left-radius: calc(var(--asb-radius-control) - 1px);
+  border-bottom-left-radius: calc(var(--asb-radius) - 1px);
 }
 
 .asb-table tbody tr:last-child td:last-child {
-  border-bottom-right-radius: calc(var(--asb-radius-control) - 1px);
+  border-bottom-right-radius: calc(var(--asb-radius) - 1px);
 }
 
 .asb-table .asb-btn-secondary {

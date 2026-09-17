@@ -558,31 +558,35 @@ export function SessionManager({ active }: { active: boolean }) {
       {pendingDelete && (
         <ConfirmSheet
           title="删除会话"
-          details={[
-            `将永久删除本地会话「${pendingDelete.title}」`,
-            `会话 ID ${pendingDelete.sessionId}`,
-            "此操作不可恢复；Codex 或 Claude Code 将无法再恢复该会话。",
-          ]}
           confirmLabel="确认删除"
           destructive
           onConfirm={() => void runDelete()}
           onCancel={() => setPendingDelete(null)}
-        />
+        >
+          <ul className="asb-dialog-details">
+            <li>将永久删除本地会话「{pendingDelete.title}」</li>
+            <li>会话 ID {pendingDelete.sessionId}</li>
+            <li>此操作不可恢复；Codex 或 Claude Code 将无法再恢复该会话。</li>
+          </ul>
+        </ConfirmSheet>
       )}
       {pendingBatch && chosenSessions.length > 0 && (
         <ConfirmSheet
           title="批量删除会话"
-          details={[
-            `将永久删除 ${chosenSessions.length} 个本地会话`,
-            ...chosenSessions.slice(0, 3).map((session) => `${clientFullName(session.app)}「${session.title}」`),
-            ...(chosenSessions.length > 3 ? [`以及另外 ${chosenSessions.length - 3} 个会话`] : []),
-            "此操作不可恢复；每个会话的删除结果会单独报告。",
-          ]}
           confirmLabel="确认批量删除"
           destructive
           onConfirm={() => void runBatchDelete()}
           onCancel={() => setPendingBatch(false)}
-        />
+        >
+          <ul className="asb-dialog-details">
+            <li>将永久删除 {chosenSessions.length} 个本地会话</li>
+            {chosenSessions.slice(0, 3).map((session) => (
+              <li key={session.sessionId}>{clientFullName(session.app)}「{session.title}」</li>
+            ))}
+            {chosenSessions.length > 3 && <li>以及另外 {chosenSessions.length - 3} 个会话</li>}
+            <li>此操作不可恢复；每个会话的删除结果会单独报告。</li>
+          </ul>
+        </ConfirmSheet>
       )}
     </div>
   );

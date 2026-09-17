@@ -23,10 +23,8 @@ mod settings;
 mod subagents;
 #[cfg(test)]
 mod tests;
-mod universal;
 mod usage;
 
-pub use universal::{UniversalProvider, UniversalProviderInput};
 
 pub use codex::{
     codex_model_catalog_document, default_model_limits, official_model_limits, CodexCapabilities,
@@ -55,7 +53,7 @@ pub use provider::{
 };
 pub use responses::{ResponsesOptions, ResponsesRequestMode};
 pub use settings::{
-    ClientSettingsPreview, ClientSettingsSnapshot, ConfigValue, SettingValue, SettingsValues,
+    ClientSettingsSnapshot, ConfigValue, SettingValue, SettingsValues,
     MAX_EXACT_CONFIG_INTEGER,
 };
 pub use subagents::{

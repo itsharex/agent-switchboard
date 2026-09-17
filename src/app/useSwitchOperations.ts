@@ -8,24 +8,24 @@ import {
   type AppKind,
   type CommandError,
   type ConfigFileStatus,
-  type FilePreview,
   type KeyChange,
   type ProviderProfile,
   type ConfigWriteRecord,
 } from "../api/client";
 import { notifyWriteOutcome } from "./notifications";
+import type { ActivationCandidate } from "./useProviderSwitchFlow";
 
 interface SwitchOperationDeps {
   busy: boolean;
   onError: (error: CommandError) => void;
   clearError: () => void;
   setBusy: (busy: boolean) => void;
-  switchCandidate: { profileId: string; file: FilePreview } | null;
-  retractPreview: () => void;
+  activationCandidate: ActivationCandidate | null;
+  clearCandidates: () => void;
   invalidateCandidates: () => void;
-  selectProfile: (profileId: string) => Promise<void> | void;
-  selectedId: string | null;
-  selectedProfile: ProviderProfile | null;
+  setTargetProfile: (profileId: string) => Promise<void> | void;
+  targetProfileId: string | null;
+  targetProfile: ProviderProfile | null;
   refresh: () => Promise<void>;
   refreshDiscoveryOrAppend: (warnings: string[], failureNote: string) => Promise<string[]>;
 }
@@ -40,12 +40,12 @@ export function useSwitchOperations({
   onError,
   clearError,
   setBusy,
-  switchCandidate,
-  retractPreview,
+  activationCandidate,
+  clearCandidates,
   invalidateCandidates,
-  selectProfile,
-  selectedId,
-  selectedProfile,
+  setTargetProfile,
+  targetProfileId,
+  targetProfile,
   refresh,
   refreshDiscoveryOrAppend,
 }: SwitchOperationDeps) {
@@ -86,30 +86,30 @@ export function useSwitchOperations({
   }, []);
 
   const runSwitch = useCallback(async () => {
-    if (busy || !switchCandidate || !selectedProfile || switchCandidate.profileId !== selectedId) return;
+    if (busy || !activationCandidate || !targetProfile || activationCandidate.profileId !== targetProfileId) return;
     invalidateCandidates();
     setBusy(true);
     clearError();
     try {
       const result = await executeSwitch(
-        switchCandidate.profileId,
-        switchCandidate.file.contentHash,
-        switchCandidate.file.renderedHash,
+        activationCandidate.profileId,
+        activationCandidate.file.contentHash,
+        activationCandidate.file.renderedHash,
         true,
-        switchCandidate.file,
+        activationCandidate.file,
       );
       await refresh();
-      await selectProfile(selectedId);
+      await setTargetProfile(targetProfileId);
       const warnings = await refreshDiscoveryOrAppend(
         result.warnings,
         "配置已写入，但无法刷新本机配置发现结果。",
       );
-      notifyWriteOutcome(`已切换到「${selectedProfile.name}」`, selectedProfile.app, warnings);
+      notifyWriteOutcome(`已切换到「${targetProfile.name}」`, targetProfile.app, warnings);
     } catch (caught) {
       const commandError = caught as CommandError;
       onError(commandError);
       if (commandError.code === "external-change" || commandError.code === "preview-stale") {
-        retractPreview();
+        clearCandidates();
       }
       await refresh();
     } finally {
@@ -120,13 +120,13 @@ export function useSwitchOperations({
     clearError,
     invalidateCandidates,
     onError,
-    switchCandidate,
+    activationCandidate,
     refresh,
     refreshDiscoveryOrAppend,
-    retractPreview,
-    selectProfile,
-    selectedId,
-    selectedProfile,
+    clearCandidates,
+    setTargetProfile,
+    targetProfileId,
+    targetProfile,
     setBusy,
   ]);
 
@@ -139,7 +139,7 @@ export function useSwitchOperations({
       try {
         const result = await restoreBackup(backupId, true);
         await refresh();
-        if (selectedId) await selectProfile(selectedId);
+        if (targetProfileId) await setTargetProfile(targetProfileId);
         const warnings = await refreshDiscoveryOrAppend(
           result.warnings,
           "配置已恢复，但无法刷新本机配置发现结果。",
@@ -158,8 +158,8 @@ export function useSwitchOperations({
       onError,
       refresh,
       refreshDiscoveryOrAppend,
-      selectProfile,
-      selectedId,
+      setTargetProfile,
+      targetProfileId,
       setBusy,
     ],
   );
@@ -174,7 +174,7 @@ export function useSwitchOperations({
     try {
       const result = await undoLastSwitch(target.app, true);
       await refresh();
-      if (selectedId) await selectProfile(selectedId);
+      if (targetProfileId) await setTargetProfile(targetProfileId);
       const warnings = await refreshDiscoveryOrAppend(
         result.warnings,
         "配置已撤回，但无法刷新本机配置发现结果。",
@@ -193,8 +193,8 @@ export function useSwitchOperations({
     onError,
     refresh,
     refreshDiscoveryOrAppend,
-    selectedId,
-    selectProfile,
+    targetProfileId,
+    setTargetProfile,
     setBusy,
     undoDiff.state,
     undoPending,

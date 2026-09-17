@@ -84,7 +84,8 @@ tauri-plugin-opener = "2"
 # commands so both the desktop webview and the browser-dev backend can use it.
 tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
-tauri-plugin-updater = "2.11"
+# The custom Windows installer owns the exact NSIS updater invocation emitted by 2.11.0.
+tauri-plugin-updater = "=2.11.0"
 # Rejects additional desktop launches: the duplicate process exits during
 # plugin init and the surviving instance restores its main window instead.
 tauri-plugin-single-instance = "2"

@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
-import { ExtensionDialog } from "../../components/extensions/ExtensionDialog";
+import { AppDialog } from "../../components/AppDialog";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 export function PortableExportSheet({
@@ -14,7 +14,7 @@ export function PortableExportSheet({
 }) {
   const [path, setPath] = useState("");
   return (
-    <ExtensionDialog title={`导出便携包 ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog}>
+    <AppDialog title={`导出便携包 ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog}>
       <form
         className="asb-form"
         onSubmit={(event) => {
@@ -45,6 +45,6 @@ export function PortableExportSheet({
           </Button>
         </div>
       </form>
-    </ExtensionDialog>
+    </AppDialog>
   );
 }

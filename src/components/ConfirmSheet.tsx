@@ -4,7 +4,7 @@ import { Button } from "./Button";
 
 interface Props {
   title: string;
-  details: ReactNode[];
+  children: ReactNode;
   confirmLabel: string;
   confirmDisabled?: boolean;
   destructive?: boolean;
@@ -18,7 +18,7 @@ interface Props {
  */
 export function ConfirmSheet({
   title,
-  details,
+  children,
   confirmLabel,
   confirmDisabled = false,
   destructive = false,
@@ -56,7 +56,7 @@ export function ConfirmSheet({
   return (
     <div
       className="asb-dialog-backdrop is-inline"
-      onClick={(e) => e.target === e.currentTarget && onCancel()}
+      onClick={(event) => event.target === event.currentTarget && onCancel()}
     >
       <div
         ref={sheetRef}
@@ -68,13 +68,7 @@ export function ConfirmSheet({
         <header className="asb-dialog-heading">
           <h2 className="asb-dialog-title">{title}</h2>
         </header>
-        <div className="asb-dialog-body">
-          <ul className="asb-dialog-details">
-            {details.map((detail, index) => (
-              <li key={index}>{detail}</li>
-            ))}
-          </ul>
-        </div>
+        <div className="asb-dialog-body">{children}</div>
         <div className="asb-dialog-footer">
           <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
             取消

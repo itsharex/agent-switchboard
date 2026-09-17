@@ -39,10 +39,13 @@ export interface CodexEditorDraft {
 
 /** One editor catalog row. The two limits may stay empty (null): empty means
  * "use the model's default" and is materialized with a concrete number only
- * when the draft is prepared for save. */
+ * when the draft is prepared for save. `imageInputEvidence` belongs only to
+ * the editor: it records whether the current model discovery supplied an
+ * explicit input-modality fact and never reaches the persisted profile. */
 export type EditableCodexCatalogEntry = Omit<CodexCatalogEntry, "contextWindow" | "maxOutputTokens"> & {
   contextWindow: number | null;
   maxOutputTokens: number | null;
+  imageInputEvidence: boolean | null;
 };
 
 /** Explicit starting capability declaration; the catalog generator only ever
@@ -126,7 +129,7 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
     upstream: record.profile.upstream,
     requestMode: record.profile.requestMode,
     defaultModel: record.profile.defaultModel,
-    catalog: record.profile.catalog.map((entry) => ({ ...entry, supportedReasoningLevels: [...entry.supportedReasoningLevels] })),
+    catalog: record.profile.catalog.map((entry) => ({ ...entry, supportedReasoningLevels: [...entry.supportedReasoningLevels], imageInputEvidence: null })),
     modelRoutes: record.profile.modelRoutes.map((route) => ({ ...route })),
     capabilities: { ...record.profile.capabilities },
     parameters: { settings: { ...record.parameters.settings } },
@@ -147,20 +150,27 @@ export function prepareCodexDraft(draft: CodexEditorDraft): CodexProviderDraft |
     upstream: draft.upstream,
     requestMode: draft.requestMode,
     defaultModel: draft.defaultModel.trim(),
-    catalog: draft.catalog.map((entry) => {
-      const limits = defaultModelLimits(entry.id);
-      return {
-        ...entry,
-        contextWindow: entry.contextWindow ?? limits.contextWindow,
-        maxOutputTokens: entry.maxOutputTokens ?? limits.maxOutputTokens,
-      };
-    }),
+    catalog: draft.catalog.map(prepareCatalogEntry),
     modelRoutes: draft.modelRoutes,
     capabilities: draft.capabilities,
     parameters: draft.parameters,
     notes: optional(draft.notes),
     websiteUrl: optional(draft.websiteUrl),
     usageQuery: normalizeUsageQuery(draft.usageQuery),
+  };
+}
+
+function prepareCatalogEntry({
+  contextWindow,
+  maxOutputTokens,
+  imageInputEvidence: _imageInputEvidence,
+  ...entry
+}: EditableCodexCatalogEntry): CodexCatalogEntry {
+  const limits = defaultModelLimits(entry.id);
+  return {
+    ...entry,
+    contextWindow: contextWindow ?? limits.contextWindow,
+    maxOutputTokens: maxOutputTokens ?? limits.maxOutputTokens,
   };
 }
 
@@ -238,7 +248,7 @@ export function validateCodexDraft(draft: CodexEditorDraft): string[] {
  * never inferred. */
 export interface CatalogSeedFacts {
   contextWindow?: number | null;
-  images?: boolean | null;
+  imageInput?: boolean | null;
   defaultReasoningLevel?: CodexReasoningLevel | null;
   reasoningLevels?: readonly CodexReasoningLevel[] | null;
 }
@@ -277,27 +287,39 @@ export function catalogEntryFromModel(
     reasoning,
     defaultReasoningLevel,
     supportedReasoningLevels: levels,
-    images: facts.images ?? false,
+    images: facts.imageInput === true,
+    imageInputEvidence: facts.imageInput ?? null,
     compact: capabilities.compact,
   };
 }
 
 /** A blank editable row for manual entry, narrowed to the declared capabilities. */
 export function emptyCatalogEntry(capabilities: CodexCapabilities): EditableCodexCatalogEntry {
-  return catalogEntryFromModel({ id: "", ownedBy: null }, capabilities);
+  return catalogEntryFromModel({ id: "", ownedBy: null, imageInput: null }, capabilities);
 }
 
-/** Appends rows for models not already cataloged, preserving user edits. */
+/** Merges explicit image-input facts from discovery without guessing from
+ * model names. A source-confirmed unsupported model is disabled immediately;
+ * a source-confirmed supported model preserves any user choice to keep image
+ * input off. Newly discovered models inherit the same evidence. */
 export function mergeFetchedCatalog(
   current: EditableCodexCatalogEntry[],
   models: ProviderModel[],
   capabilities: CodexCapabilities,
 ): EditableCodexCatalogEntry[] {
-  const known = new Set(current.map((entry) => entry.id));
+  const discovered = new Map(models.map((model) => [model.id, model.imageInput]));
+  const refreshed = current.map((entry) => {
+    const imageInput = discovered.get(entry.id);
+    if (imageInput === undefined || imageInput === null) return entry;
+    return imageInput
+      ? { ...entry, imageInputEvidence: true }
+      : { ...entry, images: false, imageInputEvidence: false };
+  });
+  const known = new Set(refreshed.map((entry) => entry.id));
   const added = models
     .filter((model) => !known.has(model.id))
-    .map((model) => catalogEntryFromModel(model, capabilities));
-  return [...current, ...added];
+    .map((model) => catalogEntryFromModel(model, capabilities, { imageInput: model.imageInput }));
+  return [...refreshed, ...added];
 }
 
 /** Keeps catalog, routes, and chat reasoning consistent with the declared

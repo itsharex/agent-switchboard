@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { DiscoverPanel } from "../../components/extensions/DiscoverPanel";
-import { ExtensionDialog } from "../../components/extensions/ExtensionDialog";
+import { AppDialog } from "../../components/AppDialog";
 import { ExtensionSearch } from "./ExtensionToolbar";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
@@ -38,8 +38,8 @@ export function ExtensionDiscoveryPanel({ workspace: w }: { workspace: Extension
  * uses ExtensionDiscoveryPanel so discovery does not create another layer. */
 export function ExtensionDiscoveryDialog({ workspace: w }: { workspace: ExtensionWorkspace }) {
   return (
-    <ExtensionDialog title="从本机发现" busy={w.busy} onClose={w.nav.closeDialog} wide>
+    <AppDialog title="从本机发现" busy={w.busy} onClose={w.nav.closeDialog} wide>
       <ExtensionDiscoveryPanel workspace={w} />
-    </ExtensionDialog>
+    </AppDialog>
   );
 }

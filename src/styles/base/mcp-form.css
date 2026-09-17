@@ -44,7 +44,7 @@
   height: var(--asb-control-height);
   padding-inline: var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   color: var(--asb-text-muted);
   background: var(--asb-content);
   font: var(--asb-text-label);

@@ -267,8 +267,7 @@ pub struct RouteState {
     /// Codex run parameters found in the live configuration, when this is a
     /// Codex route. They are imported into the profile that owns them.
     pub codex_model_options: Option<CodexModelSettings>,
-    /// Claude model tiers in effect. The Haiku tier falls back to the
-    /// deprecated `ANTHROPIC_SMALL_FAST_MODEL` when that is all the file has.
+    /// Claude model tiers in effect, read only from their current canonical keys.
     pub haiku_model: Option<String>,
     pub sonnet_model: Option<String>,
     pub opus_model: Option<String>,

@@ -1,10 +1,3 @@
-.asb-route-cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--asb-space-3);
-  margin-bottom: var(--asb-space-4);
-}
-
 .asb-route-card {
   position: relative;
   display: flex;
@@ -15,20 +8,48 @@
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: 38px;
   background: var(--asb-route-idle-bg);
 }
 
 .asb-route-card.is-on {
-  border-color: var(--asb-action);
+  --asb-text: #10263b;
+  --asb-text-muted: #3b5369;
+  --asb-link: #075d99;
+  --asb-warning: #854600;
+  --asb-hairline: rgb(16 38 59 / 0.16);
+  --asb-hairline-strong: rgb(16 38 59 / 0.3);
+  --asb-route-inner-bg: rgb(255 255 255 / 0.48);
+  border-color: rgb(255 255 255 / 0.78);
+  background: var(--asb-route-active-gradient);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.56),
+    var(--asb-route-shadow);
 }
 
 .asb-route-card[data-app="claude"].is-on {
-  border-color: var(--asb-claude);
+  border-color: rgb(255 255 255 / 0.78);
+}
+
+/* The idle-card point matrix is decorative only; active overview cards use
+   the cloud gradient without a competing texture. */
+.asb-card-particle-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.asb-route-card.is-on .asb-card-particle-canvas {
+  display: none;
 }
 
 .asb-route-card-body {
   position: relative;
+  z-index: 1;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -49,11 +70,7 @@
 }
 
 .asb-route-card.is-on .asb-route-client {
-  color: var(--asb-action);
-}
-
-.asb-route-card[data-app="claude"].is-on .asb-route-client {
-  color: var(--asb-claude);
+  color: var(--asb-text-muted);
 }
 
 .asb-route-provider {
@@ -79,7 +96,7 @@
   margin: 0;
   padding: var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-route-inner-bg);
 }
 
@@ -108,20 +125,18 @@
   gap: var(--asb-space-1);
   margin: 0;
   padding: var(--asb-space-2);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-route-inner-bg);
   color: var(--asb-warning);
   font: var(--asb-text-label);
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 760px) {
-  .asb-route-cards {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 480px) {
+  .asb-route-card {
+    border-radius: 28px;
+  }
+
   .asb-route-values {
     grid-template-columns: 1fr;
   }

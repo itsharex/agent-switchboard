@@ -261,6 +261,38 @@ pub fn preview_rendered(
     })
 }
 
+/// Builds a preview for a deterministic syntax repair. The current document is
+/// intentionally not syntax-validated because it is the broken source being
+/// backed up and replaced; only the repaired candidate may proceed.
+pub fn preview_repair_rendered(
+    app: asb_core::AppKind,
+    target: &Path,
+    backup_dir: &Path,
+    current: &str,
+    rendered: &str,
+) -> Result<FilePreview, SwitchError> {
+    asb_core::adapter::validate_syntax(app, rendered).map_err(|error| SwitchError::PlanRejected {
+        message: error.message,
+        line: error.line,
+    })?;
+    Ok(FilePreview {
+        preview: SwitchPreview {
+            app,
+            target: target.to_string_lossy().into_owned(),
+            changes: vec![],
+            warnings: vec!["已生成可安全自动修复的配置候选；确认后会先备份原文件。".to_string()],
+            backup_dir: backup_dir.to_string_lossy().into_owned(),
+        },
+        content_hash: sha256_hex(current),
+        rendered_hash: sha256_hex(rendered),
+        content: crate::display::display_content(app, rendered),
+        auth_hash: None,
+        auth_rendered_hash: None,
+        auth_existed: None,
+        auth_rendered_existed: None,
+    })
+}
+
 pub struct RenderedWriteRequest<'a> {
     pub target: &'a Path,
     pub app: asb_core::AppKind,

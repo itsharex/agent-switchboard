@@ -1,0 +1,225 @@
+/* Provider list layout: stable data zones make models and endpoints easy to compare. */
+/* Provider rows use a compact, scan-first data layout. Each card keeps
+   identity, model, connection, summary, and actions in stable zones. */
+.asb-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  animation: asb-provider-list-appear var(--asb-motion-fast) var(--asb-easing) both;
+}
+
+@keyframes asb-provider-list-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.asb-row-line {
+  /* The action rail stays fixed while the data tracks share the remaining
+     width, so a supported window size keeps every value on one horizontal rail. */
+  --asb-provider-grid: var(--asb-touch-target) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .75fr) var(--asb-provider-row-action-width);
+  display: grid;
+  grid-template-columns: var(--asb-provider-grid);
+  align-items: center;
+  gap: var(--asb-space-2);
+  width: 100%;
+}
+
+.asb-row-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  width: 100%;
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
+  color: var(--asb-text);
+  transition:
+    background-color var(--asb-motion-fast) var(--asb-easing),
+    border-color var(--asb-motion-press) var(--asb-easing);
+}
+
+/* The primary data rail is a fixed-height line. Expanded usage, login, and
+   preview surfaces live below it, so no row action or summary can stretch the model cell. */
+.asb-row-line {
+  --asb-row-line-height: var(--asb-provider-row-line-height);
+  height: var(--asb-row-line-height);
+  min-height: var(--asb-row-line-height);
+}
+
+.asb-row-item:hover,
+.asb-row-item.is-live {
+  border-color: var(--asb-action);
+  background: var(--asb-provider-row-highlight);
+}
+
+/* A pending switch confirmation turns the card into a reading surface: hover
+   stops tinting it. :where keeps this exception at the base rule's
+   specificity so the is-live card below still wins. */
+.asb-row-item.is-confirming {
+  background: var(--asb-content);
+  border-color: var(--asb-hairline-strong);
+}
+
+.asb-row-grip-spacer {
+  display: block;
+  width: var(--asb-touch-target);
+  height: var(--asb-touch-target);
+}
+
+/* Identity owns the current-state badge. The data columns stay aligned and
+   can be compared without reading a vertically stacked detail block. */
+.asb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+.asb-row-identity-copy,
+.asb-row-identity-heading,
+.asb-row-model,
+.asb-row-endpoint,
+.asb-row-summary {
+  min-width: 0;
+}
+
+.asb-row-identity-copy {
+  flex: 1;
+}
+
+.asb-row-identity-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+}
+
+.asb-row-model,
+.asb-row-endpoint {
+  overflow: hidden;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-row-model {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  align-self: stretch;
+  height: var(--asb-row-line-height);
+  min-height: var(--asb-row-line-height);
+  color: var(--asb-text);
+  font-family: var(--asb-font-code);
+}
+/* Model names are always one horizontal value. A long name is clipped inside
+   its own slot instead of wrapping and increasing the primary rail height. */
+.asb-row-model-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: inherit;
+}
+
+/* The summary is reduced to one compact fact and stays on the fixed data
+   rail. There is no ellipsis and no wrapping that could alter model height. */
+.asb-row-summary {
+  overflow: hidden;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: nowrap;
+}
+
+.asb-row-usage-summary {
+  display: block;
+}
+
+.asb-row-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: stretch;
+  width: var(--asb-provider-row-action-width);
+  gap: var(--asb-space-2);
+  min-width: 0;
+}
+
+/* Keep the action rail reserved for alignment, but reveal every row action
+   only when the row is intentionally inspected. Opacity preserves keyboard
+   tab order; focus-within reveals the focused action before it is used. */
+.asb-row-item .asb-row-activate {
+  flex: none;
+  display: inline-flex;
+  padding-inline: var(--asb-space-3);
+}
+
+@media (hover: hover) {
+  .asb-row-item .asb-row-controls > .asb-btn,
+  .asb-row-item .asb-row-controls > .asb-iconcluster {
+    opacity: 0;
+    visibility: visible;
+    pointer-events: none;
+    transition: opacity var(--asb-motion-press) var(--asb-easing);
+  }
+
+  .asb-row-item:hover .asb-row-controls > .asb-btn,
+  .asb-row-item:hover .asb-row-controls > .asb-iconcluster,
+  .asb-row-item:focus-within .asb-row-controls > .asb-btn,
+  .asb-row-item:focus-within .asb-row-controls > .asb-iconcluster {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.asb-row-item.is-live .asb-avatar {
+  background: var(--asb-content);
+  color: var(--asb-text);
+}
+
+.asb-avatar {
+  display: grid;
+  place-items: center;
+  width: var(--asb-square-control-size);
+  height: var(--asb-square-control-size);
+  flex: none;
+  border-radius: var(--asb-radius);
+  background: var(--asb-surface-rail);
+  font: 600 16px/1 var(--asb-font-display);
+  color: var(--asb-text-muted);
+  transition:
+    background-color var(--asb-motion-press) var(--asb-easing),
+    color var(--asb-motion-press) var(--asb-easing);
+}
+
+.asb-pill-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--asb-space-hairline) var(--asb-space-2);
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-row-selected);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+  white-space: nowrap;
+}
+
+.asb-row-name {
+  overflow: hidden;
+  font: var(--asb-text-body);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (hover: none) {
+  .asb-row-item .asb-row-controls > .asb-btn,
+  .asb-row-item .asb-row-controls > .asb-iconcluster {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}

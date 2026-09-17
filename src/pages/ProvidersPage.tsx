@@ -1,19 +1,16 @@
 import type {
   AppKind,
   ConfigFileStatus,
-  FilePreview,
   LockStatus,
   ProviderDraft,
   ProviderProfile,
   UsageQuery,
 } from "../api/client";
 import type { ProviderView } from "../app/navigation";
-import { PreviewInspector } from "../components/PreviewInspector";
 import { ProviderEditor } from "../components/ProviderEditor";
 import { ProviderList } from "../components/ProviderList";
 import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
 import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
-import { ModuleHeader } from "../components/WorkspaceHeader";
 import type { ProviderEditorSession } from "../app/useProviders";
 
 interface ProvidersPageProps {
@@ -29,18 +26,14 @@ interface ProvidersPageProps {
   userConfigModel: string | null;
   /** Known conditions that can override the user-level configuration. */
   userConfigWarnings: string[];
-  selectedId: string | null;
   /** The generic editor serves Claude only; Codex owns its specialized editor. */
   editorSession: Extract<ProviderEditorSession, { app: "claude" }> | null;
-  preview: { profileId: string; file: FilePreview } | null;
   busy: boolean;
   /** Persisted profile ids whose usage panel is collapsed. */
   collapsedUsageIds: string[];
   onSelectApp: (app: AppKind) => void;
   onNew: () => void;
   onImport: () => void;
-  onOpenClientSettings: () => void;
-  onOpenHistory: () => void;
   onCloseEditor: () => void;
   onSave: (draft: ProviderDraft) => Promise<void>;
   /** Replaces the editor session when the user picks Codex from the editor. */
@@ -55,12 +48,10 @@ interface ProvidersPageProps {
     profile: ProviderProfile,
     minutes: number,
   ) => Promise<boolean>;
-  onSelect: (profileId: string) => void;
   onReorder: (orderedIds: string[]) => void;
   /** Persists the flipped usage-panel state for the profile. */
   onToggleUsage: (profile: ProviderProfile) => void;
   onActivate: (profile: ProviderProfile) => void;
-  onTogglePreview: (profile: ProviderProfile) => void;
   onEdit: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
   /** Refreshes the provider snapshot after a management-dialog change. */
@@ -99,22 +90,6 @@ function ProviderEditView(props: ProvidersPageProps) {
   );
 }
 
-function ProviderPreview(props: ProvidersPageProps) {
-  if (!props.preview) return null;
-  // Read-only what-if: the preview shows what a
-  // switch would write; the write itself is confirmed in the 启用 sheet.
-  return (
-    <section className="asb-preview-inline" aria-label="变更预览">
-      <ModuleHeader title="变更预览" />
-      <PreviewInspector
-        filePreview={props.preview.file}
-        userConfigModel={props.userConfigModel}
-        userConfigWarnings={props.userConfigWarnings}
-      />
-    </section>
-  );
-}
-
 function ProviderListView({
   onConfigureUsage,
   ...props
@@ -131,8 +106,6 @@ function ProviderListView({
       statuses={props.statuses}
       profiles={props.profiles}
       locks={props.locks}
-      onOpenClientSettings={props.onOpenClientSettings}
-      onOpenHistory={props.onOpenHistory}
       onImport={props.onImport}
       onNew={props.onNew}
     >
@@ -140,19 +113,14 @@ function ProviderListView({
         profiles={props.profiles.filter((profile) => profile.app === appFilter)}
         activeProfileId={props.activeProfileId}
         userConfigModel={props.userConfigModel}
-        selectedId={props.selectedId}
-        openPreviewId={props.preview?.profileId ?? null}
         collapsedUsageIds={props.collapsedUsageIds}
-        onSelect={props.onSelect}
         onReorder={props.onReorder}
         onToggleUsage={props.onToggleUsage}
         onSaveQuotaInterval={props.onSaveQuotaInterval}
         onActivate={props.onActivate}
-        onPreview={props.onTogglePreview}
         onEdit={props.onEdit}
         onConfigureUsage={onConfigureUsage}
         onDelete={props.onDelete}
-        renderPreview={() => <ProviderPreview {...props} />}
       />
     </ProviderWorkspaceShell>
   );
@@ -191,7 +159,7 @@ export function ProvidersPage(props: ProvidersPageProps) {
   }
   if (props.editorSession !== null) {
     return (
-      <div hidden={!props.active}>
+      <div className="asb-provider-editor-route" hidden={!props.active}>
         <ProviderEditView {...props} />
       </div>
     );

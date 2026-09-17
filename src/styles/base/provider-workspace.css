@@ -1,14 +1,14 @@
-/* The observed connection cards and the editable provider list are separate
-   surfaces: reading current state never blends into choosing or changing it. */
+/* Each observed connection card and the editable provider list are direct,
+   independent workspace modules. */
 .asb-provider-workspace {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--asb-space-4);
   min-width: 0;
 }
 
-.asb-provider-connection-panel .asb-route-cards {
-  margin-bottom: 0;
+.asb-provider-list-panel {
+  grid-column: 1 / -1;
 }
 
 /* Third-party enable precondition. */
@@ -32,5 +32,11 @@
 .asb-provider-import .asb-discovery-import {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 760px) {
+  .asb-provider-workspace {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

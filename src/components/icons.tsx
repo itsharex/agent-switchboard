@@ -10,14 +10,15 @@ import {
   ChevronUp,
   Copy,
   Download,
-  Ellipsis,
   Eye,
   EyeOff,
   FolderOpen,
   GripVertical,
   Minus,
+  Network,
   Pencil,
   Pin,
+  Radio,
   Play,
   Plus,
   Search,
@@ -51,12 +52,13 @@ export const RestoreIcon = icon(Copy, 16);
 export const CloseIcon = icon(X, 16);
 export const PinIcon = icon(Pin, 16);
 export const GripIcon = icon(GripVertical, 18);
-export const MoreIcon = icon(Ellipsis, 18);
 export const PlayIcon = icon(Play, 16);
 export const UpdateIcon = icon(Download, 16);
 export const UsageIcon = icon(ChartColumnIncreasing, 16);
 export const ConnectivityIcon = icon(Wifi, 16);
 export const RequestIcon = icon(Send, 16);
+export const GatewayIcon = icon(Network, 20);
+export const GatewaySignalIcon = icon(Radio, 16);
 
 export const ChevronDownIcon = icon(ChevronDown, 16, 2.4);
 export const ChevronUpIcon = icon(ChevronUp, 16, 2.4);

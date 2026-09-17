@@ -8,6 +8,14 @@ export const NATIVE_PROTOCOL: Record<AppKind, UpstreamProtocol> = {
   claude: "anthropicMessages",
 };
 
+/** A route converts wire protocols only when its client and upstream protocols differ. */
+export function isProtocolTranslation(
+  clientProtocol: UpstreamProtocol,
+  upstreamProtocol: UpstreamProtocol,
+): boolean {
+  return clientProtocol !== upstreamProtocol;
+}
+
 /** Single owner of the UpstreamProtocol display name across pages and forms. */
 export const PROTOCOL_LABELS: Record<UpstreamProtocol, string> = {
   responses: "OpenAI Responses",

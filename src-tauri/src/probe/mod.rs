@@ -17,7 +17,7 @@ mod tests;
 #[cfg(test)]
 mod auth_tests;
 
-pub(crate) use models::provider_auth_headers;
+pub(crate) use models::{image_input_from_entry, provider_auth_headers};
 pub use models::{fetch_models, ProviderModel};
 pub use transport::{
     http_get, http_get_with_options, http_request, http_request_with_options, probe, probe_warmed,

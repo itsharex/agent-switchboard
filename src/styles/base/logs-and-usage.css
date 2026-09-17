@@ -40,7 +40,7 @@
   justify-content: center;
   min-height: var(--asb-runtime-log-empty-min-height);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
 }
 
@@ -71,7 +71,7 @@
   align-items: center;
   padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-action);
+  border-radius: var(--asb-radius);
   background: var(--asb-content);
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
@@ -151,7 +151,7 @@
   justify-content: center;
   min-height: 0;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
 }
 

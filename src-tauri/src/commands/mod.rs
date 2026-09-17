@@ -22,33 +22,12 @@
 //! free while a provider responds.
 
 mod app_settings;
-pub(crate) mod claude_accounts;
-pub(crate) mod claude_endpoints;
-pub(crate) mod claude_env;
-pub(crate) mod claude_failover_import;
 pub(crate) mod claude_integration;
-pub(crate) mod claude_ledger;
-pub(crate) mod claude_management;
-pub(crate) mod claude_mcp_import;
-pub(crate) mod claude_pricing;
-pub(crate) mod claude_prompts;
-pub(crate) mod claude_session_usage;
-pub(crate) mod codex_accounts;
-pub(crate) mod codex_common;
-pub(crate) mod codex_endpoints;
-pub(crate) mod codex_env;
-pub(crate) mod codex_history;
-pub(crate) mod codex_management;
-pub(crate) mod codex_metering;
-pub(crate) mod codex_prompts;
 pub(crate) mod codex_project_plans;
-pub(crate) mod codex_universal;
 mod discovery;
-pub(crate) mod failover;
 mod profiles;
 mod query;
 mod quota;
-pub(crate) mod xai_accounts;
 
 #[cfg(test)]
 mod tests;
@@ -59,9 +38,10 @@ pub(crate) mod error;
 pub(crate) mod extensions;
 pub(crate) mod gateway;
 pub(crate) mod client_configuration_apply;
+pub(crate) mod client_configuration_manual;
+pub(crate) mod client_configuration_repair;
 pub(crate) mod model_usage;
 pub(crate) mod official_login;
-pub(crate) mod outbound_proxy;
 pub(crate) mod prompt_management;
 pub(crate) mod provider_endpoints;
 pub(crate) mod provider_request;

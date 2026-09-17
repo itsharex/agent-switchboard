@@ -18,6 +18,10 @@ function reasonLabel(reason: string): string {
   if (reason === "restore-precheck") return "恢复前备份";
   if (reason === "gateway-port-change") return "网关端口修改前备份";
   if (reason === "gateway-port-rollback") return "网关端口恢复前备份";
+  if (reason === "client-configuration-apply") return "应用客户端通用配置前备份";
+  if (reason === "client-configuration-repair") return "自动修复客户端配置前备份";
+  if (reason === "client-configuration-native-defaults") return "恢复客户端原生默认值前备份";
+  if (reason === "client-configuration-clear-extra-configuration") return "清空额外通用配置前备份";
   return reason;
 }
 
@@ -154,21 +158,20 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
       {pending && (
         <ConfirmSheet
           title="恢复备份"
-          details={[
-            <>
-              时间 <Time iso={pending.createdAt} />
-            </>,
-            `客户端 ${clientLabel(pending.app)}`,
-            `内容哈希 ${pending.contentHash.slice(0, 12)}`,
-            "当前内容会先另行备份，恢复本身可撤销。",
-          ]}
           confirmLabel="确认恢复"
           onConfirm={() => {
             onRestore(pending.id);
             setPending(null);
           }}
           onCancel={() => setPending(null)}
-        />
+        >
+          <ul className="asb-dialog-details">
+            <li>时间 <Time iso={pending.createdAt} /></li>
+            <li>客户端 {clientLabel(pending.app)}</li>
+            <li>内容哈希 {pending.contentHash.slice(0, 12)}</li>
+            <li>当前内容会先另行备份，恢复本身可撤销。</li>
+          </ul>
+        </ConfirmSheet>
       )}
     </div>
   );

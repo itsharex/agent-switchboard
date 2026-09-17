@@ -6,7 +6,7 @@ mod shared;
 mod validation;
 pub use import::import_fragment;
 pub use projection::{
-    apply, apply_profile, changes, changes_profile, diff_documents, fragment, import_filter,
+    apply, apply_profile, changes, changes_profile, diff_documents, import_filter,
     owned_paths, validate_scopes,
 };
 use serde_json::{Map, Value};
@@ -20,27 +20,13 @@ pub const MANIFEST: &str = "ASB_CLAUDE_COMMON_KEYS";
 pub const PROFILE_MANIFEST: &str = "ASB_CLAUDE_PROFILE_KEYS";
 pub type Extra = Map<String, Value>;
 
-/// Separates visual client fields from the additional fragment, without giving
-/// either store a second owner for provider or extension configuration.
-pub fn split(text: &str) -> Result<(String, Extra), String> {
-    let mut extra: Value =
-        serde_json::from_str(text).map_err(|_| "Claude 配置片段不是有效 JSON")?;
+/// Parses Claude's ASB-managed extra configuration without accepting any
+/// visual client setting, provider setting, credential, or extension field.
+pub fn parse_extra(text: &str) -> Result<Extra, String> {
+    let extra: Value =
+        serde_json::from_str(text).map_err(|_| "Claude 额外通用配置不是有效 JSON")?;
     if !extra.is_object() {
-        return Err("Claude 配置片段根节点必须是对象".into());
-    }
-    let mut managed = Value::Object(Map::new());
-    for spec in crate::ownership::setting_specs(crate::AppKind::Claude) {
-        if spec.owner != crate::ownership::SettingOwner::Client
-            || spec.control == crate::ownership::SettingControl::None
-        {
-            continue;
-        }
-        let segments = spec.key.split('.').map(str::to_string).collect::<Vec<_>>();
-        let path = pointer::encode(&segments);
-        if let Some(value) = extra.pointer(&path).cloned() {
-            pointer::set(&mut managed, &segments, value)?;
-            pointer::remove(&mut extra, &segments)?;
-        }
+        return Err("Claude 额外通用配置根节点必须是对象".into());
     }
     let mut canonical = Value::Object(Map::new());
     for (path, value) in leaves(&extra)? {
@@ -48,7 +34,7 @@ pub fn split(text: &str) -> Result<(String, Extra), String> {
     }
     let extra = canonical.as_object().expect("object").clone();
     validate(&extra)?;
-    Ok((managed.to_string(), extra))
+    Ok(extra)
 }
 
 fn leaves(value: &Value) -> Result<BTreeMap<String, Value>, String> {

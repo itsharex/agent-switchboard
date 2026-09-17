@@ -84,6 +84,9 @@ export function useProviderConnection(input: ProviderConnectionInput) {
   const baseUrl = input.baseUrl?.trim() ?? "";
   const endpoints = useResolvedEndpoints(baseUrl, input.upstreamProtocol, input.connection);
   const gatewayRouteWarning = useGatewayWarning(input);
+  const modelsEndpointError = input.connection?.isFullUrl && !input.connection.modelsUrl?.trim()
+    ? "完整请求 URL 不能推导模型列表地址；请填写模型列表 URL"
+    : endpoints.endpoints?.modelsError ?? null;
   const modelAuthentication = input.authentication ?? undefined;
   const modelConnection = input.connection && Object.keys(input.connection).length > 0
     ? input.connection : undefined;
@@ -98,6 +101,10 @@ export function useProviderConnection(input: ProviderConnectionInput) {
    * null when the request was skipped or superseded. */
   const fetchModels = async (): Promise<ProviderModel[] | null> => {
     if (modelsBusy || !baseUrl || !input.upstreamProtocol) return null;
+    if (modelsEndpointError) {
+      setModelsError(modelsEndpointError);
+      return null;
+    }
     const version = modelsVersion.current;
     setModelsBusy(true);
     setModelsError(null);
@@ -121,5 +128,5 @@ export function useProviderConnection(input: ProviderConnectionInput) {
       if (modelsVersion.current === version) setModelsBusy(false);
     }
   };
-  return { models, modelsBusy, modelsError, baseUrl, gatewayRouteWarning, fetchModels, ...endpoints };
+  return { models, modelsBusy, modelsError, modelsEndpointError, baseUrl, gatewayRouteWarning, fetchModels, ...endpoints };
 }

@@ -141,9 +141,7 @@ mod tests {
         let file = state
             .configuration()
             .create_codex_provider(
-                asb_core::codex_presets::prepare("codex-preset-02", "isolated-key")
-                    .unwrap()
-                    .draft,
+                crate::codex_common::test_draft(),
             )
             .unwrap();
         let fragment = resolve(root, &file.profile.id).unwrap().unwrap();

@@ -6,62 +6,134 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'The Windows installer must be built on Windows.' }
-$repository = Split-Path $PSScriptRoot -Parent
-$framework = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319'
-$compiler = Join-Path $framework 'csc.exe'
-if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
-  throw 'The Windows .NET Framework C# compiler is required.'
+
+function Resolve-MSBuild {
+  $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+  if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
+    $resolved = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe'
+    if ($LASTEXITCODE -eq 0 -and $resolved) {
+      $candidate = $resolved | Select-Object -First 1
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+  }
+
+  $frameworkMsBuild = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe'
+  if (Test-Path -LiteralPath $frameworkMsBuild -PathType Leaf) { return $frameworkMsBuild }
+  throw 'MSBuild with .NET Framework WPF targets is required.'
 }
 
+function Assert-WpfTargetingPack {
+  $targetingPack = Join-Path ${env:ProgramFiles(x86)} 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8.1'
+  $requiredAssemblies = @('mscorlib.dll', 'System.Xaml.dll', 'WindowsBase.dll', 'PresentationCore.dll', 'PresentationFramework.dll')
+  $missing = @($requiredAssemblies | Where-Object { -not (Test-Path -LiteralPath (Join-Path $targetingPack $_) -PathType Leaf) })
+  if ($missing.Count -gt 0) {
+    throw '.NET Framework 4.8.1 targeting pack is required to build the custom WPF installer. Missing: ' + ($missing -join ', ')
+  }
+}
+
+function ConvertTo-VerbatimCSharpLiteral {
+  param([Parameter(Mandatory)][string]$Value)
+  if ($Value -match '[\r\n]') { throw 'Installer metadata cannot contain newlines.' }
+  return '@"' + $Value.Replace('"', '""') + '"'
+}
+
+function Assert-InstallerBackground {
+  param([Parameter(Mandatory)][string]$Path)
+  Add-Type -AssemblyName PresentationCore
+  $stream = [IO.File]::OpenRead($Path)
+  try {
+    $decoder = [System.Windows.Media.Imaging.WmpBitmapDecoder]::new(
+      $stream,
+      [System.Windows.Media.Imaging.BitmapCreateOptions]::None,
+      [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
+    if ($decoder.Frames.Count -eq 0) { throw 'Installer background has no image frame.' }
+  }
+  finally {
+    $stream.Dispose()
+  }
+}
+
+$repository = Split-Path $PSScriptRoot -Parent
 Push-Location $repository
 try {
   $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
   $package = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
   $version = (& node scripts/updater-release.mjs workspace-version --cargo-manifest Cargo.toml).Trim()
   if ($LASTEXITCODE -ne 0) { throw 'Could not read the workspace version.' }
+  if ([string]::IsNullOrWhiteSpace($config.productName) -or [string]::IsNullOrWhiteSpace($package.name)) {
+    throw 'Installer product metadata is incomplete.'
+  }
+  $msbuild = Resolve-MSBuild
+  Assert-WpfTargetingPack
+  Assert-InstallerBackground (Resolve-Path -LiteralPath 'installer/assets/installer-background.wdp').Path
+
   $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'target' }
   $bundleRoot = [IO.Path]::GetFullPath((Join-Path $targetRoot 'release/bundle'))
   & node node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.windows.conf.json @TauriArguments
   if ($LASTEXITCODE -ne 0) { throw "Tauri engine build failed (exit code $LASTEXITCODE)." }
+
   $engine = (Resolve-Path -LiteralPath (Join-Path $bundleRoot "nsis/$($config.productName)_${version}_x64-setup.exe")).Path
   $engineVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($engine).ProductVersion
   if ($engineVersion -ne $version) {
     throw "Installation engine version '$engineVersion' does not match workspace '$version'."
   }
+
   $outputDirectory = Join-Path $bundleRoot 'installer'
+  $buildDirectory = Join-Path $targetRoot 'release/agent-switchboard-installer'
+  $intermediateDirectory = Join-Path $buildDirectory 'obj'
   New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
-  $output = Join-Path $outputDirectory "$($config.productName)_${version}_x64-setup.exe"
-  $metadata = Join-Path $outputDirectory 'Package.txt'
-  [IO.File]::WriteAllText($metadata, "$($config.productName)`n$version`n$($package.name)`n", [Text.UTF8Encoding]::new($false))
+  New-Item -ItemType Directory -Path $buildDirectory -Force | Out-Null
+  New-Item -ItemType Directory -Path $intermediateDirectory -Force | Out-Null
+
   $fileVersion = ($version -split '[-+]')[0] + '.0'
-  $assemblyInfo = Join-Path $outputDirectory 'AssemblyInfo.cs'
-  $productLiteral = $config.productName.Replace('"', '""')
-  $versionInfo = @"
+  $buildInfo = Join-Path $buildDirectory 'InstallerBuildInfo.cs'
+  $buildInfoSource = @"
 using System.Reflection;
 [assembly: AssemblyVersion("$fileVersion")]
 [assembly: AssemblyFileVersion("$fileVersion")]
-[assembly: AssemblyInformationalVersion("$version")]
-[assembly: AssemblyProduct(@"$productLiteral")]
+[assembly: AssemblyInformationalVersion($(ConvertTo-VerbatimCSharpLiteral $version))]
+[assembly: AssemblyProduct($(ConvertTo-VerbatimCSharpLiteral $config.productName))]
+
+namespace AgentSwitchboard.Installer
+{
+    internal static class InstallerProductMetadata
+    {
+        internal const string ProductName = $(ConvertTo-VerbatimCSharpLiteral $config.productName);
+        internal const string Version = $(ConvertTo-VerbatimCSharpLiteral $version);
+        internal const string ApplicationFileStem = $(ConvertTo-VerbatimCSharpLiteral $package.name);
+    }
+}
 "@
-  [IO.File]::WriteAllText($assemblyInfo, $versionInfo, [Text.UTF8Encoding]::new($false))
-  $references = @('System.dll', 'System.Core.dll', 'System.Xaml.dll', 'System.Windows.Forms.dll') |
-    ForEach-Object { '/reference:' + (Join-Path $framework $_) }
-  $references += @('WindowsBase.dll', 'PresentationCore.dll', 'PresentationFramework.dll') |
-    ForEach-Object { '/reference:' + (Join-Path $framework "WPF/$_") }
-  $sources = @(Get-ChildItem -LiteralPath 'installer' -Filter '*.cs' -File | ForEach-Object { $_.FullName })
-  if ($sources.Count -eq 0) { throw 'Installer sources are missing.' }
-  $sources += $assemblyInfo
-  & $compiler /nologo /target:winexe /platform:x64 /optimize+ /langversion:5 `
-    "/out:$output" '/win32manifest:installer/app.manifest' '/win32icon:src-tauri/icons/icon.ico' `
-    "/resource:$engine,AgentSwitchboard.Installer.Engine.exe" `
-    '/resource:installer/Theme.xaml,AgentSwitchboard.Installer.Theme.xaml' `
-    '/resource:installer/assets/installer-background.wdp,AgentSwitchboard.Installer.Assets.InstallerBackground.wdp' `
-    "/resource:$metadata,AgentSwitchboard.Installer.Package.txt" @references @sources
+  [IO.File]::WriteAllText($buildInfo, $buildInfoSource, [Text.UTF8Encoding]::new($false))
+
+  $targetName = "$($config.productName)_${version}_x64-setup"
+  $outputPath = [IO.Path]::GetFullPath($outputDirectory) + [IO.Path]::DirectorySeparatorChar
+  $intermediatePath = [IO.Path]::GetFullPath($intermediateDirectory) + [IO.Path]::DirectorySeparatorChar
+  $buildArguments = @(
+    'installer/AgentSwitchboard.Installer.csproj',
+    '/nologo',
+    '/m',
+    '/t:Rebuild',
+    '/p:Configuration=Release',
+    '/p:Platform=x64',
+    "/p:OutputPath=$outputPath",
+    "/p:IntermediateOutputPath=$intermediatePath",
+    "/p:TargetName=$targetName",
+    "/p:InstallerEnginePath=$engine",
+    "/p:InstallerBuildInfoFile=$buildInfo"
+  )
+  & $msbuild @buildArguments
   if ($LASTEXITCODE -ne 0) { throw "Custom installer compilation failed (exit code $LASTEXITCODE)." }
+
+  $output = Join-Path $outputDirectory "$targetName.exe"
+  if (-not (Test-Path -LiteralPath $output -PathType Leaf)) {
+    throw 'Custom installer compilation did not produce the expected executable.'
+  }
   $compiledVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($output)
   if ($compiledVersion.ProductVersion -ne $version -or $compiledVersion.FileVersion -ne $fileVersion -or $compiledVersion.ProductName -ne $config.productName) {
     throw 'Compiled installer version metadata does not match the workspace contract.'
   }
+
   if (Test-Path -LiteralPath "$output.sig") { Remove-Item -LiteralPath "$output.sig" }
   if ($env:TAURI_SIGNING_PRIVATE_KEY) {
     & node node_modules/@tauri-apps/cli/tauri.js signer sign $output

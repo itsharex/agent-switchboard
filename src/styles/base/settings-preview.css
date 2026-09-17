@@ -1,8 +1,11 @@
-/* Client-preference preview below the selection controls */
-.asb-settings-preview {
-  margin-top: var(--asb-space-3);
-  padding-top: var(--asb-space-3);
-  border-top: 1px solid var(--asb-hairline);
+.asb-client-configuration-review {
+  display: grid;
+  gap: var(--asb-space-2);
+  margin: 0 0 var(--asb-space-4);
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
 }
 
 /* One page-owned footer gives whole-form reset, save status, and save action
@@ -75,7 +78,7 @@
   scrollbar-gutter: stable;
   padding: var(--asb-space-3);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
   font: var(--asb-text-code);
   color: var(--asb-text);
@@ -109,7 +112,7 @@
   height: var(--asb-filepreview-height);
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius-control);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
   font: var(--asb-text-code);
   color: var(--asb-text);

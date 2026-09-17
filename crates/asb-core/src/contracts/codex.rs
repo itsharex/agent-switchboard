@@ -1,10 +1,11 @@
 use super::{
-    AuthenticationScheme, ProviderConnectionOptions, ResponsesRequestMode, SettingsValues,
-    UpstreamProtocol, UsageQuery,
+    AuthenticationScheme, ProviderConnectionOptions, ResponsesRequestMode, SettingsValues, UsageQuery,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+mod routing;
+pub use routing::{CodexRouteMode, CodexUpstream};
 pub const CODEX_PROVIDER_SCHEMA_VERSION: u8 = 1;
 
 /// A validated Codex upstream API root. The value is never an operation URL;
@@ -21,73 +22,6 @@ pub const XAI_OAUTH_PLACEHOLDER: &str = "xai_oauth_placeholder";
 /// editable provider endpoint is ignored so a managed account token can
 /// never be sent elsewhere.
 pub const XAI_API_BASE_URL: &str = "https://api.x.ai/v1";
-
-/// The only third-party protocols a Codex profile may target.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CodexUpstream {
-    Responses,
-    ChatCompletions,
-    AnthropicMessages,
-}
-
-/// How a third-party Codex provider is activated in the local client.
-/// Older files without this field deserialize conservatively as `Gateway`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CodexRouteMode {
-    Direct,
-    Gateway,
-}
-
-impl Default for CodexRouteMode {
-    fn default() -> Self {
-        Self::Gateway
-    }
-}
-
-impl CodexRouteMode {
-    pub const fn for_upstream(upstream: CodexUpstream) -> Self {
-        match upstream {
-            CodexUpstream::Responses => Self::Direct,
-            CodexUpstream::ChatCompletions | CodexUpstream::AnthropicMessages => Self::Gateway,
-        }
-    }
-
-    pub const fn requires_gateway(self) -> bool {
-        matches!(self, Self::Gateway)
-    }
-
-    /// Codex can speak a Responses provider directly only when the provider
-    /// uses the native credential scheme and does not need request rewriting.
-    /// Connection overrides therefore become routing facts rather than UI
-    /// hints: a saved profile must project to the same path on every client.
-    pub fn for_connection(
-        upstream: CodexUpstream,
-        connection: &ProviderConnectionOptions,
-        authentication: Option<AuthenticationScheme>,
-    ) -> Self {
-        let default_authentication = upstream.protocol().authentication_scheme();
-        if upstream != CodexUpstream::Responses
-            || connection.requires_gateway()
-            || authentication.is_some_and(|selected| selected != default_authentication)
-        {
-            Self::Gateway
-        } else {
-            Self::Direct
-        }
-    }
-}
-
-impl CodexUpstream {
-    pub const fn protocol(self) -> UpstreamProtocol {
-        match self {
-            Self::Responses => UpstreamProtocol::Responses,
-            Self::ChatCompletions => UpstreamProtocol::ChatCompletions,
-            Self::AnthropicMessages => UpstreamProtocol::AnthropicMessages,
-        }
-    }
-}
 
 /// The operations which may be exposed on the fixed local Codex endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -318,7 +252,6 @@ pub struct CodexModelRoute {
 pub struct CodexProviderProfile {
     pub id: String,
     pub name: String,
-    #[serde(default)]
     pub route_mode: CodexRouteMode,
     pub endpoint: CodexEndpoint,
     pub api_key: String,

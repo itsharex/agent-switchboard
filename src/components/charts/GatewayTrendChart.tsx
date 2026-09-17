@@ -32,7 +32,9 @@ function buildTrendRows(samples: GatewaySample[], nowMs: number): TrendRow[] {
     claude: undefined,
   }));
   let firstMinute = Number.MAX_SAFE_INTEGER;
-  for (const sample of samples) firstMinute = Math.min(firstMinute, Math.floor(sample.atMs / MINUTE_MS));
+  for (const sample of samples) {
+    firstMinute = Math.min(firstMinute, Math.floor(sample.atMs / MINUTE_MS));
+  }
   for (const sample of samples) {
     const index = Math.floor(sample.atMs / MINUTE_MS) - startMinute;
     if (index >= 0 && index < TREND_MINUTES) {
@@ -48,78 +50,138 @@ function buildTrendRows(samples: GatewaySample[], nowMs: number): TrendRow[] {
   return rows;
 }
 
-/** 近 60 分钟网关请求趋势卡。图表卡语言（.bui-scope 工具类表面）按
- * DESIGN.md 图表组件层豁免归图表层所有；本文件是该表面在网关页的唯一入口。 */
+/** 近 60 分钟网关请求趋势复用网关页的材料、文字和状态色，
+ * 而不是引入图表专属的背景或阴影。 */
 export function GatewayTrendChart({ samples }: { samples: GatewaySample[] }) {
   const rows = buildTrendRows(samples, Date.now());
-  const total = rows.reduce((sum, row) => sum + (row.codex ?? 0) + (row.claude ?? 0), 0);
+  const total = rows.reduce(
+    (sum, row) => sum + (row.codex ?? 0) + (row.claude ?? 0),
+    0,
+  );
   return (
-    <figure
-      className="bui-scope flex h-72 w-full min-w-0 flex-col gap-4 rounded-2xl bg-background-secondary-default px-4 pt-4 pb-2"
-      aria-label="近 60 分钟请求趋势"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-0.5">
-          <figcaption className="m-0 text-title-3-semibold text-text-primary">近 60 分钟请求</figcaption>
-          <p className="m-0 text-body-2-medium text-text-tertiary tabular-nums">共 {total} 次请求</p>
-        </div>
-        <dl className="m-0 flex shrink-0 items-center gap-4 text-body-2-medium text-text-secondary">
-          {(["codex", "claude"] as const).map((series, index) => (
-            <div key={series} className="flex items-center gap-1.5">
-              <span
-                className="size-2 rounded-full"
-                style={{ backgroundColor: `var(--color-chart-${index + 1})` }}
-                aria-hidden
-              />
-              <dt className="whitespace-nowrap">{APP_LABELS[series]}</dt>
-            </div>
-          ))}
-        </dl>
-      </div>
+    <figure className="asb-gateway-trend" aria-label="近 60 分钟请求趋势">
+      <GatewayTrendHeader total={total} />
       {total === 0 ? (
-        <p
-          className="m-0 flex flex-1 items-center justify-center text-body-medium text-text-tertiary"
-          role="status"
-        >
+        <p className="asb-gateway-trend-empty" role="status">
           暂无网关请求记录。
         </p>
       ) : (
-        <div className="min-h-0 w-full flex-1">
-          <ChartFrame>
-            <ComposedChart data={rows} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
-              <XAxis
-                dataKey="timestamp"
-                type="number"
-                scale="time"
-                domain={["dataMin", "dataMax"]}
-                ticks={rows.filter((_, index) => index % 10 === 0).map((row) => row.timestamp)}
-                tickFormatter={(value: number) => formatClock(Number(value))}
-                tickLine={false}
-                axisLine={false}
-                tickMargin={12}
-                tick={{ fontSize: 12, fill: "var(--color-text-tertiary)" }}
-              />
-              <YAxis width={44} allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--color-text-tertiary)" }} />
-              <Tooltip content={<TrendTooltip />} cursor={{ stroke: "var(--color-chart-cursor)", strokeWidth: 1, strokeDasharray: "4 4" }} />
-              <Line type="monotone" dataKey="codex" name="Codex" stroke="var(--color-chart-1)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="claude" name="Claude Code" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-            </ComposedChart>
-          </ChartFrame>
-        </div>
+        <GatewayTrendPlot rows={rows} />
       )}
     </figure>
   );
 }
 
-function TrendTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ dataKey: string; value?: number | string }>; label?: number | string }) {
+function GatewayTrendHeader({ total }: { total: number }) {
+  return (
+    <figcaption className="asb-gateway-trend-header">
+      <span className="asb-gateway-trend-copy">
+        <span className="asb-gateway-trend-title">近 60 分钟请求</span>
+        <span className="asb-gateway-trend-summary">共 {total} 次请求</span>
+      </span>
+      <span className="asb-gateway-trend-legend" role="list" aria-label="请求来源">
+        {(["codex", "claude"] as const).map((series, index) => (
+          <span
+            key={series}
+            className="asb-gateway-trend-legend-entry"
+            role="listitem"
+          >
+            <span
+              className="asb-gateway-trend-legend-dot"
+              style={{ backgroundColor: `var(--color-chart-${index + 1})` }}
+              aria-hidden
+            />
+            {APP_LABELS[series]}
+          </span>
+        ))}
+      </span>
+    </figcaption>
+  );
+}
+
+function GatewayTrendPlot({ rows }: { rows: TrendRow[] }) {
+  const ticks = rows
+    .filter((_, index) => index % 10 === 0)
+    .map((row) => row.timestamp);
+  return (
+    <div className="asb-gateway-trend-chart">
+      <ChartFrame>
+        <ComposedChart data={rows} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
+          <XAxis
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            ticks={ticks}
+            tickFormatter={(value: number) => formatClock(Number(value))}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={12}
+            tick={{ fontSize: 12, fill: "var(--asb-text-muted)" }}
+          />
+          <YAxis
+            width={44}
+            allowDecimals={false}
+            tickLine={false}
+            axisLine={false}
+            tick={{ fontSize: 12, fill: "var(--asb-text-muted)" }}
+          />
+          <Tooltip
+            content={<TrendTooltip />}
+            cursor={{
+              stroke: "var(--asb-hairline-strong)",
+              strokeWidth: 1,
+              strokeDasharray: "4 4",
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey="codex"
+            name="Codex"
+            stroke="var(--asb-action)"
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+            isAnimationActive={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="claude"
+            name="Claude Code"
+            stroke="var(--asb-claude)"
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ChartFrame>
+    </div>
+  );
+}
+
+function TrendTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey: string; value?: number | string }>;
+  label?: number | string;
+}) {
   if (!active || !payload?.length) return null;
   const parts = payload
     .filter((entry) => typeof entry.value === "number")
-    .map((entry) => `${entry.dataKey === "codex" ? "Codex" : "Claude Code"}：${entry.value}`);
+    .map(
+      (entry) =>
+        `${entry.dataKey === "codex" ? "Codex" : "Claude Code"}：${entry.value}`,
+    );
   return (
-    <div className="rounded-lg px-3 py-2 text-body-2-medium text-text-primary shadow-md" style={{ background: "var(--asb-chart-tooltip-bg)" }}>
-      <p className="m-0 tabular-nums">{formatClock(Number(label))}</p>
-      {parts.map((part) => <p key={part} className="m-0 tabular-nums">{part}</p>)}
+    <div className="asb-gateway-trend-tooltip">
+      <p>{formatClock(Number(label))}</p>
+      {parts.map((part) => (
+        <p key={part}>{part}</p>
+      ))}
     </div>
   );
 }

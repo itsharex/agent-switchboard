@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    AppKind, AuthenticationScheme, ExplicitMaxOutputTokens, ModelOptions,
-    ProviderConnectionOptions, ResponsesOptions, ResponsesRequestMode, RouteMode, SettingsValues,
-    UpstreamProtocol, UsageQuery,
+    AppKind, AuthenticationScheme, CodexRouteMode, CodexUpstream, ExplicitMaxOutputTokens,
+    ModelOptions, ProviderConnectionOptions, ResponsesOptions, ResponsesRequestMode, RouteMode,
+    SettingsValues, UpstreamProtocol, UsageQuery,
 };
 
 /// Application-side display metadata. It is carried over from a source row or
@@ -209,17 +209,27 @@ impl ProviderProfile {
 
     /// Whether the selected protocol or request shape needs the local gateway.
     pub fn requires_gateway(&self) -> bool {
-        if self.connection.claude_native.is_some() {
+        if self.route_mode != RouteMode::Custom || self.connection.claude_native.is_some() {
             return false;
         }
-        self.route_mode == RouteMode::Custom
-            && ((self.app == AppKind::Codex
-                && self.upstream_protocol != Some(UpstreamProtocol::Responses))
-                || self.requires_protocol_translation()
-                || self
-                    .responses_options
-                    .is_some_and(|options| options.request_mode == ResponsesRequestMode::Minimal)
-                || self.connection.requires_gateway())
+        if self.app == AppKind::Codex {
+            let Some(upstream) = self.upstream_protocol.and_then(CodexUpstream::from_protocol)
+            else {
+                return true;
+            };
+            let request_mode = self
+                .responses_options
+                .map(|options| options.request_mode)
+                .unwrap_or(ResponsesRequestMode::Standard);
+            return CodexRouteMode::for_profile(
+                upstream,
+                request_mode,
+                &self.connection,
+                self.authentication,
+            )
+            .requires_gateway();
+        }
+        self.requires_protocol_translation() || self.connection.requires_gateway()
     }
 
     pub fn requires_protocol_translation(&self) -> bool {

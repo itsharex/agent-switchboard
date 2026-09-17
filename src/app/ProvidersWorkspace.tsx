@@ -6,15 +6,15 @@ import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
   const importing = model.providerView.kind === "import";
-  const { snapshot, appFilter, activeProfileId, providers, switchPreview, appSettingsState, busy } = model;
+  const { snapshot, appFilter, activeProfileId, providers, providerSwitch, appSettingsState, busy } = model;
   const { discoveryState, ccImport } = model;
   const editorApp = providers.editorSession?.app ?? appFilter;
   const userConfigRoute = snapshot.statuses?.find((status) => status.app === editorApp)?.route ?? null;
   const codexEditorSession = providers.editorSession?.app === "codex" ? providers.editorSession : null;
   const claudeEditorSession = providers.editorSession?.app === "claude" ? providers.editorSession : null;
   useEffect(() => {
-    if (!active || importing || appFilter !== "claude" || claudeEditorSession) switchPreview.retractPreview();
-  }, [active, importing, appFilter, claudeEditorSession, switchPreview.retractPreview]);
+    if (!active || importing || appFilter !== "claude" || claudeEditorSession) providerSwitch.clearCandidates();
+  }, [active, importing, appFilter, claudeEditorSession, providerSwitch.clearCandidates]);
   return (
     <>
       {importing && <div hidden={!active}>
@@ -30,10 +30,8 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         officialRecord={snapshot.codexOfficialRecords[0] ?? null}
         activeProfileId={activeProfileId("codex")}
         busy={busy} onBusy={model.setBusy} onError={model.reportError} onRefresh={async () => { await snapshot.refresh(); }}
-        onSelectApp={providers.selectApp} requestedPreviewId={model.requestedCodexPreviewId}
-        onPreviewRequestHandled={model.clearRequestedCodexPreview}
-        onImport={() => { switchPreview.retractPreview(); model.setProviderView({ kind: "import" }); }}
-        onOpenClientSettings={() => model.openClientConfiguration()} onOpenHistory={() => model.openSettings("backups")}
+        onSelectApp={providers.selectApp}
+        onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
         onDelete={(record) => providers.setDeletePending({ kind: "codexThirdParty", record })}
         onDeleteOfficial={(record) => providers.setDeletePending({ kind: "generic", profile: record.profile })}
         editorSession={codexEditorSession} onNew={providers.newEditor} onEdit={providers.openCodexEditor}
@@ -50,24 +48,23 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       profiles={snapshot.profiles} appFilter={appFilter}
       activeProfileId={activeProfileId(appFilter)} statuses={snapshot.statuses} locks={snapshot.locks}
       userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []}
-      selectedId={snapshot.selectedId} editorSession={claudeEditorSession}
-      preview={switchPreview.preview} busy={busy} collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
+      editorSession={claudeEditorSession}
+      busy={busy} collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
       onSelectApp={providers.selectApp} onNew={providers.newEditor}
-      onImport={() => { switchPreview.retractPreview(); model.setProviderView({ kind: "import" }); }}
-      onOpenClientSettings={() => model.openClientConfiguration()} onOpenHistory={() => model.openSettings("backups")}
+      onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
       onCloseEditor={providers.closeEditor} onSave={providers.saveProfile}
       onSwitchClient={providers.newEditorFor}
       onSaveUsageQuery={async (profile, query) => {
         const saved = await providers.saveProfileUsageQuery(profile, query);
         if (saved) {
           providers.selectApp(profile.app);
-          switchPreview.selectProfile(profile.id);
+          providerSwitch.setTargetProfile(profile.id);
         }
         return saved;
       }} onSaveQuotaInterval={providers.saveOfficialQuotaInterval}
-      onSelect={switchPreview.selectProfile} onReorder={providers.dragReorderClaudeProfiles}
+      onReorder={providers.dragReorderClaudeProfiles}
       onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
-      onActivate={switchPreview.activateProfile} onTogglePreview={switchPreview.togglePreviewProfile}
+      onActivate={providerSwitch.requestActivation}
       onEdit={providers.openEditor}
       onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })}
       onRefresh={async () => { await snapshot.refresh(); }} />

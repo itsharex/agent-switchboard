@@ -7,7 +7,7 @@ use crate::contracts::{
 use crate::ownership::is_owned;
 
 use crate::adapter::claude::document::{get, parse, scalar_repr};
-use crate::adapter::claude::overlay::{DEPRECATED_MODEL_KEY, ENV_MODEL_KEY};
+use crate::adapter::claude::overlay::ENV_MODEL_KEY;
 
 pub(crate) fn matches_provider_credentials(
     current: &str,
@@ -98,10 +98,7 @@ pub fn route_state(text: &str) -> RouteState {
     // env.ANTHROPIC_MODEL overrides the top-level `model` when present, so it
     // is the model that actually takes effect.
     let model = string_at(ENV_MODEL_KEY).or_else(|| string_at("model"));
-    // The Haiku tier falls back to the deprecated key so old files import
-    // cleanly; the adapter removes the deprecated key on the next switch.
-    let haiku_model =
-        string_at("env.ANTHROPIC_DEFAULT_HAIKU_MODEL").or_else(|| string_at(DEPRECATED_MODEL_KEY));
+    let haiku_model = string_at("env.ANTHROPIC_DEFAULT_HAIKU_MODEL");
     let available_models = get(&root, "availableModels").and_then(|v| {
         v.as_array().map(|items| {
             items

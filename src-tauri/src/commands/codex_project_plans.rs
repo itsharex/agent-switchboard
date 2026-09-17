@@ -3,14 +3,18 @@
 //! 本模块只拥有方案库本身；应用时的每一步都交给该资源域自己的所有者：
 //! 供应商走切换执行器（`switch_provider_internal`），MCP/Skills 走扩展计划
 //! 管线（`apply_binding_states`），指令走指令激活事务
-//! （`preview_codex_prompt` + `apply_codex_prompt`）。任一步失败只作为该步
+//! （项目方案内的直接激活事务）。任一步失败只作为该步
 //! 的告警继续，不整体回滚——与 CC 一致，且不会留下「方案库新、live 旧」的
 //! 假状态：方案库指针在写入任何客户端文件之前先落盘，失败即早退。
 //!
 //! Claude 的项目方案由 `commands/claude_project_plans.rs` 独立实现，两边不
 //! 共享业务文件、不互相读写。
 
-use super::error::{blocking, require_write_confirmation, state, CommandError};
+use super::{
+    error::{blocking, require_write_confirmation, state, CommandError},
+    ConfigWriteGate,
+};
+use crate::codex_prompts;
 use crate::codex_project_plans::{
     self, ApplyPlan, CodexBindingFact, CodexCurrentState, CodexProjectPlan,
 };
@@ -24,6 +28,24 @@ use tauri::{AppHandle, Manager};
 
 fn plan_error(message: String) -> CommandError {
     CommandError::new("codex-project-plan-failed", message)
+}
+
+async fn activate_project_prompt(app: AppHandle, preset_id: String) -> Result<(), CommandError> {
+    let state = state(&app)?;
+    let gate = app.state::<ConfigWriteGate>().inner().clone();
+    blocking(move || {
+        let _guard = gate.lock().map_err(plan_error)?;
+        let target = state
+            .global_prompt_target(AppKind::Codex)
+            .map_err(plan_error)?;
+        let prompts = codex_prompts::list(state.root(), &target).map_err(plan_error)?;
+        let preview = codex_prompts::preview(state.root(), &target, Some(preset_id), &prompts.revision)
+            .map_err(plan_error)?;
+        codex_prompts::activate(state.root(), &target, &state.prompt_backup_dir(), preview.plan)
+            .map_err(plan_error)?;
+        Ok(())
+    })
+    .await
 }
 
 /// Reads the plan library, refusing a caller whose revision is stale. Every
@@ -584,51 +606,18 @@ pub(crate) async fn apply_codex_project_plan(
             }
         }
 
-        // 3. Prompt activation, through the prompt activation transaction.
+        // 3. Prompt activation stays inside the project-plan transaction.
         if let Some(preset_id) = prepared.plan.prompt_activate.as_deref() {
-            let revision = blocking({
-                let app = app.clone();
-                move || {
-                    let state = state(&app)?;
-                    Ok(crate::codex_prompts::list(
-                        state.root(),
-                        &state
-                            .global_prompt_target(AppKind::Codex)
-                            .map_err(plan_error)?,
-                    )
-                    .map_err(plan_error)?
-                    .revision)
-                }
-            })
-            .await?;
-            match crate::commands::codex_prompts::preview_codex_prompt(
-                app.clone(),
-                Some(preset_id.to_string()),
-                revision,
-            )
-            .await
-            {
-                Ok(preview) => match crate::commands::codex_prompts::apply_codex_prompt(
-                    app.clone(),
-                    preview.plan,
-                    true,
-                )
-                .await
-                {
-                    Ok(_) => applied.push(
-                        prepared
-                            .steps
-                            .iter()
-                            .find(|step| step.kind == "prompt")
-                            .cloned(),
-                    ),
-                    Err(error) => warnings.push(format!(
-                        "指令预设 {preset_id} 激活失败：{}",
-                        error.message
-                    )),
-                },
+            match activate_project_prompt(app.clone(), preset_id.to_string()).await {
+                Ok(()) => applied.push(
+                    prepared
+                        .steps
+                        .iter()
+                        .find(|step| step.kind == "prompt")
+                        .cloned(),
+                ),
                 Err(error) => warnings.push(format!(
-                    "指令预设 {preset_id} 预览失败：{}",
+                    "指令预设 {preset_id} 激活失败：{}",
                     error.message
                 )),
             }

@@ -188,7 +188,7 @@ fn claude_connection(
     if let Some(url) = meta.get("modelsUrl") {
         let url = url.as_str().ok_or("meta.modelsUrl 必须是完整 URL")?;
         crate::endpoint::validate_full_url(url)?;
-        connection.claude_models_url = Some(url.into());
+        connection.models_url = Some(url.into());
     }
     Ok(connection)
 }

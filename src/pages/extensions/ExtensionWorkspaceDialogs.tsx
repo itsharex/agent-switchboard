@@ -1,5 +1,5 @@
 import { Button } from "../../components/Button";
-import { ExtensionDialog, ExtensionDialogSuspension } from "../../components/extensions/ExtensionDialog";
+import { AppDialog, AppDialogSuspension } from "../../components/AppDialog";
 import {
   ExtensionPlanSheet,
   ExtensionRemoveSheet,
@@ -50,12 +50,12 @@ function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWork
       const item = w.items.find((entry) => entry.id === dialog.definitionId);
       if (!item)
         return (
-          <ExtensionDialog title="读取扩展" busy={w.busy} onClose={w.nav.closeDialog}>
+          <AppDialog title="读取扩展" busy={w.busy} onClose={w.nav.closeDialog}>
             <p>暂时无法读取这个扩展，请刷新扩展库。</p>
             <Button variant="secondary" onClick={() => void w.ext.runExclusive(w.ext.refresh)}>
               重新加载
             </Button>
-          </ExtensionDialog>
+          </AppDialog>
         );
       return dialog.type === "skillEditor" && item.kind === "skill" ? (
         <SkillEditorDialog key={item.id} workspace={w} item={item} />
@@ -66,9 +66,9 @@ function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWork
     }
   })();
   return (
-    <ExtensionDialogSuspension suspended={suspended}>
+    <AppDialogSuspension suspended={suspended}>
       {content}
-    </ExtensionDialogSuspension>
+    </AppDialogSuspension>
   );
 }
 

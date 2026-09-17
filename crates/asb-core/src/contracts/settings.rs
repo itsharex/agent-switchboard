@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::contracts::AppKind;
 
 /// Largest integer that can round-trip through JSON's IEEE-754 number type
 /// without a loss of precision. Typed configuration values use `f64`, so a
@@ -100,15 +99,4 @@ impl SettingsValues {
 pub struct ClientSettingsSnapshot {
     pub settings: SettingsValues,
     pub settings_hash: String,
-}
-
-/// A side-effect-free rendering of the current draft's client-settings
-/// fragment. It never includes provider routing, credentials, or host-owned
-/// configuration.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClientSettingsPreview {
-    pub app: AppKind,
-    pub target: String,
-    pub content: String,
 }

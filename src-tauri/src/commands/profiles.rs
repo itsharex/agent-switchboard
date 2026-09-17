@@ -62,6 +62,69 @@ pub async fn create_codex_profile(
     result
 }
 
+/// A native Responses profile may be active without an in-memory gateway route.
+/// The generated catalog reference still identifies its owning provider.
+fn ensure_codex_profile_deletable(state: &LocalState, id: &str) -> Result<(), CommandError> {
+    let (policy, _) = crate::gateway::codex::policy::load(state.root())
+        .map_err(|error| CommandError::new("codex-policy-invalid", error))?;
+    if policy.provider_ids.iter().any(|entry| entry == id) {
+        return Err(CommandError::new(
+            "codex-provider-in-failover-queue",
+            "请先从 Codex 故障转移队列移除该供应商，再删除档案",
+        ));
+    }
+    let target = state
+        .target(AppKind::Codex)
+        .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+    let text = match std::fs::read_to_string(target) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => {
+            return Err(CommandError::new(
+                "codex-profile-delete-check-failed",
+                "无法读取 Codex 配置以确认档案未被引用",
+            ))
+        }
+    };
+    let document = text.parse::<toml_edit::DocumentMut>().map_err(|_| {
+        CommandError::new(
+            "codex-profile-delete-check-failed",
+            "Codex 配置格式无效，无法确认档案是否仍被引用",
+        )
+    })?;
+    if document
+        .get("model_catalog_json")
+        .and_then(toml_edit::Item::as_str)
+        .is_some_and(|pointer| codex_catalog_references_profile(pointer, id))
+    {
+        return Err(CommandError::new(
+            "codex-profile-active",
+            "该 Codex 供应商仍被当前客户端配置引用；请先切换后再删除",
+        ));
+    }
+    Ok(())
+}
+
+fn codex_catalog_references_profile(pointer: &str, id: &str) -> bool {
+    std::path::Path::new(pointer)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|name| {
+            name.starts_with(&format!("agent-switchboard-codex-{id}-")) && name.ends_with(".json")
+        })
+}
+
+fn remove_claude_provider_from_failover_policy(
+    state: &LocalState,
+    provider_id: &str,
+) -> Result<(), String> {
+    if !crate::gateway::failover::path(state.root()).exists() {
+        return Ok(());
+    }
+    let mut policy = crate::gateway::failover::load(state.root())?;
+    policy.provider_ids.retain(|id| id != provider_id);
+    crate::gateway::failover::save(state.root(), &policy)
+}
 #[tauri::command]
 pub async fn delete_codex_profile(
     app: tauri::AppHandle,
@@ -84,7 +147,7 @@ pub async fn delete_codex_profile(
                     "该 Codex 供应商正在被本机协议网关使用；请先切换到官方登录后再删除",
                 ));
             }
-            super::codex_management::ensure_deletable(&state, &profile_id)?;
+            ensure_codex_profile_deletable(&state, &profile_id)?;
             state
                 .configuration()
                 .delete_codex_provider(&profile_id, &expected_file_hash)
@@ -234,7 +297,7 @@ pub async fn delete_profile(
                 .map_err(|error| operation_error("profile-delete-failed", error));
             if deleted.is_ok() && is_claude {
                 if let Err(error) =
-                    crate::commands::failover::remove_provider_from_policy(&state, &profile_id)
+                    remove_claude_provider_from_failover_policy(&state, &profile_id)
                 {
                     log::warn!(
                         "无法从 Claude 故障转移队列清理已删除供应商 {}: {}",
