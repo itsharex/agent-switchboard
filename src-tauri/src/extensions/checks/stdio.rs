@@ -9,6 +9,7 @@ use super::{
 use super::{MAX_LINE_BYTES, RECEIVE_POLL};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, SyncSender};
