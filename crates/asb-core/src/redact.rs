@@ -33,7 +33,10 @@ pub fn is_secret_key(key: &str) -> bool {
 }
 
 /// Value prefixes that mark a value as a live secret, whatever the key says.
-const SECRET_VALUE_PREFIXES: &str = "sk- ghp_ gho_ github_pat_ xox AKIA AIza";
+/// The trailing space is load-bearing: linkers may lay this literal adjacent
+/// to other string data in the binary, and a bare final `AIza` glued to
+/// following word bytes would false-positive release credential scans.
+const SECRET_VALUE_PREFIXES: &str = "sk- ghp_ gho_ github_pat_ xox AKIA AIza ";
 
 /// True when a raw value is secret-shaped: a known token prefix, or a long
 /// pure-alphanumeric run that no model name or URL would produce.
