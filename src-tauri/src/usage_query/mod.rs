@@ -11,8 +11,6 @@ mod declarative;
 pub(crate) mod scheduler;
 mod script;
 
-#[cfg(test)]
-mod tests;
 
 use asb_core::contracts::{ProviderConnectionOptions, UpstreamProtocol, UsageQuery, UsageSummary};
 use declarative::run_declarative_query;

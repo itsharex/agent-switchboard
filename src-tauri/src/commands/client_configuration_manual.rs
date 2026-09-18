@@ -11,6 +11,7 @@ use super::{
     error::{blocking, require_write_confirmation, state, store_error, CommandError},
     ConfigWriteGate,
 };
+use asb_core::adapter::PreviewDiff;
 use asb_core::contracts::{AppKind, SettingsValues};
 use asb_switch::{preview_rendered, rehydrate_display_content, sha256_hex};
 use std::io::ErrorKind;
@@ -73,8 +74,15 @@ pub async fn preview_manual_client_configuration(
             subagent_settings,
         )?;
         let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let file = preview_rendered(target, &path, &state.backup_dir(), &current, &rendered)
-            .map_err(CommandError::from)?;
+        let file = preview_rendered(
+            target,
+            &path,
+            &state.backup_dir(),
+            &current,
+            &rendered,
+            PreviewDiff::Owned,
+        )
+        .map_err(CommandError::from)?;
         Ok(ClientConfigurationApplyPreview {
             file,
             settings_hash: stored.settings_hash,

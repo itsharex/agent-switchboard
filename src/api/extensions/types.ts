@@ -384,6 +384,8 @@ export interface PlannedTargetView {
   changes: PlanChangeView[];
   files?: FileChangeView[];
   writesSensitiveConnectionData: boolean;
+  /** 该目标将替换一个未被本应用接管的同名原生条目，需要显式确认。 */
+  adoptsNativeEntry: boolean;
 }
 
 export interface PlannedOperationView {

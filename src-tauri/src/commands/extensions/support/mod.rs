@@ -18,8 +18,6 @@ use asb_core::extensions::contracts::{
     SkillDependency, SkillManifest, EXTENSIONS_SCHEMA_VERSION,
 };
 use asb_core::extensions::plan::ExtensionPlan;
-#[cfg(test)]
-use asb_core::redact::REDACTED;
 use serde::Serialize;
 
 use crate::commands::error::CommandError;
@@ -340,8 +338,6 @@ pub(super) fn extension_mutation(definition: &ExtensionDefinition) -> ExtensionM
     }
 }
 
-#[cfg(test)]
-mod tests;
 
 pub(super) fn projection_error(error: asb_core::extensions::ProjectionError) -> CommandError {
     let message = match error {

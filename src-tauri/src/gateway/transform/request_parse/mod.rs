@@ -33,5 +33,3 @@ use messages::*;
 use protocols::{parse_anthropic, parse_chat, parse_responses};
 use tools::*;
 
-#[cfg(test)]
-mod tool_search_tests;

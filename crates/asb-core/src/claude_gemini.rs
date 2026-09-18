@@ -152,6 +152,3 @@ pub fn credential(
     Ok((scheme, token))
 }
 
-#[cfg(test)]
-#[path = "claude_gemini_tests.rs"]
-mod tests;

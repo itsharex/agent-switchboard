@@ -78,11 +78,10 @@
   margin-bottom: var(--asb-space-4);
 }
 
-/* Client configuration uses the shared subagent material: muted-gray modules
-   establish groups, while editable rows stay white. The save footer remains
-   on the page surface so it is the only unwrapped operation area. */
-.asb-client-settings-panel .asb-toggle-group,
-.asb-client-settings-panel .asb-subagent-settings,
+/* Client configuration keeps its expanded modules on the muted-gray module
+   surface; preference rows themselves are whitespace-separated, not boxed.
+   The toolbar and the save footer stay on the page surface as the unwrapped
+   operation areas. */
 .asb-client-settings-panel .asb-client-configuration-review,
 .asb-client-settings-panel .asb-client-settings-reset-preview,
 .asb-client-settings-panel .asb-official-directory,
@@ -91,16 +90,15 @@
   background: var(--asb-settings-module-bg);
 }
 
-.asb-client-settings-panel .asb-toggle-group {
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-settings-module-border);
-  border-radius: var(--asb-radius);
+/* Loading placeholders reserve the client form's row footprint so the panel
+   does not reflow when the real settings arrive. */
+.asb-settings-skeleton {
+  display: grid;
+  gap: var(--asb-space-2);
 }
 
-.asb-client-settings-panel .asb-toggle-row,
-.asb-client-settings-panel .asb-official-directory-entry {
-  border-color: var(--asb-settings-row-border);
-  background: var(--asb-settings-row-bg);
+.asb-settings-skeleton > .asb-skeleton {
+  height: var(--asb-touch-target);
 }
 
 .asb-client-settings-panel .asb-client-settings-disclosure.is-instructions .asb-client-settings-disclosure-content {
@@ -154,16 +152,10 @@
   margin-top: var(--asb-space-2);
 }
 
-.asb-client-provider-help .asb-field-help {
-  margin: 0;
-}
-
 .asb-client-preference-save {
   justify-content: flex-end;
 }
 
-/* The reset action belongs with the top-level client tools. The footer keeps
-   only save feedback and the save action. */
 .asb-client-configuration-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;
@@ -180,11 +172,6 @@
   gap: var(--asb-space-1);
 }
 
-.asb-client-configuration-notice .asb-field-help,
-.asb-client-configuration-notice .asb-field-error {
-  margin: 0;
-}
-
 /* The toolbar-owned reset preview lists removals on a shared surface instead
    of nesting preview cards inside the expanded section. */
 .asb-client-settings-reset-preview {
@@ -196,7 +183,8 @@
   border-radius: var(--asb-radius);
 }
 
-.asb-client-settings-reset-preview > p {
+.asb-client-settings-reset-preview > p,
+.asb-client-settings-reset-scope > p {
   margin: 0;
 }
 
@@ -220,9 +208,7 @@
 
 
 .asb-client-settings-reset-preview > .asb-section-title,
-.asb-client-settings-reset-scope > p,
-.asb-client-extra-configuration .asb-section-title,
-.asb-client-extra-configuration .asb-field-help {
+.asb-client-settings-reset-scope > p {
   margin: 0;
 }
 
@@ -241,6 +227,17 @@
   gap: var(--asb-space-hairline);
   margin: 0;
   padding-left: 1.25rem;
+}
+
+.asb-client-settings-reset-advanced {
+  display: grid;
+  gap: var(--asb-space-hairline);
+  padding: var(--asb-space-2) 0 0;
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-client-settings-reset-advanced .asb-field-help {
+  margin: 0 0 0 1.5rem;
 }
 
 .asb-client-settings-reset-back {
@@ -282,39 +279,29 @@
 
 .asb-client-settings-reset-error .asb-field-error {
   flex: 1 1 16rem;
-  margin: 0;
 }
 
-.asb-client-configuration-review-heading,
 .asb-client-configuration-review-scope {
   display: grid;
   gap: var(--asb-space-1);
 }
 
-.asb-client-configuration-review-heading .asb-section-title,
-.asb-client-configuration-review-heading .asb-field-help,
-.asb-client-configuration-review-scope .asb-section-title,
-.asb-client-configuration-review-scope .asb-field-help {
-  margin: 0;
-}
-
-.asb-client-configuration-review-scope {
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-settings-row-border);
-  border-radius: var(--asb-radius);
-  background: var(--asb-settings-row-bg);
-}
-
-.asb-client-manual-configuration,
+/* The single real-configuration module: read-only review surface whose
+   heading edit icon turns it editable in place. It leads the review card,
+   so no separator is needed; the Claude extra editor below keeps one. */
+.asb-client-configuration-file,
 .asb-client-claude-extra-editor {
   display: grid;
   gap: var(--asb-space-3);
+}
+
+.asb-client-claude-extra-editor {
   padding-top: var(--asb-space-3);
   border-top: 1px solid var(--asb-hairline);
 }
 
-.asb-client-manual-configuration-heading,
-.asb-client-manual-configuration-actions,
+.asb-client-configuration-file-heading,
+.asb-client-configuration-file-actions,
 .asb-client-claude-extra-editor-heading,
 .asb-client-claude-extra-editor-actions {
   display: flex;
@@ -324,23 +311,12 @@
   gap: var(--asb-space-2);
 }
 
-.asb-client-manual-configuration-heading > div,
+.asb-client-configuration-file-heading > div,
 .asb-client-claude-extra-editor-heading > div {
   min-width: 0;
 }
 
-.asb-client-manual-configuration-heading .asb-section-title,
-.asb-client-manual-configuration-heading .asb-field-help,
-.asb-client-manual-configuration > .asb-field-help,
-.asb-client-manual-configuration > .asb-field-error,
-.asb-client-claude-extra-editor-heading .asb-section-title,
-.asb-client-claude-extra-editor-heading .asb-field-help,
-.asb-client-claude-extra-editor > .asb-field-help,
-.asb-client-claude-extra-editor > .asb-field-error {
-  margin: 0;
-}
-
-.asb-client-manual-configuration-actions,
+.asb-client-configuration-file-actions,
 .asb-client-claude-extra-editor-actions {
   justify-content: flex-end;
 }
@@ -391,10 +367,6 @@
   display: grid;
   gap: var(--asb-space-3);
   margin: var(--asb-space-4) 0;
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline-strong);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
 }
 .asb-subagent-heading {
   min-width: 0;
@@ -403,14 +375,11 @@
   display: grid;
   gap: var(--asb-space-2);
 }
-.asb-subagent-settings .asb-subagent-row {
-  background: var(--asb-content);
-}
 .asb-subagent-controls {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: var(--asb-space-2);
 }
@@ -419,9 +388,8 @@
   flex-wrap: wrap;
 }
 .asb-subagent-input {
-  flex: 1 1 16rem;
+  flex: 0 1 7rem;
   min-width: 0;
-  max-width: 28rem;
 }
 .asb-subagent-input .asb-input {
   width: 100%;
@@ -463,10 +431,6 @@
   min-width: 0;
 }
 
-.asb-about-product .asb-field-help {
-  margin-bottom: 0;
-}
-
 .asb-diagnostics:not([hidden]),
 .asb-diagnostics-configuration {
   display: flex;
@@ -504,14 +468,8 @@
     align-items: stretch;
   }
 
-  .asb-client-configuration-commit,
-  .asb-subagent-controls {
+  .asb-client-configuration-commit {
     justify-content: flex-start;
-  }
-
-  .asb-subagent-input {
-    flex-basis: 100%;
-    max-width: none;
   }
 
   .asb-settings-content .asb-settings-actions-main {

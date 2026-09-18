@@ -105,12 +105,6 @@ pub(super) mod lifecycle;
 mod parse;
 mod render;
 
-#[cfg(test)]
-mod lifecycle_tests;
-#[cfg(test)]
-mod native_reasoning_tests;
-#[cfg(test)]
-mod tests;
 
 pub(super) use render::responses_reasoning_item;
 

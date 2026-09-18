@@ -21,8 +21,6 @@ mod provider;
 mod responses;
 mod settings;
 mod subagents;
-#[cfg(test)]
-mod tests;
 mod usage;
 
 

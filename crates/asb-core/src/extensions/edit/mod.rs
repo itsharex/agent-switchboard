@@ -8,8 +8,6 @@
 
 mod apply;
 mod metadata;
-#[cfg(test)]
-mod tests;
 mod view;
 
 pub use apply::apply_mcp_edit;

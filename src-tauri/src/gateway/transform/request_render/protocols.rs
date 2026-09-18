@@ -168,6 +168,9 @@ fn responses_message_role(message: &Message) -> Result<&'static str, TransformEr
 }
 
 pub(super) fn render_responses(request: &CanonicalRequest) -> Result<Value, TransformError> {
+    if request.stop.is_some() {
+        return error("Responses 上游无法表达 stop_sequences 终止序列");
+    }
     let mut root = Map::new();
     root.insert("model".to_string(), Value::String(request.model.clone()));
     root.insert(

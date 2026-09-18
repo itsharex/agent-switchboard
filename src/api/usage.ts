@@ -196,10 +196,18 @@ export function testUsageQuery(
   });
 }
 
-/** Runs a persisted provider query without exposing its credential to the UI.
- * Successful summaries are retained by the desktop runtime for tray display.
- * The backend scheduler owns automatic re-queries; this is the immediate,
- * manual path. */
+/** Ensures the provider's summary is fresh without exposing its credential
+ * to the UI: the desktop runtime returns its retained entry while it is not
+ * due, or pulls one query forward into now. Mount-time reads go through
+ * here; the backend owns all query timing. */
+export function ensureProfileUsage(profileId: string): Promise<UsageSummary> {
+  return invoke<UsageSummary>("ensure_profile_usage", { profileId });
+}
+
+/** Runs one persisted provider query right now without exposing its
+ * credential to the UI. Successful summaries are retained by the desktop
+ * runtime for tray display. This is the forced manual path (the refresh
+ * button); the backend scheduler owns automatic re-queries. */
 export function queryProfileUsage(profileId: string): Promise<UsageSummary> {
   return invoke<UsageSummary>("query_profile_usage", { profileId });
 }

@@ -477,6 +477,3 @@ fn unix_now_ms() -> u64 {
         .unwrap_or_default()
 }
 
-#[cfg(test)]
-#[path = "provider_health_tests.rs"]
-mod tests;

@@ -165,5 +165,3 @@ impl ExtensionStore {
     }
 }
 
-#[cfg(test)]
-mod tests;

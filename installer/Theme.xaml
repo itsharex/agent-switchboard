@@ -11,6 +11,7 @@
   <SolidColorBrush x:Key="Muted" Color="#A8B4C7" />
   <SolidColorBrush x:Key="Line" Color="#2E3C55" />
   <SolidColorBrush x:Key="Action" Color="#0071E3" />
+  <SolidColorBrush x:Key="BrandBlue" Color="#0A84FF" />
   <SolidColorBrush x:Key="ActionHover" Color="#2997FF" />
   <SolidColorBrush x:Key="Hover" Color="#263754" />
   <SolidColorBrush x:Key="Violet" Color="#8B7CFF" />

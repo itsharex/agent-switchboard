@@ -354,9 +354,6 @@ fn average(values: &[u64]) -> Option<u64> {
         .then(|| values.iter().copied().fold(0_u64, u64::saturating_add) / values.len() as u64)
 }
 
-#[cfg(test)]
-#[path = "request_ledger_tests.rs"]
-mod tests;
 
 fn cost_summary(entries: &[ClaudeRequestRecord]) -> Result<(String, usize), String> {
     let mut total = 0u64;

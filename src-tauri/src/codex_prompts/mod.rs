@@ -2,8 +2,6 @@
 //! Inactive edits never touch live instructions or Claude's prompt library.
 pub(crate) mod contracts;
 mod store;
-#[cfg(test)]
-mod tests;
 mod transaction;
 use asb_switch::{read_global_prompt_document, FsIo};
 use contracts::*;

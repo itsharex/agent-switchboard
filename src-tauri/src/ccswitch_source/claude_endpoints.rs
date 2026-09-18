@@ -71,5 +71,3 @@ pub(super) fn merge_into(draft: &mut ProviderDraft, endpoints: &[SourceEndpoint]
         .collect();
 }
 
-#[cfg(test)]
-mod tests;

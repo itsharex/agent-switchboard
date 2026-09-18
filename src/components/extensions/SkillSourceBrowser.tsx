@@ -1,9 +1,12 @@
 import { LoaderCircle, Plus, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import { Button } from "../Button";
+import { EditorFrame } from "../EditorFrame";
 import { Input } from "../Input";
 import { Select } from "../Select";
 import { SearchIcon } from "../icons";
+import { ExtensionLoading } from "./ExtensionLoading";
 import { SkillDirectoryResults } from "./SkillDirectoryResults";
 import { SkillRepositoryManager } from "./SkillRepositoryManager";
 import { SkillSourceCandidate } from "./SkillSourceCandidate";
@@ -12,7 +15,13 @@ import { sourceErrorMessage, type SkillSourceFilter } from "./skill-source-model
 import { skillRepositoryLabel, skillRepositoryName } from "./skill-repository-model";
 import { useSkillSource, type SkillSourceActions, type SkillSourceState } from "./useSkillSource";
 
-interface Props extends SkillSourceActions { busy: boolean; items: ExtensionListItem[] }
+interface Props extends SkillSourceActions {
+  busy: boolean;
+  items: ExtensionListItem[];
+  onBack: () => void;
+  /** Persistent failure notice rendered at the top of the scroll body. */
+  notice?: ReactNode;
+}
 
 function SourceFilters({ state }: { state: SkillSourceState }) {
   return <div className="asb-skill-source-toolbar">
@@ -41,10 +50,14 @@ function SourceResults({ state, busy }: { state: SkillSourceState; busy: boolean
       <Plus size={16} />添加仓库
     </Button>
   </div>;
-  if (state.candidates === null) return (
+  if (state.candidates === null) return state.loading ? (
+    <section className="asb-skill-source-results" aria-label="Skill 来源候选" aria-busy="true">
+      <ExtensionLoading />
+    </section>
+  ) : (
     <div className="asb-skill-source-empty" role="status">
-      {state.loading ? <LoaderCircle size={24} className="asb-skill-source-spinner" /> : <SearchIcon />}
-      <p>{state.loading ? "正在读取 Skills" : state.source === "catalog" ? "尚未刷新仓库" : "尚未扫描来源"}</p>
+      <SearchIcon />
+      <p>{state.source === "catalog" ? "尚未刷新仓库" : "尚未扫描来源"}</p>
     </div>
   );
   return (
@@ -97,16 +110,39 @@ function SourceErrors({ state, busy }: { state: SkillSourceState; busy: boolean 
   </>;
 }
 
+/** 发现 Skills is a full-page workbench on the shared editor frame; the scan
+ * action lives in the fixed bottom bar and submits the source form via its id. */
 export function SkillSourceBrowser(props: Props) {
   const state = useSkillSource(props);
+  const scanning = state.source === "directory" ? state.directory.searching : state.loading;
+  const scanDisabled = props.busy || state.loading || state.imports.busy || (state.source === "catalog" &&
+    (!state.repositories.ready || state.repositories.loading || !state.repositories.items.some((repo) => repo.enabled)));
+  const scanLabel = scanning ? (state.source === "directory" ? "正在搜索…" : "正在扫描…")
+    : state.source === "catalog" ? "刷新仓库"
+      : state.source === "directory" ? "搜索" : state.source === "zip" ? "扫描 ZIP" : "扫描来源";
   return (
-    <section className="asb-skill-source-browser" aria-label="发现 Skills">
-      <SkillSourceForm state={state} busy={props.busy} />
-      {state.managerOpen ? <SkillRepositoryManager state={state} busy={props.busy} /> : <>
-        <SourceErrors state={state} busy={props.busy} />
-        {state.source === "directory" ? <SkillDirectoryResults state={state} busy={props.busy} items={props.items} /> :
-          <SourceResults state={state} busy={props.busy} />}
-      </>}
-    </section>
+    <EditorFrame
+      title="发现 Skills"
+      backLabel="返回扩展库"
+      busy={props.busy}
+      onBack={props.onBack}
+      footer={
+        <Button type="submit" form="skill-source-scan" variant="primary" disabled={scanDisabled}>
+          {scanning ? <LoaderCircle size={16} className="asb-skill-source-spinner" />
+            : state.source === "catalog" ? <RefreshCw size={16} /> : <SearchIcon />}
+          {scanLabel}
+        </Button>
+      }
+    >
+      {props.notice}
+      <div className="asb-skill-source-browser">
+        <SkillSourceForm state={state} busy={props.busy} />
+        {state.managerOpen ? <SkillRepositoryManager state={state} busy={props.busy} /> : <>
+          <SourceErrors state={state} busy={props.busy} />
+          {state.source === "directory" ? <SkillDirectoryResults state={state} busy={props.busy} items={props.items} /> :
+            <SourceResults state={state} busy={props.busy} />}
+        </>}
+      </div>
+    </EditorFrame>
   );
 }

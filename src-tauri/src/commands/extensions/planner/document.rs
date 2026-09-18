@@ -10,7 +10,7 @@ use asb_core::extensions::contracts::{
     DocumentSyntax, ExtensionBinding, ExtensionTarget, ManagedBaseline, ManagedBaselineFile,
 };
 use asb_core::extensions::mcp::apply_claude_entry_restore;
-use asb_core::extensions::plan::{ExtensionPlan, PlanStep};
+use asb_core::extensions::plan::{ExtensionPlan, PlanStep, PlannedOperation};
 
 use crate::commands::error::CommandError;
 use crate::commands::extensions::support::*;
@@ -108,22 +108,166 @@ pub(super) fn document_hash_of(path: &std::path::Path) -> Result<Option<String>,
     }
 }
 
-pub(super) fn json_or_toml_step(
-    client: AppKind,
-    document: &std::path::Path,
-    rendered: String,
-    syntax: DocumentSyntax,
-) -> Result<PlanStep, CommandError> {
-    let expected_content_hash = document_hash_of(document)?;
-    Ok(PlanStep::DocumentWrite {
-        client,
-        path: document.to_string_lossy().to_string(),
-        expected_existed: expected_content_hash.is_some(),
-        expected_content_hash,
-        rendered,
-        syntax,
-        backup_dir: String::new(),
-    })
+// ---------------------------------------------------------------- batch documents
+
+/// Working state of one client document across a batch plan. Every entry
+/// patch of the batch threads through `rendered`, so one document yields
+/// exactly one materialized `DocumentWrite` no matter how many operations
+/// touch it — the same threading the repair path applies.
+pub(super) struct DocumentWork {
+    pub(super) client: AppKind,
+    pub(super) syntax: DocumentSyntax,
+    /// Digest of the document as it sat on disk when the batch first
+    /// touched it; the materialized write's expectation.
+    pub(super) expected_content_hash: Option<String>,
+    /// Whether the document existed at first touch.
+    pub(super) expected_existed: bool,
+    /// The batch's progressively patched text.
+    pub(super) rendered: String,
+    /// Flat target index (batch order) of the target that carries the
+    /// materialized write: the first target that actually changed the text.
+    pub(super) writer: Option<usize>,
+    /// Entry positions already claimed by another binding of this batch.
+    pub(super) claimed: BTreeSet<String>,
+}
+
+/// The batch-scoped document states plus the flat target counter the
+/// planner advances as it pushes targets.
+#[derive(Default)]
+pub(crate) struct DocumentBatch {
+    documents: BTreeMap<String, DocumentWork>,
+    targets: usize,
+}
+
+impl DocumentBatch {
+    /// The flat index of the next target the current builder will push.
+    pub(super) fn targets(&self) -> usize {
+        self.targets
+    }
+
+    pub(super) fn advance(&mut self, count: usize) {
+        self.targets += count;
+    }
+
+    pub(super) fn documents_mut(&mut self) -> &mut BTreeMap<String, DocumentWork> {
+        &mut self.documents
+    }
+}
+
+impl DocumentWork {
+    /// Claims one entry position for the target being built. Two bindings
+    /// of one batch may never write the same position; the first changing
+    /// target of a document becomes its writer.
+    pub(super) fn claim(&mut self, pointer: &str, writer: usize) -> Result<(), CommandError> {
+        if !self.claimed.insert(pointer.to_string()) {
+            return Err(CommandError::new(
+                "extension-conflict",
+                format!("条目 {pointer} 已被同一批量计划中的另一绑定使用"),
+            ));
+        }
+        if self.writer.is_none() {
+            self.writer = Some(writer);
+        }
+        Ok(())
+    }
+}
+
+impl Planner<'_> {
+    /// The batch's working state for one document, reading the file on
+    /// first touch. Every patch of the batch applies to this shared text.
+    pub(super) fn document_work<'a>(
+        &self,
+        batch: &'a mut DocumentBatch,
+        document: &std::path::Path,
+        client: AppKind,
+        syntax: DocumentSyntax,
+    ) -> Result<&'a mut DocumentWork, CommandError> {
+        let key = document.to_string_lossy().to_string();
+        if !batch.documents.contains_key(&key) {
+            let current = read_document(document)?;
+            let empty = match client {
+                AppKind::Codex => String::new(),
+                AppKind::Claude => "{}".to_string(),
+            };
+            batch.documents.insert(
+                key.clone(),
+                DocumentWork {
+                    client,
+                    syntax,
+                    expected_content_hash: document_hash_of(document)?,
+                    expected_existed: current.is_some(),
+                    rendered: current.unwrap_or(empty),
+                    writer: None,
+                    claimed: BTreeSet::new(),
+                },
+            );
+        }
+        Ok(batch.documents.get_mut(&key).expect("just inserted"))
+    }
+}
+
+/// Folds the batch's threaded document states into the plan: one
+/// `DocumentWrite` per touched document, carried by the first target that
+/// changed it, and every planned baseline of that document moves to the
+/// final rendered hash so the committed post-state matches the disk.
+pub(super) fn materialize_document_writes(
+    batch: &mut DocumentBatch,
+    operations: &mut [PlannedOperation],
+) {
+    let mut flat: Vec<(usize, usize)> = Vec::new();
+    for (operation_index, operation) in operations.iter().enumerate() {
+        for target_index in 0..operation.targets.len() {
+            flat.push((operation_index, target_index));
+        }
+    }
+    let documents = batch.documents_mut();
+    for (path, work) in documents.iter_mut() {
+        let Some(writer) = work.writer else {
+            continue;
+        };
+        let final_hash = sha_hex(work.rendered.as_bytes());
+        let Some(&(operation_index, target_index)) = flat.get(writer) else {
+            continue;
+        };
+        operations[operation_index].targets[target_index]
+            .steps
+            .push(PlanStep::DocumentWrite {
+                client: work.client,
+                path: path.clone(),
+                expected_content_hash: work.expected_content_hash.clone(),
+                expected_existed: work.expected_existed,
+                rendered: work.rendered.clone(),
+                syntax: work.syntax,
+                backup_dir: String::new(),
+            });
+        for target in operations
+            .iter_mut()
+            .flat_map(|operation| operation.targets.iter_mut())
+        {
+            let Some(baseline) = &mut target.baseline else {
+                continue;
+            };
+            for entry in &mut baseline.entries {
+                match entry {
+                    ManagedBaseline::DocumentEntry {
+                        target_path,
+                        last_document_hash,
+                        ..
+                    }
+                    | ManagedBaseline::SetMember {
+                        target_path,
+                        last_document_hash,
+                        ..
+                    } if *target_path == *path => {
+                        *last_document_hash = final_hash.clone();
+                    }
+                    ManagedBaseline::DocumentEntry { .. }
+                    | ManagedBaseline::SetMember { .. }
+                    | ManagedBaseline::Directory { .. } => {}
+                }
+            }
+        }
+    }
 }
 
 /// Whether two MCP document scopes address the same native namespace: the

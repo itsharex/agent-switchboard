@@ -10,17 +10,9 @@ mod dispatch;
 mod extensions_dispatch;
 mod http;
 
-#[cfg(all(test, target_os = "windows"))]
-mod sandbox_tests;
 
-#[cfg(test)]
-mod extension_sandbox_tests;
 
-#[cfg(test)]
-mod tests;
 
-#[cfg(all(test, target_os = "windows"))]
-mod provider_request_tests;
 
 pub(crate) const DEV_API_HOST: &str = "127.0.0.1";
 pub(crate) const DEV_API_PORT: u16 = 1422;

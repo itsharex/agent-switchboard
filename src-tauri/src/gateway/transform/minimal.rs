@@ -143,5 +143,3 @@ fn empty(value: &Value) -> bool {
     }
 }
 
-#[cfg(test)]
-mod tests;

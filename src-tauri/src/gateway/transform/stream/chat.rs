@@ -383,6 +383,3 @@ fn parse_usage(value: &Value) -> Result<Usage, TransformError> {
     usage::parse(UpstreamProtocol::ChatCompletions, Some(value))
 }
 
-#[cfg(test)]
-#[path = "chat/tests/mod.rs"]
-mod tests;

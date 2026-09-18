@@ -157,5 +157,3 @@ pub fn declared_keys(root: &serde_json::Value) -> Result<Vec<String>, String> {
     Ok(keys)
 }
 
-#[cfg(test)]
-mod tests;

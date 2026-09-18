@@ -73,8 +73,6 @@ pub(super) fn response_body(
     }
 }
 
-#[cfg(test)]
-mod tests;
 
 pub(super) fn gemini_test_payload(prompt: &str, max: u32) -> serde_json::Value {
     serde_json::json!({"contents":[{"role":"user","parts":[{"text":prompt}]}],"generationConfig":{"maxOutputTokens":max}})

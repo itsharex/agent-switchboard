@@ -1,9 +1,9 @@
-import { FileArchive, FolderGit2, LoaderCircle, RefreshCw, Settings2 } from "lucide-react";
+import { FileArchive, FolderGit2, Settings2 } from "lucide-react";
 import { Button } from "../Button";
 import { Input } from "../Input";
 import { RadioOption } from "../RadioOption";
 import { Tooltip } from "../Tooltip";
-import { FolderOpenIcon, SearchIcon } from "../icons";
+import { FolderOpenIcon } from "../icons";
 import type { SkillSourceKind } from "./skill-source-model";
 import type { SkillSourceState } from "./useSkillSource";
 
@@ -40,13 +40,8 @@ function SourceInput({ state, disabled, busy }: { state: SkillSourceState; disab
 
 export function SkillSourceForm({ state, busy }: { state: SkillSourceState; busy: boolean }) {
   const disabled = state.imports.busy || (busy && !state.loading);
-  const isCatalog = state.source === "catalog";
-  const isDirectory = state.source === "directory";
-  const scanning = isDirectory ? state.directory.searching : isCatalog ? state.catalog.loading : state.files.loading;
-  const submitDisabled = busy || state.loading || state.imports.busy || (isCatalog &&
-    (!state.repositories.ready || state.repositories.loading || !state.repositories.items.some((repo) => repo.enabled)));
   return (
-    <form className="asb-skill-source-form" aria-label="Skill 来源" onSubmit={(event) => {
+    <form id="skill-source-scan" className="asb-skill-source-form" aria-label="Skill 来源" onSubmit={(event) => {
       event.preventDefault(); void state.search();
     }}>
       <div className="asb-skill-source-input-row">
@@ -63,12 +58,6 @@ export function SkillSourceForm({ state, busy }: { state: SkillSourceState; busy
       </div>
       <div className="asb-skill-source-input-row">
         <SourceInput state={state} disabled={disabled} busy={busy} />
-        <Button variant="primary" type="submit" disabled={submitDisabled}>
-          {scanning ? <LoaderCircle size={16} className="asb-skill-source-spinner" /> :
-            isCatalog ? <RefreshCw size={16} /> : <SearchIcon />}
-          {scanning ? (isDirectory ? "正在搜索…" : "正在扫描…") :
-            isCatalog ? "刷新仓库" : isDirectory ? "搜索" : state.source === "zip" ? "扫描 ZIP" : "扫描来源"}
-        </Button>
       </div>
     </form>
   );

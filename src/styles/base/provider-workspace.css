@@ -21,7 +21,13 @@
 
 .asb-provider-import {
   display: grid;
-  gap: var(--asb-space-3);
+  gap: var(--asb-space-4);
+}
+
+/* The import page is a gap-owning stack: unwrapped module headers must not
+   stack their default bottom margin on top of the grid gap. */
+.asb-provider-import > .asb-module-header {
+  margin-bottom: 0;
 }
 
 .asb-provider-import .asb-status-card {

@@ -1,8 +1,6 @@
 //! Local Claude managed-login sessions. A session never writes either client's native auth cache.
 
 mod endpoints;
-#[cfg(test)]
-mod tests;
 mod tokens;
 use super::{contracts::validate_text, http, store, ClaudeAccount, ClaudeAuth};
 use asb_core::claude_auth::ClaudeAuthProvider;

@@ -59,17 +59,25 @@ function ApplicationSettings(props: SettingsPageProps) {
           onHardwareAccelerationChange={(hardwareAcceleration) => onPatch({ hardwareAcceleration })}
           onRestart={props.onRestart} />
       ) : props.loadError ? (
-        <div className="asb-app-setting-row" role="alert">
-          <div className="asb-app-setting-copy">
-            <span className="asb-checkbox-label">设置加载失败：{props.loadError}</span>
-            <span className="asb-app-setting-detail">读取失败期间，外观与关闭行为使用默认值</span>
+        <>
+          <div className="asb-app-setting-row" role="alert">
+            <div className="asb-app-setting-copy">
+              <span className="asb-checkbox-label">设置加载失败：{props.loadError}</span>
+              <span className="asb-app-setting-detail">读取失败期间，外观与关闭行为使用默认值</span>
+            </div>
+            <div className="asb-panel-actions">
+              <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>重试</Button>
+            </div>
           </div>
-          <div className="asb-panel-actions">
-            <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>重试</Button>
-            <Button variant="secondary" disabled={busy} onClick={props.onRepair}>一键修复</Button>
+          <div className="asb-app-settings-danger-zone">
+            <Button variant="danger" disabled={busy} onClick={props.onRepair}>一键修复</Button>
           </div>
-        </div>
-      ) : <p className="asb-empty">加载中</p>}
+        </>
+      ) : <div className="asb-settings-skeleton" role="status" aria-label="正在读取设置">
+        <div className="asb-skeleton" />
+        <div className="asb-skeleton" />
+        <div className="asb-skeleton" />
+      </div>}
     </div>
   );
 }

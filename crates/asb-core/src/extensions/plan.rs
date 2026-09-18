@@ -129,6 +129,11 @@ pub struct PlannedTarget {
     pub warnings: Vec<String>,
     /// Raw entry changes for preview and baseline bookkeeping.
     pub changes: Vec<EntryChange>,
+    /// Whether this target adopts a same-name native entry it does not yet
+    /// own: the baseline records the native value as the verbatim restore
+    /// point, and the frontend must show the diff for explicit confirmation
+    /// before the replace lands.
+    pub adopts_native_entry: bool,
 }
 
 /// The finite set of executable step shapes. There is deliberately no
@@ -236,6 +241,9 @@ pub struct PlannedTargetView {
     /// Whether applying this target writes redacted endpoint, credential, or
     /// argument material into the client document.
     pub writes_sensitive_connection_data: bool,
+    /// Whether this target replaces a native entry this application did not
+    /// own; forces the explicit confirmation dialog.
+    pub adopts_native_entry: bool,
 }
 
 /// One redacted document change.
@@ -336,6 +344,7 @@ fn redact_target(target: &PlannedTarget) -> PlannedTargetView {
         changes,
         files,
         writes_sensitive_connection_data,
+        adopts_native_entry: target.adopts_native_entry,
     }
 }
 
@@ -389,6 +398,7 @@ mod tests {
             }],
             warnings: Vec::new(),
             changes,
+            adopts_native_entry: false,
         }
     }
 

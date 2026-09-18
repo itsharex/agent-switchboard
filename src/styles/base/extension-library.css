@@ -205,6 +205,18 @@
 .asb-ext-table-description { font: var(--asb-text-caption); color: var(--asb-text-muted); }
 .asb-ext-table-meta { flex: none; }
 .asb-ext-table-description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asb-ext-check-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--asb-space-unit);
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--asb-text-muted);
+}
+.asb-ext-check-dot[data-tone="safe"] { background: var(--asb-safe); }
+.asb-ext-check-dot[data-tone="warning"] { background: var(--asb-warning); }
+.asb-ext-check-dot[data-tone="danger"] { background: var(--asb-danger); }
 .asb-ext-update-badge,
 .asb-ext-table-error {
   flex: none;
@@ -253,7 +265,7 @@
 .asb-ext-table-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--asb-space-hairline);
+  gap: var(--asb-space-1);
   opacity: 0;
   transition: opacity var(--asb-motion-press) var(--asb-easing);
 }
@@ -271,7 +283,15 @@
 .asb-ext-import-details.asb-btn > svg { width: var(--asb-icon-size-xs); height: var(--asb-icon-size-xs); }
 .asb-ext-table-action-danger:hover:not(:disabled) { color: var(--asb-danger); background: var(--asb-diff-remove-bg); }
 
-.asb-ext-loading { display: flex; justify-content: center; padding: var(--asb-space-6) var(--asb-space-3); text-align: center; }
+/* Loading reserves the final list's footprint (S7): rows at list-row height
+   instead of a one-line note. Shared by the extension loading states. */
+.asb-ext-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-ext-loading > .asb-skeleton { height: 44px; }
 .asb-ext-result-count { margin: var(--asb-space-2) 0 0; color: var(--asb-text-muted); font: var(--asb-text-caption); }
 
 .asb-ext-menu {

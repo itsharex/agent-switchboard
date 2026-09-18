@@ -44,7 +44,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--asb-space-hairline);
+  gap: var(--asb-space-1);
 }
 .asb-ext-management-actions { margin-left: auto; }
 .asb-ext-management-action.asb-btn,
@@ -59,9 +59,16 @@
   width: var(--asb-icon-size-xs);
   height: var(--asb-icon-size-xs);
 }
+/* Destructive actions always read as danger (S6) and sit one space-2 past
+   the safe cluster: space-unit margin plus the cluster's space-1 gap. */
+.asb-ext-management-action.is-danger,
+.asb-ext-binding-action.is-danger {
+  margin-inline-start: var(--asb-space-unit);
+  color: var(--asb-danger);
+}
+
 .asb-ext-management-action.is-danger:hover:not(:disabled),
 .asb-ext-binding-action.is-danger:hover:not(:disabled) {
-  color: var(--asb-danger);
   background: var(--asb-diff-remove-bg);
 }
 .asb-ext-capability-list,

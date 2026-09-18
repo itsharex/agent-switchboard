@@ -136,6 +136,15 @@ pub fn owned_paths(root: &Value) -> Result<BTreeSet<String>, String> {
     paths.insert(format!("/env/{PROFILE_MANIFEST}"));
     Ok(paths)
 }
+
+/// Same claim set as [`owned_paths`], rendered as dotted document paths so
+/// the adapter layer can match leaves without knowing pointer encoding.
+pub fn owned_dotted_paths(root: &Value) -> Result<BTreeSet<String>, String> {
+    owned_paths(root)?
+        .into_iter()
+        .map(|path| pointer::decode(&path).map(|segments| segments.join(".")))
+        .collect()
+}
 fn changes_with(before: &str, extra: &Extra, manifest: &str) -> Result<Vec<KeyChange>, String> {
     let after = parse(&apply_with(before, extra, manifest)?)?;
     let before = parse(before)?;

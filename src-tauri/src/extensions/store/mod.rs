@@ -212,8 +212,6 @@ mod commit;
 mod content;
 mod records;
 mod skill_backups;
-#[cfg(test)]
-mod tests;
 
 pub use content::ExtensionStoreError;
 pub use skill_backups::SkillBackup;

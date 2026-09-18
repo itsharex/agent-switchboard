@@ -339,7 +339,7 @@ export function SessionManager({ active }: { active: boolean }) {
   return (
     <div className="asb-sessions">
       <WorkspaceHeader
-        title="会话"
+        title="会话记录"
         secondary={
           <>
             <Input
@@ -369,26 +369,29 @@ export function SessionManager({ active }: { active: boolean }) {
               {selecting ? "退出批量选择" : "批量选择"}
             </Button>
             {selecting && (
-              <>
-                <Button
-                  variant="secondary"
-                  disabled={deleting || filtered.length === 0}
-                  onClick={() => setChosen(new Set(filtered.map(sessionKey)))}
-                >
-                  全选筛选结果
-                </Button>
-                <Button
-                  variant="danger"
-                  disabled={deleting || chosen.size === 0}
-                  onClick={() => setPendingBatch(true)}
-                >
-                  删除所选（{chosen.size}）
-                </Button>
-              </>
+              <Button
+                variant="secondary"
+                disabled={deleting || filtered.length === 0}
+                onClick={() => setChosen(new Set(filtered.map(sessionKey)))}
+              >
+                全选筛选结果
+              </Button>
             )}
           </>
         }
       />
+      {selecting && chosen.size > 0 && (
+        <div className="asb-session-selection-bar">
+          <span>已选择 {chosen.size} 个会话</span>
+          <Button
+            variant="danger"
+            disabled={deleting}
+            onClick={() => setPendingBatch(true)}
+          >
+            删除所选（{chosen.size}）
+          </Button>
+        </div>
+      )}
       {issues.length > 0 && (
         <ul className="asb-session-issues" aria-label="会话扫描提示">
           {issues.map((issue) => (
@@ -406,7 +409,13 @@ export function SessionManager({ active }: { active: boolean }) {
             <span className="asb-session-count">{filtered.length}</span>
           </div>
           {sessions === null ? (
-            <p className="asb-empty">正在扫描本地会话</p>
+            <div role="status" aria-label="正在扫描本地会话">
+              <div className="asb-session-skeleton">
+                {Array.from({ length: 5 }, (_, index) => (
+                  <div key={index} className="asb-skeleton asb-session-skeleton-row" />
+                ))}
+              </div>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="asb-empty-state">
               <span className="asb-empty-state-icon" aria-hidden="true">
@@ -476,15 +485,17 @@ export function SessionManager({ active }: { active: boolean }) {
                   >
                     复制工作目录
                   </Button>
-                  <Button
-                    variant="danger"
-                    disabled={deleting}
-                    onClick={() => setPendingDelete(selected)}
-                  >
-                    删除会话
-                  </Button>
                 </div>
               </header>
+              <div className="asb-session-danger-row">
+                <Button
+                  variant="danger"
+                  disabled={deleting}
+                  onClick={() => setPendingDelete(selected)}
+                >
+                  删除会话
+                </Button>
+              </div>
               <p className="asb-session-meta-line">
                 <span className="asb-code asb-session-meta-id">{selected.sessionId}</span>
                 <span>{selected.lastActiveAt ? <Time iso={selected.lastActiveAt} /> : "时间未知"}</span>
@@ -511,7 +522,15 @@ export function SessionManager({ active }: { active: boolean }) {
                     <span className="asb-session-count">{messages?.length ?? 0}</span>
                   </div>
                   <div className="asb-session-transcript" ref={transcriptRef} aria-label="对话历史">
-                    {messageLoading && <p className="asb-empty">正在读取会话内容</p>}
+                    {messageLoading && (
+                      <div role="status" aria-label="正在读取会话">
+                        <div className="asb-session-skeleton">
+                          {Array.from({ length: 6 }, (_, index) => (
+                            <div key={index} className="asb-skeleton asb-session-skeleton-row" />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {detailError && <p className="asb-warn-text">{detailError}</p>}
                     {messages !== null && messages.length === 0 && (
                       <div className="asb-empty-state">

@@ -56,34 +56,36 @@ export function BackupsPage({
       >
         {activeTab === "local" && (
           <>
-            <div className="asb-backup-toolbar">
-              <div className="asb-panel-actions">
-                {lastSwitch && lastSwitch.operation !== "gatewayPortChange" && (
-                  <Button
-                    variant="danger"
-                    disabled={busy}
-                    onClick={() => onUndo(lastSwitch)}
-                  >
-                    {lastSwitch.profileName ? "撤回上一次切换" : "撤回上一次配置写入"}
-                  </Button>
-                )}
-                <Button variant="secondary" onClick={onOpenDir}>
-                  打开备份文件夹
-                </Button>
-              </div>
-            </div>
             {lastSwitch && (
               <p className="asb-scope-note">
                 上次操作：{clientName(lastSwitch.app)}
                 {lastSwitch.operation === "projection" && lastSwitch.profileName
                   ? ` 已投影供应商「${lastSwitch.profileName}」`
                   : lastSwitch.operation === "projection"
-                    ? " 已写入客户端通用配置"
+                    ? " 已写入客户端配置"
                     : lastSwitch.operation === "restore"
                       ? " 恢复了备份"
                       : " 已修改网关监听端口"}
                 ，<Time iso={lastSwitch.at} />。
               </p>
+            )}
+            <div className="asb-backup-toolbar">
+              <div className="asb-panel-actions">
+                <Button variant="secondary" onClick={onOpenDir}>
+                  打开备份文件夹
+                </Button>
+              </div>
+            </div>
+            {lastSwitch && lastSwitch.operation !== "gatewayPortChange" && (
+              <div className="asb-backup-danger-row">
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => onUndo(lastSwitch)}
+                >
+                  {lastSwitch.profileName ? "撤回上一次切换" : "撤回上一次配置写入"}
+                </Button>
+              </div>
             )}
             <BackupHistory records={records} busy={busy} onRestore={onRestore} />
           </>

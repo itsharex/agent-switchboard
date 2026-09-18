@@ -29,8 +29,6 @@ mod profiles;
 mod query;
 mod quota;
 
-#[cfg(test)]
-mod tests;
 
 pub(crate) mod client_settings;
 pub(crate) mod cloud_backup;

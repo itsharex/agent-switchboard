@@ -196,7 +196,11 @@ export function CloudBackupPanel({
         </div>
       </section>
       {!loaded ? (
-        <p className="asb-empty">加载云端备份设置</p>
+        <div className="asb-cloud-backup-loading" role="status" aria-label="正在读取云端备份设置">
+          <div className="asb-skeleton" />
+          <div className="asb-skeleton" />
+          <div className="asb-skeleton" />
+        </div>
       ) : (
         <>
           <form
@@ -303,18 +307,20 @@ export function CloudBackupPanel({
             </label>
             <div className="asb-form-actions">
               <Button
-                variant="secondary"
-                disabled={busy || settings === null}
-                onClick={() => setPending("restore")}
-              >
-                从云端恢复
-              </Button>
-              <Button
                 variant="primary"
                 disabled={busy || settings === null}
                 onClick={() => setPending("upload")}
               >
                 备份到云端
+              </Button>
+            </div>
+            <div className="asb-backup-danger-row">
+              <Button
+                variant="danger"
+                disabled={busy || settings === null}
+                onClick={() => setPending("restore")}
+              >
+                从云端恢复
               </Button>
             </div>
           </fieldset>

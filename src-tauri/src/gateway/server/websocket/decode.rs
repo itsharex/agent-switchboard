@@ -6,11 +6,12 @@ pub(super) fn known_responses_event(kind: &str) -> bool {
     matches!(
         kind,
         "response.created"
-            | "response.in_progress"
             | "response.output_item.added"
             | "response.content_part.added"
             | "response.output_text.delta"
             | "response.function_call_arguments.delta"
+            | "response.custom_tool_call_input.delta"
+            | "response.custom_tool_call_input.done"
             | "response.content_part.done"
             | "response.output_item.done"
             | "response.completed"

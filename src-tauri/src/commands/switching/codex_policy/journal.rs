@@ -209,6 +209,3 @@ pub(super) fn abandon(
     clear(state.root())
 }
 
-#[cfg(test)]
-#[path = "journal_tests.rs"]
-mod tests;

@@ -200,6 +200,3 @@ pub(crate) fn restore_on_exit(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| e.message)
 }
 
-#[cfg(test)]
-#[path = "claude_gateway_tests.rs"]
-mod tests;

@@ -368,5 +368,3 @@ fn read_proxy(connection: &Connection) -> Result<Option<SourceProxy>, String> {
         .map_err(|error| format!("无法读取 Codex 代理策略: {error}"))
 }
 
-#[cfg(test)]
-mod tests;

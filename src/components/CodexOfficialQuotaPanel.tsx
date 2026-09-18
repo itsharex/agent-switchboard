@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { queryCodexOfficialQuota, type CodexOfficialQuota } from "../api/client";
 import { Input } from "./Input";
 import { Button } from "./Button";
-import { OfficialQuotaTrend } from "./OfficialQuotaTrend";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
 import { useAutoQuery } from "./use-auto-query";
-import { useUsageHistory } from "./use-usage-history";
 
 interface Props {
   id: string;
@@ -44,16 +42,10 @@ export function CodexOfficialQuotaPanel({
   refreshIntervalMinutes,
   onSaveInterval,
 }: Props) {
-  const history = useUsageHistory({ kind: "official" });
-  const query = useCallback(async (nextProfileId: string) => {
-    const quota = await queryCodexOfficialQuota(nextProfileId);
-    if (quota.status === "available" && !quota.stale) void history.refresh();
-    return quota;
-  }, [history.refresh]);
   const { data: reading, querying, error: requestError, run } = useAutoQuery(
     profileId,
     refreshIntervalMinutes,
-    query,
+    queryCodexOfficialQuota,
     "订阅额度读取失败",
   );
 
@@ -124,12 +116,6 @@ export function CodexOfficialQuotaPanel({
         />
       </label>
 
-      <OfficialQuotaTrend
-        series={history.series}
-        loading={history.loading}
-        error={history.error}
-        ariaLabel={`${profileName} 官方额度趋势`}
-      />
       {showsWindows && (
         <QuotaWindowsTable
           windows={reading!.windows}

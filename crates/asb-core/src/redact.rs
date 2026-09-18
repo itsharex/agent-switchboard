@@ -19,7 +19,9 @@ const SECRET_MARKERS: &[&str] = &[
     "auth",
 ];
 
-/// True when a key path names something secret-like.
+/// True when a key path names something secret-like. The first app-specific
+/// spec wins; keys are disjoint across apps today (only `model` repeats, as
+/// String on both), so no classification depends on the loop order.
 pub fn is_secret_key(key: &str) -> bool {
     for app in [crate::AppKind::Codex, crate::AppKind::Claude] {
         if let Some(spec) = crate::ownership::setting_spec(app, key) {
@@ -97,5 +99,16 @@ mod tests {
                 REDACTED
             );
         }
+    }
+    #[test]
+    fn codex_routing_urls_render_verbatim() {
+        // openai_base_url is a routing fact, not a secret: the route card
+        // parses its host, so whole-value redaction there broke the display.
+        assert_eq!(
+            redact("openai_base_url", "https://relay.example/v1"),
+            "https://relay.example/v1"
+        );
+        // A secret-shaped value still redacts under this key.
+        assert_eq!(redact("openai_base_url", "sk-live-0123456789abcdef"), REDACTED);
     }
 }

@@ -7,20 +7,18 @@
 
 use asb_core::contracts::AppKind;
 use asb_core::extensions::contracts::{
-    DocumentSyntax, ExtensionBinding, ExtensionDefinition, ExtensionPayload, ExtensionTarget,
-    ManagedBaseline, ManagedBaselineFile,
+    ExtensionBinding, ExtensionDefinition, ExtensionPayload, ExtensionTarget, ManagedBaseline,
+    ManagedBaselineFile,
 };
 use asb_core::extensions::mcp::{
     apply_claude_project_disabled_members, apply_claude_skill_overrides,
     apply_claude_user_server_patches, apply_codex_server_patches, apply_codex_skill_rules,
     claude_project_disabled_member_present, render_codex, SkillOverrideValue,
 };
-use asb_core::extensions::plan::PlanStep;
 
 use crate::commands::error::CommandError;
 use crate::commands::extensions::support::*;
 
-use super::super::document::{json_or_toml_step, read_document};
 use super::super::{McpScope, Planner};
 
 impl Planner<'_> {
@@ -40,9 +38,10 @@ impl Planner<'_> {
         definition: &ExtensionDefinition,
         binding: &ExtensionBinding,
         shared_settings: Option<bool>,
+        batch: &mut super::super::document::DocumentBatch,
+        writer: usize,
     ) -> Result<
         (
-            Vec<PlanStep>,
             Vec<asb_core::extensions::mcp::EntryChange>,
             Option<ManagedBaselineFile>,
             Vec<String>,
@@ -63,25 +62,28 @@ impl Planner<'_> {
                     ));
                 }
                 let key = binding.native_key.as_deref().unwrap_or_default();
+                let work = self.document_work(
+                    batch,
+                    &document,
+                    binding.target.client(),
+                    target.syntax,
+                )?;
+                let base = work.rendered.clone();
                 match &target.scope {
                     McpScope::CodexServers => {
-                        let text = read_document(&document)?.unwrap_or_default();
                         let render =
                             render_codex(mcp, false, self.secrets).map_err(projection_error)?;
                         let (rendered, changes) =
-                            apply_codex_server_patches(&text, &[(key.to_string(), Some(render))])
+                            apply_codex_server_patches(&base, &[(key.to_string(), Some(render))])
                                 .map_err(adapter_error)?;
-                        let document_hash = sha_hex(rendered.as_bytes());
+                        if !changes.is_empty() {
+                            work.claim(&format!("mcp_servers.{key}"), writer)?;
+                            work.rendered = rendered;
+                        }
                         let original_before =
                             changes.first().and_then(|change| change.before.clone());
                         let written = changes.first().and_then(|change| change.after.clone());
                         Ok((
-                            vec![json_or_toml_step(
-                                AppKind::Codex,
-                                &document,
-                                rendered,
-                                DocumentSyntax::Toml,
-                            )?],
                             changes,
                             Some(self.merge_baseline_entry(
                                 &binding.id,
@@ -90,8 +92,8 @@ impl Planner<'_> {
                                     entry_pointer: format!("mcp_servers.{key}"),
                                     original_value: original_before,
                                     last_written_value: written,
-                                    last_document_hash: document_hash,
-                                    target_existed_before: true,
+                                    last_document_hash: sha_hex(work.rendered.as_bytes()),
+                                    target_existed_before: work.expected_existed,
                                     backup_reference: None,
                                 },
                             )?),
@@ -99,20 +101,16 @@ impl Planner<'_> {
                         ))
                     }
                     McpScope::ClaudeUserServers => {
-                        let text = read_document(&document)?.unwrap_or_default();
                         let (rendered, changes) =
-                            apply_claude_user_server_patches(&text, &[(key.to_string(), None)])
+                            apply_claude_user_server_patches(&base, &[(key.to_string(), None)])
                                 .map_err(adapter_error)?;
-                        let document_hash = sha_hex(rendered.as_bytes());
+                        if !changes.is_empty() {
+                            work.claim(&format!("mcpServers.{key}"), writer)?;
+                            work.rendered = rendered;
+                        }
                         let original_before =
                             changes.first().and_then(|change| change.before.clone());
                         Ok((
-                            vec![json_or_toml_step(
-                                AppKind::Claude,
-                                &document,
-                                rendered,
-                                DocumentSyntax::Json,
-                            )?],
                             changes,
                             Some(self.merge_baseline_entry(
                                 &binding.id,
@@ -121,8 +119,8 @@ impl Planner<'_> {
                                     entry_pointer: format!("mcpServers.{key}"),
                                     original_value: original_before,
                                     last_written_value: None,
-                                    last_document_hash: document_hash,
-                                    target_existed_before: true,
+                                    last_document_hash: sha_hex(work.rendered.as_bytes()),
+                                    target_existed_before: work.expected_existed,
                                     backup_reference: None,
                                 },
                             )?),
@@ -130,14 +128,11 @@ impl Planner<'_> {
                         ))
                     }
                     McpScope::ClaudeProjectPrivate { project_path } => {
-                        let current = read_document(&document)?;
-                        let existed = current.is_some();
-                        let text = current.unwrap_or_else(|| "{}".to_string());
                         let original_present =
-                            claude_project_disabled_member_present(&text, project_path, key)
+                            claude_project_disabled_member_present(&base, project_path, key)
                                 .map_err(adapter_error)?;
                         let (rendered, changes) = apply_claude_project_disabled_members(
-                            &text,
+                            &base,
                             project_path,
                             &[key.to_string()],
                             &[],
@@ -146,20 +141,17 @@ impl Planner<'_> {
                         if changes.is_empty() {
                             return Ok((
                                 Vec::new(),
-                                Vec::new(),
                                 None,
                                 vec!["该项目已由原生 MCP 停用规则限制；本应用不会接管该规则"
                                     .to_string()],
                             ));
                         }
-                        let document_hash = sha_hex(rendered.as_bytes());
+                        work.claim(
+                            &format!("projects.{project_path}.disabledMcpServers#{key}"),
+                            writer,
+                        )?;
+                        work.rendered = rendered;
                         Ok((
-                            vec![json_or_toml_step(
-                                AppKind::Claude,
-                                &document,
-                                rendered,
-                                DocumentSyntax::Json,
-                            )?],
                             changes,
                             Some(self.merge_baseline_entry(
                                 &binding.id,
@@ -171,8 +163,8 @@ impl Planner<'_> {
                                     member: key.to_string(),
                                     original_present,
                                     last_present: true,
-                                    last_document_hash: document_hash,
-                                    target_existed_before: existed,
+                                    last_document_hash: sha_hex(work.rendered.as_bytes()),
+                                    target_existed_before: work.expected_existed,
                                     backup_reference: None,
                                 },
                             )?),
@@ -182,7 +174,7 @@ impl Planner<'_> {
                 }
             }
             ExtensionPayload::Skill(_) => {
-                self.disable_skill_steps(definition, binding, shared_settings)
+                self.disable_skill_steps(definition, binding, shared_settings, batch, writer)
             }
         }
     }
@@ -193,9 +185,10 @@ impl Planner<'_> {
         definition: &ExtensionDefinition,
         binding: &ExtensionBinding,
         shared_settings: Option<bool>,
+        batch: &mut super::super::document::DocumentBatch,
+        writer: usize,
     ) -> Result<
         (
-            Vec<PlanStep>,
             Vec<asb_core::extensions::mcp::EntryChange>,
             Option<ManagedBaselineFile>,
             Vec<String>,
@@ -222,23 +215,25 @@ impl Planner<'_> {
                     self.paths.codex_home.as_deref(),
                 );
                 self.require_owned_document_baseline_current(binding, &document)?;
-                let current = read_document(&document)?;
-                let existed = current.is_some();
-                let text = current.unwrap_or_default();
                 let rule_path = self.skill_rule_path(binding)?;
-                let (rendered, changes) =
-                    apply_codex_skill_rules(&text, &[(rule_path.clone(), Some(false))])
-                        .map_err(adapter_error)?;
-                let document_hash = sha_hex(rendered.as_bytes());
+                let work = self.document_work(
+                    batch,
+                    &document,
+                    AppKind::Codex,
+                    asb_core::extensions::contracts::DocumentSyntax::Toml,
+                )?;
+                let (rendered, changes) = apply_codex_skill_rules(
+                    &work.rendered.clone(),
+                    &[(rule_path.clone(), Some(false))],
+                )
+                .map_err(adapter_error)?;
+                if !changes.is_empty() {
+                    work.claim(&format!("skills.config[path={rule_path}]"), writer)?;
+                    work.rendered = rendered;
+                }
                 let original_before = changes.first().and_then(|change| change.before.clone());
                 let written = changes.first().and_then(|change| change.after.clone());
                 Ok((
-                    vec![json_or_toml_step(
-                        AppKind::Codex,
-                        &document,
-                        rendered,
-                        DocumentSyntax::Toml,
-                    )?],
                     changes,
                     Some(self.merge_baseline_entry(
                         &binding.id,
@@ -247,8 +242,8 @@ impl Planner<'_> {
                             entry_pointer: format!("skills.config[path={rule_path}]"),
                             original_value: original_before,
                             last_written_value: written,
-                            last_document_hash: document_hash,
-                            target_existed_before: existed,
+                            last_document_hash: sha_hex(work.rendered.as_bytes()),
+                            target_existed_before: work.expected_existed,
                             backup_reference: None,
                         },
                     )?),
@@ -301,14 +296,21 @@ impl Planner<'_> {
                     }
                 };
                 self.require_owned_document_baseline_current(binding, &document)?;
-                let current = read_document(&document)?;
-                let existed = current.is_some();
-                let text = current.unwrap_or_else(|| "{}".to_string());
+                let work = self.document_work(
+                    batch,
+                    &document,
+                    AppKind::Claude,
+                    asb_core::extensions::contracts::DocumentSyntax::Json,
+                )?;
                 let (rendered, changes) = apply_claude_skill_overrides(
-                    &text,
+                    &work.rendered.clone(),
                     &[(name.to_string(), Some(SkillOverrideValue::Off))],
                 )
                 .map_err(adapter_error)?;
+                if !changes.is_empty() {
+                    work.claim(&format!("skillOverrides.{name}"), writer)?;
+                    work.rendered = rendered;
+                }
                 let mut warnings = vec![format!(
                     "skillOverrides 按名字生效；同名不同来源的 {name} 也会被停用"
                 )];
@@ -317,16 +319,9 @@ impl Planner<'_> {
                 {
                     warnings.push("该项目共享设置文件可能被版本控制；请确认提交范围".to_string());
                 }
-                let document_hash = sha_hex(rendered.as_bytes());
                 let original_before = changes.first().and_then(|change| change.before.clone());
                 let written = changes.first().and_then(|change| change.after.clone());
                 Ok((
-                    vec![json_or_toml_step(
-                        AppKind::Claude,
-                        &document,
-                        rendered,
-                        DocumentSyntax::Json,
-                    )?],
                     changes,
                     Some(self.merge_baseline_entry(
                         &binding.id,
@@ -335,8 +330,8 @@ impl Planner<'_> {
                             entry_pointer: format!("skillOverrides.{name}"),
                             original_value: original_before,
                             last_written_value: written,
-                            last_document_hash: document_hash,
-                            target_existed_before: existed,
+                            last_document_hash: sha_hex(work.rendered.as_bytes()),
+                            target_existed_before: work.expected_existed,
                             backup_reference: None,
                         },
                     )?),

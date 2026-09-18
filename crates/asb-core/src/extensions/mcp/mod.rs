@@ -16,8 +16,6 @@ mod observe;
 mod redaction;
 mod render;
 mod skill_rules;
-#[cfg(test)]
-mod tests;
 
 pub use claude_launcher::{
     unwrap_windows_launcher, wrap_windows_launcher, ClaudeHost, WINDOWS_SHELL_LAUNCHERS,

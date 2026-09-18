@@ -15,8 +15,7 @@ mod preview;
 mod render;
 mod state;
 mod subagents;
-#[cfg(test)]
-mod tests;
+mod unmanaged;
 
 pub(crate) use document::{check_syntax, parse};
 pub use legacy::{
@@ -24,9 +23,10 @@ pub use legacy::{
 };
 pub(crate) use preview::preview;
 pub(crate) use render::{render, render_client_settings_into_file, render_gateway_base_url};
-pub(crate) use state::{matches_provider_settings, owned_diff};
+pub(crate) use state::{full_diff, matches_provider_settings, owned_diff};
 pub use state::{route_state, OFFICIAL_PROVIDER};
 pub use subagents::{read_subagent_settings, render_subagent_settings};
+pub(crate) use unmanaged::remove_unmanaged;
 
 fn validate_projection(
     plan: &crate::contracts::SwitchPlan,

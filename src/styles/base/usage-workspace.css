@@ -91,18 +91,369 @@
   font: var(--asb-text-label);
 }
 
-/* Backup row actions and inline diff */
+/* ---------------------------------------------------------------------------
+ * Usage charts and the summary stat band. Shared by the model-usage page and
+ * the official-quota trend. The surface recipe mirrors the app's chart
+ * material (.asb-chart-empty / .asb-chart-tooltip): hairline frame on the
+ * muted content surface. Series hues resolve straight to --asb-* tokens; no
+ * bridged chart palette.
+ * ------------------------------------------------------------------------- */
+.asb-usage-stat-band {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--asb-space-2);
+}
+
+.asb-usage-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-usage-stat-value-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--asb-space-1);
+}
+
+.asb-usage-stat-value {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+  font-variant-numeric: var(--asb-num-font-variant);
+  white-space: nowrap;
+}
+
+.asb-usage-stat-unit {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-usage-stat-label {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+/* Trend chart card. Two shapes only: the page showcase (with title) and the
+   compact card embedded in provider panels. */
+.asb-usage-chart-card {
+  --asb-usage-chart-card-height: 24rem;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+  min-width: 0;
+  height: var(--asb-usage-chart-card-height);
+  margin: 0;
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-usage-chart-card.is-compact {
+  --asb-usage-chart-card-height: 14rem;
+
+  gap: var(--asb-space-3);
+  padding: var(--asb-space-3) var(--asb-space-3) var(--asb-space-2);
+}
+
+.asb-usage-chart-title {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-section);
+}
+
+.asb-usage-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--asb-space-2) var(--asb-space-4);
+}
+
+.asb-usage-chart-readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-hairline);
+  min-width: 0;
+}
+
+.asb-usage-chart-label {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-usage-chart-value {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+  font-variant-numeric: var(--asb-num-font-variant);
+  white-space: nowrap;
+  animation: asb-number-fade var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-usage-chart-caption {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  font-variant-numeric: var(--asb-num-font-variant);
+}
+
+.asb-usage-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-1) var(--asb-space-3);
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-usage-chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-unit);
+}
+
+.asb-usage-chart-legend-label {
+  white-space: nowrap;
+}
+
+.asb-usage-chart-swatch,
+.asb-usage-donut-swatch {
+  flex: none;
+  width: var(--asb-space-1);
+  height: var(--asb-space-1);
+  border-radius: var(--asb-radius-pill);
+}
+
+.asb-usage-chart-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.asb-chart-frame {
+  width: 100%;
+  height: 100%;
+}
+
+/* Recharts hover tooltip: Recharts owns positioning, this owns the surface. */
+.asb-usage-chart-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-1);
+  min-width: 176px;
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-chart-tooltip-bg);
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+  box-shadow: var(--asb-shadow-modal);
+}
+
+.asb-usage-chart-tooltip-title {
+  margin: 0;
+  font: var(--asb-text-label);
+  font-variant-numeric: var(--asb-num-font-variant);
+  white-space: nowrap;
+}
+
+.asb-usage-chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+}
+
+.asb-usage-chart-tooltip-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-unit);
+}
+
+.asb-usage-chart-tooltip-series {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-unit);
+  color: var(--asb-text-muted);
+  white-space: nowrap;
+}
+
+.asb-usage-chart-tooltip-value {
+  font-variant-numeric: var(--asb-num-font-variant);
+  white-space: nowrap;
+}
+
+/* Donut card — the model-composition ledger. */
+.asb-usage-donut-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--asb-space-4);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-usage-donut-title {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-section);
+}
+
+.asb-usage-donut-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--asb-space-6);
+  min-width: 0;
+}
+
+.asb-usage-donut-stage {
+  position: relative;
+  flex: none;
+  width: 18rem;
+  height: 18rem;
+}
+
+.asb-usage-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.asb-usage-donut-center-value {
+  color: var(--asb-text);
+  font: var(--asb-text-title);
+  font-variant-numeric: var(--asb-num-font-variant);
+  animation: asb-number-fade var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-usage-donut-center-unit {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+}
+
+.asb-usage-donut-legend {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asb-usage-donut-row {
+  min-width: 0;
+  padding: var(--asb-space-2) 0;
+}
+
+.asb-usage-donut-row:first-child {
+  padding-top: 0;
+}
+
+.asb-usage-donut-row:last-child {
+  padding-bottom: 0;
+}
+
+.asb-usage-donut-row + .asb-usage-donut-row {
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-usage-donut-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  min-width: 0;
+}
+
+.asb-usage-donut-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asb-usage-donut-percent {
+  flex: none;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  font-variant-numeric: var(--asb-num-font-variant);
+}
+
+.asb-usage-donut-value {
+  margin: var(--asb-space-unit) 0 0;
+  padding-left: var(--asb-space-3);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  font-variant-numeric: var(--asb-num-font-variant);
+}
+
+/* The count-up figure fade. Remounting the element replays it (the key on
+   the value node changes whenever its target changes). */
+@keyframes asb-number-fade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-usage-chart-value,
+  .asb-usage-donut-center-value {
+    animation: none;
+  }
+}
+
+:root[data-motion="reduce"] .asb-usage-chart-value,
+:root[data-motion="reduce"] .asb-usage-donut-center-value {
+  animation: none;
+}
+
+/* Loading placeholder sized as the official-quota trend's compact card. */
+.asb-usage-history-skeleton {
+  display: block;
+  height: 14rem;
+}
+
+@media (max-width: 720px) {
+  .asb-usage-stat-band {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asb-usage-donut-layout {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--asb-space-5);
+  }
+}
+
+/* Backup row actions */
 .asb-backup-actions {
   display: flex;
   align-items: flex-start;
   gap: var(--asb-space-2);
-}
-
-.asb-backup-diff {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-1);
-  --asb-backup-diff-min-width: 240px;
-  min-width: var(--asb-backup-diff-min-width);
 }
 

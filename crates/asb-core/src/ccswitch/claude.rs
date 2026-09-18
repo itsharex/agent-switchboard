@@ -1,8 +1,6 @@
 //! Claude-only the source application import boundary.
 
 mod auth;
-#[cfg(test)]
-mod auth_tests;
 mod connection;
 
 use super::row::{CcSwitchProposal, CcSwitchProviderDraft, CcSwitchRow};

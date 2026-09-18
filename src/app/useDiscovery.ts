@@ -21,7 +21,7 @@ interface DiscoveryDeps {
   refresh: () => Promise<ProviderInventory | undefined>;
   setTargetProfile: (profileId: string) => Promise<void> | void;
   setAppFilter: (app: AppKind) => void;
-  setPage: (page: "供应商") => void;
+  setPage: (page: "供应商切换") => void;
 }
 
 /**
@@ -103,7 +103,7 @@ export function useDiscovery({
         const refreshed = await refresh();
         if (!refreshed) return false;
         setAppFilter(app);
-        setPage("供应商");
+        setPage("供应商切换");
         await setTargetProfile("profile" in result ? result.profile.id : result.id);
         return true;
       } catch (caught) {

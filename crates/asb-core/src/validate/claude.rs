@@ -72,7 +72,7 @@ pub(super) fn validate_native(
             "Claude 原生云模式使用自己的 SDK 认证，不接受普通 API 密钥、认证头或跨协议选项".into(),
         ));
     }
-    if connection.requires_gateway()
+    if connection.requires_gateway(base)
         || connection.auth_binding.is_some()
         || connection.models_url.is_some()
         || !connection.custom_endpoints.is_empty()

@@ -1,152 +1,173 @@
-/* 网关遥测与运行事实分层：趋势、协议和请求记录使用同一组
- * 中性内容面，避免图表组件引入第二套背景、圆角或阴影语言。 */
+/* 网关遥测分层：仪表带与「最近请求」披露区共用同一组中性内容面，
+ * 不引入第二套背景、圆角或阴影语言。结构契约见 gateway.css 顶部注释。 */
 
-.asb-gateway-telemetry {
+/* —— 仪表带 —— */
+
+.asb-gateway-instruments {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(17rem, 0.8fr);
-  gap: var(--asb-space-4);
-  min-width: 0;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 1px;
+  overflow: hidden;
+  padding: 1px;
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-hairline);
 }
 
-.asb-gateway-section,
-.asb-gateway-trend {
+.asb-gateway-instrument {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-hairline);
+  min-width: 0;
+  padding: var(--asb-space-3);
+  background: var(--asb-content);
+}
+
+.asb-gateway-instrument.is-warning {
+  background: color-mix(in srgb, var(--asb-warning) 6%, var(--asb-content));
+}
+
+.asb-gateway-instrument-label {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  font-weight: 600;
+}
+
+.asb-gateway-instrument-value {
+  margin: 0;
+  color: var(--asb-text);
+  font: var(--asb-text-instrument);
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-gateway-instrument-detail {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.asb-gateway-sparkline {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin-top: var(--asb-space-1);
+}
+
+.asb-gateway-sparkline-line {
+  fill: none;
+  stroke: var(--asb-action);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.asb-gateway-sparkline-area {
+  fill: color-mix(in srgb, var(--asb-action) 12%, transparent);
+}
+
+.asb-gateway-sparkline-baseline {
+  stroke: var(--asb-hairline-strong);
+  stroke-width: 1;
+}
+
+.asb-gateway-instrument.is-protocol { gap: var(--asb-space-2); }
+
+.asb-gateway-protocol-bar {
+  display: flex;
+  gap: var(--asb-space-hairline);
+  overflow: hidden;
+  height: var(--asb-space-unit);
+  border-radius: var(--asb-radius-pill);
+}
+
+.asb-gateway-protocol-bar > span {
+  flex-basis: 0;
+  min-width: 2px;
+}
+
+.asb-gateway-protocol-legend {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— 最近请求披露区 —— */
+
+.asb-gateway-recent {
   min-width: 0;
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius);
   background: var(--asb-content-muted);
 }
 
-.asb-gateway-section {
+.asb-gateway-recent-toggle {
   display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-4);
-}
-
-.asb-gateway-section > .asb-section-title { margin: 0; }
-
-.asb-gateway-telemetry > .asb-gateway-section:last-child {
-  grid-column: 1 / -1;
-}
-
-.asb-gateway-trend {
-  display: flex;
-  margin: 0;
-  flex-direction: column;
-  height: 18rem;
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-4);
-}
-
-.asb-gateway-trend-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--asb-space-3);
-}
-
-.asb-gateway-trend-copy {
-  display: grid;
-  gap: var(--asb-space-hairline);
-}
-
-.asb-gateway-trend-title {
-  margin: 0;
-  color: var(--asb-text);
-  font: var(--asb-text-section);
-}
-
-.asb-gateway-trend-summary {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-  font-variant-numeric: tabular-nums;
-}
-
-.asb-gateway-trend-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--asb-space-3);
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
-.asb-gateway-trend-legend-entry {
-  display: inline-flex;
   align-items: center;
-  gap: var(--asb-space-1);
-}
-
-.asb-gateway-trend-legend-dot {
-  width: var(--asb-space-1);
-  height: var(--asb-space-1);
-  border-radius: var(--asb-radius-pill);
-}
-
-.asb-gateway-trend-chart {
-  flex: 1;
-  min-height: 0;
+  gap: var(--asb-space-2);
   width: 100%;
-}
-
-.asb-gateway-trend-empty {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-body);
-}
-
-.asb-gateway-trend-tooltip {
-  padding: var(--asb-space-2) var(--asb-space-3);
-  border: 1px solid var(--asb-hairline-strong);
+  padding: var(--asb-space-3) var(--asb-space-4);
+  border: 0;
   border-radius: var(--asb-radius);
-  background: var(--asb-content);
+  background: transparent;
   color: var(--asb-text);
+  cursor: pointer;
   font: var(--asb-text-label);
+  font-weight: 600;
 }
 
-.asb-gateway-trend-tooltip p {
-  margin: 0;
+.asb-gateway-recent-toggle:hover { background: color-mix(in srgb, var(--asb-text) 4%, transparent); }
+
+.asb-gateway-recent-chevron {
+  display: inline-flex;
+  color: var(--asb-text-muted);
+  transition: rotate var(--asb-motion-fast) var(--asb-easing);
+}
+
+.asb-gateway-recent-toggle[aria-expanded="true"] .asb-gateway-recent-chevron { rotate: 180deg; }
+
+.asb-gateway-recent-count {
+  margin-left: auto;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
   font-variant-numeric: tabular-nums;
 }
 
-.asb-gateway-protocol-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content);
-  list-style: none;
-}
-
-.asb-gateway-protocol-list li {
+.asb-gateway-recent-body {
   display: grid;
-  grid-template-columns: minmax(8rem, 0.9fr) minmax(0, 2fr) auto;
-  align-items: center;
-  gap: var(--asb-space-3);
-  padding: var(--asb-space-2) var(--asb-space-3);
-  border-bottom: 1px solid var(--asb-hairline);
-  font: var(--asb-text-body);
+  gap: var(--asb-space-2);
+  padding: 0 var(--asb-space-4) var(--asb-space-4);
 }
 
-.asb-gateway-protocol-list li:last-child { border-bottom: 0; }
-.asb-gateway-protocol-name { color: var(--asb-text-muted); }
-
-.asb-gateway-protocol-bar {
-  height: var(--asb-space-1);
+/* The disclosure is the only box; the table drops the frame it carries in
+   standalone contexts and separates from the toggle by padding alone. */
+.asb-gateway-recent-table {
   min-width: 0;
-  border-radius: var(--asb-radius-pill);
+  overflow-x: auto;
 }
 
-.asb-gateway-protocol-count,
+.asb-gateway-recent-table .asb-table {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.asb-gateway-recent-table .asb-table th,
+.asb-gateway-recent-table .asb-table td { border-radius: 0; }
+
+.asb-gateway-note {
+  margin: 0;
+  padding-top: var(--asb-space-2);
+  border-top: 1px solid var(--asb-hairline);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+/* —— 请求表内单元格 —— */
+
 .asb-gateway-row-value { font-variant-numeric: tabular-nums; }
 
 .asb-gateway-revision { overflow-wrap: anywhere; }
@@ -182,36 +203,16 @@
   color: var(--asb-action);
 }
 
-.asb-gateway-note {
-  margin: 0;
-  padding-top: var(--asb-space-2);
-  border-top: 1px solid var(--asb-hairline);
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
+/* —— 响应式 —— */
 
 @media (max-width: 980px) {
-  .asb-gateway-telemetry { grid-template-columns: minmax(0, 1fr); }
-  .asb-gateway-telemetry > .asb-gateway-section:last-child { grid-column: auto; }
+  .asb-gateway-instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .asb-gateway-instrument.is-protocol { grid-column: 1 / -1; }
 }
 
-@media (max-width: 680px) {
-  .asb-gateway-trend-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
+@media (max-width: 480px) {
+  .asb-gateway-instruments { grid-template-columns: minmax(0, 1fr); }
 
-@media (max-width: 520px) {
-  .asb-gateway-section,
-  .asb-gateway-trend { padding: var(--asb-space-3); }
-
-  .asb-gateway-protocol-list li {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .asb-gateway-protocol-bar {
-    grid-row: 2;
-    grid-column: 1 / -1;
-  }
+  .asb-gateway-instrument.is-protocol { grid-column: auto; }
 }

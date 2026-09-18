@@ -36,45 +36,60 @@ html, body, #root { background: transparent; overflow: hidden; }
   overflow: auto;
   padding-inline: var(--asb-space-1);
 }
-.tray-group { padding-block: var(--asb-space-2); }
+.tray-group { padding-block: var(--asb-space-unit); }
 .tray-group + .tray-group { border-top: 1px solid var(--asb-hairline); }
 .tray-group-heading {
   display: flex;
   align-items: center;
   gap: var(--asb-space-1);
   margin: 0;
-  padding: 0 var(--asb-space-1) var(--asb-space-2);
+  padding: 0 var(--asb-space-1) var(--asb-space-unit);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
   font-weight: 600;
 }
 .tray-group-empty {
   margin: 0;
-  padding: 0 var(--asb-space-1) var(--asb-space-2);
+  padding: 0 var(--asb-space-1) var(--asb-space-unit);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
 .tray-client-logo { width: 20px; height: 20px; padding: var(--asb-space-hairline); border-radius: var(--asb-radius); background: var(--asb-text-on-action); }
+
+/* Each provider is one compact line: identity, inline balance, and the fixed
+   right switch rail. Detailed readings stay in the main window. */
+.tray-provider-item {
+  padding: var(--asb-space-hairline) var(--asb-space-unit);
+  border: 1px solid transparent;
+  border-radius: var(--asb-radius);
+}
+
+.tray-provider-item + .tray-provider-item {
+  margin-top: var(--asb-space-hairline);
+}
+
+.tray-provider-item.is-active {
+  border-color: var(--asb-action);
+  background: var(--asb-row-selected);
+}
+
 .tray-provider.asb-btn {
   display: flex;
-  align-items: center;
-  width: 100%;
-  --asb-tray-provider-min-height: 56px;
-  min-height: var(--asb-tray-provider-min-height);
-  padding: var(--asb-space-1);
-  gap: var(--asb-space-1);
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: var(--asb-control-height-compact);
+  padding: var(--asb-space-hairline) var(--asb-space-2);
   text-align: left;
   border-color: transparent;
   background: transparent;
   box-shadow: none;
 }
 .tray-provider.asb-btn:disabled { opacity: 1; }
-.tray-provider.asb-btn:disabled:not(.tray-provider-active) { color: var(--asb-text-muted); }
 .tray-provider.asb-btn:not(:disabled):hover { background: var(--asb-content-muted); }
-.tray-provider-active.asb-btn { background: var(--asb-row-selected); }
-.tray-check { display: flex; width: var(--asb-icon-size-md); flex-shrink: 0; color: var(--asb-action); }
-.tray-provider-text { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: var(--asb-space-hairline); }
+.tray-check { display: flex; flex: none; width: var(--asb-icon-size-md); color: var(--asb-action); }
 .tray-provider-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -82,29 +97,38 @@ html, body, #root { background: transparent; overflow: hidden; }
   font: var(--asb-text-label);
   font-weight: 600;
 }
-.tray-detail { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.tray-detail, .tray-time {
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-  font-variant-numeric: tabular-nums;
-}
 .tray-switch {
+  /* Fixed-width, always-reserved right slot: the widest state text (切换中)
+     sets the rail width so every row state keeps an identical name column. */
+  flex: none;
+  min-width: calc(3em + var(--asb-space-hairline));
+  text-align: right;
   color: var(--asb-action);
-  flex-shrink: 0;
+  font: var(--asb-text-label);
+}
+.tray-usage-balance {
+  /* Content-sized slot right-anchored against the switch rail: right edges
+     align across rows through the flex layout, so no width floor is needed
+     and the name column keeps every spare pixel. Rendered only when a cached
+     reading exists. */
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
 .tray-footer {
   padding: var(--asb-space-1);
   border-top: 1px solid var(--asb-hairline);
 }
-.tray-ghost-button.asb-btn { border-color: transparent; background: transparent; min-width: 0; gap: calc(var(--asb-space-unit) + var(--asb-space-hairline)); }
+.tray-ghost-button.asb-btn { min-height: var(--asb-control-height-compact); border-color: transparent; background: transparent; min-width: 0; gap: calc(var(--asb-space-unit) + var(--asb-space-hairline)); }
 .tray-error {
   padding: var(--asb-space-1) var(--asb-space-4);
   color: var(--asb-danger);
   font: var(--asb-text-label);
   overflow-wrap: anywhere;
-  --asb-tray-error-max-height: 96px;
-  max-height: var(--asb-tray-error-max-height);
+  max-height: 96px;
   overflow: auto;
 }
 .tray-loading {

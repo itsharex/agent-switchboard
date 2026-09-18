@@ -41,12 +41,12 @@ pub(crate) fn matches_provider_credentials(
     })
 }
 
-/// Collects every owned scalar or array path and its textual value.
-fn collect_owned_scalars(
+/// Collects every scalar or array path accepted by `keep` with its textual value.
+fn collect_scalars(
     value: &Json,
     prefix: &str,
     out: &mut std::collections::BTreeMap<String, String>,
-    native: &std::collections::BTreeSet<String>,
+    keep: &dyn Fn(&str) -> bool,
 ) {
     let Json::Object(map) = value else {
         return;
@@ -58,23 +58,32 @@ fn collect_owned_scalars(
             format!("{prefix}.{key}")
         };
         if let Some(repr) = scalar_repr(child) {
-            if is_owned(AppKind::Claude, &path) || native.contains(&path) {
+            if keep(&path) {
                 out.insert(path.clone(), repr);
             }
         }
-        collect_owned_scalars(child, &path, out, native);
+        collect_scalars(child, &path, out, keep);
     }
+}
+
+fn collect_with(
+    value: &Json,
+    keep: &dyn Fn(&str) -> bool,
+) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    collect_scalars(value, "", &mut out, keep);
+    out
 }
 
 /// Owned-key diff between the live text and a previous copy.
 pub(crate) fn owned_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>, AdapterError> {
     let mut native = super::native::owned_paths(&parse(current)?)?;
     native.extend(super::native::owned_paths(&parse(previous)?)?);
-    let mut current_values = std::collections::BTreeMap::new();
-    collect_owned_scalars(&parse(current)?, "", &mut current_values, &native);
-    let mut previous_values = std::collections::BTreeMap::new();
-    collect_owned_scalars(&parse(previous)?, "", &mut previous_values, &native);
-    let mut changes = crate::adapter::diff_owned_maps(&current_values, &previous_values);
+    let keep = |path: &str| is_owned(AppKind::Claude, path) || native.contains(path);
+    let mut changes = crate::adapter::diff_owned_maps(
+        &collect_with(&parse(current)?, &keep),
+        &collect_with(&parse(previous)?, &keep),
+    );
     changes.extend(
         crate::claude_common::diff_documents(current, previous).map_err(|message| {
             AdapterError {
@@ -84,6 +93,17 @@ pub(crate) fn owned_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>
         })?,
     );
     Ok(changes)
+}
+
+/// Every-leaf diff, including host-owned keys: the deep reset preview must
+/// list unmanaged removals, which [`owned_diff`] deliberately hides. The
+/// all-leaf walk already covers manifest-claimed paths, so no separate
+/// claude-common pass is needed.
+pub(crate) fn full_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>, AdapterError> {
+    Ok(crate::adapter::diff_owned_maps(
+        &collect_with(&parse(current)?, &|_| true),
+        &collect_with(&parse(previous)?, &|_| true),
+    ))
 }
 
 /// Reads the active routing facts from Claude settings text.

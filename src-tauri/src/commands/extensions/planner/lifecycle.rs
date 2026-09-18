@@ -19,6 +19,7 @@ impl Planner<'_> {
         operation: PlanOperation,
         binding_id: &str,
         shared_settings: Option<bool>,
+        batch: &mut super::document::DocumentBatch,
     ) -> Result<PlannedOperation, CommandError> {
         let binding = self
             .store
@@ -35,6 +36,7 @@ impl Planner<'_> {
         validate_binding(&definition, &binding)
             .map_err(|error| CommandError::new("extension-invalid", error.message))?;
         self.require_write_capabilities(&definition, &binding, operation)?;
+        let writer = batch.targets();
         let mut plan = PlannedOperation {
             definition_id: definition.id.clone(),
             definition_revision: definition.revision,
@@ -48,31 +50,35 @@ impl Planner<'_> {
                 next.updated_at = now();
                 // A Claude private-project MCP has two owned positions in
                 // one user document: the server and its project disable
-                // member. They must be rendered as one document step.
-                let (mut steps, changes, mut baseline, mut warnings) = if matches!(
-                    (&definition.payload, &next.target),
-                    (
-                        ExtensionPayload::Mcp(_),
-                        ExtensionTarget::ProjectPrivate {
-                            client: AppKind::Claude,
-                            ..
-                        }
-                    )
-                ) {
-                    self.enable_private_mcp_steps(&definition, &next)?
-                } else {
-                    self.deploy_steps(&definition, &next)?
-                };
-                let (clear_steps, cleared_baseline, mut clear_warnings) =
-                    self.clear_disable_steps(&definition, &binding, baseline.as_ref())?;
+                // member. They must thread into one document state.
+                let (steps, changes, mut baseline, mut warnings, adopts_native_entry) =
+                    if matches!(
+                        (&definition.payload, &next.target),
+                        (
+                            ExtensionPayload::Mcp(_),
+                            ExtensionTarget::ProjectPrivate {
+                                client: AppKind::Claude,
+                                ..
+                            }
+                        )
+                    ) {
+                        // A private re-enable requires a current baseline and
+                        // never adopts a foreign entry; its document write is
+                        // materialized with the batch.
+                        let (changes, baseline, warnings) =
+                            self.enable_private_mcp_steps(&definition, &next, batch, writer)?;
+                        (Vec::new(), changes, baseline, warnings, false)
+                    } else {
+                        // Skill targets carry their directory deploy here;
+                        // MCP document writes are materialized with the batch.
+                        self.deploy_steps(&definition, &next, batch, writer)?
+                    };
+                let (cleared_baseline, mut clear_warnings) =
+                    self.clear_disable_steps(&definition, &binding, baseline.as_ref(), batch, writer)?;
                 if let Some(cleared_baseline) = cleared_baseline {
                     baseline = Some(cleared_baseline);
                 }
                 warnings.append(&mut clear_warnings);
-                steps.extend(clear_steps);
-                if steps.is_empty() {
-                    warnings.push("该目标已是启用状态".to_string());
-                }
                 plan.targets.push(PlannedTarget {
                     binding_id: Some(binding.id.clone()),
                     target: next.target.clone(),
@@ -81,11 +87,12 @@ impl Planner<'_> {
                     steps,
                     warnings,
                     changes,
+                    adopts_native_entry,
                 });
             }
             PlanOperation::Disable => {
-                let (steps, changes, new_baseline, warnings) =
-                    self.disable_steps(&definition, &binding, shared_settings)?;
+                let (changes, new_baseline, warnings) =
+                    self.disable_steps(&definition, &binding, shared_settings, batch, writer)?;
                 // The committed state comes from the verified plan: the
                 // binding lands in the library as Disabled.
                 let mut next = binding.clone();
@@ -96,22 +103,29 @@ impl Planner<'_> {
                     target: binding.target.clone(),
                     binding: next,
                     baseline: new_baseline,
-                    steps,
+                    steps: Vec::new(),
                     warnings,
                     changes,
+                    adopts_native_entry: false,
                 });
             }
             PlanOperation::Remove => {
-                let (mut steps, changes, mut new_baseline, mut warnings) =
-                    self.remove_document_steps(&definition, &binding)?;
+                let (changes, mut new_baseline, mut warnings) =
+                    self.remove_document_steps(&definition, &binding, batch, writer)?;
+                let mut steps = Vec::new();
                 if let ExtensionPayload::Skill(_) = &definition.payload {
                     let existing_baseline = self
                         .store
                         .get_baseline_file(&binding.id)
                         .map_err(store_error)?;
-                    let (rule_steps, _cleared_baseline, mut rule_warnings) = self
-                        .clear_disable_steps(&definition, &binding, existing_baseline.as_ref())?;
-                    steps.extend(rule_steps);
+                    let (cleared_baseline, mut rule_warnings) = self.clear_disable_steps(
+                        &definition,
+                        &binding,
+                        existing_baseline.as_ref(),
+                        batch,
+                        writer,
+                    )?;
+                    let _ = cleared_baseline;
                     warnings.append(&mut rule_warnings);
                     if let Some((remove_step, restores_original)) =
                         self.skill_remove_step(&definition, &binding)?
@@ -141,6 +155,7 @@ impl Planner<'_> {
                     steps,
                     warnings,
                     changes,
+                    adopts_native_entry: false,
                 });
                 let _ = new_baseline;
             }

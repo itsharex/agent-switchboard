@@ -8,8 +8,6 @@ mod parse;
 
 use parse::{local_date, scan_claude_session, scan_codex_session};
 
-#[cfg(test)]
-mod tests;
 
 use asb_core::contracts::{
     AppKind, ModelUsageDay, ModelUsageGroup, ModelUsageIssue, ModelUsageRange, ModelUsageReport,

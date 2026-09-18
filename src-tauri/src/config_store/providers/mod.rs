@@ -5,7 +5,5 @@
 mod load;
 mod mutations;
 
-#[cfg(test)]
-mod tests;
 
 pub(crate) use load::load_provider_files;

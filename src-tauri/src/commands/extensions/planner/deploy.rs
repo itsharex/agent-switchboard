@@ -20,22 +20,26 @@ use asb_core::extensions::skill::ContentEntry;
 use crate::commands::error::CommandError;
 use crate::commands::extensions::support::*;
 
-use super::document::{document_hash_of, read_document};
 use super::{McpScope, Planner};
 
 impl Planner<'_> {
-    /// Steps that put one binding's desired state onto its target.
+    /// Steps that put one binding's desired state onto its target. The
+    /// document patch threads into the batch's working text; the single
+    /// document write is materialized once the batch is complete.
     #[allow(clippy::type_complexity)]
     pub(super) fn deploy_steps(
         &self,
         definition: &ExtensionDefinition,
         binding: &ExtensionBinding,
+        batch: &mut super::document::DocumentBatch,
+        writer: usize,
     ) -> Result<
         (
             Vec<PlanStep>,
             Vec<asb_core::extensions::mcp::EntryChange>,
             Option<ManagedBaselineFile>,
             Vec<String>,
+            bool,
         ),
         CommandError,
     > {
@@ -45,13 +49,6 @@ impl Planner<'_> {
                 let document = target.path.clone();
                 let syntax = target.syntax;
                 let client = binding.target.client();
-                let current = read_document(&document)?;
-                let existed = current.is_some();
-                let empty = match client {
-                    AppKind::Codex => String::new(),
-                    AppKind::Claude => "{}".to_string(),
-                };
-                let text = current.clone().unwrap_or(empty);
                 let has_document_baseline =
                     self.document_baseline_is_current(binding, &document)?;
                 let key = binding
@@ -59,12 +56,14 @@ impl Planner<'_> {
                     .as_deref()
                     .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
                 let enabled = binding.desired == DesiredState::Enabled;
+                let work = self.document_work(batch, &document, client, syntax)?;
+                let base = work.rendered.clone();
                 let (rendered, changes, entry_pointer) = match &target.scope {
                     McpScope::CodexServers => {
                         let render =
                             render_codex(mcp, enabled, self.secrets).map_err(projection_error)?;
                         let (rendered, changes) =
-                            apply_codex_server_patches(&text, &[(key.to_string(), Some(render))])
+                            apply_codex_server_patches(&base, &[(key.to_string(), Some(render))])
                                 .map_err(adapter_error)?;
                         (rendered, changes, format!("mcp_servers.{key}"))
                     }
@@ -72,7 +71,7 @@ impl Planner<'_> {
                         let render = render_claude(mcp, self.secrets, ClaudeHost::current())
                             .map_err(projection_error)?;
                         let (rendered, changes) = apply_claude_user_server_patches(
-                            &text,
+                            &base,
                             &[(key.to_string(), if enabled { Some(render) } else { None })],
                         )
                         .map_err(adapter_error)?;
@@ -82,7 +81,7 @@ impl Planner<'_> {
                         let render = render_claude(mcp, self.secrets, ClaudeHost::current())
                             .map_err(projection_error)?;
                         let (rendered, changes) = apply_claude_project_private_server_patches(
-                            &text,
+                            &base,
                             project_path,
                             &[(key.to_string(), if enabled { Some(render) } else { None })],
                         )
@@ -94,21 +93,24 @@ impl Planner<'_> {
                         )
                     }
                 };
-                if !has_document_baseline
-                    && changes
-                        .first()
-                        .and_then(|change| change.before.as_ref())
-                        .is_some()
-                {
-                    return Err(CommandError::new(
-                        "extension-conflict",
-                        format!(
-                            "{} 已有同名原生 MCP 服务；请先在发现页导入并显式接管",
-                            document.display()
-                        ),
-                    ));
-                }
+                // Deploying onto a native entry this application does not
+                // own adopts it: the baseline records the original value as
+                // the verbatim restore point, and the plan view forces the
+                // explicit confirmation dialog. Managed collisions are
+                // rejected earlier by `assert_native_key_free`.
+                let adopts_native_entry = !has_document_baseline
+                    && changes.first().and_then(|change| change.before.as_ref()).is_some();
                 let mut warnings = Vec::new();
+                let document_hash = sha_hex(rendered.as_bytes());
+                if !changes.is_empty() {
+                    work.claim(&entry_pointer, writer)?;
+                    work.rendered = rendered;
+                    if adopts_native_entry {
+                        warnings.push(
+                            "将替换同名原生条目；原内容已记录为恢复点，移除时恢复".to_string(),
+                        );
+                    }
+                }
                 if !enabled && client == AppKind::Claude {
                     warnings.push("将从 Claude 配置移除该服务条目，库中保留定义".to_string());
                 }
@@ -119,23 +121,21 @@ impl Planner<'_> {
                         entry_pointer,
                         original_value: changes.first().and_then(|change| change.before.clone()),
                         last_written_value: changes.first().and_then(|change| change.after.clone()),
-                        last_document_hash: sha_hex(rendered.as_bytes()),
-                        target_existed_before: existed,
+                        // Materialization rewrites this to the batch's final
+                        // document hash; unchanged documents keep the disk
+                        // hash of the threaded text.
+                        last_document_hash: document_hash,
+                        target_existed_before: work.expected_existed,
                         backup_reference: None,
                     },
                 )?;
-                let step = PlanStep::DocumentWrite {
-                    client,
-                    path: document.to_string_lossy().to_string(),
-                    expected_content_hash: document_hash_of(&document)?,
-                    expected_existed: existed,
-                    rendered,
-                    syntax,
-                    backup_dir: String::new(),
-                };
-                Ok((vec![step], changes, Some(baseline), warnings))
+                Ok((Vec::new(), changes, Some(baseline), warnings, adopts_native_entry))
             }
-            ExtensionPayload::Skill(_) => self.skill_deploy_steps(definition, binding),
+            ExtensionPayload::Skill(_) => {
+                let (steps, changes, baseline, warnings) =
+                    self.skill_deploy_steps(definition, binding)?;
+                Ok((steps, changes, baseline, warnings, false))
+            }
         }
     }
 

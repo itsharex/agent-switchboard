@@ -33,7 +33,7 @@ pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     ProviderSettingSpec {
         app: AppKind::Codex,
         key: CODEX_PROVIDER_BASE_URL_KEY,
-        value_type: SettingValueType::Secret,
+        value_type: SettingValueType::String,
     },
     ProviderSettingSpec {
         app: AppKind::Codex,

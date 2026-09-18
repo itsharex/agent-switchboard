@@ -1,6 +1,6 @@
 import type { ProviderProfile } from "../api/client";
 
-export const PAGES = ["供应商", "客户端通用配置", "扩展", "会话", "用量", "设置"] as const;
+export const PAGES = ["供应商切换", "客户端配置", "扩展", "会话记录", "用量", "设置"] as const;
 export type Page = (typeof PAGES)[number];
 export type ProviderView =
   | { kind: "list" }

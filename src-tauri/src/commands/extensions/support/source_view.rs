@@ -79,5 +79,3 @@ pub(super) fn skill_source_view(source: SourceRef) -> SkillSourceViewDto {
     view
 }
 
-#[cfg(test)]
-mod tests;

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pickDirectory, pickFile } from "../../api/client";
 import { AppDialog } from "../../components/AppDialog";
 import { ExtensionHistory } from "../../components/extensions/ExtensionHistory";
 import { NewMcpForm } from "../../components/extensions/NewMcpForm";
@@ -49,6 +50,10 @@ export function PortableImportDialog({ workspace: w }: Props) {
         busy={w.writeBlocked}
         portablePath={path}
         setPortablePath={setPath}
+        browsePortable={async () => {
+          const picked = await pickFile("Portable package", ["json"]);
+          if (picked) setPath(picked);
+        }}
         submitPortableImport={async () => {
           if (!path.trim()) return;
           const result = await w.ext.importPortable(path.trim());
@@ -67,6 +72,10 @@ export function ProjectDialog({ workspace: w }: Props) {
         busy={w.writeBlocked}
         projectRoot={root}
         setProjectRoot={setRoot}
+        browseProject={async () => {
+          const picked = await pickDirectory();
+          if (picked) setRoot(picked);
+        }}
         submitProject={async () => {
           if (root.trim() && (await w.ext.addProject(root.trim()))) w.nav.closeDialog();
         }}

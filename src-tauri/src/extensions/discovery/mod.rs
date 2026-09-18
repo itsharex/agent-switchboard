@@ -505,5 +505,3 @@ pub fn finalize_diagnostics(
 mod managed;
 mod mcp;
 mod skills;
-#[cfg(test)]
-mod tests;

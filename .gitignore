@@ -24,3 +24,4 @@ secrets*.json
 id_rsa
 MEMORY.md
 .codex/memories/
+.workbuddy/

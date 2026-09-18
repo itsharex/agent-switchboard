@@ -77,7 +77,7 @@ function LocalConfigCard({ file, proposal, busy, onImport }: {
 
 export function LocalConfigImport({ app, discovery, busy, onScan, onImport }: LocalConfigImportProps) {
   return (
-    <section className="asb-panel" aria-label="从本机配置导入">
+    <>
       <ModuleHeader
         title="本机配置"
         primaryActions={
@@ -94,6 +94,6 @@ export function LocalConfigImport({ app, discovery, busy, onScan, onImport }: Lo
             <h3 className="asb-section-title">尚未扫描 {clientName(app)} 配置。</h3>
           </div>
         )}
-    </section>
+    </>
   );
 }

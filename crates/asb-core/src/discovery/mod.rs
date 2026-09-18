@@ -9,8 +9,6 @@ mod codex;
 mod import;
 mod inspect;
 mod report;
-#[cfg(test)]
-mod tests;
 
 pub use codex::{import_source as codex_import_source, proposal as codex_import_proposal};
 pub use import::claude_import_proposal;

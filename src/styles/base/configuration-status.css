@@ -6,6 +6,13 @@
   margin-top: var(--asb-space-3);
 }
 
+/* Loading placeholder shaped as the status grid: four cards at a real status
+   card's footprint. */
+.asb-status-card-skeleton {
+  display: block;
+  min-height: 96px;
+}
+
 .asb-status-card {
   display: flex;
   flex-direction: column;
@@ -58,6 +65,11 @@
   background: var(--asb-safe);
 }
 
+/* Idle state: the fact is real but not in effect — never warn-colored. */
+.asb-status-pill.is-idle .asb-status-pill-dot {
+  background: var(--asb-text-muted);
+}
+
 .asb-status-rows {
   margin: 0;
 }
@@ -86,11 +98,12 @@
 }
 
 /* Runtime overview — application facts remain visually quieter than the
-   configuration and quota surfaces above, while each value stays copyable. */
+   configuration and quota surfaces above, while each value stays copyable.
+   No tiles: the panel provides the one surface, the grid gap separates. */
 .asb-runtime-overview-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--asb-space-2);
+  gap: var(--asb-space-3);
   margin: 0;
 }
 
@@ -99,10 +112,6 @@
   flex-direction: column;
   gap: var(--asb-space-unit);
   min-width: 0;
-  padding: var(--asb-space-2);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
 }
 
 .asb-runtime-overview-item dt {

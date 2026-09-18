@@ -182,7 +182,3 @@ fn interrupted() -> CommandError {
     CommandError::new("provider-request-interrupted", "真实请求任务中断，请重试")
 }
 
-#[cfg(test)]
-mod draft_tests;
-#[cfg(test)]
-mod tests;

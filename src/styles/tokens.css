@@ -85,6 +85,12 @@
      heading, never a label. */
   --asb-text-signal: 700 72px/0.95 var(--asb-font-display);
 
+  /* Gateway device-face metrics (user-directed 2026-09-18): the address
+     plate and instrument numerals are mono so machine facts read as
+     machine facts. Not text steps — never used for prose copy. */
+  --asb-text-plate: 600 22px/1.3 var(--asb-font-code);
+  --asb-text-instrument: 600 20px/1.3 var(--asb-font-code);
+
   /* Every number that can be compared down a column carries tabular figures
      and proportional-agnostic spacing. Applied by .asb-num, never per value. */
   --asb-num-font-variant: tabular-nums;
@@ -131,6 +137,8 @@
   --asb-motion-fast: 180ms;
   --asb-motion-node: 220ms;
   --asb-motion-sheet: 240ms;
+  /* Ambient loops (skeleton pulse) — slower than any interaction motion. */
+  --asb-motion-ambient: 1600ms;
   --asb-easing: cubic-bezier(0.4, 0, 0.2, 1);
   --asb-ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
 
@@ -185,13 +193,18 @@
   --asb-fact-label-width: 6em;
   --asb-menu-min-width: 190px;
   --asb-select-min-width: 108px;
+  /* Reading measures: a form never runs the full window width, and long
+     prose wraps inside a readable line. Consumers: .asb-form and the
+     field feedback classes in forms.css. */
+  --asb-measure-form: 48rem;
+  --asb-measure-prose: 65ch;
   --asb-row-min-height: calc(var(--asb-space-6) + var(--asb-space-4));
   --asb-row-min-height-compact: 44px;
   /* The provider list's calm primary rail: 40px touch target plus 28px air. */
   --asb-provider-row-line-height: calc(
     var(--asb-control-height) + var(--asb-space-4) + var(--asb-space-unit)
   );
-  /* Two text actions plus the provider row's five compact icon actions. */
+  /* Two text actions plus the provider row's four compact icon actions. */
   --asb-provider-row-action-width: 352px;
   /* The window-control / dense-row square: one number, because a title-bar
      button and a dense list row must agree on their height. */
@@ -297,6 +310,7 @@
     --asb-motion-fast: 0ms;
     --asb-motion-node: 0ms;
     --asb-motion-sheet: 0ms;
+    --asb-motion-ambient: 0ms;
   }
 }
 
@@ -305,4 +319,5 @@
   --asb-motion-fast: 0ms;
   --asb-motion-node: 0ms;
   --asb-motion-sheet: 0ms;
+  --asb-motion-ambient: 0ms;
 }

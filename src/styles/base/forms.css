@@ -3,12 +3,43 @@
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-3);
+  max-width: var(--asb-measure-form);
 }
 
 .asb-field {
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-1);
+}
+
+/* Width semantics: a field's width advertises its content's length. The
+   parent field opts in — Input owns no className (see Input.tsx), size and
+   layout belong to the container. Numbers and short codes take is-narrow,
+   names and single values is-medium; every other field stays fluid. */
+.asb-field.is-narrow :is(.asb-input, .asb-select-trigger) {
+  max-width: 7rem;
+}
+
+.asb-field.is-medium :is(.asb-input, .asb-select-trigger) {
+  max-width: 18rem;
+}
+
+/* Path fields pair the input with a native picker button: the input keeps
+   the fluid width and manual entry, the button never shrinks or wraps. */
+.asb-field-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-field-input-row > .asb-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.asb-field-input-row > .asb-btn {
+  flex: none;
+  white-space: nowrap;
 }
 
 /* A credential stays masked until the user explicitly reveals it. */
@@ -414,21 +445,128 @@
   color: var(--asb-text-muted);
 }
 
+/* Field-adjacent feedback: help and error share the field's left baseline,
+   own their line, and wrap inside the prose measure. The look is owned here;
+   modules must not re-style these classes per view. */
+.asb-field-help,
+.asb-field-error {
+  margin: 0;
+  max-width: var(--asb-measure-prose);
+  font: var(--asb-text-label);
+  color: var(--asb-text-muted);
+}
+
+.asb-field-error {
+  color: var(--asb-danger);
+}
+
 .asb-form-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--asb-space-2);
 }
 
-/* Dedicated provider edit view — the editor replaces the page content and a
-   back affordance returns to the list. */
-.asb-edit-view {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-3);
+/* Full-page editor frame shared by every secondary functional page (provider
+   editors, run parameters, usage query, provider import, extension discovery
+   and source browser): a pinned header row with the back control, a
+   scrollable module body, and a pinned bottom action bar. The route wrapper
+   replaces the page stack's natural flow for the frame. */
+.asb-main:has(> .asb-page-stack:not([hidden]) .asb-editor-route:not([hidden])) {
+  overflow: hidden;
 }
 
-.asb-edit-panel {
+.asb-page-stack:has(.asb-editor-route:not([hidden])) {
   flex: 1;
+  min-height: 0;
+  height: 100%;
+  gap: 0;
+}
+
+.asb-editor-route:not([hidden]) {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.asb-editor-frame {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  flex: 1;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.asb-editor-frame > .asb-workspace-header {
+  grid-row: 1;
+  z-index: 1;
+  margin: 0;
+  padding: 0 0 var(--asb-space-3);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-editor-frame .asb-panel-title {
+  font: var(--asb-text-title);
+  letter-spacing: -0.02em;
+}
+
+.asb-editor-back {
+  width: auto;
+  height: auto;
+  min-width: var(--asb-touch-target);
+  flex-direction: column;
+  gap: var(--asb-space-hairline);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  font: var(--asb-text-label);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.asb-editor-back > span[aria-hidden="true"] {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.asb-editor-frame > .asb-edit-panel {
+  grid-row: 2;
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--asb-space-3) 0;
+  border: 0;
+  background: transparent;
+  scrollbar-gutter: stable;
+}
+
+/* The frame's action bar is a fixed third grid row, not another content
+   card and not part of the scrolling module body. */
+.asb-editor-frame > .asb-editor-footer {
+  grid-row: 3;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--asb-space-3) 0 0;
+  border: 0;
+  border-top: 1px solid var(--asb-hairline);
+  border-radius: 0;
+}
+
+@media (max-width: 580px) {
+  .asb-editor-frame > .asb-editor-footer { padding-top: var(--asb-space-2); }
+  .asb-editor-frame > .asb-editor-footer > .asb-btn { flex: 1; }
 }
 

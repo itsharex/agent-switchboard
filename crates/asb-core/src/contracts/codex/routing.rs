@@ -27,6 +27,8 @@ impl CodexRouteMode {
 
     /// Codex can speak a Responses provider directly only when its request
     /// shape and credential delivery both match the native client contract.
+    /// `base_url` is the profile's primary service address: endpoint
+    /// candidates equal to it give automatic routing nothing to choose.
     /// Every route-affecting profile field participates here so construction,
     /// validation, and later connection edits share one decision owner.
     pub fn for_profile(
@@ -34,11 +36,12 @@ impl CodexRouteMode {
         request_mode: ResponsesRequestMode,
         connection: &ProviderConnectionOptions,
         authentication: Option<AuthenticationScheme>,
+        base_url: Option<&str>,
     ) -> Self {
         let default_authentication = upstream.protocol().authentication_scheme();
         if upstream != CodexUpstream::Responses
             || request_mode == ResponsesRequestMode::Minimal
-            || connection.requires_gateway()
+            || connection.requires_gateway(base_url)
             || authentication.is_some_and(|selected| selected != default_authentication)
         {
             Self::Gateway

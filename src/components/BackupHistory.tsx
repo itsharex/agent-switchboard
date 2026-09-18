@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { backupDiff, type BackupRecord, type KeyChange } from "../api/client";
 import { DiffView } from "./DiffView";
 import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
-import { Table, type TableColumn } from "./Table";
+import { type TableColumn } from "./Table";
 import { Time } from "./Time";
 import { RestoreIcon } from "./icons";
+import { cx } from "@/utils/cx";
 
 interface Props {
   records: BackupRecord[];
@@ -18,7 +19,7 @@ function reasonLabel(reason: string): string {
   if (reason === "restore-precheck") return "恢复前备份";
   if (reason === "gateway-port-change") return "网关端口修改前备份";
   if (reason === "gateway-port-rollback") return "网关端口恢复前备份";
-  if (reason === "client-configuration-apply") return "应用客户端通用配置前备份";
+  if (reason === "client-configuration-apply") return "应用客户端配置前备份";
   if (reason === "client-configuration-repair") return "自动修复客户端配置前备份";
   if (reason === "client-configuration-native-defaults") return "恢复客户端原生默认值前备份";
   if (reason === "client-configuration-clear-extra-configuration") return "清空额外通用配置前备份";
@@ -33,68 +34,53 @@ function clientLabel(app: string): string {
   return app === "codex" ? "Codex" : "Claude";
 }
 
-/** One backup's owned-key difference against the live file. */
-function DiffRow({ record }: { record: BackupRecord }) {
+/** One backup's owned-key difference, fetched while its region stays open. */
+function BackupDiff({ record }: { record: BackupRecord }) {
   const [changes, setChanges] = useState<KeyChange[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-  const requestVersion = useRef(0);
 
   useEffect(() => {
-    requestVersion.current += 1;
-    setChanges(null);
-    setError(null);
-    setBusy(false);
-    setOpen(false);
+    let active = true;
+    backupDiff(record.id)
+      .then((next) => {
+        if (active) setChanges(next);
+      })
+      .catch((caught) => {
+        if (active) setError((caught as { message?: string }).message ?? "无法生成差异");
+      });
+    return () => {
+      active = false;
+    };
   }, [record]);
 
-  const run = async () => {
-    if (busy) return;
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    setOpen(true);
-    if (changes) return;
-    const version = requestVersion.current;
-    setBusy(true);
-    setError(null);
-    try {
-      const nextChanges = await backupDiff(record.id);
-      if (requestVersion.current === version) setChanges(nextChanges);
-    } catch (caught) {
-      if (requestVersion.current === version) {
-        setError((caught as { message?: string }).message ?? "无法生成差异");
-      }
-    } finally {
-      if (requestVersion.current === version) setBusy(false);
-    }
-  };
-
-  return (
-    <div className="asb-backup-diff">
-      <Button
-        variant="secondary"
-        disabled={busy}
-        aria-expanded={open}
-        onClick={run}
-      >
-        查看差异
-      </Button>
-      {open && error && <p className="asb-warn-text">{error}</p>}
-      {open && changes !== null && (changes.length > 0 ? (
-        <DiffView changes={changes} label="当前文件与备份的差异" />
-      ) : (
-        <p className="asb-empty">与当前文件一致</p>
-      ))}
-    </div>
-  );
+  if (error) return <p className="asb-warn-text">{error}</p>;
+  /* Stands in for the DiffView rows, so it keeps a multi-row footprint. */
+  if (changes === null) {
+    return <div className="asb-skeleton asb-backup-diff-loading" aria-hidden="true" />;
+  }
+  if (changes.length === 0) return <p className="asb-empty">与当前文件一致</p>;
+  return <DiffView changes={changes} label="当前文件与备份的差异" />;
 }
 
-/** Recent validation and restore history (DESIGN.md §7 bottom band). */
+/** Recent validation and restore history (DESIGN.md §7 bottom band). The
+ * table markup mirrors the shared Table contract because an open diff needs
+ * a full-width expansion row under its own row, which the shared renderer
+ * does not emit. */
 export function BackupHistory({ records, busy, onRestore }: Props) {
   const [pending, setPending] = useState<BackupRecord | null>(null);
+  const [openDiffs, setOpenDiffs] = useState<ReadonlySet<string>>(() => new Set());
+
+  const toggleDiff = (recordId: string) => {
+    setOpenDiffs((current) => {
+      const next = new Set(current);
+      if (next.has(recordId)) {
+        next.delete(recordId);
+      } else {
+        next.add(recordId);
+      }
+      return next;
+    });
+  };
 
   const columns: Array<TableColumn<BackupRecord>> = [
     {
@@ -129,7 +115,14 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
                 恢复
               </Button>
             )}
-            <DiffRow record={record} />
+            <Button
+              variant="secondary"
+              disabled={busy}
+              aria-expanded={openDiffs.has(record.id)}
+              onClick={() => toggleDiff(record.id)}
+            >
+              查看差异
+            </Button>
           </div>
         );
       },
@@ -149,12 +142,37 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
 
   return (
     <div className="asb-backups">
-      <Table
-        columns={columns}
-        rows={records}
-        rowKey={(record) => record.id}
-        ariaLabel="备份历史"
-      />
+      <table className="asb-table" aria-label="备份历史">
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key} scope="col" className="asb-table-cell">
+                {column.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((record) => (
+            <Fragment key={record.id}>
+              <tr>
+                {columns.map((column) => (
+                  <td key={column.key} className={cx("asb-table-cell", column.cellClassName)}>
+                    {column.render(record)}
+                  </td>
+                ))}
+              </tr>
+              {openDiffs.has(record.id) && (
+                <tr className="asb-backup-diff-row">
+                  <td colSpan={columns.length}>
+                    <BackupDiff record={record} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
       {pending && (
         <ConfirmSheet
           title="恢复备份"

@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from "react";
 import { Button } from "../Button";
-import { WorkspaceHeader } from "../WorkspaceHeader";
+import { EditorFrame } from "../EditorFrame";
 
 interface Props {
   title: string;
@@ -14,7 +14,8 @@ interface Props {
   children: ReactNode;
 }
 
-/** Owns the fixed provider-editor frame: header, scroll body, and write bar. */
+/** Composes the provider write bar (取消 + 保存供应商) onto the shared
+ * editor frame; the save action may live in an external form via `formId`. */
 export function ProviderEditorFrame({
   title,
   titleRef,
@@ -28,19 +29,23 @@ export function ProviderEditorFrame({
 }: Props) {
   const canSubmit = Boolean(formId) && canSave && !busy;
   return (
-    <div className="asb-edit-view asb-provider-editor">
-      <WorkspaceHeader title={title} titleRef={titleRef}
-        back={<Button variant="back" className="asb-provider-editor-back" disabled={busy}
-          aria-label={backLabel} onClick={onBack}>
-          <span aria-hidden="true">←</span>{backLabel}
-        </Button>} />
-      <div className="asb-edit-panel">{children}</div>
-      <footer className="asb-provider-form-footer">
-        <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
-        <Button type={formId ? "submit" : "button"} form={formId} variant="primary" disabled={!canSubmit}>
-          保存供应商
-        </Button>
-      </footer>
-    </div>
+    <EditorFrame
+      title={title}
+      titleRef={titleRef}
+      backLabel={backLabel}
+      busy={busy}
+      onBack={onBack}
+      className="asb-provider-editor"
+      footer={
+        <>
+          <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
+          <Button type={formId ? "submit" : "button"} form={formId} variant="primary" disabled={!canSubmit}>
+            保存供应商
+          </Button>
+        </>
+      }
+    >
+      {children}
+    </EditorFrame>
   );
 }

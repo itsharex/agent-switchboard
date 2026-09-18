@@ -94,7 +94,7 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
   const rows = importRows(props.scan);
   const selectedCount = rows.filter(({ item }) => item && !item.existing && props.selected[item.key]).length;
   return (
-    <section className="asb-panel" aria-label="从本机数据库导入">
+    <>
       <ModuleHeader
         title="本机数据库"
         primaryActions={
@@ -124,6 +124,6 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
         </div>
       )}
       <ImportResult result={props.result} />
-    </section>
+    </>
   );
 }

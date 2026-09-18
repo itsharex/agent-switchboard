@@ -7,6 +7,7 @@ import type {
   UsageQuery,
 } from "../api/client";
 import type { ProviderView } from "../app/navigation";
+import type { ActivationCandidate } from "../app/useProviderSwitchFlow";
 import { ProviderEditor } from "../components/ProviderEditor";
 import { ProviderList } from "../components/ProviderList";
 import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
@@ -31,6 +32,8 @@ interface ProvidersPageProps {
   busy: boolean;
   /** Persisted profile ids whose usage panel is collapsed. */
   collapsedUsageIds: string[];
+  /** The pending switch candidate; its row unfolds the write confirmation. */
+  activationCandidate: ActivationCandidate | null;
   onSelectApp: (app: AppKind) => void;
   onNew: () => void;
   onImport: () => void;
@@ -52,6 +55,10 @@ interface ProvidersPageProps {
   /** Persists the flipped usage-panel state for the profile. */
   onToggleUsage: (profile: ProviderProfile) => void;
   onActivate: (profile: ProviderProfile) => void;
+  /** Confirms the pending switch candidate through the switch executor. */
+  onConfirmSwitch: () => void;
+  /** Discards the pending switch candidate without writing. */
+  onCancelActivation: () => void;
   onEdit: (profile: ProviderProfile) => void;
   onDelete: (profile: ProviderProfile) => void;
   /** Refreshes the provider snapshot after a management-dialog change. */
@@ -113,11 +120,16 @@ function ProviderListView({
         profiles={props.profiles.filter((profile) => profile.app === appFilter)}
         activeProfileId={props.activeProfileId}
         userConfigModel={props.userConfigModel}
+        userConfigWarnings={props.userConfigWarnings}
+        busy={busy}
         collapsedUsageIds={props.collapsedUsageIds}
+        activationCandidate={props.activationCandidate}
         onReorder={props.onReorder}
         onToggleUsage={props.onToggleUsage}
         onSaveQuotaInterval={props.onSaveQuotaInterval}
         onActivate={props.onActivate}
+        onConfirmSwitch={props.onConfirmSwitch}
+        onCancelActivation={props.onCancelActivation}
         onEdit={props.onEdit}
         onConfigureUsage={onConfigureUsage}
         onDelete={props.onDelete}
@@ -131,35 +143,33 @@ export function ProvidersPage(props: ProvidersPageProps) {
   const usageProfile = props.view.kind === "usage" ? props.view.profile : null;
   if (usageProfile) {
     return (
-      <div className="asb-edit-view" hidden={!props.active}>
-        <section className="asb-panel asb-edit-panel">
-          <UsageQueryWorkspace
-            key={usageProfile.id}
-            providerName={usageProfile.name}
-            value={usageProfile.usageQuery ?? null}
-            apiKey={usageProfile.apiKey}
-            authentication={usageProfile.authentication}
-            connection={usageProfile.connection}
-            baseUrl={usageProfile.baseUrl}
-            upstreamProtocol={usageProfile.upstreamProtocol}
-            busy={props.busy}
-            onSave={async (usageQuery) => {
-              const saved = await props.onSaveUsageQuery(
-                usageProfile,
-                usageQuery,
-              );
-              if (saved) props.onViewChange({ kind: "list" });
-              return saved;
-            }}
-            onClose={() => props.onViewChange({ kind: "list" })}
-          />
-        </section>
+      <div className="asb-editor-route" hidden={!props.active}>
+        <UsageQueryWorkspace
+          key={usageProfile.id}
+          providerName={usageProfile.name}
+          value={usageProfile.usageQuery ?? null}
+          apiKey={usageProfile.apiKey}
+          authentication={usageProfile.authentication}
+          connection={usageProfile.connection}
+          baseUrl={usageProfile.baseUrl}
+          upstreamProtocol={usageProfile.upstreamProtocol}
+          busy={props.busy}
+          onSave={async (usageQuery) => {
+            const saved = await props.onSaveUsageQuery(
+              usageProfile,
+              usageQuery,
+            );
+            if (saved) props.onViewChange({ kind: "list" });
+            return saved;
+          }}
+          onClose={() => props.onViewChange({ kind: "list" })}
+        />
       </div>
     );
   }
   if (props.editorSession !== null) {
     return (
-      <div className="asb-provider-editor-route" hidden={!props.active}>
+      <div className="asb-editor-route" hidden={!props.active}>
         <ProviderEditView {...props} />
       </div>
     );

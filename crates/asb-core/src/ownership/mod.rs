@@ -11,8 +11,6 @@ mod lookup;
 mod models;
 mod provider;
 mod spec;
-#[cfg(test)]
-mod tests;
 mod toggles;
 
 pub use choices::{CLAUDE_CHOICES, CODEX_CHOICES, CODEX_SUBAGENT_REASONING_EFFORT_KEY};

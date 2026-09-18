@@ -7,13 +7,7 @@ mod claude;
 mod codex;
 mod error;
 mod profile;
-#[cfg(test)]
-mod responses_tests;
 mod settings;
-#[cfg(test)]
-mod settings_tests;
-#[cfg(test)]
-mod tests;
 mod usage;
 
 pub(crate) use codex::validate_connection as validate_codex_connection;

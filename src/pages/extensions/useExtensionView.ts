@@ -32,7 +32,6 @@ export function useExtensionView({ section, onSectionChange }: ExtensionNavigati
   };
   const changeSection = (nextSection: ExtensionSection) => {
     onSectionChange(nextSection);
-    if (nextSection !== "skill") setSourceBrowser(false);
   };
   return {
     section,

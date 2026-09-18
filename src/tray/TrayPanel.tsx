@@ -1,14 +1,55 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, LogOut } from "lucide-react";
-import { hideTray, openTrayMain, quitTray, resizeTray, switchTrayProvider, trayReady } from "../api/client";
+import { ArrowUpRight, LogOut } from "lucide-react";
+import {
+  hideTray,
+  openTrayMain,
+  quitTray,
+  resizeTray,
+  switchTrayProvider,
+  trayReady,
+  type TraySnapshot,
+} from "../api/client";
 import appIcon from "../assets/app-icon.svg";
 import { Button } from "@/components/Button";
 import { ClientLogo } from "@/components/ClientLogo";
-import { Time } from "@/components/Time";
-import { formatUsageSummary } from "@/lib/usage-format";
 import { applyAppAppearance } from "@/lib/app-appearance";
-import { cx } from "@/utils/cx";
+import { TrayProviderItem } from "./TrayProviderItem";
 import { trayError, useTraySnapshot } from "./useTraySnapshot";
+
+/** Hard cap for the native popup height. The single-line row density keeps
+ * realistic provider counts fully visible below it; an extreme count scrolls
+ * inside .tray-list as the physical last resort instead of stretching. */
+const TRAY_MAX_HEIGHT = 560;
+
+type TrayApp = "codex" | "claude";
+
+interface TrayGroupProps {
+  app: TrayApp;
+  providers: TraySnapshot["providers"];
+  loaded: boolean;
+  busy: boolean;
+  pending: string | null;
+  onSwitch: (providerId: string) => void;
+}
+
+function TrayGroup({ app, providers, loaded, busy, pending, onSwitch }: TrayGroupProps) {
+  const label = app === "codex" ? "Codex" : "Claude Code";
+  return (
+    <section aria-label={label} className="tray-group">
+      <h2 className="tray-group-heading"><ClientLogo app={app} className="tray-client-logo" />{label}</h2>
+      {loaded && providers.length === 0 && <p className="tray-group-empty">暂无供应商</p>}
+      {providers.map((provider) => (
+        <TrayProviderItem
+          key={provider.id}
+          provider={provider}
+          busy={busy}
+          pending={pending}
+          onSwitch={() => onSwitch(provider.id)}
+        />
+      ))}
+    </section>
+  );
+}
 
 export function TrayPanel() {
   const { snapshot, error: readError, initialized, refresh } = useTraySnapshot();
@@ -43,7 +84,8 @@ export function TrayPanel() {
     let lastHeight = 0;
     const measure = () => {
       if (!panel.current || !list.current) return;
-      const height = Math.ceil(panel.current.offsetHeight - list.current.clientHeight + list.current.scrollHeight);
+      const content = Math.ceil(panel.current.offsetHeight - list.current.clientHeight + list.current.scrollHeight);
+      const height = Math.min(content, TRAY_MAX_HEIGHT);
       if (height <= 0 || height === lastHeight) return;
       lastHeight = height;
       const request = ++revision;
@@ -87,6 +129,13 @@ export function TrayPanel() {
     }
   };
   const error = actionError ?? readError ?? snapshot?.error;
+  const providers = snapshot?.providers ?? [];
+  const switchProvider = (providerId: string) => {
+    void act(providerId, async () => {
+      await switchTrayProvider(providerId);
+      await refresh();
+    });
+  };
   return (
     <div ref={panel} className="tray-panel" aria-label="Agent Switchboard 托盘">
       <header className="tray-header">
@@ -100,34 +149,17 @@ export function TrayPanel() {
       <div ref={list} className="tray-list">
         <div>
           {!snapshot && !readError && <p role="status" className="tray-loading">正在读取供应商…</p>}
-          {(["codex", "claude"] as const).map((app) => {
-            const providers = snapshot?.providers.filter((provider) => provider.app === app) ?? [];
-            return <section key={app} aria-label={app === "codex" ? "Codex" : "Claude Code"} className="tray-group">
-              <h2 className="tray-group-heading"><ClientLogo app={app} className="tray-client-logo" />{app === "codex" ? "Codex" : "Claude Code"}</h2>
-              {snapshot && providers.length === 0 && <p className="tray-group-empty">暂无供应商</p>}
-              {providers.map((provider) => <Button
-                key={provider.id} variant="secondary"
-                className={cx("tray-provider", provider.active && "tray-provider-active")}
-                disabled={busy || provider.active}
-                aria-label={provider.active ? `${provider.name}，当前供应商` : `切换到 ${provider.name}`}
-                aria-describedby={`tray-provider-detail-${provider.id}`}
-                onClick={() => void act(provider.id, async () => { await switchTrayProvider(provider.id); await refresh(); })}
-              >
-                <span className="tray-check">{provider.active && <Check size={18} aria-hidden="true" />}</span>
-                <span className="tray-provider-text">
-                  <span className="tray-provider-name">{provider.name}</span>
-                  <span id={`tray-provider-detail-${provider.id}`} className="tray-provider-text">
-                  <span className="tray-detail">{provider.model ?? "默认模型"}</span>
-                  {provider.usage && <>
-                    <span className="tray-detail">{formatUsageSummary(provider.usage)}</span>
-                    <span className="tray-time">缓存 · <Time iso={provider.usage.at} /></span>
-                  </>}
-                  </span>
-                </span>
-                {!provider.active && <span className="tray-switch">{pending === provider.id ? "切换中" : "切换"}</span>}
-              </Button>)}
-            </section>;
-          })}
+          {(["codex", "claude"] as const).map((app) => (
+            <TrayGroup
+              key={app}
+              app={app}
+              providers={providers.filter((provider) => provider.app === app)}
+              loaded={snapshot !== null}
+              busy={busy}
+              pending={pending}
+              onSwitch={switchProvider}
+            />
+          ))}
         </div>
       </div>
       <footer className="tray-footer">

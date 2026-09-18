@@ -1,4 +1,5 @@
 import { Button } from "../../components/Button";
+import { ExtensionLoading } from "../../components/extensions/ExtensionLoading";
 import { SearchIcon } from "../../components/icons";
 import { Server, Sparkles } from "lucide-react";
 import { ExtensionList } from "./ExtensionList";
@@ -30,12 +31,7 @@ function EmptyLibrary({ workspace }: { workspace: ExtensionWorkspace }) {
 
 export function ExtensionLibraryPanel({ workspace }: { workspace: ExtensionWorkspace }) {
   if (workspace.nav.kind === null) return null;
-  if (!workspace.ext.loaded)
-    return (
-      <div className="asb-ext-loading" role="status">
-        <p className="asb-empty">正在加载扩展…</p>
-      </div>
-    );
+  if (!workspace.ext.loaded) return <ExtensionLoading />;
   if (!workspace.ext.workspace)
     return (
       <div className="asb-empty-state" role="alert">

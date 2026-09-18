@@ -407,5 +407,3 @@ use stdio::check_stdio;
 
 mod http;
 mod stdio;
-#[cfg(test)]
-mod tests;

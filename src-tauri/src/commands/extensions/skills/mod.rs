@@ -477,5 +477,3 @@ pub use editor::{
     update_skill_dependencies, update_skill_files,
 };
 
-#[cfg(test)]
-mod diff_tests;

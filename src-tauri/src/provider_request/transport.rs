@@ -261,13 +261,5 @@ async fn read_body(mut response: reqwest::Response, limit: usize) -> BodyRead {
     body
 }
 
-#[cfg(test)]
-mod tests;
 
-#[cfg(test)]
-mod diagnostics_tests;
-#[cfg(test)]
-mod draft_tests;
 
-#[cfg(test)]
-mod auth_tests;

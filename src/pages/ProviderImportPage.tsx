@@ -1,8 +1,7 @@
 import { useState } from "react";
 import type { AppKind, CcSwitchImportOutcome, CcSwitchScan, DiscoveryReport } from "../api/client";
-import { Button } from "../components/Button";
 import { RadioOption } from "../components/RadioOption";
-import { WorkspaceHeader } from "../components/WorkspaceHeader";
+import { EditorFrame } from "../components/EditorFrame";
 import { CcSwitchImport } from "./provider-import/CcSwitchImport";
 import { LocalConfigImport } from "./provider-import/LocalConfigImport";
 import "../styles/base/provider-workspace.css";
@@ -22,7 +21,9 @@ interface ProviderImportPageProps {
   onImportCc: () => Promise<boolean>;
 }
 
-/** Local discovery uses the selected client; batch import stays cross-client. */
+/** Local discovery uses the selected client; batch import stays cross-client.
+ * Scan and import actions belong to each source panel, so the frame runs
+ * without a persistent bottom action bar. */
 export function ProviderImportPage(props: ProviderImportPageProps) {
   const localImportAvailable = true;
   const [selectedSource, setSelectedSource] = useState<"local" | "ccswitch">("local");
@@ -34,25 +35,19 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
     if (await props.onImportCc()) props.onBack();
   };
   return (
-    <div className="asb-provider-import">
-      <WorkspaceHeader
-        title="导入供应商"
-        back={
-          <Button variant="back" disabled={props.busy} aria-label="返回供应商" onClick={props.onBack}>←</Button>
-        }
-      />
-      {localImportAvailable && <section className="asb-panel" aria-label="导入供应商">
-        <div className="asb-segments" role="radiogroup" aria-label="导入来源">
+    <EditorFrame title="导入供应商" backLabel="返回供应商" busy={props.busy} onBack={props.onBack}>
+      <div className="asb-provider-import">
+        {localImportAvailable && <div className="asb-segments" role="radiogroup" aria-label="导入来源">
           <RadioOption name="provider-import-source" checked={source === "local"} disabled={props.busy}
             label="本机配置" onChange={() => setSelectedSource("local")} />
           <RadioOption name="provider-import-source" checked={source === "ccswitch"} disabled={props.busy}
             label="本机数据库" onChange={() => setSelectedSource("ccswitch")} />
-        </div>
-      </section>}
-      {source === "local" ? <LocalConfigImport app={props.appFilter} discovery={props.discovery} busy={props.busy}
-        onScan={props.onScanLocal} onImport={() => void importLocal()} />
-        : <CcSwitchImport scan={props.ccScan} selected={props.ccSelected} result={props.ccResult}
-          busy={props.busy} onScan={props.onScanCc} onSelect={props.onSelectCc} onImport={() => void importCc()} />}
-    </div>
+        </div>}
+        {source === "local" ? <LocalConfigImport app={props.appFilter} discovery={props.discovery} busy={props.busy}
+          onScan={props.onScanLocal} onImport={() => void importLocal()} />
+          : <CcSwitchImport scan={props.ccScan} selected={props.ccSelected} result={props.ccResult}
+            busy={props.busy} onScan={props.onScanCc} onSelect={props.onSelectCc} onImport={() => void importCc()} />}
+      </div>
+    </EditorFrame>
   );
 }

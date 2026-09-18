@@ -241,12 +241,19 @@ impl Planner<'_> {
                 "批量计划没有包含任何资源操作",
             ));
         }
+        // Per-document working state for the whole batch: every patch
+        // threads through one text per document and each document is
+        // written exactly once when the batch is complete.
+        // Per-document working state for the whole batch: every patch
+        // threads through one text per document and each document is
+        // written exactly once when the batch is complete.
+        let mut batch = document::DocumentBatch::default();
         let mut operations = Vec::new();
         for entry in &request.operations {
             let planned = match entry.operation {
                 PlanOperation::Install => {
                     let definition_id = required_id(&entry.definition_id, "安装计划缺少扩展 id")?;
-                    self.build_install(definition_id, &entry.targets)?
+                    self.build_install(definition_id, &entry.targets, &mut batch)?
                 }
                 PlanOperation::Update => {
                     let definition_id = required_id(&entry.definition_id, "更新计划缺少扩展 id")?;
@@ -264,11 +271,16 @@ impl Planner<'_> {
                         .into_iter()
                         .filter(|binding| binding.resource_id == definition_id)
                         .collect();
-                    self.build_redeploy(&definition, &bindings)?
+                    self.build_redeploy(&definition, &bindings, &mut batch)?
                 }
                 PlanOperation::Enable | PlanOperation::Disable | PlanOperation::Remove => {
                     let binding_id = required_id(&entry.binding_id, "该操作缺少绑定 id")?;
-                    self.build_binding_change(entry.operation, binding_id, entry.shared_settings)?
+                    self.build_binding_change(
+                        entry.operation,
+                        binding_id,
+                        entry.shared_settings,
+                        &mut batch,
+                    )?
                 }
                 PlanOperation::Restore => {
                     return Err(CommandError::new(
@@ -283,6 +295,7 @@ impl Planner<'_> {
                     ))
                 }
             };
+            batch.advance(planned.targets.len());
             operations.push(planned);
         }
         // One resource may appear at most once per batch; overlapping writes
@@ -296,6 +309,9 @@ impl Planner<'_> {
                 ));
             }
         }
+        // Every touched document lands as exactly one write, carried by the
+        // first target that changed it.
+        document::materialize_document_writes(&mut batch, &mut operations);
         Ok(ExtensionPlan {
             plan_id: String::new(),
             created_at: String::new(),
@@ -312,6 +328,7 @@ impl Planner<'_> {
         &self,
         definition_id: &str,
         targets: &[ExtensionTarget],
+        batch: &mut document::DocumentBatch,
     ) -> Result<PlannedOperation, CommandError> {
         if targets.is_empty() {
             return Err(CommandError::new(
@@ -325,6 +342,7 @@ impl Planner<'_> {
             .map_err(store_error)?
             .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
         let existing_bindings = self.store.list_bindings().map_err(store_error)?;
+        let first_target = batch.targets();
         let mut operation = PlannedOperation {
             definition_id: definition.id.clone(),
             definition_revision: definition.revision,
@@ -350,7 +368,7 @@ impl Planner<'_> {
             let binding = self.new_binding(&definition, target)?;
             validate_binding(&definition, &binding)
                 .map_err(|error| CommandError::new("extension-invalid", error.message))?;
-            self.push_target(&mut operation, &definition, &binding)?;
+            self.push_target(&mut operation, &definition, &binding, batch, first_target + index)?;
         }
         Ok(operation)
     }
@@ -360,9 +378,18 @@ impl Planner<'_> {
         operation: &mut PlannedOperation,
         definition: &ExtensionDefinition,
         binding: &ExtensionBinding,
+        batch: &mut document::DocumentBatch,
+        writer: usize,
     ) -> Result<(), CommandError> {
         self.require_write_capabilities(definition, binding, operation.operation)?;
-        let (steps, changes, baseline, warnings) = self.deploy_steps(definition, binding)?;
+        // Two managed bindings may never fight over one entry position;
+        // installs of a fresh binding claim their key against the library
+        // just like renames and takeovers do.
+        if matches!(definition.payload, ExtensionPayload::Mcp(_)) {
+            self.assert_native_key_free(binding)?;
+        }
+        let (steps, changes, baseline, warnings, adopts_native_entry) =
+            self.deploy_steps(definition, binding, batch, writer)?;
         operation.targets.push(PlannedTarget {
             binding_id: Some(binding.id.clone()),
             target: binding.target.clone(),
@@ -371,6 +398,7 @@ impl Planner<'_> {
             steps,
             warnings,
             changes,
+            adopts_native_entry,
         });
         Ok(())
     }

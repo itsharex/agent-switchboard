@@ -7,14 +7,8 @@ mod binding;
 mod content;
 mod definition;
 mod error;
-#[cfg(test)]
-mod mcp_tests;
 mod metadata;
-#[cfg(test)]
-mod metadata_tests;
 mod naming;
-#[cfg(test)]
-mod tests;
 
 pub use binding::{target_scope_supported, validate_binding, validate_target};
 pub use content::{

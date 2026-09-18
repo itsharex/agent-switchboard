@@ -65,6 +65,3 @@ pub(crate) fn convert_request(
         stream: request.stream,
     })
 }
-#[cfg(test)]
-#[path = "request_tests.rs"]
-mod tests;

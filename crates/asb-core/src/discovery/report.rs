@@ -99,12 +99,6 @@ impl DiscoveryReport {
         for proposal in &mut copy.claude_import_proposals {
             proposal.draft.api_key = String::new();
         }
-        if let DiscoveredState::Ok { route, .. } = &mut copy.codex.state {
-            route.base_url = route
-                .base_url
-                .as_ref()
-                .map(|_| crate::redact::REDACTED.into());
-        }
         copy
     }
 }

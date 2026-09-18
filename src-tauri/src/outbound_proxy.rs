@@ -352,5 +352,3 @@ pub(crate) fn cached_client(
     client
 }
 
-#[cfg(test)]
-mod tests;

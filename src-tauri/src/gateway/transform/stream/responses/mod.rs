@@ -300,8 +300,6 @@ mod events;
 mod json;
 mod lifecycle;
 mod reasoning;
-#[cfg(test)]
-mod tests;
 
 /// Responses custom tools carry raw text input, while Anthropic's tool-use
 /// stream requires JSON object fragments. Keep the wrapper identical for

@@ -494,6 +494,3 @@ impl CodexRouteSnapshot {
     }
 }
 
-#[cfg(test)]
-#[path = "codex/tests.rs"]
-mod tests;

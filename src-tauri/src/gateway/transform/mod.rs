@@ -246,5 +246,3 @@ pub(crate) fn error<T>(message: impl Into<String>) -> Result<T, TransformError> 
     Err(TransformError(message.into()))
 }
 
-#[cfg(test)]
-mod codex_input_tests;

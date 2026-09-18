@@ -93,7 +93,14 @@ export interface ClientConfigurationApplyPreview {
 }
 
 /** A backend-owned client-configuration reset scope. */
-export type ClientConfigurationResetKind = "nativeDefaults" | "clearExtraConfiguration";
+export type ClientConfigurationResetKind =
+  | "nativeDefaults"
+  | "nativeDefaultsWithUnmanaged"
+  | "clearExtraConfiguration";
+
+/** The two native-defaults reset scopes (standard and advanced); the
+ * Claude-only extra-configuration clear is a separate operation. */
+export type NativeConfigurationResetKind = Exclude<ClientConfigurationResetKind, "clearExtraConfiguration">;
 
 export interface ProviderParametersCatalog {
   app: AppKind;

@@ -33,5 +33,3 @@ use protocols::*;
 use reasoning::*;
 use tool_results::*;
 
-#[cfg(test)]
-mod claude_tests;

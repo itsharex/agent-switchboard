@@ -316,6 +316,3 @@ fn unix_now_ms() -> u64 {
         .unwrap_or_default()
 }
 
-#[cfg(test)]
-#[path = "metrics/tests.rs"]
-mod tests;

@@ -2,15 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import {
   executeSwitch, reorderCodexProfiles,
   type AppKind, type CodexProviderDraft, type CodexProviderRecord, type CommandError,
-  type ConfigFileStatus, type LockStatus, type ProviderDraft, type ProviderProfile, type ProviderRecord,
+  type ConfigFileStatus, type LockStatus, type ProviderDraft, type ProviderProfile,
+  type ProviderRecord, type UsageQuery,
 } from "../api/client";
 import type { CodexEditorSource } from "../app/useProviders";
 import { useProviderSwitchFlow } from "../app/useProviderSwitchFlow";
-import { Button } from "../components/Button";
-import { CodexOfficialRow, CodexProviderRow } from "../components/CodexProviderRows";
+import { CodexOfficialRow, CodexProviderRow, ConfiguredCodexProviderRow } from "../components/CodexProviderRows";
 import { CodexProviderEditor } from "../components/codex-provider-editor/CodexProviderEditor";
-import { PreviewInspector } from "../components/PreviewInspector";
 import { ProviderWorkspaceShell, SortableProviderRows } from "../components/ProviderWorkspaceShell";
+import { SwitchConfirmationSection } from "../components/SwitchConfirmationSection";
+import { UsageQueryWorkspace } from "../components/UsageQueryWorkspace";
 
 interface Props {
   active: boolean;
@@ -44,6 +45,13 @@ interface Props {
   onSwitchClient: (app: AppKind) => void;
   /** Persists the official record's subscription-quota refresh interval. */
   onSaveOfficialQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
+  /** Persisted profile ids whose usage panel is collapsed; every other
+   * configured panel stays expanded. */
+  collapsedUsageIds: string[];
+  /** Persists the flipped usage-panel state for a Codex profile. */
+  onToggleUsage: (profileId: string) => void;
+  /** Saves one Codex profile's usage query through the strict store. */
+  onSaveUsageQuery: (record: CodexProviderRecord, usageQuery: UsageQuery | null) => Promise<boolean>;
   /** Why third-party switching is blocked right now, or null when the
    * official login is ready; owned by the config snapshot refresh. */
   loginBlocker: string | null;
@@ -56,6 +64,8 @@ interface Props {
 
 function useCodexProvidersState(props: Props) {
   const [quotaOpen, setQuotaOpen] = useState(false);
+  /** The Codex provider whose usage query the full-page workspace edits. */
+  const [usageRecord, setUsageRecord] = useState<CodexProviderRecord | null>(null);
   const providerSwitch = useProviderSwitchFlow({ busy: props.busy, onError: props.onError });
   const { activationCandidate, clearCandidates, requestActivation } = providerSwitch;
   const run = useCallback(async (action: () => Promise<void>) => {
@@ -89,6 +99,8 @@ function useCodexProvidersState(props: Props) {
     clearCandidates,
     quotaOpen,
     setQuotaOpen,
+    usageRecord,
+    setUsageRecord,
     requestActivation,
     run,
     confirmActivation,
@@ -107,21 +119,10 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
   ].sort((left, right) => left.record.position - right.record.position
     || left.record.profile.id.localeCompare(right.record.profile.id));
   const confirmationSection = activationCandidate && (
-    <section className="asb-preview-inline" aria-label="确认切换">
-      <div className="asb-panel-heading">
-        <h3 className="asb-section-title">确认切换</h3>
-        <div className="asb-panel-actions">
-          <Button variant="secondary" disabled={props.busy} onClick={state.clearCandidates}>
-            取消切换
-          </Button>
-          <Button variant="primary" disabled={props.busy} onClick={state.confirmActivation}>
-            确认切换
-          </Button>
-        </div>
-      </div>
-      <PreviewInspector filePreview={activationCandidate.file}
-        userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
-    </section>
+    <SwitchConfirmationSection filePreview={activationCandidate.file}
+      busy={props.busy} userConfigModel={props.userConfigModel}
+      userConfigWarnings={props.userConfigWarnings}
+      onConfirm={state.confirmActivation} onCancel={state.clearCandidates} />
   );
   const rowProps = (profile: { id: string }) => ({
     active: props.activeProfileId === profile.id,
@@ -137,22 +138,31 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
         ariaLabel="Codex 供应商列表"
         emptyLabel="尚无 Codex 供应商"
       >
-        {rows.map((row) => row.kind === "official" ? (
-          <CodexOfficialRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)} quotaOpen={state.quotaOpen}
-            onEdit={() => { state.clearCandidates(); props.onEditOfficial(row.record); }}
-            onDelete={() => props.onDeleteOfficial(row.record)}
-            onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
-            onToggleQuota={() => state.setQuotaOpen((open) => !open)}
-            onReloginFinished={() => void props.onRefresh()}>
-            {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
-          </CodexOfficialRow>
-        ) : (
-          <CodexProviderRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)}
-            onEdit={() => { state.clearCandidates(); props.onEdit(row.record); }}
-            onDelete={() => props.onDelete(row.record)}>
-            {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
-          </CodexProviderRow>
-        ))}
+        {rows.map((row) => {
+          if (row.kind === "official") {
+            return (
+              <CodexOfficialRow key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)} quotaOpen={state.quotaOpen}
+                onEdit={() => { state.clearCandidates(); props.onEditOfficial(row.record); }}
+                onDelete={() => props.onDeleteOfficial(row.record)}
+                onSaveQuotaInterval={props.onSaveOfficialQuotaInterval}
+                onToggleQuota={() => state.setQuotaOpen((open) => !open)}
+                onReloginFinished={() => void props.onRefresh()}>
+                {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
+              </CodexOfficialRow>
+            );
+          }
+          const Row = row.record.usageQuery ? ConfiguredCodexProviderRow : CodexProviderRow;
+          return (
+            <Row key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)}
+              usageOpen={!props.collapsedUsageIds.includes(row.record.profile.id)}
+              onToggleUsage={() => props.onToggleUsage(row.record.profile.id)}
+              onConfigureUsage={() => state.setUsageRecord(row.record)}
+              onEdit={() => { state.clearCandidates(); props.onEdit(row.record); }}
+              onDelete={() => props.onDelete(row.record)}>
+              {activationCandidate?.profileId === row.record.profile.id && confirmationSection}
+            </Row>
+          );
+        })}
       </SortableProviderRows>
     </>
   );
@@ -161,12 +171,34 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
 export function CodexProvidersPage(props: Props) {
   const state = useCodexProvidersState(props);
   if (props.editorSession) return (
-    <div className="asb-provider-editor-route" hidden={!props.active}>
+    <div className="asb-editor-route" hidden={!props.active}>
       <CodexProviderEditor active={props.active} source={props.editorSession.source} busy={props.busy}
         userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings}
         onSave={props.onSave} onSaveOfficial={props.onSaveOfficial}
         onSwitchAccessMode={props.onSwitchAccessMode} onCancel={props.onCloseEditor}
         onSwitchClient={props.onSwitchClient} />
+    </div>
+  );
+  const usageRecord = state.usageRecord;
+  if (usageRecord) return (
+    <div className="asb-editor-route" hidden={!props.active}>
+      <UsageQueryWorkspace
+        key={usageRecord.profile.id}
+        providerName={usageRecord.profile.name}
+        value={usageRecord.usageQuery ?? null}
+        apiKey={usageRecord.profile.apiKey}
+        authentication={usageRecord.profile.authentication ?? null}
+        connection={usageRecord.profile.connection ?? null}
+        baseUrl={usageRecord.profile.endpoint}
+        upstreamProtocol={usageRecord.profile.upstream}
+        busy={props.busy}
+        onSave={async (usageQuery) => {
+          const saved = await props.onSaveUsageQuery(usageRecord, usageQuery);
+          if (saved) state.setUsageRecord(null);
+          return saved;
+        }}
+        onClose={() => state.setUsageRecord(null)}
+      />
     </div>
   );
   if (!props.active) return null;

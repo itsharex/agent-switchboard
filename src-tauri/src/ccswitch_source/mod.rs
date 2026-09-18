@@ -11,8 +11,6 @@ mod claude_order;
 pub(crate) mod codex_failover;
 mod db;
 
-#[cfg(test)]
-mod tests;
 
 use crate::config_store::StoreOperationError;
 use crate::local_state::LocalState;

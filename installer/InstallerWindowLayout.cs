@@ -197,7 +197,7 @@ namespace AgentSwitchboard.Installer
             launch = new CheckBox
             {
                 Content = copy.LaunchWhenFinished,
-                IsChecked = false,
+                IsChecked = true,
                 Visibility = Visibility.Collapsed,
                 Margin = new Thickness(0, 10, 0, 0),
             };
@@ -259,20 +259,32 @@ namespace AgentSwitchboard.Installer
             }
         }
 
+        /// The brand mark mirrors the two crossing switch paths of
+        /// src/assets/app-icon.svg; keep this geometry in sync with that
+        /// master when the icon changes.
         private FrameworkElement CreateBrandMark(double size)
         {
-            var artwork = new Grid { Width = 48, Height = 48, SnapsToDevicePixels = true };
-            artwork.Children.Add(new ShapePath
-            {
-                Data = Geometry.Parse("M 23,0 C 9,4 1,14 1,24 C 1,34 9,44 23,48 Z"),
-                Fill = Brush("Action"),
-            });
-            artwork.Children.Add(new ShapePath
-            {
-                Data = Geometry.Parse("M 26,0 C 40,4 48,14 48,24 C 48,34 40,44 26,48 Z"),
-                Fill = Brush("Violet"),
-            });
+            var artwork = new Grid { Width = 512, Height = 512, SnapsToDevicePixels = true };
+            artwork.Children.Add(SwitchPath(
+                "M 120,168 C 202,168 204,256 256,256 C 308,256 310,344 392,344",
+                Brush("BrandBlue")));
+            artwork.Children.Add(SwitchPath(
+                "M 120,344 C 202,344 204,256 256,256 C 308,256 310,168 392,168",
+                Brush("Violet")));
             return new Viewbox { Width = size, Height = size, Stretch = Stretch.Uniform, Child = artwork };
+        }
+
+        private static ShapePath SwitchPath(string data, Brush stroke)
+        {
+            return new ShapePath
+            {
+                Data = Geometry.Parse(data),
+                Stroke = stroke,
+                StrokeThickness = 56,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round,
+            };
         }
 
         private Button MakeButton(string label, bool primaryButton)

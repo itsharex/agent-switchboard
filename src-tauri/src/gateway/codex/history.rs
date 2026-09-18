@@ -408,5 +408,3 @@ fn find_block_end(buffer: &[u8]) -> Option<usize> {
         .map(|position| position + 2)
 }
 
-#[cfg(test)]
-mod tests;

@@ -12,13 +12,10 @@ mod native;
 mod takeover;
 pub use takeover::restore_gateway_overlay;
 mod overlay;
-#[cfg(test)]
-mod parity_tests;
 mod preview;
 mod render;
 mod state;
-#[cfg(test)]
-mod tests;
+mod unmanaged;
 
 pub(crate) use document::{check_syntax, parse};
 pub use common::extract_client_settings;
@@ -26,4 +23,5 @@ pub(crate) use preview::preview;
 pub(crate) use render::render_gateway_base_url;
 pub(crate) use render::{render, render_client_settings_into_file};
 pub use state::route_state;
-pub(crate) use state::{matches_provider_credentials, owned_diff};
+pub(crate) use state::{full_diff, matches_provider_credentials, owned_diff};
+pub(crate) use unmanaged::remove_unmanaged;

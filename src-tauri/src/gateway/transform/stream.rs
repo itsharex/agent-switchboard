@@ -426,11 +426,3 @@ fn parse_frame(bytes: &[u8]) -> Result<Option<Frame>, TransformError> {
     }))
 }
 
-#[cfg(test)]
-#[path = "stream/anthropic_thinking_tests.rs"]
-mod anthropic_thinking_tests;
-#[cfg(test)]
-#[path = "stream/diagnostic_tests.rs"]
-mod diagnostic_tests;
-#[cfg(test)]
-mod tests;

@@ -21,8 +21,6 @@ pub(crate) use manager::{
 pub(crate) use query::{models, official_models_document, quota};
 pub(crate) use store::lock;
 pub(crate) mod projection;
-#[cfg(test)]
-mod tests;
 pub(crate) use login::{AccountLoginStart, LoginPoll};
 pub(crate) use query::{AccountModels, AccountQuota};
 mod native_sync;

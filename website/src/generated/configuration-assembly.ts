@@ -46,7 +46,7 @@ export const configurationAssembly = {
       },
       {
         "key": "openai_base_url",
-        "value": "••••••••"
+        "value": "http://127.0.0.1:47821/codex/••••••••/v1"
       }
     ],
     "fileName": "config.toml",

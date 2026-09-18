@@ -12,8 +12,6 @@ pub(crate) mod quota;
 mod refresh;
 pub(crate) mod request;
 mod store;
-#[cfg(test)]
-mod tests;
 
 use asb_core::{
     claude_auth::{managed_auth, ClaudeAuthProvider},

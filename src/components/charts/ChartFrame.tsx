@@ -34,7 +34,7 @@ export function ChartFrame({ children }: Props) {
   }, []);
 
   return (
-    <div ref={hostRef} className="h-full w-full">
+    <div ref={hostRef} className="asb-chart-frame">
       {size && (
         <ResponsiveContainer width={size.width} height={size.height}>
           {children}

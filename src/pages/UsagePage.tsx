@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Database, Layers, LogIn, LogOut } from "lucide-react";
 import {
   type ModelUsageGroup,
   type ModelUsageRange,
@@ -179,16 +178,14 @@ export function UsagePage({ active }: { active: boolean }) {
       ) : report?.groups.length ? (
         <div className="asb-model-usage-content">
           <div className="asb-model-usage-summary">
-            <div role="group" aria-label="模型消耗汇总" className="bui-scope">
+            <div role="group" aria-label="模型消耗汇总">
               <StatCards
-                variant="summary"
                 stats={[
-                  { icon: Layers, label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
-                  { icon: LogIn, label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
-                  { icon: Database, label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
-                  { icon: LogOut, label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
+                  { label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
+                  { label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
+                  { label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
+                  { label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
                 ]}
-                columns={4}
               />
             </div>
             {undated > 0 && (

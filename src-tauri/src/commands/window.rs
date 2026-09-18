@@ -121,15 +121,23 @@ pub async fn pick_directory(app: AppHandle) -> Result<Option<String>, CommandErr
         .map_err(|_| CommandError::new("directory-picker-failed", "目录选择对话框未返回结果"))
 }
 
-/// Opens the native ZIP file picker. The selected path is scanned by the
-/// source command; the picker itself never reads or extracts the archive.
+/// Opens the native file picker limited to `extensions` and returns the picked
+/// absolute path; `None` means the user canceled. The dialog lives in a Rust
+/// command so the browser-dev backend offers the same native picker as the
+/// desktop webview, and no local path reaches the renderer unasked. The picker
+/// itself never reads the selected file.
 #[tauri::command]
-pub async fn pick_skill_zip(app: AppHandle) -> Result<Option<String>, CommandError> {
+pub async fn pick_file(
+    app: AppHandle,
+    filter_name: String,
+    extensions: Vec<String>,
+) -> Result<Option<String>, CommandError> {
     use tauri_plugin_dialog::DialogExt;
+    let extension_refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
-        .add_filter("ZIP archives", &["zip"])
+        .add_filter(&filter_name, &extension_refs)
         .pick_file(move |picked| {
             let _ = sender.send(
                 picked
@@ -139,5 +147,5 @@ pub async fn pick_skill_zip(app: AppHandle) -> Result<Option<String>, CommandErr
         });
     receiver
         .await
-        .map_err(|_| CommandError::new("zip-picker-failed", "ZIP 文件选择对话框未返回结果"))
+        .map_err(|_| CommandError::new("file-picker-failed", "文件选择对话框未返回结果"))
 }

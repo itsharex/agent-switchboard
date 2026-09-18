@@ -16,6 +16,11 @@
   font: var(--asb-text-body);
 }
 
+/* Tables compare numbers down columns, so figures are tabular table-wide. */
+.asb-table {
+  font-variant-numeric: var(--asb-num-font-variant);
+}
+
 .asb-table th {
   padding: var(--asb-space-2) var(--asb-space-3);
   background: var(--asb-content-muted);
@@ -58,10 +63,21 @@
   min-width: var(--asb-table-action-min-width);
 }
 
+/* The cloud-backup settings load placeholder reserves the form's row
+   footprint so the panel does not reflow when the connection fields arrive. */
+.asb-cloud-backup-loading {
+  display: grid;
+  gap: var(--asb-space-2);
+}
+
+.asb-cloud-backup-loading > .asb-skeleton {
+  height: var(--asb-touch-target);
+}
+
 /* A data table never shares an edge with the trend block above it (user
-   directive 2026-09-04): the chart card carries no own margin (.bui-scope
-   reset), so the table keeps breathing room whatever spacing model its
-   parent uses — flex gap or plain block flow. */
+   directive 2026-09-04): the chart card carries no own margin, so the table
+   keeps breathing room whatever spacing model its parent uses — flex gap or
+   plain block flow. */
 .asb-usage-history + .asb-table {
   margin-top: var(--asb-space-3);
 }
@@ -115,6 +131,30 @@
   flex: none;
   justify-content: flex-end;
   margin-bottom: var(--asb-space-3);
+}
+
+/* Destructive backup actions (undo, cloud restore) read after the object they
+   act on, on their own hairline row below the safe action cluster. */
+.asb-backup-danger-row {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  border-top: 1px solid var(--asb-hairline);
+  padding-top: var(--asb-space-3);
+}
+
+.asb-backup-local > .asb-backup-danger-row {
+  margin-bottom: var(--asb-space-3);
+}
+
+/* The open backup diff is a full-width region under its own row, never a
+   squeezed cell; unlike data rows it stays hover-neutral. */
+.asb-table .asb-backup-diff-row:hover {
+  background: transparent;
+}
+
+.asb-backup-diff-loading {
+  min-height: 96px;
 }
 
 .asb-backups {

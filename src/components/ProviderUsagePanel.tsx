@@ -1,4 +1,3 @@
-import type { ProviderProfile } from "../api/client";
 import { Button } from "./Button";
 import { Time } from "./Time";
 import { UsageReadingsTable } from "./UsageReadingsTable";
@@ -6,17 +5,18 @@ import type { ProviderUsage } from "./use-provider-usage";
 
 interface Props {
   id: string;
-  profile: ProviderProfile;
+  name: string;
   usage: ProviderUsage;
-  onConfigure?: (profile: ProviderProfile) => void;
+  /** Opens the usage-query workspace for this provider. */
+  onConfigure?: () => void;
 }
 
 /** The containing row mounts this panel only while its usage disclosure is open. */
-export function ProviderUsagePanel({ id, profile, usage, onConfigure }: Props) {
+export function ProviderUsagePanel({ id, name, usage, onConfigure }: Props) {
   const { data: summary, querying, error, run } = usage;
 
   return (
-    <section id={id} className="asb-provider-usage" aria-label={`${profile.name} 用量`}>
+    <section id={id} className="asb-provider-usage" aria-label={`${name} 用量`}>
       <header className="asb-provider-usage-head">
         <div className="asb-provider-usage-title">
           <h3 className="asb-section-title">用量</h3>
@@ -27,7 +27,7 @@ export function ProviderUsagePanel({ id, profile, usage, onConfigure }: Props) {
             <Button
               variant="unstyled"
               className="asb-provider-usage-configure"
-              onClick={() => onConfigure(profile)}
+              onClick={onConfigure}
             >
               编辑查询
             </Button>
@@ -44,7 +44,7 @@ export function ProviderUsagePanel({ id, profile, usage, onConfigure }: Props) {
       </header>
 
       {summary ? (
-        <UsageReadingsTable readings={summary.readings} ariaLabel={`${profile.name} 用量读数`} />
+        <UsageReadingsTable readings={summary.readings} ariaLabel={`${name} 用量读数`} />
       ) : (
         !error && <p className="asb-provider-usage-state" role="status">正在读取已配置的用量…</p>
       )}

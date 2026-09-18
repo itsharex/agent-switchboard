@@ -28,6 +28,7 @@ fn validate_identity(profile: &CodexProviderProfile) -> Result<(), String> {
         profile.request_mode,
         &profile.connection,
         profile.authentication,
+        Some(profile.endpoint.0.as_str()),
     );
     if profile.route_mode != expected_route {
         return Err("Codex 路由模式与上游协议、请求模式、认证或连接覆盖不一致".to_string());
@@ -249,6 +250,7 @@ mod tests {
                 ResponsesRequestMode::Minimal,
                 &ProviderConnectionOptions::default(),
                 None,
+                None,
             ),
             CodexRouteMode::Gateway,
         );
@@ -261,6 +263,7 @@ mod tests {
                 CodexUpstream::Responses,
                 ResponsesRequestMode::Standard,
                 &ProviderConnectionOptions::default(),
+                None,
                 None,
             ),
             CodexRouteMode::Direct,

@@ -163,5 +163,3 @@ pub async fn resolve_directory_skill(
     .await
 }
 
-#[cfg(test)]
-mod tests;

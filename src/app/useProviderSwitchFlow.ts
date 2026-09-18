@@ -124,7 +124,6 @@ export function useProviderSwitchFlow({
   return {
     activationCandidate: state.activationCandidate,
     clearCandidates: state.clearCandidates,
-    cancelActivation: state.clearCandidates,
     invalidateCandidates,
     setTargetProfile,
     requestActivation,

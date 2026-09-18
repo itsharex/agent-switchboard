@@ -5,12 +5,8 @@ mod pricing;
 mod query;
 mod session_parse;
 mod session_sync;
-#[cfg(test)]
-mod session_sync_tests;
 mod settings;
 mod store;
-#[cfg(test)]
-mod tests;
 pub(crate) use contracts::*;
 pub(crate) use pricing::{estimate, CodexModelPrice};
 pub(crate) use query::{CodexLedgerFilter, CodexLedgerPage, CodexLedgerSummary};

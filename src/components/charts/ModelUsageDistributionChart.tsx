@@ -3,10 +3,9 @@ import { useCountUp } from "@/hooks/use-count-up";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
 import { formatUsageValue } from "../../lib/usage-format";
 import { ChartFrame } from "./ChartFrame";
-import type { ModelUsageDistributionItem } from "./chart-data";
+import { chartSeriesColor, type ModelUsageDistributionItem } from "./chart-data";
 
 const TOP_MODEL_COUNT = 5;
-const SERIES_TONE_COUNT = 5;
 
 type DisplayItem = ModelUsageDistributionItem & {
   otherCount: number | null;
@@ -33,13 +32,10 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
   const total = visible.reduce((sum, item) => sum + item.value, 0);
   const display = useCountUp(Math.round(total));
   return (
-    <figure
-      className="bui-scope flex w-full min-w-0 flex-col gap-6 rounded-3xl bg-background-secondary-default p-6"
-      aria-label={ariaLabel}
-    >
-      <figcaption className="text-title-3-semibold text-text-primary">模型构成</figcaption>
-      <div className="flex min-w-0 flex-col items-center gap-8 lg:flex-row lg:items-center lg:gap-12">
-        <div className="relative h-72 w-72 shrink-0">
+    <figure className="asb-usage-donut-card" aria-label={ariaLabel}>
+      <figcaption className="asb-usage-donut-title">模型构成</figcaption>
+      <div className="asb-usage-donut-layout">
+        <div className="asb-usage-donut-stage">
           <ChartFrame>
             <PieChart>
               <Pie
@@ -49,45 +45,48 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
                 innerRadius="61%"
                 outerRadius="90%"
                 paddingAngle={1}
-                stroke="var(--color-background-secondary-default)"
+                // Slice separators stay the card surface so the ring reads as
+                // one shape cut into shares.
+                stroke="var(--asb-content-muted)"
                 strokeWidth={4}
                 isAnimationActive={false}
               >
                 {visible.map((item, index) => (
                   <Cell
                     key={item.id}
-                    fill={item.otherCount === null ? seriesColor(index) : "var(--color-chart-neutral)"}
+                    fill={
+                      item.otherCount === null
+                        ? chartSeriesColor(index)
+                        : "var(--asb-hairline-strong)"
+                    }
                   />
                 ))}
               </Pie>
             </PieChart>
           </ChartFrame>
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="animate-number-fade text-title-1-medium text-text-primary tabular-nums">
+          <div className="asb-usage-donut-center">
+            <span className="asb-usage-donut-center-value">
               {formatCompactTokenCount(display)}
             </span>
-            <span className="text-body-medium text-text-tertiary">{TOKEN_UNIT}</span>
+            <span className="asb-usage-donut-center-unit">{TOKEN_UNIT}</span>
           </div>
         </div>
-        <ol className="flex w-full min-w-0 flex-col divide-y divide-separator-border">
+        <ol className="asb-usage-donut-legend">
           {visible.map((item, index) => {
             const percent = (item.value / total) * 100;
             const label = item.otherCount === null ? item.label : `其他（${item.otherCount} 个模型）`;
-            const color = item.otherCount === null ? seriesColor(index) : "var(--color-chart-neutral)";
+            const color =
+              item.otherCount === null ? chartSeriesColor(index) : "var(--asb-hairline-strong)";
             return (
-              <li key={item.id} className="min-w-0 py-3 first:pt-0 last:pb-0">
-                <div className="flex w-full min-w-0 items-center gap-2">
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-body-medium text-text-primary" title={label}>
+              <li key={item.id} className="asb-usage-donut-row">
+                <div className="asb-usage-donut-row-head">
+                  <span className="asb-usage-donut-swatch" style={{ backgroundColor: color }} aria-hidden />
+                  <span className="asb-usage-donut-name" title={label}>
                     {label}
                   </span>
-                  <span className="shrink-0 text-body-medium text-text-tertiary tabular-nums">
-                    {formatUsageValue(percent, "%")}
-                  </span>
+                  <span className="asb-usage-donut-percent">{formatUsageValue(percent, "%")}</span>
                 </div>
-                <p className="mt-1 ml-5 text-body-medium text-text-secondary tabular-nums">
-                  {formatTokenValue(item.value)}
-                </p>
+                <p className="asb-usage-donut-value">{formatTokenValue(item.value)}</p>
               </li>
             );
           })}
@@ -95,12 +94,6 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
       </div>
     </figure>
   );
-}
-
-/** Series hues ride the 图表组件层 chart tokens, which this app re-tints to its
- * own Frosted Relay series colors in 样式表. */
-function seriesColor(index: number): string {
-  return `var(--color-chart-${(index % SERIES_TONE_COUNT) + 1})`;
 }
 
 function resolveDisplayItems(items: ModelUsageDistributionItem[]): DisplayItem[] {

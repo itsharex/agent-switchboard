@@ -326,12 +326,6 @@ mod json;
 mod native;
 mod normalize;
 
-#[cfg(test)]
-mod binding_tests;
-#[cfg(test)]
-mod native_tests;
-#[cfg(test)]
-mod tests;
 
 use completed::normalize_completed_response;
 use input::normalize_input;

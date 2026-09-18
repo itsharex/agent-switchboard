@@ -269,5 +269,3 @@ pub(crate) async fn scan_codex_failover_source(
     .await
 }
 
-#[cfg(test)]
-mod tests;

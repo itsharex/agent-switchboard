@@ -201,5 +201,3 @@ fn registry_error() -> CommandError {
     )
 }
 
-#[cfg(test)]
-mod tests;

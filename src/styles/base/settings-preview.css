@@ -27,12 +27,6 @@
   justify-content: flex-end;
 }
 
-.asb-settings-actions-main .asb-field-help,
-.asb-settings-actions-main .asb-field-error {
-  margin: 0;
-  text-align: right;
-}
-
 @media (max-width: 680px) {
   .asb-settings-actions {
     align-items: stretch;
@@ -41,11 +35,6 @@
 
   .asb-settings-actions-main {
     justify-content: space-between;
-  }
-
-  .asb-settings-actions-main .asb-field-help,
-  .asb-settings-actions-main .asb-field-error {
-    text-align: left;
   }
 }
 

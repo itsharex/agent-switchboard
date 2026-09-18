@@ -190,7 +190,7 @@ function ClientPreferenceRow({ spec, value, baselineValue, actualValue, showActu
   if (!clientApp) throw new Error("Client preference rows require a client application.");
   const actualLabel = showActual ? choiceLabel(spec, actualValue ?? automatic) : "不可读取";
   return (
-    <div className="asb-toggle-row asb-choice-row asb-subagent-row">
+    <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
           <span className="asb-checkbox-label">{spec.label}</span>
@@ -216,7 +216,7 @@ function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: Pr
   const baseline = baselineValue ?? automatic;
   const changed = !sameSettingValue(baseline, value);
   return (
-    <div className="asb-toggle-row asb-choice-row asb-subagent-row">
+    <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
           <span className="asb-checkbox-label">{spec.label}</span>

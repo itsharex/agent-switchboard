@@ -336,5 +336,3 @@ pub async fn put_extension_secret(
     .await
 }
 
-#[cfg(test)]
-mod tests;

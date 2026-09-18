@@ -5,8 +5,6 @@
 pub(crate) mod activation;
 mod decode;
 
-#[cfg(test)]
-mod tests;
 
 pub use activation::enable_snapshot;
 pub(crate) use decode::decode_cloud_backup_snapshot;

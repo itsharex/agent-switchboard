@@ -24,8 +24,6 @@ pub fn extract_client_settings(
 }
 pub use parameters::read_provider_parameters;
 
-#[cfg(test)]
-mod identity_tests;
 
 use crate::contracts::{AppKind, SettingsValues, SwitchPlan, SwitchPreview};
 use serde::{Deserialize, Serialize};
@@ -192,6 +190,40 @@ pub fn owned_diff(
     match app {
         AppKind::Codex => codex::owned_diff(current, previous),
         AppKind::Claude => claude::owned_diff(current, previous),
+    }
+}
+
+/// Which leaf set a rendered preview diffs: catalog-owned keys only, or
+/// every leaf including host-owned ones. The deep client reset deletes
+/// unmanaged fields, so its preview must list them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewDiff {
+    Owned,
+    Full,
+}
+
+/// Diff over every leaf, including host-owned keys; used only by the deep
+/// client reset preview.
+pub fn full_diff(
+    app: AppKind,
+    current: &str,
+    previous: &str,
+) -> Result<Vec<crate::contracts::KeyChange>, AdapterError> {
+    match app {
+        AppKind::Codex => codex::full_diff(current, previous),
+        AppKind::Claude => claude::full_diff(current, previous),
+    }
+}
+
+/// Deletes every leaf no ASB module owns and prunes the containers it
+/// empties, so the deep client reset can converge a real file onto the
+/// configuration the interface models. Preserved: directory scalars, Claude
+/// native and manifest-claimed paths, Codex provider and extension table
+/// families, and the sub-agent keys the typed render removes itself.
+pub fn remove_unmanaged_entries(app: AppKind, text: &str) -> Result<String, AdapterError> {
+    match app {
+        AppKind::Codex => codex::remove_unmanaged(text),
+        AppKind::Claude => claude::remove_unmanaged(text),
     }
 }
 

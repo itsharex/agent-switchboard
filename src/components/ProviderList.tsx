@@ -1,6 +1,7 @@
+import type { ActivationCandidate } from "../app/useProviderSwitchFlow";
 import type { ProviderProfile, ProviderRequestTarget } from "../api/client";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ConnectivityIcon,
   EditIcon,
@@ -14,6 +15,7 @@ import { ProviderRowShell, SortableProviderRows } from "./ProviderWorkspaceShell
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
 import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
 import { formatUsageHighlight, formatUsageSummary } from "../lib/usage-format";
+import { SwitchConfirmationSection } from "./SwitchConfirmationSection";
 import { Tooltip } from "./Tooltip";
 import { ProviderTestPanel } from "./ProviderTestPanel";
 
@@ -23,9 +25,14 @@ interface Props {
   activeProfileId: string | null;
   /** Model read from the displayed client's user-level configuration file. */
   userConfigModel: string | null;
+  /** Known conditions that can override the user-level configuration. */
+  userConfigWarnings: string[];
+  busy: boolean;
   /** Persisted profile ids whose usage panel is collapsed; every other
    * configured panel stays expanded. */
   collapsedUsageIds?: string[];
+  /** The pending switch candidate; its row unfolds the confirmation. */
+  activationCandidate: ActivationCandidate | null;
   /** Persists a new display order for the visible client's profiles. */
   onReorder?: (orderedIds: string[]) => void;
   /** Persists the flipped usage-panel state for the profile. */
@@ -34,6 +41,10 @@ interface Props {
   onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   /** Requests a fresh candidate and the explicit write confirmation. */
   onActivate?: (profile: ProviderProfile) => void;
+  /** Confirms the pending candidate through the switch executor. */
+  onConfirmSwitch: () => void;
+  /** Discards the pending candidate without writing. */
+  onCancelActivation: () => void;
   onEdit?: (profile: ProviderProfile) => void;
   /** Opens the dedicated usage-query workspace for this profile. */
   onConfigureUsage?: (profile: ProviderProfile) => void;
@@ -57,6 +68,8 @@ interface RowProps {
    * persisted through the same collapsed-usage owner as `usageOpen`. */
   quotaOpen: boolean;
   sortable: boolean;
+  /** The pending switch confirmation, already matched to this row. */
+  confirmation?: ReactNode;
   onToggleUsage: (profile: ProviderProfile) => void;
   /** Persists the official Codex quota panel's auto-refresh interval. */
   onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
@@ -81,6 +94,7 @@ function ProviderRow({
   usageOpen,
   quotaOpen,
   sortable,
+  confirmation,
   onToggleUsage,
   onSaveQuotaInterval,
   onActivate,
@@ -161,7 +175,7 @@ function ProviderRow({
       id={profile.id}
       name={profile.name}
       active={active}
-      confirmationOpen={false}
+      confirmationOpen={confirmation !== undefined}
       sortable={sortable}
       model={<span title={modelTitle}>{modelText}</span>}
       endpoint={providerUrl}
@@ -271,11 +285,12 @@ function ProviderRow({
       {hasUsageQuery && usageOpen && usage && (
         <ProviderUsagePanel
           id={`provider-usage-${profile.id}`}
-          profile={profile}
+          name={profile.name}
           usage={usage}
-          onConfigure={onConfigureUsage}
+          onConfigure={onConfigureUsage ? () => onConfigureUsage(profile) : undefined}
         />
       )}
+      {confirmation}
       {reloginOpen && official && (
         <OfficialLoginPanel
           app={profile.app}
@@ -302,11 +317,16 @@ export function ProviderList({
   profiles,
   activeProfileId,
   userConfigModel,
+  userConfigWarnings,
+  busy,
   collapsedUsageIds = [],
+  activationCandidate,
   onReorder,
   onToggleUsage,
   onSaveQuotaInterval,
   onActivate,
+  onConfirmSwitch,
+  onCancelActivation,
   onEdit,
   onConfigureUsage,
   onDelete,
@@ -316,6 +336,7 @@ export function ProviderList({
     <SortableProviderRows ids={ids} onReorder={onReorder}>
       {profiles.map((profile) => {
         const Row = profile.usageQuery ? ConfiguredProviderRow : ProviderRow;
+        const confirming = activationCandidate?.profileId === profile.id;
         return <Row
           key={profile.id}
           profile={profile}
@@ -328,6 +349,12 @@ export function ProviderList({
             !collapsedUsageIds.includes(profile.id)
           }
           sortable={Boolean(onReorder)}
+          confirmation={confirming && activationCandidate ? (
+            <SwitchConfirmationSection filePreview={activationCandidate.file}
+              busy={busy} userConfigModel={userConfigModel}
+              userConfigWarnings={userConfigWarnings}
+              onConfirm={onConfirmSwitch} onCancel={onCancelActivation} />
+          ) : undefined}
           onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
           onSaveQuotaInterval={onSaveQuotaInterval}
           onActivate={onActivate}

@@ -108,7 +108,7 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
         <div className="asb-dialog-body">
           {state.stage === "input" && (
             <>
-              <label className="asb-field">
+              <label className="asb-field is-narrow">
                 <span>新监听端口（当前 {configuredPort}）</span>
                 <Input
                   type="number"

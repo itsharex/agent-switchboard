@@ -1,6 +1,8 @@
 /* Shared skeleton for the one client-owned feature rendered in each tab.
- * It gives Codex and Claude the same header, scope note, control rhythm, and
- * confirmation boundaries without turning either workflow into a nested card. */
+ * The page header and the client tabs stay the only heading pair, so the
+ * module identifies itself with a quiet eyebrow bar. Both tabs share the
+ * same status-first row rhythm without turning either workflow into a
+ * nested card. */
 .asb-client-management-module,
 .asb-client-management-module-content,
 .asb-client-management-group {
@@ -9,14 +11,55 @@
   min-width: 0;
 }
 
-/* The module owns its spacing through the grid gap rather than stacking the
- * header's default bottom margin with another layout gap. */
-.asb-client-management-module > .asb-module-header,
+/* Groups are the module's major sections: the content gap plus each group's
+   own padding-top keeps between-group whitespace at twice the in-group
+   rhythm. */
+.asb-client-management-module-content {
+  gap: var(--asb-space-4);
+}
+
+/* The module owns its spacing through the grid gap rather than stacking
+ * default margins with another layout gap. */
 .asb-client-management-module > .asb-scope-note,
 .asb-client-management-group > .asb-scope-note,
 .asb-client-management-group > .asb-warn-text,
-.asb-client-management-module-content > .asb-warn-text {
+.asb-client-management-module-content > .asb-warn-text,
+.asb-client-management-group > p,
+.asb-client-management-group > ul {
   margin: 0;
+}
+
+/* Eyebrow bar: the module title reads as a quiet label beside the icon
+ * refresh action, never as a second module header. */
+.asb-client-management-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-management-eyebrow {
+  margin: 0;
+  font: var(--asb-text-label);
+  font-weight: 600;
+  color: var(--asb-text-muted);
+}
+
+/* File paths and other verbatim values keep the code voice. */
+.asb-client-management-group code {
+  color: var(--asb-text);
+  font: var(--asb-text-code);
+  overflow-wrap: anywhere;
+}
+
+/* Loading placeholders reserve the module's row footprint. */
+.asb-client-management-skeleton {
+  display: grid;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-management-skeleton > .asb-skeleton {
+  height: var(--asb-touch-target);
 }
 
 /* A divider is only used when a workflow reveals a locally confirmable step
@@ -25,6 +68,104 @@
   padding-top: var(--asb-space-3);
   border-top: 1px solid var(--asb-hairline);
 }
+
+/* A marker row leads with its state pill; the title rides beside it and the
+ * target file stays one step quieter. */
+.asb-client-management-marker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-client-management-marker-meta {
+  font: var(--asb-text-caption);
+  color: var(--asb-text-muted);
+}
+
+/* The row-local confirmable step: preview and confirmation render inside the
+ * marker row that triggered them, on a quiet inset surface. */
+.asb-client-management-preview {
+  display: grid;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+}
+
+.asb-client-management-preview > p {
+  margin: 0;
+}
+
+/* Saved-scenario ledger: one selectable row per scenario, the same
+ * status-first rhythm as the marker rows. The clipped native radio keeps the
+ * keyboard and screen-reader contract; the row surface carries the visible
+ * selection. */
+.asb-client-management-ledger {
+  display: grid;
+}
+
+.asb-client-management-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--asb-space-2);
+  padding: var(--asb-space-1) var(--asb-space-2);
+  border-radius: var(--asb-radius);
+  cursor: pointer;
+}
+
+.asb-client-management-option + .asb-client-management-option {
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-client-management-option:hover {
+  background: var(--asb-content-muted);
+}
+
+.asb-client-management-option.is-active {
+  background: var(--asb-row-selected);
+}
+
+.asb-client-management-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.asb-client-management-option:has(input:focus-visible) {
+  outline: 2px solid var(--asb-focus-ring);
+  outline-offset: calc(-1 * var(--asb-space-hairline));
+}
+
+.asb-client-management-option:has(input:disabled) {
+  cursor: default;
+}
+
+.asb-client-management-option-text {
+  display: grid;
+  gap: var(--asb-space-hairline);
+  min-width: 0;
+}
+
+.asb-client-management-option-name {
+  overflow-wrap: anywhere;
+  font: var(--asb-text-body);
+  font-weight: 600;
+}
+
+.asb-client-management-option-meta {
+  overflow-wrap: anywhere;
+  font: var(--asb-text-caption);
+  color: var(--asb-text-muted);
+}
+
 /* Codex keeps its high-impact action clear by giving apply a full row, then
  * places reversible maintenance controls in a compact two-column grid. */
 .asb-project-plan-action-grid {

@@ -6,7 +6,7 @@ import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
   const importing = model.providerView.kind === "import";
-  const { snapshot, appFilter, activeProfileId, providers, providerSwitch, appSettingsState, busy } = model;
+  const { snapshot, appFilter, activeProfileId, providers, providerSwitch, appSettingsState, busy, operations } = model;
   const { discoveryState, ccImport } = model;
   const editorApp = providers.editorSession?.app ?? appFilter;
   const userConfigRoute = snapshot.statuses?.find((status) => status.app === editorApp)?.route ?? null;
@@ -17,7 +17,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
   }, [active, importing, appFilter, claudeEditorSession, providerSwitch.clearCandidates]);
   return (
     <>
-      {importing && <div hidden={!active}>
+      {importing && <div className="asb-editor-route" hidden={!active}>
         <ProviderImportPage appFilter={appFilter} discovery={discoveryState.discovery} busy={busy}
           ccScan={ccImport.ccScan} ccSelected={ccImport.ccSelected} ccResult={ccImport.ccResult}
           onBack={() => model.setProviderView({ kind: "list" })}
@@ -41,6 +41,9 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onSwitchAccessMode={providers.switchCodexAccessMode}
         onSwitchClient={providers.newEditorFor}
         onSaveOfficialQuotaInterval={providers.saveOfficialQuotaInterval}
+        collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
+        onToggleUsage={(profileId) => appSettingsState.toggleUsageCollapsed(profileId)}
+        onSaveUsageQuery={providers.saveCodexProfileUsageQuery}
         loginBlocker={snapshot.loginBlocker}
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks}
         userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []} />
@@ -50,6 +53,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []}
       editorSession={claudeEditorSession}
       busy={busy} collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
+      activationCandidate={providerSwitch.activationCandidate}
       onSelectApp={providers.selectApp} onNew={providers.newEditor}
       onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
       onCloseEditor={providers.closeEditor} onSave={providers.saveProfile}
@@ -65,6 +69,8 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       onReorder={providers.dragReorderClaudeProfiles}
       onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
       onActivate={providerSwitch.requestActivation}
+      onConfirmSwitch={() => void operations.runSwitch()}
+      onCancelActivation={providerSwitch.clearCandidates}
       onEdit={providers.openEditor}
       onDelete={(profile) => providers.setDeletePending({ kind: "generic", profile })}
       onRefresh={async () => { await snapshot.refresh(); }} />

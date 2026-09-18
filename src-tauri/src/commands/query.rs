@@ -186,10 +186,11 @@ pub async fn test_usage_query(request: UsageQueryRequest) -> Result<UsageSummary
 }
 
 /// Runs the persisted query of one provider and records the successful
-/// credential-free summary for the custom tray panel. This is the manual,
-/// immediate path; the scheduled path lives in `usage_query::scheduler` and
-/// shares the same executor. The renderer passes only the stable profile id;
-/// this backend boundary owns the query and API key.
+/// credential-free summary for the custom tray panel. This is the forced,
+/// immediate path (the refresh button); the scheduled and ensure-fresh paths
+/// live in `usage_query::scheduler` and share the same executor. The
+/// renderer passes only the stable profile id; this backend boundary owns
+/// the query and API key.
 #[tauri::command]
 pub async fn query_profile_usage(
     app: tauri::AppHandle,
@@ -204,6 +205,29 @@ pub async fn query_profile_usage(
     })
     .await?;
     crate::tray::refresh(&app);
+    Ok(summary)
+}
+
+/// Ensures the provider's summary is fresh: returns the retained cache entry
+/// while it is not due, or pulls one query forward into now. Mount-time UI
+/// reads go through here; only a pulled-forward query changes state and
+/// broadcasts to the tray.
+#[tauri::command]
+pub async fn ensure_profile_usage(
+    app: tauri::AppHandle,
+    profile_id: String,
+) -> Result<UsageSummary, CommandError> {
+    let state = state(&app)?;
+    let (summary, queried) = blocking(move || {
+        let profile = crate::usage_query::scheduler::usage_profile(&state, &profile_id)
+            .map_err(|error| operation_error("profile-not-found", error))?;
+        crate::usage_query::scheduler::ensure_fresh(&state, &profile)
+            .map_err(|error| CommandError::new("usage-query-failed", error))
+    })
+    .await?;
+    if queried {
+        crate::tray::refresh(&app);
+    }
     Ok(summary)
 }
 

@@ -69,7 +69,7 @@ export function ProviderWorkspaceShell({
       <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
       <section className="asb-panel asb-provider-list-panel" aria-label="供应商列表">
         <WorkspaceHeader
-          title="供应商"
+          title="供应商切换"
           primary={
             <ClientPicker
               app={app}

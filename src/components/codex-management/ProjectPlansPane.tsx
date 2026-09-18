@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import * as api from "../../api/codex-project-plans";
 import { Button } from "../Button";
 import { Input } from "../Input";
-import { Select } from "../Select";
 import { ClientManagementModule } from "../client-management/ClientManagementModule";
 import type { CodexOperations } from "./operations";
 
@@ -57,24 +56,41 @@ function ProjectPlanDetails({
   const { run, busy, changed } = operations;
   const selected = view.plans.find((plan) => plan.id === selectedId) ?? null;
   const nameOf = (id: string) => projectPlanName(view, id);
+  const ledgerName = useId();
+  const select = (id: string | null) => {
+    const plan = id === null ? null : view.plans.find((item) => item.id === id) ?? null;
+    setSelectedId(plan?.id ?? null); setName(plan?.name ?? "");
+    setPreview(null); setDeleting(false); clearOutcome();
+  };
 
-  return <section className="asb-client-management-group asb-project-plan-details" aria-label="工作场景内容">
-    <h4 className="asb-group-title">场景内容</h4>
-    <p className="asb-scope-note">当前状态 · 供应商：{view.activeProviderId ? nameOf(view.activeProviderId) : "无"} · MCP：{view.bindings.filter((binding) => binding.kind === "mcp" && binding.enabled).length} · Skills：{view.bindings.filter((binding) => binding.kind === "skill" && binding.enabled).length} · 指令：{view.activePromptId ? nameOf(view.activePromptId) : "无"}</p>
-    <Select ariaLabel="选择工作场景" value={selectedId ?? "new"} disabled={busy}
-      onChange={(id) => {
-        const plan = view.plans.find((item) => item.id === id) ?? null;
-        setSelectedId(plan?.id ?? null); setName(plan?.name ?? "");
-        setPreview(null); setDeleting(false); clearOutcome();
-      }}
-      options={[
-        { value: "new", label: "创建新场景" },
-        ...view.plans.map((plan) => ({ value: plan.id, label: plan.name + (plan.id === view.current ? " · 当前场景" : "") })),
-      ]} />
-    {selected && <p className="asb-scope-note">场景包含：{api.describeCodexProjectSlot(selected.slot, nameOf)}</p>}
+  return <section className="asb-client-management-group" aria-label="工作场景内容">
+    <h4 className="asb-group-title">场景</h4>
+    <p className="asb-scope-note">当前工作状态 · 供应商：{view.activeProviderId ? nameOf(view.activeProviderId) : "无"} · MCP：{view.bindings.filter((binding) => binding.kind === "mcp" && binding.enabled).length} · Skills：{view.bindings.filter((binding) => binding.kind === "skill" && binding.enabled).length} · 指令：{view.activePromptId ? nameOf(view.activePromptId) : "无"}</p>
+    <div role="radiogroup" aria-label="选择工作场景" className="asb-client-management-ledger">
+      <label className={"asb-client-management-option" + (!selectedId ? " is-active" : "")}>
+        <input type="radio" name={ledgerName} checked={!selectedId} disabled={busy} onChange={() => select(null)} />
+        <span className="asb-client-management-option-text">
+          <span className="asb-client-management-option-name">新建场景</span>
+          <span className="asb-client-management-option-meta">把当前工作状态保存为新场景</span>
+        </span>
+      </label>
+      {view.plans.map((plan) => (
+        <label key={plan.id} className={"asb-client-management-option" + (plan.id === selectedId ? " is-active" : "")}>
+          <input type="radio" name={ledgerName} checked={plan.id === selectedId} disabled={busy}
+            onChange={() => select(plan.id)} />
+          <span className="asb-client-management-option-text">
+            <span className="asb-client-management-option-name">{plan.name}</span>
+            <span className="asb-client-management-option-meta">{api.describeCodexProjectSlot(plan.slot, nameOf)}</span>
+          </span>
+          {plan.id === view.current && <span className="asb-status-pill is-ok">
+            <span className="asb-status-pill-dot" aria-hidden="true" />当前场景
+          </span>}
+        </label>
+      ))}
+    </div>
     {selected
-      ? <label className="asb-field"><span>场景名称</span><Input value={name} disabled={busy} onChange={(event) => setName(event.target.value)} /></label>
-      : <label className="asb-field"><span>新场景名称</span><Input value={newName} disabled={busy} onChange={(event) => setNewName(event.target.value)} /></label>}
+      ? <label className="asb-field is-medium"><span>场景名称</span><Input value={name} disabled={busy} onChange={(event) => setName(event.target.value)} /></label>
+      : <label className="asb-field is-medium"><span>新场景名称</span><Input value={newName} disabled={busy} onChange={(event) => setNewName(event.target.value)} /></label>}
     <div className="asb-form-actions">
       {selected
         ? <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void run(async () => {
@@ -241,7 +257,12 @@ export function ProjectPlansPane({ operations }: { operations: CodexOperations }
 
   if (!view) return (
     <ClientManagementModule title="工作场景" description={description} refreshLabel="重新读取场景" busy={busy} onRefresh={reload}>
-      <p role="status">正在读取工作场景…</p>
+      <div className="asb-client-management-skeleton" role="status" aria-label="正在读取">
+        <div className="asb-skeleton" />
+        <div className="asb-skeleton" />
+        <div className="asb-skeleton" />
+        <div className="asb-skeleton" />
+      </div>
     </ClientManagementModule>
   );
 

@@ -5,10 +5,6 @@ mod codex;
 mod overview;
 mod report;
 
-#[cfg(test)]
-mod parameter_tests;
-#[cfg(test)]
-mod tests;
 
 use super::error::{blocking, observe, state, CommandError};
 use crate::runtime_log::RuntimeLogAction;

@@ -18,7 +18,6 @@ import {
   Network,
   Pencil,
   Pin,
-  Radio,
   Play,
   Plus,
   Search,
@@ -58,7 +57,6 @@ export const UsageIcon = icon(ChartColumnIncreasing, 16);
 export const ConnectivityIcon = icon(Wifi, 16);
 export const RequestIcon = icon(Send, 16);
 export const GatewayIcon = icon(Network, 20);
-export const GatewaySignalIcon = icon(Radio, 16);
 
 export const ChevronDownIcon = icon(ChevronDown, 16, 2.4);
 export const ChevronUpIcon = icon(ChevronUp, 16, 2.4);

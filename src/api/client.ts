@@ -25,7 +25,7 @@ import type { UsageSummary } from "./usage";
 type InvokeArgs = Record<string, unknown>;
 
 export interface TraySnapshot {
-  providers: Array<{ id: string; app: AppKind; name: string; model: string | null; active: boolean; usage: UsageSummary | null }>;
+  providers: Array<{ id: string; app: AppKind; name: string; active: boolean; usage: UsageSummary | null }>;
   settings: AppSettings | null;
   error: string | null;
   switching: boolean;
@@ -240,9 +240,10 @@ export function pickDirectory(): Promise<string | null> {
   return invoke<string | null>("pick_directory");
 }
 
-/** Opens the native ZIP file picker and returns the selected absolute path. */
-export function pickSkillZip(): Promise<string | null> {
-  return invoke<string | null>("pick_skill_zip");
+/** Opens the native file picker limited to `extensions` and returns the
+ * selected absolute path; `null` means the user closed it without choosing. */
+export function pickFile(filterName: string, extensions: string[]): Promise<string | null> {
+  return invoke<string | null>("pick_file", { filterName, extensions });
 }
 
 export function getWindowMaximized(): Promise<boolean> {

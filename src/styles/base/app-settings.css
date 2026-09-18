@@ -1,5 +1,5 @@
-/* Application-runtime settings: same compact, solid information surface as
-   client settings, without claiming to write a client config line. */
+/* Application-runtime settings: compact, solid information surface, without
+   claiming to write a client config line. */
 .asb-app-settings {
   display: flex;
   flex-direction: column;
@@ -36,6 +36,13 @@
   color: var(--asb-text-muted);
 }
 
+/* Destructive action row: the .asb-app-settings gap owns the separation; the
+   hairline marks the boundary. */
+.asb-app-settings-danger-zone {
+  padding-top: var(--asb-space-3);
+  border-top: 1px solid var(--asb-hairline);
+}
+
 .asb-update-notes {
   display: flex;
   flex-direction: column;
@@ -61,6 +68,7 @@
 }
 
 .asb-update-notes-text {
+  max-width: var(--asb-measure-prose);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
   white-space: pre-wrap;
@@ -94,8 +102,6 @@
 :where(.asb-client-settings-panel, .asb-provider-parameters) {
   --asb-settings-module-bg: var(--asb-content-muted);
   --asb-settings-module-border: var(--asb-hairline-strong);
-  --asb-settings-row-bg: var(--asb-content);
-  --asb-settings-row-border: var(--asb-hairline);
 }
 
 .asb-toggle-group {
@@ -124,10 +130,6 @@
   align-items: center;
   gap: var(--asb-space-3);
   min-height: var(--asb-touch-target);
-  padding: 0 var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
 }
 
 .asb-toggle-row > :first-child {

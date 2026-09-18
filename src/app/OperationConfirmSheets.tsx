@@ -1,42 +1,26 @@
-import type { ActivationCandidate } from "./useProviderSwitchFlow";
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { DiffView } from "../components/DiffView";
 import { PreviewInspector } from "../components/PreviewInspector";
-import { SwitchConfirmSheet } from "../components/SwitchConfirmSheet";
 import { Time } from "../components/Time";
 import { clientName } from "../lib/client-name";
 import type { useProviders } from "./useProviders";
 import type { useSwitchOperations } from "./useSwitchOperations";
 
 interface OperationConfirmSheetsProps {
-  /** Only an explicit activation supplies a candidate for write confirmation. */
-  activationCandidate: ActivationCandidate | null;
-  busy: boolean;
-  onCancelActivation: () => void;
   operations: ReturnType<typeof useSwitchOperations>;
   providers: ReturnType<typeof useProviders>;
 }
 
 /** Every destructive or writing operation gets one explicit confirmation
- * sheet; nothing writes without it. */
+ * sheet; nothing writes without it. The switch confirmation is not a sheet:
+ * it unfolds inline inside the requesting provider row. */
 export function OperationConfirmSheets({
-  activationCandidate,
-  busy,
-  onCancelActivation,
   operations,
   providers,
 }: OperationConfirmSheetsProps) {
   const { undoPending, recoverLockPending } = operations;
   return (
     <>
-      {activationCandidate && (
-        <SwitchConfirmSheet
-          filePreview={activationCandidate.file}
-          busy={busy}
-          onConfirm={() => void operations.runSwitch()}
-          onCancel={onCancelActivation}
-        />
-      )}
       {providers.pendingSave && (
         <ConfirmSheet
           title="确认保存并应用"

@@ -4,6 +4,7 @@ use super::{
     ConfigWriteGate,
 };
 use asb_core::{
+    adapter::PreviewDiff,
     contracts::{AppKind, CodexSubagentSettings, ConfigWriteRecord, SettingsValues, WriteOperation},
     ownership,
 };
@@ -20,12 +21,13 @@ pub struct ClientConfigurationApplyPreview {
     pub target_existed: bool,
 }
 
-/// The two non-draft client-configuration mutations. The backend owns their
+/// The non-draft client-configuration mutations. The backend owns their
 /// exact scopes so a UI action cannot accidentally persist unrelated edits.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientConfigurationResetKind {
     NativeDefaults,
+    NativeDefaultsWithUnmanaged,
     ClearExtraConfiguration,
 }
 
@@ -36,7 +38,7 @@ impl ClientConfigurationResetKind {
         saved: SettingsValues,
     ) -> Result<(SettingsValues, Option<CodexSubagentSettings>), CommandError> {
         match self {
-            Self::NativeDefaults => {
+            Self::NativeDefaults | Self::NativeDefaultsWithUnmanaged => {
                 let mut settings = ownership::default_client_settings(target);
                 if target == AppKind::Claude {
                     settings.claude_extra = saved.claude_extra;
@@ -63,6 +65,7 @@ impl ClientConfigurationResetKind {
     fn write_label(self) -> &'static str {
         match self {
             Self::NativeDefaults => "恢复客户端原生默认值",
+            Self::NativeDefaultsWithUnmanaged => "恢复客户端原生默认值并移除界面外字段",
             Self::ClearExtraConfiguration => "清空 ASB 管理的额外通用配置",
         }
     }
@@ -70,7 +73,17 @@ impl ClientConfigurationResetKind {
     fn backup_reason(self) -> &'static str {
         match self {
             Self::NativeDefaults => "client-configuration-native-defaults",
+            Self::NativeDefaultsWithUnmanaged => "client-configuration-native-defaults-unmanaged",
             Self::ClearExtraConfiguration => "client-configuration-clear-extra-configuration",
+        }
+    }
+
+    /// The deep reset deletes host-owned leaves, so its preview must list
+    /// them; the other scopes only ever remove owned keys.
+    fn diff_scope(self) -> PreviewDiff {
+        match self {
+            Self::NativeDefaults | Self::ClearExtraConfiguration => PreviewDiff::Owned,
+            Self::NativeDefaultsWithUnmanaged => PreviewDiff::Full,
         }
     }
 }
@@ -89,7 +102,7 @@ pub(super) fn render_client_configuration(
     if target == AppKind::Codex {
         let subagent_settings = subagent_settings.ok_or_else(|| CommandError::new(
             "client-configuration-rejected",
-            "Codex 客户端通用配置缺少子 agent 运行设置",
+            "Codex 客户端配置缺少子 agent 运行设置",
         ))?;
         asb_core::adapter::codex::render_subagent_settings(&rendered, subagent_settings)
             .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))
@@ -172,7 +185,7 @@ pub(super) fn commit_rendered_client_configuration(
             operation: WriteOperation::Projection,
         }) {
             config.save_client_settings(target, before.settings.clone(), &saved.settings_hash)
-                .map_err(|rollback| format!("{error}；恢复客户端通用配置意图失败：{rollback}"))?;
+                .map_err(|rollback| format!("{error}；恢复客户端配置意图失败：{rollback}"))?;
             return Err(error.to_string());
         }
         Ok(())
@@ -190,6 +203,13 @@ fn render_reset_configuration(
     match kind {
         ClientConfigurationResetKind::NativeDefaults => {
             render_client_configuration(target, current, settings, subagent_settings)
+        }
+        ClientConfigurationResetKind::NativeDefaultsWithUnmanaged => {
+            let pruned = asb_core::adapter::remove_unmanaged_entries(target, current)
+                .map_err(|error| {
+                    CommandError::new("client-configuration-preview-failed", error.to_string())
+                })?;
+            render_client_configuration(target, &pruned, settings, subagent_settings)
         }
         ClientConfigurationResetKind::ClearExtraConfiguration => {
             settings.validate_client_settings(target)
@@ -233,8 +253,15 @@ fn preview_reset(
     let stored = state.configuration().get_client_settings(target).map_err(store_error)?;
     let (current, existed, _, rendered) = reset_candidate(state, target, kind, stored.settings.clone())?;
     let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
-    let file = preview_rendered(target, &path, &state.backup_dir(), &current, &rendered)
-        .map_err(CommandError::from)?;
+    let file = preview_rendered(
+        target,
+        &path,
+        &state.backup_dir(),
+        &current,
+        &rendered,
+        kind.diff_scope(),
+    )
+    .map_err(CommandError::from)?;
     Ok(ClientConfigurationApplyPreview { file, settings_hash: stored.settings_hash, target_existed: existed })
 }
 
@@ -250,8 +277,15 @@ pub async fn preview_client_configuration_apply(
         let stored = state.configuration().get_client_settings(target).map_err(store_error)?;
         let (current, existed, _, rendered) = candidate(&state, target, settings, subagent_settings)?;
         let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let file = preview_rendered(target, &path, &state.backup_dir(), &current, &rendered)
-            .map_err(CommandError::from)?;
+        let file = preview_rendered(
+            target,
+            &path,
+            &state.backup_dir(),
+            &current,
+            &rendered,
+            PreviewDiff::Owned,
+        )
+        .map_err(CommandError::from)?;
         Ok(ClientConfigurationApplyPreview { file, settings_hash: stored.settings_hash, target_existed: existed })
     }).await
 }
@@ -278,7 +312,7 @@ pub async fn commit_client_configuration_apply(
     subagent_settings: Option<CodexSubagentSettings>,
     confirm_write: bool,
 ) -> Result<(), CommandError> {
-    require_write_confirmation(confirm_write, "应用客户端通用配置")?;
+    require_write_confirmation(confirm_write, "应用客户端配置")?;
     let state = state(&app)?;
     let gate = app.try_state::<ConfigWriteGate>()
         .ok_or_else(|| CommandError::new("app-state-unavailable", "写入闸门尚未初始化"))?
@@ -424,5 +458,78 @@ mod tests {
             .expect_err("Codex has no Claude extra configuration");
 
         assert_eq!(error.code, "client-configuration-rejected");
+    }
+
+    #[test]
+    fn deep_reset_matches_native_settings_intent() {
+        let mut saved = ownership::default_client_settings(AppKind::Claude);
+        saved.claude_extra.insert("custom".into(), json!({ "enabled": true }));
+
+        let (reset, subagents) = ClientConfigurationResetKind::NativeDefaultsWithUnmanaged
+            .settings(AppKind::Claude, saved.clone())
+            .expect("deep reset");
+
+        assert!(reset.settings.values().all(|value| matches!(value, SettingValue::Automatic)));
+        assert_eq!(reset.claude_extra, saved.claude_extra);
+        assert_eq!(subagents, None);
+    }
+
+    #[test]
+    fn deep_reset_removes_unmanaged_fields_but_keeps_provider_and_extra() {
+        let mut saved = ownership::default_client_settings(AppKind::Claude);
+        saved.claude_extra.insert("custom".into(), json!({ "enabled": true }));
+        let (reset, _) = ClientConfigurationResetKind::NativeDefaultsWithUnmanaged
+            .settings(AppKind::Claude, saved)
+            .expect("deep reset");
+        let current = r#"{
+  "model": "claude-x",
+  "spinnerTipsEnabled": true,
+  "statusLine": { "type": "command" },
+  "custom": { "enabled": true },
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+    "ASB_CLAUDE_COMMON_KEYS": "[\"/custom/enabled\"]",
+    "MY_TOOL_TOKEN": "v"
+  }
+}"#;
+
+        let rendered = render_reset_configuration(
+            AppKind::Claude,
+            current,
+            ClientConfigurationResetKind::NativeDefaultsWithUnmanaged,
+            &reset,
+            None,
+        )
+        .expect("render deep reset");
+
+        assert!(rendered.contains("\"model\": \"claude-x\""));
+        assert!(rendered.contains("ANTHROPIC_BASE_URL"));
+        assert!(rendered.contains("custom"));
+        assert!(rendered.contains("ASB_CLAUDE_COMMON_KEYS"));
+        assert!(!rendered.contains("statusLine"));
+        assert!(!rendered.contains("MY_TOOL_TOKEN"));
+        assert!(!rendered.contains("spinnerTipsEnabled"));
+    }
+
+    #[test]
+    fn deep_reset_keeps_codex_provider_families_and_drops_host_tables() {
+        let (reset, subagents) = ClientConfigurationResetKind::NativeDefaultsWithUnmanaged
+            .settings(AppKind::Codex, ownership::default_client_settings(AppKind::Codex))
+            .expect("deep reset");
+        let current = "model = \"gpt-5\"\n\n[agents]\nenabled = true\n\n[tools]\nflag = true\n\n[model_providers.custom]\nbase_url = \"https://x\"\n";
+
+        let rendered = render_reset_configuration(
+            AppKind::Codex,
+            current,
+            ClientConfigurationResetKind::NativeDefaultsWithUnmanaged,
+            &reset,
+            subagents.as_ref(),
+        )
+        .expect("render deep reset");
+
+        assert!(rendered.contains("model = \"gpt-5\""));
+        assert!(rendered.contains("model_providers.custom"));
+        assert!(!rendered.contains("[agents]"));
+        assert!(!rendered.contains("[tools]"));
     }
 }

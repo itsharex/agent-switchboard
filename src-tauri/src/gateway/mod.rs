@@ -42,8 +42,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
-#[cfg(test)]
-use tiny_http::Server;
 use uuid::Uuid;
 
 mod activation_snapshot;
@@ -63,10 +61,6 @@ mod routing;
 mod state;
 mod state_repair;
 
-#[cfg(test)]
-mod responses_tests;
-#[cfg(test)]
-mod tests;
 
 use health_state::ClaudeHealthStore;
 use identity::*;

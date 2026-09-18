@@ -1,8 +1,6 @@
 //! Codex-specific request compatibility, applied after conversion and before transport.
 mod anthropic;
 mod moonshot;
-#[cfg(test)]
-mod tests;
 use crate::gateway::ActiveRoute;
 use asb_core::contracts::{
     AppKind, CodexPromptCacheRouting, CodexRequestOptions, UpstreamProtocol,

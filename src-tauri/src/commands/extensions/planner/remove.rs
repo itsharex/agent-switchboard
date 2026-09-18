@@ -4,20 +4,20 @@
 
 use asb_core::contracts::AppKind;
 use asb_core::extensions::contracts::{
-    DocumentSyntax, ExtensionBinding, ExtensionDefinition, ExtensionPayload, ExtensionTarget,
-    ManagedBaseline, ManagedBaselineFile,
+    ExtensionBinding, ExtensionDefinition, ExtensionPayload, ExtensionTarget, ManagedBaseline,
+    ManagedBaselineFile,
 };
 use asb_core::extensions::mcp::{
     apply_claude_project_disabled_members, apply_claude_project_private_server_patches,
     apply_claude_user_server_patches, apply_codex_entry_restore, apply_codex_server_patches,
 };
-use asb_core::extensions::plan::{PlanStep, PlannedFile};
+use asb_core::extensions::plan::{PlannedFile, PlanStep};
 
 use crate::commands::error::CommandError;
 use crate::commands::extensions::support::*;
 
 use super::deploy::write_entries_to;
-use super::document::{json_or_toml_step, read_document, restore_claude_entry};
+use super::document::restore_claude_entry;
 use super::{McpScope, Planner};
 
 impl Planner<'_> {
@@ -27,9 +27,10 @@ impl Planner<'_> {
         &self,
         definition: &ExtensionDefinition,
         binding: &ExtensionBinding,
+        batch: &mut super::document::DocumentBatch,
+        writer: usize,
     ) -> Result<
         (
-            Vec<PlanStep>,
             Vec<asb_core::extensions::mcp::EntryChange>,
             Option<ManagedBaselineFile>,
             Vec<String>,
@@ -45,25 +46,26 @@ impl Planner<'_> {
                         ..
                     }
                 ) {
-                    self.remove_private_mcp_entry(binding)
+                    self.remove_private_mcp_entry(binding, batch, writer)
                 } else {
-                    self.remove_mcp_entry(mcp, binding)
+                    self.remove_mcp_entry(mcp, binding, batch, writer)
                 }
             }
-            ExtensionPayload::Skill(_) => Ok((Vec::new(), Vec::new(), None, Vec::new())),
+            ExtensionPayload::Skill(_) => Ok((Vec::new(), None, Vec::new())),
         }
     }
 
     /// Removes a Claude private-project server and, only when this binding
     /// added it, its disabledMcpServers member. Both native positions live
-    /// in the same user document and therefore must be one executable step.
+    /// in the same user document and thread into one working text.
     #[allow(clippy::type_complexity)]
     pub(super) fn remove_private_mcp_entry(
         &self,
         binding: &ExtensionBinding,
+        batch: &mut super::document::DocumentBatch,
+        writer: usize,
     ) -> Result<
         (
-            Vec<PlanStep>,
             Vec<asb_core::extensions::mcp::EntryChange>,
             Option<ManagedBaselineFile>,
             Vec<String>,
@@ -84,8 +86,6 @@ impl Planner<'_> {
                 "MCP 绑定缺少可验证的部署基线，不能安全移除",
             ));
         }
-        let current = read_document(&document)?;
-        let text = current.unwrap_or_else(|| "{}".to_string());
         let key = binding
             .native_key
             .as_deref()
@@ -107,9 +107,16 @@ impl Planner<'_> {
                     _ => None,
                 })
             });
+        let work = self.document_work(
+            batch,
+            &document,
+            AppKind::Claude,
+            asb_core::extensions::contracts::DocumentSyntax::Json,
+        )?;
+        let base = work.rendered.clone();
         let (after_server, mut changes) = if let Some(original) = &takeover_original {
             restore_claude_entry(
-                &text,
+                &base,
                 &["projects", project_path.as_str(), "mcpServers"],
                 key,
                 original,
@@ -117,50 +124,30 @@ impl Planner<'_> {
             )?
         } else {
             apply_claude_project_private_server_patches(
-                &text,
+                &base,
                 &project_path,
                 &[(key.to_string(), None)],
             )
             .map_err(adapter_error)?
         };
+        let mut rendered = after_server;
         if self.owns_removable_private_disable_member(binding, &document, &project_path, key)? {
-            let (rendered, member_changes) = apply_claude_project_disabled_members(
-                &after_server,
+            let (after_members, member_changes) = apply_claude_project_disabled_members(
+                &rendered,
                 &project_path,
                 &[],
                 &[key.to_string()],
             )
             .map_err(adapter_error)?;
             changes.extend(member_changes);
-            if changes.is_empty() {
-                return Ok((Vec::new(), changes, None, Vec::new()));
-            }
-            return Ok((
-                vec![json_or_toml_step(
-                    AppKind::Claude,
-                    &document,
-                    rendered,
-                    DocumentSyntax::Json,
-                )?],
-                changes,
-                None,
-                Vec::new(),
-            ));
+            rendered = after_members;
         }
         if changes.is_empty() {
-            return Ok((Vec::new(), changes, None, Vec::new()));
+            return Ok((Vec::new(), None, Vec::new()));
         }
-        Ok((
-            vec![json_or_toml_step(
-                AppKind::Claude,
-                &document,
-                after_server,
-                DocumentSyntax::Json,
-            )?],
-            changes,
-            None,
-            Vec::new(),
-        ))
+        work.claim(&pointer, writer)?;
+        work.rendered = rendered;
+        Ok((changes, None, Vec::new()))
     }
 
     #[allow(clippy::type_complexity)]
@@ -168,9 +155,10 @@ impl Planner<'_> {
         &self,
         mcp: &asb_core::extensions::contracts::McpDefinition,
         binding: &ExtensionBinding,
+        batch: &mut super::document::DocumentBatch,
+        writer: usize,
     ) -> Result<
         (
-            Vec<PlanStep>,
             Vec<asb_core::extensions::mcp::EntryChange>,
             Option<ManagedBaselineFile>,
             Vec<String>,
@@ -181,19 +169,12 @@ impl Planner<'_> {
         let target = self.mcp_document(binding)?;
         let client = binding.target.client();
         let document = target.path.clone();
-        let syntax = target.syntax;
         if !self.document_baseline_is_current(binding, &document)? {
             return Err(CommandError::new(
                 "extension-baseline",
                 "MCP 绑定缺少可验证的部署基线，不能安全移除",
             ));
         }
-        let current = read_document(&document)?;
-        let existed = current.is_some();
-        let text = current.unwrap_or_else(|| match client {
-            AppKind::Codex => String::new(),
-            AppKind::Claude => "{}".to_string(),
-        });
         let key = binding
             .native_key
             .as_deref()
@@ -221,11 +202,13 @@ impl Planner<'_> {
                     _ => None,
                 })
             });
+        let work = self.document_work(batch, &document, client, target.syntax)?;
+        let base = work.rendered.clone();
         let (rendered, changes) = match (&target.scope, &takeover_original) {
             (McpScope::CodexServers, Some(original)) => {
                 let rendered =
-                    apply_codex_entry_restore(&text, key, Some(original)).map_err(adapter_error)?;
-                let before = apply_codex_server_patches(&text, &[(key.to_string(), None)])
+                    apply_codex_entry_restore(&base, key, Some(original)).map_err(adapter_error)?;
+                let before = apply_codex_server_patches(&base, &[(key.to_string(), None)])
                     .map_err(adapter_error)?
                     .1;
                 (
@@ -238,11 +221,11 @@ impl Planner<'_> {
                 )
             }
             (McpScope::ClaudeUserServers, Some(original)) => {
-                restore_claude_entry(&text, &["mcpServers"], key, original, &pointer)?
+                restore_claude_entry(&base, &["mcpServers"], key, original, &pointer)?
             }
             (McpScope::ClaudeProjectPrivate { project_path }, Some(original)) => {
                 restore_claude_entry(
-                    &text,
+                    &base,
                     &["projects", project_path, "mcpServers"],
                     key,
                     original,
@@ -251,16 +234,16 @@ impl Planner<'_> {
             }
             (_, None) => match &target.scope {
                 McpScope::CodexServers => {
-                    apply_codex_server_patches(&text, &[(key.to_string(), None)])
+                    apply_codex_server_patches(&base, &[(key.to_string(), None)])
                         .map_err(adapter_error)?
                 }
                 McpScope::ClaudeUserServers => {
-                    apply_claude_user_server_patches(&text, &[(key.to_string(), None)])
+                    apply_claude_user_server_patches(&base, &[(key.to_string(), None)])
                         .map_err(adapter_error)?
                 }
                 McpScope::ClaudeProjectPrivate { project_path } => {
                     apply_claude_project_private_server_patches(
-                        &text,
+                        &base,
                         project_path,
                         &[(key.to_string(), None)],
                     )
@@ -272,20 +255,20 @@ impl Planner<'_> {
             &binding.id,
             ManagedBaseline::DocumentEntry {
                 target_path: document.to_string_lossy().to_string(),
-                entry_pointer: pointer,
+                entry_pointer: pointer.clone(),
                 original_value: changes.first().and_then(|change| change.before.clone()),
                 last_written_value: None,
                 last_document_hash: sha_hex(rendered.as_bytes()),
-                target_existed_before: existed,
+                target_existed_before: work.expected_existed,
                 backup_reference: None,
             },
         )?;
-        Ok((
-            vec![json_or_toml_step(client, &document, rendered, syntax)?],
-            changes,
-            Some(baseline),
-            Vec::new(),
-        ))
+        if changes.is_empty() {
+            return Ok((Vec::new(), Some(baseline), Vec::new()));
+        }
+        work.claim(&pointer, writer)?;
+        work.rendered = rendered;
+        Ok((changes, Some(baseline), Vec::new()))
     }
 
     /// The removal step for a managed skill directory. A directory this

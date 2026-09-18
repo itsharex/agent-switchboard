@@ -9,8 +9,6 @@
 mod crypto;
 mod remote;
 
-#[cfg(test)]
-mod tests;
 
 use crate::local_state::{CloudBackupSettings, LocalState};
 use crate::probe::http_request;

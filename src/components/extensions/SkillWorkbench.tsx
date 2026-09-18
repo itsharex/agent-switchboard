@@ -7,6 +7,7 @@ import type {
 } from "../../api/client";
 import { Button } from "../Button";
 import { Input } from "../Input";
+import { ExtensionLoading } from "./ExtensionLoading";
 import { Select, type SelectOption } from "../Select";
 import { Textarea } from "../Textarea";
 
@@ -131,7 +132,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
         </header>
 
         {editor === null ? (
-          <p className="asb-empty">正在加载内容版本…</p>
+          <ExtensionLoading />
         ) : !editable ? (
           <div className="asb-ext-section">
             <p className="asb-scope-note">
@@ -185,9 +186,6 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
                 <Button variant="secondary" disabled={busy || newPath.trim() === ""} onClick={addFile}>
                   添加文件
                 </Button>
-                <Button variant="primary" disabled={busy} onClick={save}>
-                  保存为新版本
-                </Button>
               </div>
               {activeFile !== null && drafts[activeFile] !== undefined && (
                 <Textarea
@@ -200,6 +198,12 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
                   }
                 />
               )}
+              {/* The save follows the content it commits: directly below the editor. */}
+              <div className="asb-ext-actions">
+                <Button variant="primary" disabled={busy} onClick={save}>
+                  保存为新版本
+                </Button>
+              </div>
             </div>
           </>
         )}

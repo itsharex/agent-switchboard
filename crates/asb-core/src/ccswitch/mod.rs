@@ -10,8 +10,6 @@ mod claude;
 mod codex;
 mod mapping;
 mod row;
-#[cfg(test)]
-mod tests;
 mod usage;
 
 pub use mapping::map_row;

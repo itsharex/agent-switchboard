@@ -35,17 +35,19 @@ impl Default for UsageCache {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CachedUsage {
     query_digest: String,
-    /// RFC 3339 UTC timestamp of the most recent attempt, successful or not.
+    /// RFC 3339 UTC timestamp of when the most recent attempt was initiated.
     /// Failures advance it too, so a failing endpoint is retried on its own
-    /// configured cadence instead of every scheduler tick.
+    /// configured cadence instead of every scheduler tick. The single
+    /// executor stamps the moment before the network call, so a slow
+    /// response never lengthens the profile's cadence.
     attempted_at: String,
     /// The last successful summary; absent once every attempt so far failed
     /// or the profile's query changed since that success.
     summary: Option<UsageSummary>,
 }
 
-fn now_rfc3339() -> String {
-    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+fn rfc3339(at: DateTime<Utc>) -> String {
+    at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
 /// The stable digest for every persisted representation of a usage query.
@@ -70,12 +72,13 @@ pub(crate) fn get(state: &LocalState, profile: &ProviderProfile) -> Option<Usage
         .and_then(|cached| cached.summary.clone())
 }
 
-/// Replaces the snapshot for one profile and stamps the attempt time after a
-/// successful real query.
+/// Replaces the snapshot for one profile, stamping the supplied attempt
+/// initiation time after a successful real query.
 pub(crate) fn record_success(
     state: &LocalState,
     profile: &ProviderProfile,
     summary: UsageSummary,
+    attempted_at: DateTime<Utc>,
 ) -> Result<(), String> {
     let query = profile
         .usage_query
@@ -88,16 +91,21 @@ pub(crate) fn record_success(
         profile.id.clone(),
         CachedUsage {
             query_digest: digest,
-            attempted_at: now_rfc3339(),
+            attempted_at: rfc3339(attempted_at),
             summary: Some(summary),
         },
     );
     state.save_usage_cache(&cache)
 }
 
-/// Stamps the attempt time after a failed query, keeping the last successful
-/// summary only while it still belongs to the profile's current query.
-pub(crate) fn record_failure(state: &LocalState, profile: &ProviderProfile) -> Result<(), String> {
+/// Stamps the supplied attempt initiation time after a failed query, keeping
+/// the last successful summary only while it still belongs to the profile's
+/// current query.
+pub(crate) fn record_failure(
+    state: &LocalState,
+    profile: &ProviderProfile,
+    attempted_at: DateTime<Utc>,
+) -> Result<(), String> {
     let Some(query) = profile.usage_query.as_ref() else {
         return Ok(());
     };
@@ -113,7 +121,7 @@ pub(crate) fn record_failure(state: &LocalState, profile: &ProviderProfile) -> R
         profile.id.clone(),
         CachedUsage {
             query_digest: digest,
-            attempted_at: now_rfc3339(),
+            attempted_at: rfc3339(attempted_at),
             summary: retained,
         },
     );
@@ -228,6 +236,13 @@ mod tests {
         }
     }
 
+    /// A fixed initiation instant, matching the summary's own timestamp.
+    fn attempt_time() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-09-02T02:34:00Z")
+            .expect("attempt time")
+            .with_timezone(&Utc)
+    }
+
     #[test]
     fn last_successful_summary_survives_a_state_reopen() {
         let directory = tempfile::tempdir().expect("temporary directory");
@@ -239,10 +254,12 @@ mod tests {
             &LocalState::from_root(root.clone()),
             &profile,
             expected.clone(),
+            attempt_time(),
         )
         .expect("record success");
 
         let persisted = fs::read_to_string(root.join("usage-cache.json")).expect("cache text");
+        assert!(persisted.contains("2026-09-02T02:34:00.000Z"));
         assert!(!persisted.contains("test-api-key"));
         assert!(!persisted.contains("relay.example"));
         assert!(!persisted.contains("{{baseUrl}}/usage"));
@@ -259,7 +276,7 @@ mod tests {
         let legacy = r#"{"entries":{"profile-1":{"queryDigest":"stale","summary":{"readings":[],"at":"2026-09-06T00:00:00Z"}}}}"#;
         fs::write(root.join("usage-cache.json"), legacy).expect("write legacy cache");
 
-        record_success(&state, &profile(), summary()).expect("rebuild cache");
+        record_success(&state, &profile(), summary(), attempt_time()).expect("rebuild cache");
 
         let persisted = fs::read_to_string(root.join("usage-cache.json")).expect("rebuilt cache");
         assert!(persisted.contains("attemptedAt"));
@@ -271,7 +288,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = LocalState::from_root(directory.path().join("state"));
         let profile = profile();
-        record_success(&state, &profile, summary()).expect("record success");
+        record_success(&state, &profile, summary(), attempt_time()).expect("record success");
         let mut changed = profile.clone();
         changed.usage_query = Some(UsageQuery::Declarative {
             url: "{{baseUrl}}/new-usage".to_string(),
@@ -290,13 +307,20 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = LocalState::from_root(directory.path().join("state"));
         let profile = profile();
-        record_success(&state, &profile, summary()).expect("record success");
+        let attempted_at = Utc::now();
+        record_success(&state, &profile, summary(), attempted_at).expect("record success");
 
-        record_failure(&state, &profile).expect("record failure");
+        record_failure(&state, &profile, attempted_at).expect("record failure");
 
         assert_eq!(get(&state, &profile), Some(summary()));
         let now = Utc::now();
         assert!(!due(&state, &profile, 30, now));
+        assert!(due(
+            &state,
+            &profile,
+            30,
+            attempted_at + chrono::Duration::seconds(30 * 60)
+        ));
     }
 
     #[test]
@@ -305,7 +329,7 @@ mod tests {
         let state = LocalState::from_root(directory.path().join("state"));
         let profile = profile();
 
-        record_failure(&state, &profile).expect("record failure");
+        record_failure(&state, &profile, Utc::now()).expect("record failure");
 
         assert_eq!(get(&state, &profile), None);
     }
@@ -316,7 +340,7 @@ mod tests {
         let root = directory.path().join("state");
         let state = LocalState::from_root(root.clone());
         let profile = profile();
-        record_success(&state, &profile, summary()).expect("record success");
+        record_success(&state, &profile, summary(), attempt_time()).expect("record success");
 
         clear(&state).expect("clear cache");
 
@@ -348,7 +372,7 @@ mod tests {
         assert!(!due(&state, &unconfigured, 30, now));
         assert!(due(&state, &profile, 30, now));
 
-        record_success(&state, &profile, summary()).expect("record success");
+        record_success(&state, &profile, summary(), attempt_time()).expect("record success");
         let mut changed = profile.clone();
         changed.usage_query = Some(UsageQuery::Declarative {
             url: "{{baseUrl}}/new-usage".to_string(),

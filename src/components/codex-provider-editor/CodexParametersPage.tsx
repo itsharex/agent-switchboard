@@ -39,7 +39,7 @@ function SubagentModelRow({ spec, value, baselineValue, editor, busy }: {
   const defaultModel = draft.defaultModel.trim();
   const changed = !sameSettingValue(baselineValue, value);
   return (
-    <div className="asb-toggle-row asb-choice-row asb-subagent-row">
+    <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
           <span className="asb-checkbox-label">{spec.label}</span>

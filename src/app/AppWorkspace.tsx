@@ -17,17 +17,17 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
   const visited = (target: Page) => page === target || opened.has(target);
   return (
     <main className="asb-main" aria-label={page}>
-      <div hidden={page !== "供应商"} className="asb-page-stack">
-        <ProvidersWorkspace model={model} active={page === "供应商"} />
+      <div hidden={page !== "供应商切换"} className="asb-page-stack">
+        <ProvidersWorkspace model={model} active={page === "供应商切换"} />
       </div>
-      {visited("客户端通用配置") && <div hidden={page !== "客户端通用配置"} className="asb-page-stack">
+      {visited("客户端配置") && <div hidden={page !== "客户端配置"} className="asb-page-stack">
         <ClientConfigurationWorkspace model={model} />
       </div>}
       {visited("扩展") && <div hidden={page !== "扩展"} className="asb-page-stack">
         <ExtensionsWorkspace model={model} />
       </div>}
-      {visited("会话") && <section className="asb-panel" hidden={page !== "会话"} aria-label="会话管理">
-        <SessionManager active={page === "会话"} />
+      {visited("会话记录") && <section className="asb-panel" hidden={page !== "会话记录"} aria-label="会话管理">
+        <SessionManager active={page === "会话记录"} />
       </section>}
       {visited("用量") && <div hidden={page !== "用量"} className="asb-page-stack">
         <UsageWorkspace active={page === "用量"} section={model.usageSection} onSectionChange={model.setUsageSection} />

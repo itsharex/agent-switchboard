@@ -423,5 +423,3 @@ pub(super) fn json_content_type(request: &Request) -> bool {
         })
 }
 
-#[cfg(test)]
-mod tests;

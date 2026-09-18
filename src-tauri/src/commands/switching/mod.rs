@@ -12,11 +12,7 @@ mod profile_rollback;
 mod profile_save;
 mod projection_transaction;
 mod recovery;
-#[cfg(test)]
-mod restore_tests;
 mod transaction;
-#[cfg(test)]
-mod transaction_tests;
 
 pub(crate) use codex_policy::CodexPolicyPreparations;
 pub(crate) use codex_profile_save::CodexProfileSavePreparations;

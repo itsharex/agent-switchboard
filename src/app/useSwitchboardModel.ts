@@ -20,7 +20,7 @@ function useTrayEvents(setPage: (page: Page) => void, reportError: (error: Comma
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
-    void onTrayNavigate(() => setPage("供应商")).then((unlisten) => {
+    void onTrayNavigate(() => setPage("供应商切换")).then((unlisten) => {
       if (disposed) unlisten();
       else stop = unlisten;
     }).catch((error: unknown) => reportError({ code: "TRAY_EVENT", message: error instanceof Error ? error.message : String(error) }));
@@ -59,15 +59,15 @@ export function useSwitchboardModel() {
   const clientSettings = useClientSettings({
     app: appFilter,
     busy,
-    active: page === "客户端通用配置",
+    active: page === "客户端配置",
   });
   const codexSubagentSettings = useCodexSubagentSettings({
-    active: page === "客户端通用配置" && appFilter === "codex",
+    active: page === "客户端配置" && appFilter === "codex",
     busy,
     onError: reportError,
   });
   const promptDocuments = usePromptDocuments({
-    ...operationContext, active: page === "客户端通用配置",
+    ...operationContext, active: page === "客户端配置",
   });
   const appSettingsState = useAppSettings(operationContext);
   const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });

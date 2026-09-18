@@ -6,7 +6,6 @@
   align-content: start;
   gap: var(--asb-space-4);
   min-width: 0;
-  padding-bottom: var(--asb-space-4);
 }
 
 .asb-skill-source-browser > .asb-skill-source-form,
@@ -137,15 +136,13 @@
   list-style: none;
 }
 
+/* Cards ride on the results surface: the grid gap separates them and no
+   second box layer is added. */
 .asb-skill-source-card {
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-2);
   min-width: 0;
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content);
   overflow-wrap: anywhere;
 }
 

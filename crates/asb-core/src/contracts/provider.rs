@@ -226,10 +226,12 @@ impl ProviderProfile {
                 request_mode,
                 &self.connection,
                 self.authentication,
+                self.base_url.as_deref(),
             )
             .requires_gateway();
         }
-        self.requires_protocol_translation() || self.connection.requires_gateway()
+        self.requires_protocol_translation()
+            || self.connection.requires_gateway(self.base_url.as_deref())
     }
 
     pub fn requires_protocol_translation(&self) -> bool {

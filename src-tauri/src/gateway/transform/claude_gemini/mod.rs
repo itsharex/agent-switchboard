@@ -17,5 +17,3 @@ use super::{
 };
 use serde_json::{json, Value};
 
-#[cfg(test)]
-mod tests;

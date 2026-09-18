@@ -19,6 +19,7 @@ import {
   type ProviderRecord,
   type UsageQuery,
 } from "../api/client";
+import { codexDraftFrom, prepareCodexDraft } from "../components/codex-provider-editor/draft";
 
 /** What a Codex editor session edits: a stored third-party record or the
  * client's official-login record. The variants never convert into each other;
@@ -355,12 +356,50 @@ function useProviderMetadata(deps: ProvidersDeps) {
     [saveProfilePatch],
   );
 
+  /** Saves one Codex third-party profile's usage query through the strict
+   * Codex store. Usage metadata never re-applies the client route: a
+   * save-and-apply classification means the base record drifted and is
+   * rejected instead of silently applying. */
+  const saveCodexProfileUsageQuery = useCallback(
+    async (record: CodexProviderRecord, usageQuery: UsageQuery | null): Promise<boolean> => {
+      if (busy) return false;
+      setBusy(true);
+      clearError();
+      try {
+        const draft = prepareCodexDraft({ ...codexDraftFrom(record), usageQuery });
+        if (!draft) {
+          throw { code: "codex-profile-save-invalid", message: "无法生成 Codex 供应商变更" };
+        }
+        const prepared = await prepareCodexProfileSave(
+          record.profile.id,
+          draft,
+          record.fileHash,
+        );
+        if (prepared.kind === "saveAndApply") {
+          throw {
+            code: "profile-save-invalid",
+            message: "此修改只允许保存供应商资料，不能应用客户端配置",
+          };
+        }
+        await commitCodexProfileSave(prepared.preparationId, false);
+        await refresh();
+        return true;
+      } catch (caught) {
+        onError(caught as CommandError);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, clearError, onError, refresh, setBusy],
+  );
+
   const saveOfficialQuotaInterval = useCallback(
     (profile: ProviderProfile, minutes: number) =>
       saveProfilePatch(profile, { officialQuotaRefreshIntervalMinutes: minutes > 0 ? minutes : null }),
     [saveProfilePatch],
   );
-  return { dragReorderClaudeProfiles, saveProfileUsageQuery, saveOfficialQuotaInterval };
+  return { dragReorderClaudeProfiles, saveProfileUsageQuery, saveCodexProfileUsageQuery, saveOfficialQuotaInterval };
 }
 
 /** One pending destructive provider removal. `generic` covers the Claude

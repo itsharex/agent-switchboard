@@ -117,6 +117,7 @@ export function CodexConnectionFields({ editor, busy }: Props) {
   const gatewayRoute = requiresGateway({
     app: "codex",
     routeMode: "custom",
+    baseUrl: draft.endpoint,
     upstreamProtocol: draft.upstream,
     responsesOptions: draft.upstream === "responses" ? { requestMode: draft.requestMode } : null,
     connection: draft.connection,

@@ -5,7 +5,7 @@
   用供应商档案、类型化预览与可恢复切换，替代直接手改客户端配置文件。
 </p>
 
-Agent Switchboard 将供应商档案、客户端通用配置、扩展管理和本机状态收束在同一桌面应用中。真实配置只有在明确确认后才会由唯一的切换执行器写入；每次可恢复写入均可观察、备份、校验和恢复。
+Agent Switchboard 将供应商档案、客户端配置、扩展管理和本机状态收束在同一桌面应用中。真实配置只有在明确确认后才会由唯一的切换执行器写入；每次可恢复写入均可观察、备份、校验和恢复。
 
 ## 当前界面（隔离演示数据）
 
@@ -16,10 +16,10 @@ Agent Switchboard 将供应商档案、客户端通用配置、扩展管理和�
 <p align="center"><sub>供应商工作区：当前源码实际渲染，展示已应用的「README 沙箱 · 主路由」以及两个可切换的虚构档案。</sub></p>
 
 <p align="center">
-  <img src="docs/screenshots/client-configuration.png" width="100%" alt="当前 Agent Switchboard 客户端通用配置工作区：Codex 通用设置和受控配置操作">
+  <img src="docs/screenshots/client-configuration.png" width="100%" alt="当前 Agent Switchboard 客户端配置工作区：Codex 通用设置和受控配置操作">
 </p>
 
-<p align="center"><sub>客户端通用配置：在隔离客户端根目录中读取和编辑受控设置，保持真实界面的分组、状态与操作结构。</sub></p>
+<p align="center"><sub>客户端配置：在隔离客户端根目录中读取和编辑受控设置，保持真实界面的分组、状态与操作结构。</sub></p>
 
 <p align="center">
   <img src="docs/screenshots/switch-preview.png" width="100%" alt="当前 Agent Switchboard 的供应商切换确认界面：README 沙箱备用档案的脱敏配置差异、候选文件和确认操作">
@@ -45,7 +45,7 @@ Agent Switchboard 将供应商档案、客户端通用配置、扩展管理和�
 - 在写入前生成类型化预览；真实写入由可观察、可备份、可校验、可恢复的执行器完成。
 - 保留不属于当前档案的客户端配置键，避免覆盖用户已有设置。
 
-### 客户端通用配置
+### 客户端配置
 
 - 管理两端的通用配置、Codex 子 agent 运行设置和当前客户端的全局指令文件。
 - 当前受控字段始终由界面状态归一化：显式值写入、自动值删除；已知历史字段会在同一可恢复事务中清理，未知字段保持原样。
@@ -65,6 +65,14 @@ Agent Switchboard 将供应商档案、客户端通用配置、扩展管理和�
 - 列表主点击直接进入编辑；部署、诊断、项目安装、连接检测、能力审计和删除集中在独立高级管理面。
 - 扩展写入默认即时执行；只有敏感连接数据、删除仍有安装的定义和 Claude 项目共享 Skill 停用需要额外确认。
 
+### 本机协议网关
+
+- Codex（Responses）在 Chat Completions 或 Anthropic Messages 上游间转换，Responses 上游直通；Claude（Anthropic Messages）在 Chat Completions、Responses 或 Gemini 上游间转换，Anthropic 上游直通。
+- 无法无损表达的字段与工具在转发前报错，不做静默丢弃：例如 stop_sequences 到 Responses 上游、strict 工具与音频到 Anthropic 上游、web_search 等服务端工具到任意跨协议上游。仅影响计量或缓存的纯元数据（如 cache_control，以及 Gemini 上游的 metadata.user_id）在校验后丢弃。
+- Codex 跨协议请求必须 store=false；previous_response_id 与短续接由本机工具历史回填为完整上下文，原生 Responses 上游仍使用上游自身存储。
+- 推理轨迹以绑定路由的加密续接载荷往返；切换档案或密钥后旧续接会被拒绝。
+- Codex 的 WebSocket 传输由网关终结，上游统一走 HTTP/SSE；Claude 故障转移只按本机 `claude-failover.json` 显式策略执行并配合熔断冷却，不做隐式切换。
+
 ### 状态、恢复与诊断
 
 - 提供当前连接、用量、额度、会话、备份、日志、配置状态和网关诊断。
@@ -74,7 +82,7 @@ Agent Switchboard 将供应商档案、客户端通用配置、扩展管理和�
 ## 使用方式
 
 1. 新建供应商档案，或从本机已有配置导入。
-2. 填写模型与连接信息；需要时调整客户端通用配置、子 agent 设置或全局指令。
+2. 填写模型与连接信息；需要时调整客户端配置、子 agent 设置或全局指令。
 3. 打开类型化预览，检查脱敏差异、候选文件和备份位置后再确认应用。
 4. 如果结果不符合预期，从操作历史选择相应备份执行恢复。
 

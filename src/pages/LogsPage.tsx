@@ -202,9 +202,13 @@ export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
         </p>
       )}
       {loading && entries.length === 0 ? (
-        <p className="asb-empty asb-runtime-log-empty" role="status">
-          正在读取应用日志…
-        </p>
+        <div className="asb-runtime-log-table-wrap">
+          <div className="asb-runtime-log-skeleton" role="status" aria-label="正在读取应用日志…">
+            {Array.from({ length: 8 }, (_, index) => (
+              <span key={index} className="asb-skeleton asb-runtime-log-skeleton-row" />
+            ))}
+          </div>
+        </div>
       ) : visibleEntries.length === 0 ? (
         <div className="asb-empty-state asb-runtime-log-empty">
           <span className="asb-empty-state-icon" aria-hidden="true">

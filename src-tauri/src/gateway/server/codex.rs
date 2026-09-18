@@ -102,7 +102,13 @@ pub(super) fn resolve_model_and_validate(
         None => return serde_json::to_vec(&value).map_err(|_| "Codex 请求序列化失败".to_string()),
     };
     let upstream = snapshot.resolve_model(&requested)?;
-    validate_request_capabilities(snapshot, operation, &requested, &value)?;
+    validate_request_capabilities(
+        snapshot,
+        route.upstream_protocol,
+        operation,
+        &requested,
+        &value,
+    )?;
     let object = value
         .as_object_mut()
         .expect("validated Codex request remains an object");
@@ -172,6 +178,7 @@ fn requires_model(operation: CodexOperation) -> bool {
 
 fn validate_request_capabilities(
     snapshot: &CodexRouteSnapshot,
+    upstream_protocol: UpstreamProtocol,
     operation: CodexOperation,
     requested_model: &str,
     value: &Value,
@@ -208,6 +215,17 @@ fn validate_request_capabilities(
                 snapshot.capabilities.function_tools && model.function_tools
             }
             "custom" => snapshot.capabilities.custom_tools && model.custom_tools,
+            // Server-side Responses tools cannot survive cross-protocol
+            // conversion; reject at admission with the same rule the
+            // converter enforces, instead of letting it 422 later.
+            "web_search_preview" | "web_search" | "file_search"
+                if upstream_protocol != UpstreamProtocol::Responses =>
+            {
+                return Err(format!(
+                    "{kind} 是 Responses 服务端工具，无法由 {protocol} 上游无损承载；请使用 Responses 上游",
+                    protocol = upstream_protocol.label()
+                ));
+            }
             "web_search_preview" | "web_search" | "file_search" | "tool_search" => {
                 snapshot.capabilities.tool_search && model.tool_search
             }

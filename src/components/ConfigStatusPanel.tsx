@@ -83,7 +83,7 @@ function ConfigStatusDetails({ status, profiles, lock }: {
               ? " · 已修改网关监听端口"
               : status.lastSwitch.profileName
                 ? ` · 已投影供应商「${status.lastSwitch.profileName}」`
-                : " · 已写入客户端通用配置"}
+                : " · 已写入客户端配置"}
         </StatusField>
       )}
       {(status.route?.scopeWarnings.length ?? 0) > 0 && (
@@ -131,13 +131,20 @@ export function ConfigStatusPanel({ statuses, profiles, locks, busy, onRefresh, 
           <Button variant="secondary" disabled={busy} onClick={onRefresh}>刷新状态</Button>
         }
       />
-      <div className="asb-status-grid">
-        {(statuses ?? []).map((status) => (
-          <ConfigStatusCard key={status.app} status={status} profiles={profiles} lock={locks[status.app]}
-            busy={busy} onRecoverLock={onRecoverLock} />
-        ))}
-      </div>
-      {statuses === null && <p className="asb-empty">加载中</p>}
+      {statuses === null ? (
+        <div className="asb-status-grid" role="status" aria-label="正在读取配置状态">
+          {Array.from({ length: 4 }, (_, index) => (
+            <span key={index} className="asb-skeleton asb-status-card-skeleton" />
+          ))}
+        </div>
+      ) : (
+        <div className="asb-status-grid">
+          {statuses.map((status) => (
+            <ConfigStatusCard key={status.app} status={status} profiles={profiles} lock={locks[status.app]}
+              busy={busy} onRecoverLock={onRecoverLock} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

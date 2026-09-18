@@ -12,7 +12,6 @@ pub struct TrayProvider {
     id: String,
     app: AppKind,
     name: String,
-    model: Option<String>,
     active: bool,
     usage: Option<UsageSummary>,
 }
@@ -34,18 +33,10 @@ fn project(
     let status = statuses.iter().find(|status| status.app == profile.app);
     let active =
         status.is_some_and(|status| status.active_profile_id.as_ref() == Some(&profile.id));
-    let model = if active {
-        status
-            .and_then(|status| status.route.as_ref())
-            .and_then(|route| route.model.clone())
-    } else {
-        profile.model.clone()
-    };
     TrayProvider {
         id: profile.id.clone(),
         app: profile.app,
         name: profile.name.clone(),
-        model,
         active,
         usage,
     }
@@ -141,9 +132,8 @@ mod tests {
             },
         );
         let value = serde_json::to_value(project(&profile, &[], None)).unwrap();
-        assert_eq!(value.as_object().unwrap().len(), 6);
+        assert_eq!(value.as_object().unwrap().len(), 5);
         assert_eq!(value["active"], false);
-        assert_eq!(value["model"], "model");
         assert!(!value.to_string().contains("private-test-key"));
         assert!(!value.to_string().contains("example.invalid"));
         let status = ConfigFileStatus {
@@ -151,11 +141,10 @@ mod tests {
             path: String::new(),
             exists: true,
             syntax_ok: true,
-            route: Some(asb_core::adapter::route_state(
-                AppKind::Claude,
-                r#"{"env":{"ANTHROPIC_MODEL":"live-model"}}"#,
-            )),
+            route: None,
             read_error: None,
+            client_settings: None,
+            client_settings_error: None,
             match_status: asb_core::contracts::MatchStatus::ExternallyModified {
                 at: "test-time".into(),
             },
@@ -164,6 +153,5 @@ mod tests {
         };
         let value = serde_json::to_value(project(&profile, &[status], None)).unwrap();
         assert_eq!(value["active"], true);
-        assert_eq!(value["model"], "live-model");
     }
 }

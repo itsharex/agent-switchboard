@@ -5,7 +5,7 @@ use crate::contracts::{CodexModelSettings, KeyChange, RouteMode, RouteState, Swi
 use crate::ownership::{is_owned, CODEX_PROVIDER_ID};
 use crate::AppKind;
 
-use crate::adapter::codex::document::{item_at, item_repr, parse};
+use crate::adapter::codex::document::{item_at, item_repr, parse, scalar_repr};
 
 /// Codex's built-in provider id.
 pub const OFFICIAL_PROVIDER: &str = CODEX_PROVIDER_ID;
@@ -26,11 +26,13 @@ pub(crate) fn matches_provider_settings(
                 && plan.client_base_url().is_some())))
 }
 
-/// Collects every owned scalar path and its textual value.
-fn collect_owned_scalars(
+/// Collects every scalar path accepted by `keep`, rendered by `repr`.
+fn collect_scalars(
     table: &dyn TableLike,
     prefix: &str,
     out: &mut std::collections::BTreeMap<String, String>,
+    keep: &dyn Fn(&str) -> bool,
+    repr: &dyn Fn(&Item) -> Option<String>,
 ) {
     for (key, item) in table.iter() {
         let path = if prefix.is_empty() {
@@ -38,29 +40,72 @@ fn collect_owned_scalars(
         } else {
             format!("{prefix}.{key}")
         };
-        if let Some(value) = item_repr(item) {
-            // `agents.max_threads` is not a current setting and never enters
-            // the editor contract. It remains diff-owned solely so its one-way
-            // cleanup is explicit in every candidate that removes it.
-            if is_owned(AppKind::Codex, &path) || path == "agents.max_threads" {
+        if let Some(value) = repr(item) {
+            if keep(&path) {
                 out.insert(path.clone(), value);
             }
         }
         if let Some(sub) = item.as_table_like() {
-            collect_owned_scalars(sub, &path, out);
+            collect_scalars(sub, &path, out, keep, repr);
         }
     }
 }
 
+fn collect_with(
+    table: &dyn TableLike,
+    keep: &dyn Fn(&str) -> bool,
+    repr: &dyn Fn(&Item) -> Option<String>,
+) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    collect_scalars(table, "", &mut out, keep, repr);
+    out
+}
+
+/// Textual repr for diff purposes. Inline tables are containers (the walk
+/// recurses into them, so their children get individual leaf paths); arrays
+/// and arrays-of-tables are leaves and get a summary form so a deep-reset
+/// preview never hides a removal.
+fn leaf_repr(item: &Item) -> Option<String> {
+    if let Some(value) = item_repr(item) {
+        return Some(value);
+    }
+    if let Some(tables) = item.as_array_of_tables() {
+        return Some(format!("[{} 个表]", tables.len()));
+    }
+    item.as_value().and_then(|value| match value {
+        toml_edit::Value::Array(array) => Some(format!(
+            "[{}]",
+            array
+                .iter()
+                .filter_map(scalar_repr)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+        _ => None,
+    })
+}
+
+/// `agents.max_threads` is not a current setting and never enters the editor
+/// contract. It remains diff-owned solely so its one-way cleanup is explicit
+/// in every candidate that removes it.
+fn diff_keep(path: &str) -> bool {
+    is_owned(AppKind::Codex, path) || path == "agents.max_threads"
+}
+
 /// Owned-key diff between the live text and a previous copy.
 pub(crate) fn owned_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>, AdapterError> {
-    let mut current_values = std::collections::BTreeMap::new();
-    collect_owned_scalars(parse(current)?.as_table(), "", &mut current_values);
-    let mut previous_values = std::collections::BTreeMap::new();
-    collect_owned_scalars(parse(previous)?.as_table(), "", &mut previous_values);
     Ok(crate::adapter::diff_owned_maps(
-        &current_values,
-        &previous_values,
+        &collect_with(parse(current)?.as_table(), &diff_keep, &|item| item_repr(item)),
+        &collect_with(parse(previous)?.as_table(), &diff_keep, &|item| item_repr(item)),
+    ))
+}
+
+/// Every-leaf diff, including host-owned keys: the deep reset preview must
+/// list unmanaged removals, which [`owned_diff`] deliberately hides.
+pub(crate) fn full_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>, AdapterError> {
+    Ok(crate::adapter::diff_owned_maps(
+        &collect_with(parse(current)?.as_table(), &|_| true, &leaf_repr),
+        &collect_with(parse(previous)?.as_table(), &|_| true, &leaf_repr),
     ))
 }
 
@@ -146,5 +191,24 @@ mod tests {
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0].key, "agents.max_threads");
         assert_eq!(changes[0].after, None);
+    }
+
+    #[test]
+    fn full_diff_reports_host_removals_that_owned_diff_hides() {
+        let live = "[tools]\nflag = true\n";
+        assert!(owned_diff("", live).expect("owned diff").is_empty());
+        let changes = full_diff("", live).expect("full diff");
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].key, "tools.flag");
+        assert_eq!(changes[0].kind, crate::contracts::ChangeKind::Remove);
+        assert_eq!(changes[0].after, None);
+    }
+
+    #[test]
+    fn full_diff_reports_array_of_tables_removals_with_a_summary() {
+        let changes = full_diff("", "[[host_rules]]\nname = \"a\"\n").expect("full diff");
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].key, "host_rules");
+        assert_eq!(changes[0].before.as_deref(), Some("[1 个表]"));
     }
 }

@@ -66,7 +66,7 @@ function BooleanRow({
 }) {
   const groupName = `${field}-subagent-setting`;
   return (
-    <div className="asb-toggle-row asb-choice-row asb-subagent-row">
+    <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
           <span className="asb-checkbox-label">{label}</span>
@@ -110,7 +110,7 @@ function NumberRow({
   const custom = value.mode === "explicit";
   const invalid = custom && (!Number.isSafeInteger(Number(current)) || Number(current) < 1 || !/^\d+$/.test(current));
   return (
-    <div className="asb-toggle-row asb-choice-row asb-subagent-row">
+    <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
           <span className="asb-checkbox-label">最大并发子 agent 线程数</span>
@@ -162,7 +162,11 @@ export function CodexSubagentSettingsPanel({
     return (
       <section className="asb-subagent-settings" aria-labelledby={headingId}>
         <SubagentModuleHeader headingId={headingId} />
-        <p className="asb-empty">正在读取子 agent 运行配置</p>
+        <div className="asb-settings-skeleton" role="status" aria-label="正在读取">
+          <div className="asb-skeleton" />
+          <div className="asb-skeleton" />
+          <div className="asb-skeleton" />
+        </div>
       </section>
     );
   }
@@ -200,6 +204,7 @@ export function CodexSubagentSettingsPanel({
           disabled={working}
           onChange={onChange}
         />
+        {issue && <p className="asb-field-error" role="alert">{issue}</p>}
         <BooleanRow
           label="中断时发送消息"
           detail="控制主 agent 中断子 agent 时是否发送中断说明。"
@@ -210,8 +215,6 @@ export function CodexSubagentSettingsPanel({
           onChange={onChange}
         />
       </div>
-
-      {issue && <p className="asb-field-error" role="alert">{issue}</p>}
     </section>
   );
 }

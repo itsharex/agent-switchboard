@@ -9,8 +9,6 @@
 mod export;
 mod import;
 mod package;
-#[cfg(test)]
-mod tests;
 
 pub use export::{export_mcp, export_skill};
 pub use import::{

@@ -1,4 +1,4 @@
-import type { ExtensionListItem, SkillUpdateReport } from "../../api/client";
+import type { ExtensionListItem, McpCheckOutcome, SkillUpdateReport } from "../../api/client";
 import { Button } from "../../components/Button";
 import { PreviewIcon, TrashIcon, UpdateIcon } from "../../components/icons";
 import { Table, type TableColumn } from "../../components/Table";
@@ -9,12 +9,22 @@ import { TRANSPORT_LABELS } from "../../components/extensions/labels";
 import { pendingDeployment } from "./pending-deployment";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
-function rowDescription(item: ExtensionListItem) {
-  if (item.kind === "skill") return item.manifest.description ?? "";
-  if (item.transport === "stdio") return `${item.command} · ${item.argumentCount} 个启动参数`;
-  return item.lastCheck
-    ? `最近连接检测：${item.lastCheck.outcome.kind === "passed" ? "通过" : "查看检测结果"}`
-    : "尚未检测连接";
+const MCP_CHECK_STATES: Record<McpCheckOutcome["kind"], { tone?: "safe" | "warning" | "danger"; label: string }> = {
+  passed: { tone: "safe", label: "最近检测通过" },
+  partial: { tone: "warning", label: "最近检测部分通过" },
+  failed: { tone: "danger", label: "最近检测失败" },
+  cancelled: { label: "最近检测已取消" },
+  needsNativeConfirmation: { label: "最近检测需原生确认" },
+};
+
+function rowDescription(item: ExtensionListItem): { tone: string | null; text: string } {
+  if (item.kind === "skill") return { tone: null, text: item.manifest.description ?? "" };
+  const detail = item.transport === "stdio" ? `${item.command} · ${item.argumentCount} 个启动参数` : "";
+  const state = item.lastCheck ? MCP_CHECK_STATES[item.lastCheck.outcome.kind] : null;
+  return {
+    tone: state?.tone ?? null,
+    text: [state ? state.label : "尚未检测连接", detail].filter(Boolean).join(" · "),
+  };
 }
 
 function RowActions({
@@ -85,7 +95,14 @@ function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; works
         {updatable && <span className="asb-ext-update-badge">可更新</span>}
         {report?.error && <span className="asb-ext-table-error" title={report.error}>检查失败</span>}
       </span>
-      {description && <span className="asb-ext-table-description" title={description}>{description}</span>}
+      {description.text && (
+        <span className="asb-ext-table-description" title={description.text}>
+          {description.tone && (
+            <span className="asb-ext-check-dot" data-tone={description.tone} aria-hidden="true" />
+          )}
+          {description.text}
+        </span>
+      )}
     </Button>
   );
 }

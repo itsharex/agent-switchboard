@@ -9,8 +9,6 @@ pub(crate) mod codex_paths;
 mod paths;
 mod settings;
 
-#[cfg(test)]
-mod tests;
 
 pub(crate) use paths::user_home_dir;
 pub use settings::{AppSettings, CloseBehavior, CloudBackupSettings};

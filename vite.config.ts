@@ -1,7 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 import { createWebDevelopmentBrowserPlugin } from "./src/dev/vite-browser-launch.ts";
 import {
   WEB_DEVELOPMENT_BACKEND_HEALTH_URL,
@@ -19,7 +18,6 @@ const browserDevelopment = Object.freeze({
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss(),
     createWebDevelopmentBrowserPlugin({
       enabled: process.env.ASB_WEB_DEVELOPMENT === "1",
       healthUrl: WEB_DEVELOPMENT_BACKEND_HEALTH_URL,

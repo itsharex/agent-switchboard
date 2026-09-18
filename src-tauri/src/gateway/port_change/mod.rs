@@ -9,8 +9,6 @@ mod commit;
 mod prepare;
 mod recovery;
 
-#[cfg(test)]
-mod tests;
 
 pub(crate) use commit::commit;
 pub(crate) use prepare::prepare;

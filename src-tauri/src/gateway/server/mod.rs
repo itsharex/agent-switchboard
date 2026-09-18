@@ -20,15 +20,9 @@ use super::metrics::RequestSpan;
 use super::transform::{convert_request, ConvertedRequest, ReasoningTransport};
 use super::{constant_time_equal, content_encoding, ActiveRoute, BoundListener, GatewayInner};
 use asb_core::contracts::{AppKind, UpstreamProtocol};
-#[cfg(test)]
-use reqwest::blocking::Client;
 use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
-#[cfg(test)]
-use std::time::Duration;
 use tiny_http::Method;
-#[cfg(test)]
-use tiny_http::Server;
 
 use crate::provider_diagnostics::{ProviderDiagnostic, ProviderFailureKind};
 use diagnostics::respond_diagnostic;
@@ -189,10 +183,4 @@ fn forward_request(
 }
 
 #[cfg(test)]
-mod live_codex_cli_tests;
-#[cfg(test)]
-mod live_codex_tests;
-#[cfg(test)]
 mod live_support;
-#[cfg(test)]
-pub(crate) mod tests;

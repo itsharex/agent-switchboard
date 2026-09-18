@@ -129,6 +129,7 @@ pub(super) fn append_restore_targets(
             steps: vec![inverse],
             warnings: vec!["将恢复该操作实际修改的客户端状态".to_string()],
             changes: Vec::new(),
+            adopts_native_entry: false,
         });
     }
     Ok(())

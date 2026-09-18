@@ -3,6 +3,7 @@ import type { ExtensionListItem } from "../../api/client";
 import type { SkillDirectoryEntry } from "../../api/extensions/skill-sources";
 import { Button } from "../Button";
 import { SearchIcon } from "../icons";
+import { ExtensionLoading } from "./ExtensionLoading";
 import { skillCandidateInstalled } from "./skill-source-model";
 import { skillRepositoryLabel, skillSourceUrl } from "./skill-repository-model";
 import { SkillSourceCandidate, SkillSourceLink } from "./SkillSourceCandidate";
@@ -38,10 +39,16 @@ export function SkillDirectoryResults({ state, busy, items }: {
   state: SkillSourceState; busy: boolean; items: ExtensionListItem[];
 }) {
   const { directory } = state;
-  if (!directory.result) return <div className="asb-skill-source-empty" role="status">
-    {directory.searching ? <LoaderCircle size={24} className="asb-skill-source-spinner" /> : <SearchIcon />}
-    <p>{directory.searching ? "正在搜索 skills.sh" : "尚未搜索 skills.sh"}</p>
-  </div>;
+  if (!directory.result) return directory.searching ? (
+    <section className="asb-skill-source-results" aria-label="skills.sh 搜索结果" aria-busy="true">
+      <ExtensionLoading />
+    </section>
+  ) : (
+    <div className="asb-skill-source-empty" role="status">
+      <SearchIcon />
+      <p>尚未搜索 skills.sh</p>
+    </div>
+  );
   return (
     <section className="asb-skill-source-results" aria-label="skills.sh 搜索结果" aria-busy={directory.loading}>
       <p className="asb-skill-source-count asb-num" role="status">

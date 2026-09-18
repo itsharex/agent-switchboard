@@ -240,11 +240,15 @@ fn observe_client_file(
         Err(error) => status.client_settings_error = Some(error.to_string()),
     }
     let mut route = adapter::route_state(kind, &text);
-    if kind == AppKind::Codex {
-        route.base_url = route
-            .base_url
-            .map(|url| asb_core::redact::redact("openai_base_url", &url));
-    }
+    // Route URLs cross the redact boundary under their ownership key: hosts
+    // stay readable, token-shaped values still mask.
+    route.base_url = route.base_url.map(|url| match kind {
+        AppKind::Codex => asb_core::redact::redact(
+            asb_core::ownership::CODEX_PROVIDER_BASE_URL_KEY,
+            &url,
+        ),
+        AppKind::Claude => asb_core::redact::redact("env.ANTHROPIC_BASE_URL", &url),
+    });
     status.route = Some(route);
     status.match_status = match_status_for(state, Some(gateway), kind, &text)?;
     status.active_profile_id = if kind == AppKind::Codex {

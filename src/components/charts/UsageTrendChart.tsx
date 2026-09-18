@@ -1,12 +1,13 @@
 import { useId, useMemo, useState } from "react";
 import { Area, ComposedChart, Line, Tooltip, XAxis, YAxis } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
-import { cx } from "@/utils/cx";
 import { ChartFrame } from "./ChartFrame";
 import {
+  chartSeriesColor,
   formatChartAxisTime,
   formatChartAxisValue,
   formatChartTimestamp,
+  formatChartTooltipDate,
   formatChartValue,
   prepareTrendSeries,
   trendYAxisDomain,
@@ -30,9 +31,9 @@ interface Props {
   size?: "default" | "compact";
 }
 
-const SERIES_TONE_COUNT = 5;
-const AXIS_TICK = { fontSize: 12, fill: "var(--color-text-tertiary)" };
-/** The 图表组件层 chart card, fed by real recorded points only. It preserves
+/** Axis tick text rides the caption step; SVG text needs the literal size. */
+const AXIS_TICK = { fontSize: 12, fill: "var(--asb-text-muted)" };
+/** The usage trend chart card, fed by real recorded points only. It preserves
  * input point order and never fills missing timestamps with inferred values;
  * series that were read at different times simply leave gaps instead of
  * inventing points. */
@@ -81,7 +82,6 @@ function TrendCard({
   const gradientId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const compact = size === "compact";
-  const standalone = !compact && title !== undefined;
 
   const rows = mergeSeriesRows(prepared);
   const unit = prepared[0]?.unit ?? null;
@@ -103,60 +103,38 @@ function TrendCard({
 
   return (
     <figure
-      className={cx(
-        "bui-scope flex w-full min-w-0 flex-col bg-background-secondary-default",
-        compact
-          ? "h-56 gap-4 rounded-2xl px-4 pt-3.5 pb-2.5"
-          : standalone
-            ? "h-96 gap-6 rounded-3xl p-6"
-            : "h-[344px] gap-6 rounded-2xl px-4 pt-4 pb-3",
-      )}
+      className={compact ? "asb-usage-chart-card is-compact" : "asb-usage-chart-card"}
       aria-label={ariaLabel}
     >
-      {title && <figcaption className="text-title-3-semibold text-text-primary">{title}</figcaption>}
+      {title && <figcaption className="asb-usage-chart-title">{title}</figcaption>}
       {/* Header: label over the count-up figure and its caption; legend on the right */}
-      <div
-        className={cx(
-          "flex w-full flex-col gap-3",
-          standalone ? "lg:flex-row lg:items-start lg:justify-between" : "sm:flex-row sm:items-start sm:justify-between",
-        )}
-      >
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <p className="w-full text-body-medium text-text-secondary">{label}</p>
-          <div className="flex w-full items-center gap-2">
-            <p
-              key={activeIndex ?? "rest"}
-              className={cx(
-                "animate-number-fade whitespace-nowrap text-text-primary tabular-nums",
-                compact ? "text-title-2-medium" : "text-title-1-medium",
-              )}
-            >
-              {formatChartValue(display, unit, valueKind)}
-            </p>
-          </div>
-          <p className="text-body-2-medium text-text-tertiary tabular-nums">{caption}</p>
+      <div className="asb-usage-chart-head">
+        <div className="asb-usage-chart-readout">
+          <p className="asb-usage-chart-label">{label}</p>
+          <p
+            key={activeIndex ?? "rest"}
+            className="asb-usage-chart-value"
+          >
+            {formatChartValue(display, unit, valueKind)}
+          </p>
+          <p className="asb-usage-chart-caption">{caption}</p>
         </div>
-        <dl
-          className={cx(
-            "flex shrink-0 items-center text-body-2-medium text-text-secondary",
-            standalone ? "flex-wrap gap-x-5 gap-y-2" : "gap-4",
-          )}
-        >
+        <dl className="asb-usage-chart-legend">
           {prepared.map((entry, index) => (
-            <div key={entry.id} className="flex items-center gap-1.5">
+            <div key={entry.id} className="asb-usage-chart-legend-item">
               <span
-                className="size-2 rounded-full"
-                style={{ backgroundColor: seriesColor(index) }}
+                className="asb-usage-chart-swatch"
+                style={{ backgroundColor: chartSeriesColor(index) }}
                 aria-hidden
               />
-              <dt className="whitespace-nowrap">{entry.label}</dt>
+              <dt className="asb-usage-chart-legend-label">{entry.label}</dt>
             </div>
           ))}
         </dl>
       </div>
 
       {/* Chart */}
-      <div className="min-h-0 w-full flex-1">
+      <div className="asb-usage-chart-body">
         <ChartFrame>
           <ComposedChart
             data={rows}
@@ -169,8 +147,8 @@ function TrendCard({
           >
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={seriesColor(0)} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={seriesColor(0)} stopOpacity={0} />
+                <stop offset="0%" stopColor={chartSeriesColor(0)} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={chartSeriesColor(0)} stopOpacity={0} />
               </linearGradient>
             </defs>
             <YAxis
@@ -194,8 +172,21 @@ function TrendCard({
               tick={AXIS_TICK}
             />
             <Tooltip
-              content={() => null}
-              cursor={{ stroke: "var(--color-chart-cursor)", strokeWidth: 1, strokeDasharray: "4 4" }}
+              isAnimationActive={false}
+              content={({ active, payload }) => {
+                if (!active || payload.length === 0) return null;
+                const row = payload[0]?.payload as TrendRow | undefined;
+                if (!row) return null;
+                return (
+                  <TrendTooltipCard
+                    row={row}
+                    prepared={prepared}
+                    unit={unit}
+                    valueKind={valueKind}
+                  />
+                );
+              }}
+              cursor={{ stroke: "var(--asb-hairline-strong)", strokeWidth: 1, strokeDasharray: "4 4" }}
             />
             {prepared.length === 1 && (
               <Area
@@ -214,12 +205,12 @@ function TrendCard({
                 type="monotone"
                 dataKey={entry.id}
                 name={entry.label}
-                stroke={seriesColor(index)}
+                stroke={chartSeriesColor(index)}
                 strokeWidth={2.5}
                 // A lone real point draws no line; show it as a dot instead of
                 // leaving the only recorded value invisible.
                 dot={entry.points.length === 1 ? { r: 3 } : false}
-                activeDot={<ActiveDot color={seriesColor(index)} />}
+                activeDot={<ActiveDot color={chartSeriesColor(index)} />}
                 connectNulls
                 isAnimationActive={false}
               />
@@ -231,9 +222,8 @@ function TrendCard({
   );
 }
 
-/** The 图表组件层 hover marker: a soft halo behind a solid dot ringed by the
- * card surface. Recharts clones this element with the active point's
- * coordinates. */
+/** The hover marker: a soft halo behind a solid dot ringed by the card
+ * surface. Recharts clones this element with the active point's coordinates. */
 function ActiveDot({ color, cx, cy }: { color: string; cx?: number; cy?: number }) {
   if (cx === undefined || cy === undefined) return null;
   return (
@@ -244,17 +234,61 @@ function ActiveDot({ color, cx, cy }: { color: string; cx?: number; cy?: number 
         cy={cy}
         r={4}
         fill={color}
-        stroke="var(--color-background-secondary-default)"
+        stroke="var(--asb-content-muted)"
         strokeWidth={2}
       />
     </g>
   );
 }
 
-/** Series hues ride the 图表组件层 chart tokens, which this app re-tints to its
- * own Frosted Relay series colors in 样式表. */
-function seriesColor(index: number): string {
-  return `var(--color-chart-${(index % SERIES_TONE_COUNT) + 1})`;
+/** The hover tooltip: a floating card restating the hovered column as one row
+ * per series that actually recorded a point there. Series without a real
+ * value are omitted, mirroring the chart's no-invented-values rule; a sum is
+ * shown only for local-token trends, matching the card header. */
+function TrendTooltipCard({
+  row,
+  prepared,
+  unit,
+  valueKind,
+}: {
+  row: TrendRow;
+  prepared: PreparedTrendSeries[];
+  unit: string | null;
+  valueKind: UsageTrendValueKind;
+}) {
+  const entries = prepared
+    .map((entry, index) => ({ entry, index, value: row[entry.id] }))
+    .filter((item) => typeof item.value === "number");
+  if (entries.length === 0) return null;
+
+  const total =
+    valueKind === "local-token" ? entries.reduce((sum, item) => sum + item.value!, 0) : null;
+
+  return (
+    <div className="asb-usage-chart-tooltip">
+      <p className="asb-usage-chart-tooltip-title">
+        {formatChartTooltipDate(row.timestamp)}
+        {total !== null ? ` · ${formatChartValue(total, unit, valueKind)}` : null}
+      </p>
+      <div className="asb-usage-chart-tooltip-rows">
+        {entries.map(({ entry, index, value }) => (
+          <div key={entry.id} className="asb-usage-chart-tooltip-row">
+            <span className="asb-usage-chart-tooltip-series">
+              <span
+                className="asb-usage-chart-swatch"
+                style={{ backgroundColor: chartSeriesColor(index) }}
+                aria-hidden
+              />
+              {entry.label}
+            </span>
+            <span className="asb-usage-chart-tooltip-value">
+              {formatChartValue(value!, unit, valueKind)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 interface TrendRow {

@@ -31,7 +31,11 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             "pick_directory" => {
                 command!(commands::window::pick_directory(app.clone()))
             }
-            "pick_skill_zip" => command!(commands::window::pick_skill_zip(app.clone())),
+            "pick_file" => command!(commands::window::pick_file(
+                app.clone(),
+                argument(&request.args, "filterName")?,
+                argument(&request.args, "extensions")?,
+            )),
             "config_status" => command!(commands::status::config_status(app.clone())),
             "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
             "preview_claude_gateway_stop" => command!(

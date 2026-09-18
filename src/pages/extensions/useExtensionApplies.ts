@@ -155,7 +155,9 @@ async function executePrepared(
   if (context.signal.aborted) return { status: "cancelled" };
   context.track(plan);
   const sensitive = plan.operations.some((entry) =>
-    entry.targets.some((target) => target.writesSensitiveConnectionData));
+    entry.targets.some(
+      (target) => target.writesSensitiveConnectionData || target.adoptsNativeEntry,
+    ));
   if (sensitive) {
     context.phase("confirmation");
     if (await confirmation.requestWrite(plan, context.signal) !== true) return { status: "cancelled" };

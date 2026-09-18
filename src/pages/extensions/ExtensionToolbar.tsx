@@ -152,8 +152,7 @@ function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
 
 function ExtensionResourceActions({ workspace }: { workspace: ExtensionWorkspace }) {
   const { nav, writeBlocked, kindItems, updates } = workspace;
-  const alternateView = nav.sourceBrowser || nav.discoveryOpen;
-  if (nav.kind === null || alternateView) return null;
+  if (nav.kind === null) return null;
   return (
     <>
       {nav.kind === "skill" && updates.updatable.length > 0 && (
@@ -166,7 +165,7 @@ function ExtensionResourceActions({ workspace }: { workspace: ExtensionWorkspace
           全部更新（{updates.updatable.length}）
         </Button>
       )}
-      {nav.kind === "skill" && !nav.sourceBrowser && (
+      {nav.kind === "skill" && (
         <Tooltip label="检查更新">
           <Button variant="icon" aria-label="检查更新"
             disabled={writeBlocked || kindItems.length === 0}
@@ -189,18 +188,16 @@ function ExtensionResourceActions({ workspace }: { workspace: ExtensionWorkspace
         <Download />
         从本机发现
       </Button>
-      {nav.sourceBrowser ? null : (
-        <Button
-          variant="primary"
-          disabled={writeBlocked}
-          onClick={() =>
-            nav.kind === "skill" ? nav.setSourceBrowser(true) : nav.setDialog({ type: "newMcp" })
-          }
-        >
-          {nav.kind === "skill" ? <SearchIcon /> : <PlusIcon />}
-          {nav.kind === "skill" ? "发现 Skills" : "添加 MCP"}
-        </Button>
-      )}
+      <Button
+        variant="primary"
+        disabled={writeBlocked}
+        onClick={() =>
+          nav.kind === "skill" ? nav.setSourceBrowser(true) : nav.setDialog({ type: "newMcp" })
+        }
+      >
+        {nav.kind === "skill" ? <SearchIcon /> : <PlusIcon />}
+        {nav.kind === "skill" ? "发现 Skills" : "添加 MCP"}
+      </Button>
       <ExtensionMoreMenu workspace={workspace} />
     </>
   );
@@ -211,11 +208,6 @@ export function ExtensionToolbar({ workspace }: { workspace: ExtensionWorkspace 
   return (
     <WorkspaceHeader
       title="扩展"
-      back={nav.sourceBrowser ? (
-        <Button variant="back" aria-label="返回扩展库" onClick={() => nav.setSourceBrowser(false)}>←</Button>
-      ) : nav.discoveryOpen ? (
-        <Button variant="back" aria-label="返回扩展库" onClick={() => nav.setDiscoveryOpen(false)}>←</Button>
-      ) : undefined}
       primary={
         <Tabs value={nav.section} onChange={nav.changeSection}
           tabs={extensionTabs(workspace)} scope="ext-workspace" label="扩展内容" />

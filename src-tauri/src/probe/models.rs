@@ -148,32 +148,41 @@ pub(crate) fn provider_auth_headers(
 /// Reads only the explicit OpenAI-style `input_modalities` model fact. An
 /// absent or malformed field means the source did not establish support; it
 /// must not be guessed from a model id or vendor name.
-pub(crate) fn image_input_from_entry(entry: &serde_json::Value) -> Option<bool> {
+fn image_input_from_entry(entry: &serde_json::Value) -> Option<bool> {
     let modalities = entry.get("input_modalities")?.as_array()?;
     Some(modalities.iter().any(|value| value.as_str() == Some("image")))
 }
 
-/// Extracts `data[].id`, optional `data[].owned_by`, and an explicit
-/// `data[].input_modalities` fact from an OpenAI-compatible models response.
-/// A missing, non-string, or blank `owned_by` stays `None` so the picker groups
-/// it under "其他".
-pub(super) fn parse_models(text: &str) -> Result<Vec<ProviderModel>, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(text).map_err(|_| "模型列表响应不是有效 JSON".to_string())?;
+/// The single owner of the upstream model-catalog parsing contract. Accepts
+/// the three real wire shapes served beneath a profile's API root:
+/// OpenAI-compatible and Anthropic `data[].id` (+ `owned_by`), Codex-style
+/// catalogs' `models[].slug` (ChatGPT backend, 智谱 Responses), and Copilot's
+/// `vendor`. Only an explicit `input_modalities` entry fact confirms image
+/// input. Blank or control-character ids are skipped, vendors are trimmed
+/// (blank stays `None` so the picker groups them under "其他"), duplicates
+/// collapse, and an empty catalog is an error rather than a silent picker.
+pub(crate) fn parse_models_value(value: &serde_json::Value) -> Result<Vec<ProviderModel>, String> {
     let data = value
         .get("data")
+        .or_else(|| value.get("models"))
         .and_then(|data| data.as_array())
-        .ok_or_else(|| "模型列表响应缺少 data 数组".to_string())?;
+        .ok_or_else(|| "模型列表响应缺少 data/models 数组".to_string())?;
     let mut models: Vec<ProviderModel> = Vec::new();
     for entry in data {
-        if let Some(id) = entry.get("id").and_then(|id| id.as_str()) {
+        let id = entry
+            .get("id")
+            .or_else(|| entry.get("slug"))
+            .and_then(|id| id.as_str())
+            .filter(|id| !id.trim().is_empty() && !id.chars().any(char::is_control));
+        if let Some(id) = id {
             let owned_by = entry
                 .get("owned_by")
+                .or_else(|| entry.get("vendor"))
                 .and_then(|vendor| vendor.as_str())
                 .map(str::trim)
                 .filter(|vendor| !vendor.is_empty())
                 .map(str::to_string);
-            if !id.is_empty() && !models.iter().any(|seen: &ProviderModel| seen.id == id) {
+            if !models.iter().any(|seen: &ProviderModel| seen.id == id) {
                 models.push(ProviderModel {
                     id: id.to_string(),
                     owned_by,
@@ -186,6 +195,12 @@ pub(super) fn parse_models(text: &str) -> Result<Vec<ProviderModel>, String> {
         return Err("模型列表为空".to_string());
     }
     Ok(models)
+}
+
+fn parse_models(text: &str) -> Result<Vec<ProviderModel>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(text).map_err(|_| "模型列表响应不是有效 JSON".to_string())?;
+    parse_models_value(&value)
 }
 
 
@@ -232,5 +247,52 @@ mod tests {
         assert_eq!(models[0].image_input, Some(true));
         assert_eq!(models[1].image_input, Some(false));
         assert_eq!(models[2].image_input, None);
+    }
+
+    #[test]
+    fn parses_codex_style_model_catalog_slugs() {
+        let models = parse_models(
+            r#"{"models":[
+                {"slug":"glm-5.3","input_modalities":["text"]},
+                {"slug":"glm-5.3"},
+                {"slug":"glm-5.3-flash","input_modalities":["text","image"]}
+            ]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "glm-5.3");
+        assert_eq!(models[0].image_input, Some(false));
+        assert_eq!(models[1].id, "glm-5.3-flash");
+        assert_eq!(models[1].image_input, Some(true));
+    }
+
+    #[test]
+    fn parses_copilot_vendor_entries() {
+        let models = parse_models(
+            r#"{"models":[{"id":"claude-sonnet-4","vendor":"Anthropic"},{"id":"gpt-5","vendor":" "}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].owned_by.as_deref(), Some("Anthropic"));
+        assert_eq!(models[1].owned_by, None);
+    }
+
+    #[test]
+    fn skips_blank_and_control_character_ids() {
+        let models =
+            parse_models(r#"{"data":[{"id":"  "},{"id":"bad\nid"},{"id":"ok"}]}"#).unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "ok");
+    }
+
+    #[test]
+    fn rejects_shapes_without_a_model_array_and_empty_catalogs() {
+        assert!(parse_models(r#"{"models":"list"}"#).is_err());
+        assert!(parse_models(r#"{"foo":[]}"#)
+            .unwrap_err()
+            .contains("缺少 data/models 数组"));
+        assert_eq!(parse_models(r#"{"data":[]}"#).unwrap_err(), "模型列表为空");
     }
 }

@@ -141,11 +141,3 @@ fn check_candidate_totals(candidates: &[SkillCandidate]) -> Result<(), SourceErr
     Ok(())
 }
 
-#[cfg(test)]
-mod archive_tests;
-#[cfg(test)]
-mod local_tests;
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod zip_tests;

@@ -31,7 +31,6 @@ export interface PreparedTrendSeries {
   points: PreparedTrendPoint[];
 }
 
-export const CHART_TONE_COUNT = 5;
 /** The source contract of a trend's values. A unit string alone cannot decide
  * whether a `tokens` reading is local model usage or a provider-owned value. */
 export type UsageTrendValueKind = "generic" | "local-token" | "percentage";
@@ -104,6 +103,13 @@ export function formatChartAxisTime(timestamp: number): string {
   return `${month}/${day}`;
 }
 
+/** A human day label ("9月15日") for hover tooltips; unlike tick labels it
+ * keeps no zero padding. */
+export function formatChartTooltipDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
 export function formatChartTimestamp(timestamp: number): string {
   const date = new Date(timestamp);
   const year = date.getFullYear();
@@ -114,8 +120,19 @@ export function formatChartTimestamp(timestamp: number): string {
   return `${year}年${month}月${day}日 ${hour}:${minute}`;
 }
 
-export function chartTone(index: number): string {
-  return String(index % CHART_TONE_COUNT);
+/** The categorical hue for the nth series, shared by every usage chart.
+ * Series tones resolve straight to app palette tokens; the fifth falls back
+ * to muted text so a fifth series still reads as "lesser". */
+const SERIES_COLORS = [
+  "var(--asb-action)",
+  "var(--asb-claude)",
+  "var(--asb-safe)",
+  "var(--asb-warning)",
+  "var(--asb-text-muted)",
+] as const;
+
+export function chartSeriesColor(index: number): string {
+  return SERIES_COLORS[index % SERIES_COLORS.length];
 }
 
 function normalizedUnit(unit: string | null | undefined): string | null {

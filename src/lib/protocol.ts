@@ -24,10 +24,16 @@ export const PROTOCOL_LABELS: Record<UpstreamProtocol, string> = {
   geminiGenerateContent: "Gemini Native",
 };
 
+/** Mirrors asb-core `ProviderConnectionOptions::normalize_endpoint_url`. */
+function normalizeEndpointUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
 /** Mirrors asb-core's routing decision, including Responses field filtering. */
 export function requiresGateway(profile: Pick<ProviderDraft,
-  "app" | "routeMode" | "upstreamProtocol" | "responsesOptions" | "connection" | "authentication">): boolean {
+  "app" | "routeMode" | "upstreamProtocol" | "baseUrl" | "responsesOptions" | "connection" | "authentication">): boolean {
   if (profile.app === "claude" && profile.connection?.claudeNative) return false;
+  const normalizedBase = profile.baseUrl === null ? null : normalizeEndpointUrl(profile.baseUrl);
   return profile.routeMode === "custom" && profile.upstreamProtocol !== null && (
     profile.upstreamProtocol !== NATIVE_PROTOCOL[profile.app]
     || (profile.upstreamProtocol === "responses" && profile.responsesOptions?.requestMode === "minimal")
@@ -43,6 +49,7 @@ export function requiresGateway(profile: Pick<ProviderDraft,
       && (Object.keys(profile.connection.localProxyRequestOverrides.headers).length > 0
         || profile.connection.localProxyRequestOverrides.body !== null))
     || (profile.connection?.endpointAutoSelect !== false
-      && Object.keys(profile.connection?.customEndpoints ?? {}).length > 0)
+      && Object.keys(profile.connection?.customEndpoints ?? {}).some((url) =>
+        normalizeEndpointUrl(url) !== normalizedBase))
   );
 }

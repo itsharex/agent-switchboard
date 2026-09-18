@@ -33,6 +33,17 @@
   min-width: 0;
 }
 
+/* Batch deletion pairs the count with its danger action in a bar that exists
+   only while a selection is open; the header row keeps the safe controls. */
+.asb-session-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
 .asb-session-issues {
   display: flex;
   flex-direction: column;
@@ -45,6 +56,8 @@
   list-style: none;
 }
 
+/* The outer .asb-panel owns the surface, so the master/detail split keeps
+   only its one structural divider (.asb-session-list's border-right). */
 .asb-session-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -52,9 +65,6 @@
   flex: 1;
   --asb-session-layout-min-height: 520px;
   min-height: var(--asb-session-layout-min-height);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  overflow: hidden;
   background: var(--asb-content-muted);
 }
 
@@ -195,6 +205,15 @@
   justify-content: flex-end;
   flex-shrink: 0;
   gap: var(--asb-space-2);
+}
+
+/* Deleting a session reads after the session it acts on, on its own hairline
+   row below the safe action cluster. */
+.asb-session-danger-row {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--asb-hairline);
+  padding-top: var(--asb-space-3);
 }
 
 /* One compact fact line replaces the former meta grid so the transcript
@@ -349,16 +368,20 @@
   scrollbar-gutter: stable;
 }
 
-.asb-session-message {
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
+/* Transcript loading reserves a column of message-sized rows so the region
+   keeps its footprint while reading. */
+.asb-session-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+}
+
+.asb-session-skeleton-row {
+  min-height: 44px;
 }
 
 .asb-session-message.is-assistant {
   margin-left: var(--asb-space-5);
-  border-color: color-mix(in srgb, var(--asb-action) 32%, var(--asb-hairline));
 }
 
 .asb-session-message.is-user {
@@ -409,10 +432,10 @@
   color: var(--asb-text);
 }
 
-/* Outline-jump target: the action border plus route shadow reads as the
+/* Outline-jump target: the action outline plus route shadow reads as the
    same "you are here" signal the active row uses elsewhere. */
 .asb-session-message.is-target {
-  border-color: var(--asb-action);
+  outline: 1px solid var(--asb-action);
   box-shadow: var(--asb-shadow-raised);
 }
 
@@ -432,6 +455,7 @@
 }
 
 .asb-session-message pre {
+  max-width: var(--asb-measure-prose);
   padding: 0;
   margin: 0;
   overflow-wrap: anywhere;

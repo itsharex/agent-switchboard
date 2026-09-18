@@ -154,7 +154,8 @@ namespace AgentSwitchboard.Installer
             primary.Content = copy.Finish;
             cancel.Visibility = Visibility.Collapsed;
             launch.Content = copy.LaunchWhenFinished;
-            launch.IsChecked = false;
+            // 勾选（打开应用）是完成页的默认意图；不勾选才是仅完成。
+            launch.IsChecked = true;
             launch.Visibility = invocation.RestartAfterInstall && !restartFailed
                 ? Visibility.Collapsed
                 : Visibility.Visible;

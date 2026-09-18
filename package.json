@@ -32,22 +32,19 @@
     "react": "^19.1.0",
     "react-aria-components": "^1.21.0",
     "react-dom": "^19.1.0",
-    "recharts": "^3.9.2",
-    "tailwind-merge": "^3.6.0"
+    "recharts": "^3.9.2"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "2.1.259",
+    "@anthropic-ai/claude-code": "2.1.275",
     "@iarna/toml": "2.2.5",
-    "@openai/codex": "0.152.1",
-    "@tailwindcss/vite": "^4.3.3",
+    "@openai/codex": "0.155.0",
     "@tauri-apps/cli": "^2.5.0",
     "@types/node": "^22.20.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "cross-env": "^10.1.0",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^5.8.3",
+    "typescript": "^7.0.2",
     "vite": "^8.3.0"
   }
 }

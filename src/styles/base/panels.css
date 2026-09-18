@@ -134,6 +134,29 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Skeleton — the loading placeholder that reserves the final content's
+ * footprint, so the page does not reflow when data arrives. A loading state
+ * is never a one-line note standing in for a table or a chart: size the
+ * block like the content it stands in for; the pulse only says "reading".
+ * ------------------------------------------------------------------------- */
+.asb-skeleton {
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
+  animation: asb-skeleton-pulse var(--asb-motion-ambient) var(--asb-easing) infinite;
+}
+
+@keyframes asb-skeleton-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-skeleton { animation: none; }
+}
+
+:root[data-motion="reduce"] .asb-skeleton { animation: none; }
+
+/* ---------------------------------------------------------------------------
  * Empty state — the one shape (DESIGN.md §8).
  *
  * A glyph, a section-step heading, one line of explanation, at most one

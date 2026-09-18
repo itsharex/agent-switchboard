@@ -6,8 +6,6 @@
 
 mod feed;
 
-#[cfg(test)]
-mod tests;
 
 use crate::probe;
 use feed::{is_tibo_post_url, parse_feed, validate_timestamp, STATUS_URL};

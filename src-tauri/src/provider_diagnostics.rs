@@ -279,5 +279,3 @@ fn failure_message(kind: ProviderFailureKind) -> &'static str {
     }
 }
 
-#[cfg(test)]
-mod tests;

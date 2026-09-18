@@ -208,7 +208,7 @@ impl ProviderConnectionOptions {
         Ok(())
     }
 
-    pub fn requires_gateway(&self) -> bool {
+    pub fn requires_gateway(&self, base_url: Option<&str>) -> bool {
         self.provider_type.is_some()
             || self
                 .auth_binding
@@ -222,7 +222,19 @@ impl ProviderConnectionOptions {
                 .local_proxy_request_overrides
                 .as_ref()
                 .is_some_and(|overrides| !overrides.headers.is_empty() || !overrides.body.is_null())
-            || (self.endpoint_auto_select != Some(false) && !self.custom_endpoints.is_empty())
+            || (self.endpoint_auto_select != Some(false)
+                && self.has_distinct_endpoint_candidate(base_url))
+    }
+
+    /// Whether automatic endpoint selection has a target that differs from the
+    /// profile's base URL. Candidates equal to the base URL offer automatic
+    /// routing nothing to choose between, so they alone never justify the
+    /// local gateway.
+    pub fn has_distinct_endpoint_candidate(&self, base_url: Option<&str>) -> bool {
+        let normalized_base = base_url.map(Self::normalize_endpoint_url);
+        self.custom_endpoints
+            .keys()
+            .any(|url| Some(Self::normalize_endpoint_url(url)) != normalized_base)
     }
 
     /// Returns the stable URL spelling used by endpoint maps and routing.
@@ -290,5 +302,55 @@ impl ProviderConnectionOptions {
             }
         }
         candidates
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn options_with_endpoints(
+        urls: &[&str],
+        auto_select: Option<bool>,
+    ) -> ProviderConnectionOptions {
+        ProviderConnectionOptions {
+            custom_endpoints: urls
+                .iter()
+                .map(|url| {
+                    (
+                        url.to_string(),
+                        ProviderEndpoint {
+                            url: url.to_string(),
+                            added_at: 1,
+                            last_used: None,
+                        },
+                    )
+                })
+                .collect(),
+            endpoint_auto_select: auto_select,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn candidates_identical_to_the_base_url_do_not_require_the_gateway() {
+        let options = options_with_endpoints(&["https://upstream.example/api"], Some(true));
+        assert!(!options.requires_gateway(Some("https://upstream.example/api/")));
+    }
+
+    #[test]
+    fn a_distinct_candidate_still_requires_the_gateway() {
+        let options = options_with_endpoints(
+            &["https://upstream.example/api", "https://mirror.example/api"],
+            Some(true),
+        );
+        assert!(options.requires_gateway(Some("https://upstream.example/api")));
+        assert!(options.requires_gateway(None));
+    }
+
+    #[test]
+    fn auto_select_disabled_keeps_direct_routing_regardless_of_candidates() {
+        let options = options_with_endpoints(&["https://mirror.example/api"], Some(false));
+        assert!(!options.requires_gateway(Some("https://upstream.example/api")));
     }
 }

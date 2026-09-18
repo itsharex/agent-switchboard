@@ -48,12 +48,10 @@ pub(super) fn normalize_request(
             .ok_or_else(|| ContextError::invalid("Codex WebSocket 请求.generate 必须是布尔值"))?,
         None => true,
     };
-    if mode == ResponsesRequestMode::Standard
-        && required_bool(root, "store", "Codex WebSocket 请求")?
-    {
-        return Err(ContextError::invalid(
-            "跨协议 WebSocket 请求必须使用 store=false",
-        ));
+    if mode == ResponsesRequestMode::Standard {
+        // Presence and shape only; the store=false rule is owned by the
+        // Responses request parser shared with the HTTP bridge.
+        required_bool(root, "store", "Codex WebSocket 请求")?;
     }
     let stream = required_bool(root, "stream", "Codex WebSocket 请求")?;
     if !stream {

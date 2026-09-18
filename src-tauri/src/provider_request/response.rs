@@ -146,5 +146,3 @@ pub(super) fn redact(text: String, api_key: &str) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests;

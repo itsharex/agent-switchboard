@@ -17,7 +17,7 @@ pub(crate) fn parse(text: &str) -> Result<DocumentMut, AdapterError> {
 }
 
 /// Textual repr of a scalar TOML value for diff comparison/display.
-fn scalar_repr(value: &TomlValue) -> Option<String> {
+pub(super) fn scalar_repr(value: &TomlValue) -> Option<String> {
     match value {
         TomlValue::String(s) => Some(s.value().clone()),
         // Decoded values only: Display carries the decor (surrounding

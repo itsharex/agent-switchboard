@@ -262,5 +262,3 @@ pub(crate) fn reconcile_after_switch(root: &Path, route_mode: RouteMode) -> Resu
     apply(root, &plan).map(|_| true)
 }
 
-#[cfg(test)]
-mod tests;

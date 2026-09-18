@@ -60,6 +60,20 @@ export function formatUsageHighlight(summary: UsageSummary): string {
   return [...(name ? [name] : []), ...values].join(" · ") || "暂无额度读数";
 }
 
+/** Tray balance line: only the first reading's balance is displayed, falling
+ * back to the next reported value; it never derives or invents a number and
+ * adds no heading copy. */
+export function formatUsageBalance(summary: UsageSummary): string {
+  const reading = summary.readings[0];
+  if (!reading) return "暂无额度读数";
+  const labeled = (label: string, value: number) =>
+    `${label} ${compactUsageValue(value, reading.unit)}`;
+  if (reading.remaining !== null) return labeled("余额", reading.remaining);
+  if (reading.used !== null) return labeled("已用", reading.used);
+  if (reading.total !== null) return labeled("总量", reading.total);
+  return "暂无额度读数";
+}
+
 /** Full row/tray text preserves every non-null field returned by the
  * query. It never derives a display value that the script did not return. */
 export function formatUsageSummary(summary: UsageSummary): string {

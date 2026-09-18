@@ -46,31 +46,12 @@ export function CopyGatewayAddressButton({ value }: { value: string }) {
   );
 }
 
-export function GatewayPanel({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+/** 网关页骨架的唯一拥有者：模块标题加「主机面—接线排—仪表带」内容栈。 */
+export function GatewayPanel({ children }: { children: ReactNode }) {
   return (
     <section className="asb-panel" aria-label="协议网关">
-      <ModuleHeader title="本机协议网关" primaryActions={aside} />
+      <ModuleHeader title="本机协议网关" />
       <div className="asb-gateway-stack">{children}</div>
     </section>
-  );
-}
-
-export function GatewayStatTile({
-  label,
-  value,
-  detail,
-  tone = "default",
-}: {
-  label: string;
-  value: number | string;
-  detail: string;
-  tone?: "default" | "warning";
-}) {
-  return (
-    <div role="group" aria-label={label} className={`asb-gateway-tile is-${tone}`}>
-      <p className="asb-gateway-tile-label">{label}</p>
-      <p className="asb-gateway-tile-value">{value}</p>
-      <p className="asb-gateway-tile-detail">{detail}</p>
-    </div>
   );
 }

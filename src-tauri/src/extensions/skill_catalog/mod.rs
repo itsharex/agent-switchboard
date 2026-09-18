@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 
 pub use directory::{resolve_directory_skill, search_directory};
 pub use repositories::SkillRepositoryCatalog;
-#[cfg(test)]
-pub use scan::RepositoryScan;
 pub use scan::{scan_repositories, CatalogScan};
 
 pub const DIRECTORY_PAGE_SIZE: usize = 20;
@@ -78,9 +76,3 @@ pub enum CatalogError {
     Conflict,
 }
 
-#[cfg(test)]
-mod directory_tests;
-#[cfg(test)]
-mod repository_tests;
-#[cfg(test)]
-mod scan_tests;

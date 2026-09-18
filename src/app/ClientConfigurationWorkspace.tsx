@@ -15,8 +15,8 @@ export function ClientConfigurationWorkspace({ model }: { model: SwitchboardMode
   } = model;
   const promptDocument = prompts.documents[app];
   return (
-    <section className="asb-panel" aria-label="客户端通用配置">
-      <WorkspaceHeader title="客户端通用配置" />
+    <section className="asb-panel" aria-label="客户端配置">
+      <WorkspaceHeader title="客户端配置" />
       <ClientSettingsPanel
         key={app}
         app={app}

@@ -20,6 +20,7 @@ impl CodexProviderDraft {
                     self.request_mode,
                     &self.connection,
                     self.authentication,
+                    Some(self.endpoint.0.as_str()),
                 ),
                 endpoint: self.endpoint,
                 api_key: self.api_key,

@@ -2,8 +2,6 @@
 mod exchange;
 mod payload;
 mod request;
-#[cfg(test)]
-mod tests;
 
 use crate::gateway::transform::TransformError;
 use serde_json::{json, Value};

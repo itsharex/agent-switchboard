@@ -10,11 +10,13 @@ import {
   type ClientConfigurationResetKind,
   type CodexSubagentSettings,
   type ConfigFileStatus,
+  type NativeConfigurationResetKind,
   type SettingsValues,
 } from "../api/client";
 import { clientSettingsPayload } from "../app/claude-common-settings";
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
 import { Button } from "./Button";
+import { Checkbox } from "./Checkbox";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { DiffView } from "./DiffView";
 import { PreviewInspector } from "./PreviewInspector";
@@ -34,16 +36,19 @@ function visibleResetChanges(
     : changes;
 }
 
-function NativeResetScope({ app }: { app: AppKind }) {
+function NativeResetScope({ app, advanced }: { app: AppKind; advanced: boolean }) {
   return (
     <div className="asb-client-settings-reset-scope">
       <span className="asb-client-settings-reset-scope-label">将恢复</span>
       <ul>
         <li>ASB 管理的标准客户端通用设置</li>
         {app === "codex" && <li>Codex 的 3 项子 agent 全局运行设置</li>}
+        {advanced && <li>真实配置中界面未拥有的字段</li>}
       </ul>
       <p className="asb-field-help">
-        不会影响供应商参数、全局指令、登录与凭据、扩展配置、未管理字段或额外通用配置。
+        {advanced
+          ? "不会影响供应商参数、全局指令、登录与凭据、扩展配置或额外通用配置；移除项会先创建备份，可从历史备份恢复。"
+          : "不会影响供应商参数、全局指令、登录与凭据、扩展配置、未管理字段或额外通用配置。"}
       </p>
     </div>
   );
@@ -68,6 +73,7 @@ export function ClientConfigurationResetPreview({
   extraConfigurationCount,
   busy,
   onConfirm,
+  onScopeChange,
   onBack,
 }: {
   preview: ClientConfigurationApplyPreview;
@@ -76,26 +82,50 @@ export function ClientConfigurationResetPreview({
   extraConfigurationCount: number;
   busy: boolean;
   onConfirm: () => void;
+  onScopeChange?: (resetKind: NativeConfigurationResetKind) => void;
   onBack?: () => void;
 }) {
-  const nativeDefaults = resetKind === "nativeDefaults";
+  const deep = resetKind === "nativeDefaultsWithUnmanaged";
+  const native = resetKind !== "clearExtraConfiguration";
   const changes = visibleResetChanges(resetKind, preview);
-  const title = nativeDefaults ? "恢复为客户端原生默认值" : "清空 ASB 管理的额外通用配置";
-  const changeLabel = nativeDefaults ? "将移除的标准设置" : "将移除的额外配置";
-  const confirmLabel = nativeDefaults
-    ? "确认恢复原生默认值"
-    : `确认清空 ${extraConfigurationCount} 项额外配置`;
+  const title = native ? "恢复为客户端原生默认值" : "清空 ASB 管理的额外通用配置";
+  const changeLabel = native
+    ? deep ? "将移除的字段" : "将移除的标准设置"
+    : "将移除的额外配置";
+  const confirmLabel = !native
+    ? `确认清空 ${extraConfigurationCount} 项额外配置`
+    : deep ? "确认恢复默认并移除界面外字段" : "确认恢复原生默认值";
   return (
     <section className="asb-client-settings-reset-preview" aria-label={`${title}预览`}>
       <h3 className="asb-section-title">{title}</h3>
       <p className="asb-client-settings-reset-lead">
-        {nativeDefaults
-          ? "清除 ASB 管理的标准通用配置覆盖，让客户端按其原生默认行为运行。"
-          : "移除通过配置草稿由 ASB 明确管理的额外字段。"}
+        {!native
+          ? "移除通过配置草稿由 ASB 明确管理的额外字段。"
+          : deep
+            ? "清除 ASB 管理的标准通用配置覆盖，并移除真实配置中界面未拥有的字段。"
+            : "清除 ASB 管理的标准通用配置覆盖，让客户端按其原生默认行为运行。"}
       </p>
-      {nativeDefaults
-        ? <NativeResetScope app={app} />
-        : <ExtraResetScope extraConfigurationCount={extraConfigurationCount} />}
+      {native ? (
+        <>
+          {onScopeChange && (
+            <div className="asb-client-settings-reset-advanced">
+              <Checkbox
+                checked={deep}
+                disabled={busy}
+                label="同时移除界面外字段（高级范围）"
+                onChange={(checked) =>
+                  onScopeChange(checked ? "nativeDefaultsWithUnmanaged" : "nativeDefaults")}
+              />
+              <p className="asb-field-help">
+                开启后额外移除真实配置中界面未拥有的字段，包括第三方工具或手动添加的内容；移除项会先创建备份，可从历史备份恢复。
+              </p>
+            </div>
+          )}
+          <NativeResetScope app={app} advanced={deep} />
+        </>
+      ) : (
+        <ExtraResetScope extraConfigurationCount={extraConfigurationCount} />
+      )}
       <p className="asb-client-settings-reset-target">
         <span>目标文件</span>
         <code>{preview.file.preview.target}</code>
@@ -106,7 +136,7 @@ export function ClientConfigurationResetPreview({
         </div>
       ) : (
         <p className="asb-field-help">
-          真实客户端文件当前没有需要修改的受管字段；确认后仍会更新 ASB 已保存的配置，避免下次应用重新写入覆盖。
+          真实客户端文件当前没有需要修改的字段；确认后仍会更新 ASB 已保存的配置，避免下次应用重新写入覆盖。
         </p>
       )}
       {preview.file.preview.warnings.map((warning) => (
@@ -121,7 +151,7 @@ export function ClientConfigurationResetPreview({
             返回恢复设置
           </Button>
         )}
-        <Button variant={nativeDefaults ? "primary" : "danger"} disabled={busy} onClick={onConfirm}>
+        <Button variant="danger" disabled={busy} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>
@@ -168,7 +198,11 @@ function extraConfigurationCount(extra: Record<string, unknown> | undefined): nu
 type ResetState<T> = Record<ClientConfigurationResetKind, T>;
 
 function emptyResetState<T>(value: T): ResetState<T> {
-  return { nativeDefaults: value, clearExtraConfiguration: value };
+  return {
+    nativeDefaults: value,
+    nativeDefaultsWithUnmanaged: value,
+    clearExtraConfiguration: value,
+  };
 }
 
 interface UseClientConfigurationResetsProps {
@@ -210,29 +244,34 @@ function useClientConfigurationResets({
       setErrorFor(resetKind, error.message ?? "无法生成配置预览");
     }).finally(onFinish);
   };
-  const commit = (resetKind: ClientConfigurationResetKind) => {
+  const commit = (resetKind: ClientConfigurationResetKind, successMessage: string) => {
     const current = pending[resetKind];
     if (!current || busy) return;
     setErrorFor(resetKind, null); onStart();
     void commitClientConfigurationReset(app, resetKind, current.preview).then(() => {
       setPending(emptyResetState(null));
-      onSuccess(resetKind === "nativeDefaults"
-        ? "已恢复为客户端原生默认值。"
-        : `已清空 ${extraConfigurationCount} 项 ASB 管理的额外通用配置。`);
+      onSuccess(successMessage);
     }).catch((error: { message?: string }) => {
       setErrorFor(resetKind, error.message ?? "应用客户端配置操作失败");
     }).finally(onFinish);
   };
+  const inNativeView = resetView !== "clearExtraConfiguration";
+  const commitNativeReset = () => {
+    if (!inNativeView) return;
+    commit(resetView, resetView === "nativeDefaults"
+      ? "已恢复为客户端原生默认值。"
+      : "已恢复为客户端原生默认值，并移除界面外字段。");
+  };
   return {
     resetView,
-    pendingNativeReset: pending.nativeDefaults,
+    pendingNativeReset: inNativeView ? pending[resetView] : null,
     pendingExtraClear: pending.clearExtraConfiguration,
-    nativeResetError: errors.nativeDefaults,
+    nativeResetError: inNativeView ? errors[resetView] : null,
     extraClearError: errors.clearExtraConfiguration,
-    prepareNativeReset: () => prepare("nativeDefaults"),
+    prepareNativeReset: (resetKind: NativeConfigurationResetKind) => prepare(resetKind),
     prepareExtraClear: () => prepare("clearExtraConfiguration"),
-    commitNativeReset: () => commit("nativeDefaults"),
-    commitExtraClear: () => commit("clearExtraConfiguration"),
+    commitNativeReset,
+    commitExtraClear: () => commit("clearExtraConfiguration", `已清空 ${extraConfigurationCount} 项 ASB 管理的额外通用配置。`),
     showNativeReset: () => setResetView("nativeDefaults"),
   };
 }
@@ -281,10 +320,10 @@ export function useClientConfigurationApply(
     void commitClientConfigurationApply(app, pendingApply.settings, pendingApply.preview, pendingApply.subagentSettings)
       .then(() => {
         setPendingApply(null);
-        setStatus({ message: "已应用客户端通用配置。", error: false });
+        setStatus({ message: "已应用客户端配置。", error: false });
         onCommitted(); props.onApplied();
       })
-      .catch((error: { message?: string }) => setApplyError(error.message ?? "应用客户端通用配置失败"))
+      .catch((error: { message?: string }) => setApplyError(error.message ?? "应用客户端配置失败"))
       .finally(finish);
   };
   return {
@@ -364,7 +403,11 @@ export function ClientConfigurationResetPanel({
   configuration: ClientConfigurationActionState;
 }) {
   const working = busy || configuration.applying;
-  if (configuration.resetView === "clearExtraConfiguration") {
+  const nativeView: NativeConfigurationResetKind | null =
+    configuration.resetView === "clearExtraConfiguration"
+      ? null
+      : configuration.resetView;
+  if (nativeView === null) {
     if (configuration.pendingExtraClear) {
       return (
         <ClientConfigurationResetPreview
@@ -388,16 +431,23 @@ export function ClientConfigurationResetPanel({
       <ClientConfigurationResetPreview
         preview={configuration.pendingNativeReset.preview}
         app={app}
-        resetKind="nativeDefaults"
+        resetKind={nativeView}
         extraConfigurationCount={configuration.extraConfigurationCount}
         busy={working}
         onConfirm={configuration.commitNativeReset}
+        onScopeChange={configuration.prepareNativeReset}
       />
       <ExtraConfigurationAction configuration={configuration} busy={busy} />
     </>;
   }
   if (configuration.nativeResetError) {
-    return <ResetFailure error={configuration.nativeResetError} busy={working} onRetry={configuration.prepareNativeReset} />;
+    return (
+      <ResetFailure
+        error={configuration.nativeResetError}
+        busy={working}
+        onRetry={() => configuration.prepareNativeReset(nativeView)}
+      />
+    );
   }
   return <p className="asb-field-help" role="status">正在生成恢复预览。</p>;
 }
@@ -420,7 +470,7 @@ export function ClientConfigurationConfirmation({
   if (!pending) return null;
   return (
     <ConfirmSheet
-      title="确认应用客户端通用配置"
+      title="确认应用客户端配置"
       confirmLabel="确认应用"
       confirmDisabled={busy || applying}
       onConfirm={onConfirm}
@@ -431,7 +481,7 @@ export function ClientConfigurationConfirmation({
         <li><PreviewInspector filePreview={pending.preview.file} userConfigModel={null} userConfigWarnings={[]} /></li>
         <li>{app === "codex"
           ? "写入前会创建备份，并在同一可恢复事务中提交通用配置与子 agent 运行设置。"
-          : "写入前会创建备份，并在同一可恢复事务中提交客户端通用配置。"}</li>
+          : "写入前会创建备份，并在同一可恢复事务中提交客户端配置。"}</li>
       </ul>
     </ConfirmSheet>
   );

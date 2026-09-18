@@ -10,10 +10,9 @@
 //! unrelated content survives and every baseline lands on the same
 //! post-state.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use asb_core::contracts::AppKind;
 use asb_core::extensions::content_integrity::is_unmodified_subset;
 use asb_core::extensions::contracts::PlanOperation;
 use asb_core::extensions::contracts::{
@@ -29,7 +28,7 @@ use crate::commands::error::CommandError;
 use crate::commands::extensions::support::*;
 
 use super::deploy::write_entries_to;
-use super::document::{read_document, restore_claude_entry};
+use super::document::{read_document, restore_claude_entry, DocumentWork};
 use super::{McpScope, Planner};
 
 mod checks;
@@ -70,16 +69,6 @@ impl PreparedRepair {
             } => *definition_revision,
         }
     }
-}
-
-/// Working state of one document across the batch: the progressively
-/// patched text plus which repair carries the single merged write.
-struct DocumentWork {
-    client: AppKind,
-    expected_content_hash: String,
-    rendered: String,
-    /// Index into the batch of the repair that will carry the write.
-    writer: Option<usize>,
 }
 
 /// Builds one batch's repair operations: every binding id becomes one
@@ -147,6 +136,7 @@ pub(crate) fn build_repair_operations(
                         "将恢复最后一次部署的内容版本；版本与停用状态保持不变".to_string()
                     ],
                     changes: Vec::new(),
+                    adopts_native_entry: false,
                 }
             }
             PreparedRepair::McpEntry {
@@ -167,7 +157,7 @@ pub(crate) fn build_repair_operations(
                         client: work.client,
                         path: document_key.clone(),
                         expected_existed: true,
-                        expected_content_hash: Some(work.expected_content_hash.clone()),
+                        expected_content_hash: work.expected_content_hash.clone(),
                         rendered: work.rendered.clone(),
                         syntax,
                         backup_dir: String::new(),
@@ -200,6 +190,7 @@ pub(crate) fn build_repair_operations(
                         before: None,
                         after: Some(value),
                     }],
+                    adopts_native_entry: false,
                 }
             }
         };
@@ -414,10 +405,13 @@ impl Planner<'_> {
             documents.insert(
                 document_key.clone(),
                 DocumentWork {
-                    expected_content_hash: sha_hex(text.as_bytes()),
-                    rendered: text,
                     client,
+                    syntax,
+                    expected_content_hash: Some(sha_hex(text.as_bytes())),
+                    expected_existed: true,
+                    rendered: text,
                     writer: None,
+                    claimed: BTreeSet::new(),
                 },
             );
         }

@@ -9,7 +9,7 @@ import { useSwitchboardModel } from "./app/useSwitchboardModel";
 /** The shell composes the domain model, workspaces and operation confirmations. */
 export default function App() {
   const model = useSwitchboardModel();
-  const { page, setPage, error, busy, providers, operations, providerSwitch, appSettingsState, updateCheck } = model;
+  const { page, setPage, error, busy, providers, operations, appSettingsState, updateCheck } = model;
   useDevtoolsShortcut();
   useKeyboardFocusMarker();
   return (
@@ -21,8 +21,7 @@ export default function App() {
           ? { latestVersion: updateCheck.updateCheck.latestVersion, onOpen: () => model.openSettings("about") } : null}>
         <AppErrorBoundary><AppWorkspace model={model} /></AppErrorBoundary>
       </AppShell>
-      <OperationConfirmSheets activationCandidate={providerSwitch.activationCandidate} busy={busy}
-        onCancelActivation={providerSwitch.cancelActivation} operations={operations} providers={providers} />
+      <OperationConfirmSheets operations={operations} providers={providers} />
       <Toaster />
     </>
   );

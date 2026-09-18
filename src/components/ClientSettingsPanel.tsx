@@ -3,7 +3,7 @@ import { type AppKind, type CodexSubagentSettings, type SettingValue, type Confi
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
 import { Button } from "./Button";
 import { ClientPicker } from "./ClientPicker";
-import { CodePreview } from "./CodePreview";
+import { CurrentConfigurationEditor } from "./CurrentConfigurationEditor";
 import {
   ClientConfigurationConfirmation,
   ClientConfigurationResetPanel,
@@ -11,7 +11,6 @@ import {
   useClientConfigurationApply,
 } from "./ClientConfigurationApply";
 import { ClaudeExtraConfigurationEditor } from "./ClaudeExtraConfigurationEditor";
-import { ClientManualConfigurationEditor } from "./ClientManualConfigurationEditor";
 import { OfficialSettingsDirectory } from "./OfficialSettingsDirectory";
 import { SettingsFields } from "./SettingsFields";
 
@@ -108,21 +107,22 @@ function ClientConfigurationReview({
   }
   return (
     <div className="asb-client-configuration-review">
-      <div className="asb-client-configuration-review-heading">
-        <h3 className="asb-section-title">当前机器真实配置</h3>
-        <p className="asb-field-help">此内容仅用于审阅事实，不能直接修改。</p>
-      </div>
       {state.currentConfigurationLoading && <p className="asb-field-help" role="status">正在读取当前机器的真实配置。</p>}
       {state.currentConfigurationError && (
         <p className="asb-field-error" role="alert">
           无法读取当前机器的真实配置：{state.currentConfigurationError.message}
         </p>
       )}
-      {source?.syntaxOk && (source.exists ? (
-        <CodePreview target={`当前机器真实配置 · ${source.target}`} content={source.content} />
-      ) : (
-        <p className="asb-empty">当前机器尚未创建 {source.target}</p>
-      ))}
+      {source && (
+        <CurrentConfigurationEditor
+          app={app}
+          busy={busy}
+          editorState={state}
+          source={source}
+          subagentDraft={subagentDraft}
+          onApplied={onApplied}
+        />
+      )}
       <section className="asb-client-configuration-review-scope" aria-label="ASB 管理范围">
         <h3 className="asb-section-title">ASB 管理范围</h3>
         <p className="asb-field-help">
@@ -139,16 +139,6 @@ function ClientConfigurationReview({
           onChange={(extra) => onClaudeExtraChange(app, extra)}
         />
       )}
-      {source && (
-        <ClientManualConfigurationEditor
-          app={app}
-          busy={busy}
-          editorState={state}
-          source={source}
-          subagentDraft={subagentDraft}
-          onApplied={onApplied}
-        />
-      )}
     </div>
   );
 }
@@ -157,7 +147,11 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
   if (state.phase === "idle" || state.phase === "loading")
     return <>
       {props.subagentSettings}
-      <p className="asb-empty">正在读取客户端设置</p>
+      <div className="asb-settings-skeleton" role="status" aria-label="正在读取">
+        <div className="asb-skeleton" />
+        <div className="asb-skeleton" />
+        <div className="asb-skeleton" />
+      </div>
     </>;
   if (state.phase === "loadError" || !state.editor || !state.draft) {
     return (
@@ -248,10 +242,8 @@ interface ClientSettingsToolbarProps {
   reviewId: string;
   instructionsId: string;
   resetId: string;
+  configuration: ClientConfigurationActionState;
   onSectionChange: (section: ClientSettingsSection | null, trigger: HTMLButtonElement) => void;
-  resetDisabled: boolean;
-  resetLabel: string;
-  onReset: (trigger: HTMLButtonElement) => void;
 }
 
 function ClientSettingsToolbar({
@@ -261,10 +253,8 @@ function ClientSettingsToolbar({
   reviewId,
   instructionsId,
   resetId,
+  configuration,
   onSectionChange,
-  resetDisabled,
-  resetLabel,
-  onReset,
 }: ClientSettingsToolbarProps) {
   const directoryOpen = openSection === "directory";
   const reviewOpen = openSection === "review";
@@ -275,19 +265,10 @@ function ClientSettingsToolbar({
       <ClientPicker
         app={panel.app}
         disabled={panel.busy}
-        label="客户端通用配置客户端"
+        label="客户端配置客户端"
         onChange={(target) => panel.onSelectApp(target)}
       />
       <div className="asb-client-preferences-toolbar-actions">
-        <Button
-          variant="secondary"
-          aria-expanded={resetOpen}
-          aria-controls={resetId}
-          disabled={resetDisabled}
-          onClick={(event) => onReset(event.currentTarget)}
-        >
-          {resetLabel}
-        </Button>
         <Button
           variant="secondary"
           aria-expanded={directoryOpen}
@@ -295,7 +276,7 @@ function ClientSettingsToolbar({
           disabled={!panel.editorState.editor}
           onClick={(event) => onSectionChange(directoryOpen ? null : "directory", event.currentTarget)}
         >
-          {directoryOpen ? "返回客户端通用配置" : "官方设置目录"}
+          {directoryOpen ? "返回客户端配置" : "官方设置目录"}
         </Button>
         <ClientConfigurationReviewButton
           {...panel}
@@ -315,6 +296,21 @@ function ClientSettingsToolbar({
           onClick={(event) => onSectionChange(instructionsOpen ? null : "instructions", event.currentTarget)}
         >
           {instructionsOpen ? "收起全局指令" : "全局指令"}
+        </Button>
+        <Button
+          variant="danger"
+          aria-expanded={resetOpen}
+          aria-controls={resetId}
+          disabled={!configuration.canNativeReset || panel.busy || configuration.applying}
+          onClick={(event) => {
+            const next = !resetOpen;
+            onSectionChange(next ? "reset" : null, event.currentTarget);
+            if (next) configuration.prepareNativeReset("nativeDefaults");
+          }}
+        >
+          {resetOpen && configuration.applying
+            ? configuration.resetView === "clearExtraConfiguration" ? "正在生成清空预览" : "正在生成恢复预览"
+            : resetOpen ? "收起恢复设置" : "恢复为客户端原生默认值"}
         </Button>
       </div>
     </div>
@@ -375,7 +371,7 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
   };
   const configuration = useClientConfigurationApply(props, () => setOpenSection(null));
   return <>
-    <div className="asb-client-settings-panel" aria-label="客户端通用配置" onKeyDown={(event) => {
+    <div className="asb-client-settings-panel" aria-label="客户端配置" onKeyDown={(event) => {
       if (event.key !== "Escape" || !openSection) return;
       event.preventDefault(); setOpenSection(null); panelTrigger.current?.focus();
     }}>
@@ -386,16 +382,8 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
         reviewId={reviewId}
         instructionsId={instructionsId}
         resetId={resetId}
+        configuration={configuration}
         onSectionChange={changeSection}
-        resetDisabled={!configuration.canNativeReset || props.busy || configuration.applying}
-        resetLabel={resetOpen && configuration.applying
-          ? configuration.resetView === "clearExtraConfiguration" ? "正在生成清空预览" : "正在生成恢复预览"
-          : resetOpen ? "收起恢复设置" : "恢复为客户端原生默认值"}
-        onReset={(trigger) => {
-          const next = !resetOpen;
-          changeSection(next ? "reset" : null, trigger);
-          if (next) configuration.prepareNativeReset();
-        }}
       />
       <ClientSettingsDisclosure id={reviewId} label="配置审阅" section="review" open={reviewOpen}>
         <ClientConfigurationReview {...props} open={reviewOpen} />

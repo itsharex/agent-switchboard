@@ -131,7 +131,7 @@ mod tests {
             provider_type: Some("codex_oauth".into()),
             ..Default::default()
         };
-        assert!(options.requires_gateway());
+        assert!(options.requires_gateway(None));
         assert!(ClaudeAuthProvider::CodexOauth
             .validate_protocol(UpstreamProtocol::AnthropicMessages)
             .is_err());

@@ -40,8 +40,9 @@ pub(super) fn prepare(
     )
     .map_err(invalid)?;
     // Short Codex continuations only convert when the referenced tool calls
-    // are restored first; the Chat bridge is the only protocol that needs it.
-    if route.upstream_protocol == UpstreamProtocol::ChatCompletions {
+    // are restored first; cross-protocol bridges all need it. Native
+    // Responses keeps `previous_response_id` for the upstream's own store.
+    if route.upstream_protocol != UpstreamProtocol::Responses {
         let binding =
             crate::gateway::codex::history::HistoryBinding::for_request(&body, Some(incoming));
         let mut value: serde_json::Value =

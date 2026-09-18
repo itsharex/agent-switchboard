@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import type { ExtensionsDeps } from "../app/extensions/extension-ops";
-import { pickDirectory, pickSkillZip } from "../api/client";
+import { pickDirectory, pickFile } from "../api/client";
 import { EXTENSION_SECTIONS, type ExtensionSection } from "../app/navigation";
 import { Button } from "../components/Button";
 import { SkillSourceBrowser } from "../components/extensions/SkillSourceBrowser";
 import { ExtensionLibraryPanel } from "./extensions/ExtensionLibraryPanel";
 import { ExtensionToolbar } from "./extensions/ExtensionToolbar";
-import { ExtensionDiscoveryPanel } from "./extensions/ExtensionDiscoveryDialog";
+import { ExtensionDiscoveryView } from "./extensions/ExtensionDiscoveryView";
 import { ExtensionWorkspaceDialogs } from "./extensions/ExtensionWorkspaceDialogs";
 import type { ExtensionNavigation } from "./extensions/useExtensionView";
 import { useExtensionWorkspace } from "./extensions/useExtensionWorkspace";
@@ -26,44 +26,62 @@ function ExtensionContentPanel({ section, active, children }: {
   );
 }
 
+/** Discovery and source browsing are full-page editor frames that replace the
+ * whole workspace, mirroring the provider editor's mounting pattern; only the
+ * library keeps the toolbar-and-tabs workspace. */
 export function ExtensionsPage(props: ExtensionsPageProps) {
   const workspace = useExtensionWorkspace(props);
   const recovery = workspace.ext.workspace?.recoveryRequired ?? [];
   const section = workspace.nav.section;
-  const content = workspace.nav.discoveryOpen ? (
-    <ExtensionDiscoveryPanel workspace={workspace} />
-  ) : workspace.nav.sourceBrowser && workspace.nav.kind === "skill" ? (
-    <SkillSourceBrowser
-      busy={workspace.writeBlocked} items={workspace.items} onScanLocal={workspace.ext.scanLocal}
-      onImport={workspace.importCandidate} onPickDirectory={pickDirectory} onPickZip={pickSkillZip} />
-  ) : (
-    <ExtensionLibraryPanel workspace={workspace} />
-  );
+  const dialogs = <ExtensionWorkspaceDialogs workspace={workspace} />;
+  const recoveryBanner = recovery.length > 0 ? (
+    <div className="asb-banner asb-banner-error" role="alert" aria-label="扩展恢复告警">
+      <span>存在未能自动恢复的扩展操作，扩展写入已暂停：{recovery.join("；")}</span>
+      <Button
+        variant="secondary"
+        disabled={workspace.busy}
+        onClick={() => void workspace.ext.recoverTransactions()}
+      >
+        尝试恢复
+      </Button>
+    </div>
+  ) : null;
+  if (workspace.nav.discoveryOpen) {
+    return (
+      <div className="asb-editor-route">
+        <ExtensionDiscoveryView workspace={workspace} notice={recoveryBanner} />
+        {dialogs}
+      </div>
+    );
+  }
+  if (workspace.nav.sourceBrowser && workspace.nav.kind === "skill") {
+    return (
+      <div className="asb-editor-route">
+        <SkillSourceBrowser
+          busy={workspace.writeBlocked} items={workspace.items} onScanLocal={workspace.ext.scanLocal}
+          onImport={workspace.importCandidate} onPickDirectory={pickDirectory}
+          onPickZip={() => pickFile("ZIP archives", ["zip"])}
+          onBack={() => workspace.nav.setSourceBrowser(false)} notice={recoveryBanner} />
+        {dialogs}
+      </div>
+    );
+  }
   return (
     <section
       className="asb-ext"
       aria-label="扩展"
-      data-view={workspace.nav.discoveryOpen ? "discovery" : workspace.nav.sourceBrowser ? "sources" : section}
+      data-view={section}
     >
       <ExtensionToolbar workspace={workspace} />
-      {recovery.length > 0 && (
-        <div className="asb-banner asb-banner-error" role="alert" aria-label="扩展恢复告警">
-          <span>存在未能自动恢复的扩展操作，扩展写入已暂停：{recovery.join("；")}</span>
-          <Button
-            variant="secondary"
-            disabled={workspace.busy}
-            onClick={() => void workspace.ext.recoverTransactions()}
-          >
-            尝试恢复
-          </Button>
-        </div>
-      )}
+      {recoveryBanner}
       {EXTENSION_SECTIONS.map(({ value }) => (
         <ExtensionContentPanel key={value} section={value} active={section}>
-          {section === value ? content : null}
+          {section === value ? (
+            <ExtensionLibraryPanel workspace={workspace} />
+          ) : null}
         </ExtensionContentPanel>
       ))}
-      <ExtensionWorkspaceDialogs workspace={workspace} />
+      {dialogs}
     </section>
   );
 }

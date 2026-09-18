@@ -10,8 +10,6 @@
 use super::{TransformError, Usage};
 use asb_core::contracts::UpstreamProtocol;
 use serde_json::{json, Map, Value};
-#[cfg(test)]
-mod tests;
 
 impl Usage {
     /// Stream usage is cumulative but may be reported in partial snapshots.

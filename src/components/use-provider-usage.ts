@@ -1,29 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ensureProfileUsage,
   onTrayChanged,
   queryProfileUsage,
   readProfileUsage,
-  type ProviderProfile,
+  type UsageQuery,
   type UsageSummary,
 } from "../api/client";
 
 /** The card owns queries so collapsing its details does not stop them. The
- * backend scheduler owns automatic re-query timing; this hook only performs
- * the mount-time first read and manual refreshes, and adopts newer cache
- * entries announced through tray-changed. */
-export function useProviderUsage(profile: ProviderProfile) {
+ * backend owns all timing: the mount-time read ensures freshness (the cached
+ * entry while not due, one query pulled forward when due), the refresh
+ * button forces one query, and tray-changed adopts newer cache entries.
+ * Both clients' rows feed it the same minimal facts: the stable profile id
+ * and its persisted query. */
+export function useProviderUsage(profile: { id: string; usageQuery?: UsageQuery | null }) {
   const revision = JSON.stringify(profile.usageQuery);
   const [data, setData] = useState<UsageSummary | null>(null);
   const [querying, setQuerying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestVersion = useRef(0);
 
-  const run = useCallback(async () => {
+  const request = useCallback(async (mode: "ensure" | "force") => {
     const version = ++requestVersion.current;
     setQuerying(true);
     setError(null);
     try {
-      const summary = await queryProfileUsage(profile.id);
+      const summary = mode === "force"
+        ? await queryProfileUsage(profile.id)
+        : await ensureProfileUsage(profile.id);
       if (requestVersion.current === version) setData(summary);
     } catch (caught) {
       if (requestVersion.current === version) {
@@ -34,14 +39,16 @@ export function useProviderUsage(profile: ProviderProfile) {
     }
   }, [profile.id]);
 
+  const run = useCallback(() => request("force"), [request]);
+
   useEffect(() => {
     setData(null);
-    void run();
+    void request("ensure");
     return () => {
       requestVersion.current += 1;
     };
-    // A changed query contract requires a new first read.
-  }, [revision, run]);
+    // A changed query contract requires a new ensure-fresh read.
+  }, [revision, request]);
 
   useEffect(() => {
     let disposed = false;

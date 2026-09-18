@@ -218,13 +218,15 @@ pub struct SwitchRequest<'a> {
 /// callback rollback contract as a provider projection, without recomputing
 /// unrelated provider or client-setting fields.
 /// Builds the same redacted, hash-bound preview for a caller-rendered
-/// document that the executor will later write.
+/// document that the executor will later write. `diff_scope` selects whether
+/// the change list covers catalog-owned keys only or every leaf (deep reset).
 pub fn preview_rendered(
     app: asb_core::AppKind,
     target: &Path,
     backup_dir: &Path,
     current: &str,
     rendered: &str,
+    diff_scope: asb_core::adapter::PreviewDiff,
 ) -> Result<FilePreview, SwitchError> {
     let comparison_current = if current.is_empty() && app == asb_core::AppKind::Claude {
         "{}"
@@ -239,7 +241,15 @@ pub fn preview_rendered(
         message: error.message,
         line: error.line,
     })?;
-    let changes = asb_core::adapter::owned_diff(app, rendered, comparison_current).map_err(|error| SwitchError::PlanRejected {
+    let changes = match diff_scope {
+        asb_core::adapter::PreviewDiff::Owned => {
+            asb_core::adapter::owned_diff(app, rendered, comparison_current)
+        }
+        asb_core::adapter::PreviewDiff::Full => {
+            asb_core::adapter::full_diff(app, rendered, comparison_current)
+        }
+    }
+    .map_err(|error| SwitchError::PlanRejected {
         message: error.message,
         line: error.line,
     })?;
