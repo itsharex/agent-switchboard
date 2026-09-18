@@ -5,6 +5,7 @@ import { WorkspaceHeader } from "./WorkspaceHeader";
 interface Props {
   title: string;
   titleRef?: Ref<HTMLHeadingElement>;
+  /** Destination name, carried as the back control's accessible label. */
   backLabel: string;
   busy?: boolean;
   /** Header row 2 context (tabs, provider name) beside the back control. */
@@ -37,9 +38,8 @@ export function EditorFrame({
         title={title}
         titleRef={titleRef}
         back={
-          <Button variant="back" className="asb-editor-back" disabled={busy} aria-label={backLabel} onClick={onBack}>
+          <Button variant="back" disabled={busy} aria-label={backLabel} onClick={onBack}>
             <span aria-hidden="true">←</span>
-            {backLabel}
           </Button>
         }
         primary={primary}

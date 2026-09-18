@@ -74,13 +74,15 @@ function BooleanRow({
         </div>
         <span className="asb-setting-actual" aria-live="polite">当前配置：{actualValueLabel(actualValue)}</span>
       </div>
-      <div className="asb-subagent-controls" role="radiogroup" aria-label={label}>
-        <RadioOption name={groupName} checked={value.mode === "automatic"} disabled={disabled}
-          label="自动" onChange={() => onChange(field, automatic)} />
-        <RadioOption name={groupName} checked={value.mode === "explicit" && value.value === true}
-          disabled={disabled} label="开启" onChange={() => onChange(field, explicit(true))} />
-        <RadioOption name={groupName} checked={value.mode === "explicit" && value.value === false}
-          disabled={disabled} label="关闭" onChange={() => onChange(field, explicit(false))} />
+      <div className="asb-choice-controls">
+        <div className="asb-segments" role="radiogroup" aria-label={label}>
+          <RadioOption name={groupName} checked={value.mode === "automatic"} disabled={disabled}
+            label="自动" onChange={() => onChange(field, automatic)} />
+          <RadioOption name={groupName} checked={value.mode === "explicit" && value.value === true}
+            disabled={disabled} label="开启" onChange={() => onChange(field, explicit(true))} />
+          <RadioOption name={groupName} checked={value.mode === "explicit" && value.value === false}
+            disabled={disabled} label="关闭" onChange={() => onChange(field, explicit(false))} />
+        </div>
       </div>
     </div>
   );
@@ -118,11 +120,13 @@ function NumberRow({
         </div>
         <span className="asb-setting-actual" aria-live="polite">当前配置：{actualValueLabel(actualValue)}</span>
       </div>
-      <div className="asb-subagent-controls" role="radiogroup" aria-label="最大并发子 agent 线程数配置方式">
-        <RadioOption name={modeName} checked={!custom} disabled={disabled} label="自动"
-          onChange={() => onChange("maxConcurrentThreadsPerSession", automatic)} />
-        <RadioOption name={modeName} checked={custom} disabled={disabled} label="指定"
-          onChange={() => onChange("maxConcurrentThreadsPerSession", explicit(current))} />
+      <div className="asb-choice-controls">
+        <div className="asb-segments" role="radiogroup" aria-label="最大并发子 agent 线程数配置方式">
+          <RadioOption name={modeName} checked={!custom} disabled={disabled} label="自动"
+            onChange={() => onChange("maxConcurrentThreadsPerSession", automatic)} />
+          <RadioOption name={modeName} checked={custom} disabled={disabled} label="指定"
+            onChange={() => onChange("maxConcurrentThreadsPerSession", explicit(current))} />
+        </div>
         {custom && (
           <div className="asb-subagent-input">
             <Input

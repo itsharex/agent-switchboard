@@ -70,8 +70,9 @@
   height: var(--asb-touch-target);
 }
 
-/* Identity owns the current-state badge. The data columns stay aligned and
-   can be compared without reading a vertically stacked detail block. */
+/* The single data rail keeps name, model, and endpoint comparable at a
+   glance; the applied badge leads the model zone so every model value
+   shares one left edge. */
 .asb-row {
   display: flex;
   align-items: center;
@@ -80,20 +81,17 @@
 }
 
 .asb-row-identity-copy,
-.asb-row-identity-heading,
 .asb-row-model,
 .asb-row-endpoint {
   min-width: 0;
 }
 
+/* The flex context blockifies the inline name so its ellipsis clips;
+   as an overflow-hidden flex item its automatic minimum size is zero. */
 .asb-row-identity-copy {
   flex: 1;
-}
-
-.asb-row-identity-heading {
   display: flex;
   align-items: center;
-  gap: var(--asb-space-1);
 }
 
 .asb-row-model,
@@ -109,6 +107,7 @@
   display: flex;
   flex-flow: row nowrap;
   align-items: center;
+  gap: var(--asb-space-1);
   align-self: stretch;
   height: var(--asb-row-line-height);
   min-height: var(--asb-row-line-height);
@@ -194,6 +193,16 @@
   transition:
     background-color var(--asb-motion-press) var(--asb-easing),
     color var(--asb-motion-press) var(--asb-easing);
+}
+
+/* The applied chip only ever renders on the highlighted live row, where the
+   plain selected tint equals the row background and the chip dissolves into
+   stray text; deepen it and ring it with the action color so the status
+   reads as a badge at the head of the model zone. */
+.asb-row-item.is-live .asb-pill-status {
+  background: color-mix(in srgb, var(--asb-action) 14%, var(--asb-row-selected));
+  border: 1px solid color-mix(in srgb, var(--asb-action) 32%, transparent);
+  color: var(--asb-text);
 }
 
 .asb-pill-status {

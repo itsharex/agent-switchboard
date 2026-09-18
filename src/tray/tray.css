@@ -73,19 +73,23 @@ html, body, #root { background: transparent; overflow: hidden; }
   background: var(--asb-row-selected);
 }
 
-.tray-provider.asb-btn {
+/* `unstyled` variant: this class owns every visual property outright instead
+   of fighting the (0,3,0) base geometry rules, which silently overrode the
+   full-width flex layout before. */
+.tray-provider {
   display: flex;
+  align-items: center;
   justify-content: flex-start;
-  min-width: 0;
+  gap: calc(var(--asb-space-unit) + var(--asb-space-hairline));
   min-height: var(--asb-control-height-compact);
   padding: var(--asb-space-hairline) var(--asb-space-2);
-  text-align: left;
-  border-color: transparent;
+  border: 0;
+  border-radius: var(--asb-radius);
   background: transparent;
-  box-shadow: none;
+  text-align: left;
 }
-.tray-provider.asb-btn:disabled { opacity: 1; }
-.tray-provider.asb-btn:not(:disabled):hover { background: var(--asb-content-muted); }
+.tray-provider:disabled { opacity: 1; }
+.tray-provider:not(:disabled):hover { background: var(--asb-content-muted); }
 .tray-check { display: flex; flex: none; width: var(--asb-icon-size-md); color: var(--asb-action); }
 .tray-provider-name {
   flex: 1;
@@ -122,7 +126,7 @@ html, body, #root { background: transparent; overflow: hidden; }
   padding: var(--asb-space-1);
   border-top: 1px solid var(--asb-hairline);
 }
-.tray-ghost-button.asb-btn { min-height: var(--asb-control-height-compact); border-color: transparent; background: transparent; min-width: 0; gap: calc(var(--asb-space-unit) + var(--asb-space-hairline)); }
+.tray-ghost-button.asb-btn { border-color: transparent; background: transparent; min-width: 0; }
 .tray-error {
   padding: var(--asb-space-1) var(--asb-space-4);
   color: var(--asb-danger);

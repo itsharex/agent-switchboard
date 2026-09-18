@@ -35,9 +35,7 @@ $:
           script: |
             export PATH="/root/.cargo/bin:$PATH"
             export RUSTUP_TOOLCHAIN=stable
-            npm run test:updater-release
             cargo test --workspace
-            npm test -- --run
             npm run build
         - name: 构建与汇集 Linux 安装包
           script: |

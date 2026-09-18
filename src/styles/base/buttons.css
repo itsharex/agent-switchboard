@@ -103,8 +103,8 @@ button:disabled {
   background: color-mix(in srgb, var(--asb-action) 88%, var(--asb-text));
 }
 
-/* Page-level back control. Arrow-only uses stay square; provider editors add
-   a text label so the fixed editor header always states the destination. */
+/* Page-level back control: a square arrow-only button; the destination lives
+   in its accessible name, not as visible text decoration. */
 .asb-btn-back {
   min-width: 0;
   width: var(--asb-touch-target);

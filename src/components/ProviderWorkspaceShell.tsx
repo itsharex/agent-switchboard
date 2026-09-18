@@ -217,13 +217,11 @@ export function ProviderRowShell({
         <div className="asb-row">
           <span className="asb-avatar" aria-hidden="true">{initial}</span>
           <span className="asb-row-identity-copy">
-            <span className="asb-row-identity-heading">
-              <span className="asb-row-name" title={name}>{name}</span>
-              {active && <span className="asb-pill-status">已应用</span>}
-            </span>
+            <span className="asb-row-name" title={name}>{name}</span>
           </span>
         </div>
         <span className="asb-row-model">
+          {active && <span className="asb-pill-status">已应用</span>}
           <span className="asb-row-model-value">{model ?? "默认模型"}</span>
         </span>
         <span className="asb-row-endpoint">{endpoint}</span>

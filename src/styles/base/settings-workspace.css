@@ -362,7 +362,7 @@
 
 /* Codex subagent runtime is the [agents] section of the same user-level
    config.toml. Its module header makes the section boundary explicit, while
-   its controls reuse the shared client-preference row anatomy. */
+   its rows reuse the shared client-preference row anatomy. */
 .asb-subagent-settings {
   display: grid;
   gap: var(--asb-space-3);
@@ -375,7 +375,9 @@
   display: grid;
   gap: var(--asb-space-2);
 }
-.asb-subagent-controls {
+/* Choice-row control rail shared by client preferences, provider parameters
+   and the subagent module: one segments group plus optional inline inputs. */
+.asb-choice-controls {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -383,7 +385,7 @@
   flex-wrap: wrap;
   gap: var(--asb-space-2);
 }
-.asb-subagent-controls > .asb-segments {
+.asb-choice-controls > .asb-segments {
   max-width: 100%;
   flex-wrap: wrap;
 }
@@ -393,13 +395,6 @@
 }
 .asb-subagent-input .asb-input {
   width: 100%;
-}
-.asb-subagent-error-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--asb-space-2);
 }
 
 

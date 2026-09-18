@@ -144,11 +144,13 @@
   color: var(--asb-text);
 }
 
+/* The selected segment stays flush with its rail: a surface step plus a
+   hairline, never a raised shadow. */
 .asb-seg-opt.is-active {
   background: var(--asb-content);
+  border-color: var(--asb-hairline);
   color: var(--asb-text);
   font-weight: 600;
-  box-shadow: var(--asb-shadow-raised);
 }
 
 .asb-seg-opt input {

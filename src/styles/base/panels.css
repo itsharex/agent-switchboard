@@ -85,8 +85,6 @@
 
 /* In gap-owning containers the layout gap owns the space below the header. */
 .asb-page-stack > .asb-workspace-header,
-.asb-provider-import > .asb-workspace-header,
-.asb-usage-workspace > .asb-workspace-header,
 .asb-sessions > .asb-workspace-header,
 .asb-diagnostics > .asb-module-header {
   margin-bottom: 0;

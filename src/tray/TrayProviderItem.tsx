@@ -23,7 +23,7 @@ export function TrayProviderItem({ provider, busy, pending, onSwitch }: Props) {
   return (
     <article className={cx("tray-provider-item", provider.active && "is-active")}>
       <Button
-        variant="secondary"
+        variant="unstyled"
         className="tray-provider"
         disabled={busy || provider.active}
         aria-label={balance ? `${action}，${balance}` : action}

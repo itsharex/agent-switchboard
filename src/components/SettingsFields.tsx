@@ -198,7 +198,7 @@ function ClientPreferenceRow({ spec, value, baselineValue, actualValue, showActu
         </div>
         <span className="asb-setting-actual" aria-live="polite">当前配置：{actualLabel}</span>
       </div>
-      <div className="asb-subagent-controls">
+      <div className="asb-choice-controls">
         <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
       </div>
       {change && (
@@ -224,7 +224,7 @@ function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: Pr
         </div>
         <span className="asb-setting-actual" aria-live="polite">当前设置：{choiceLabel(spec, baseline)}</span>
       </div>
-      <div className="asb-subagent-controls">
+      <div className="asb-choice-controls">
         <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
       </div>
       {changed && <p className="asb-setting-pending" role="status">{pendingSettingMessage(spec, value, "保存")}</p>}

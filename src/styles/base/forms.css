@@ -276,19 +276,33 @@
 
 .asb-font-menu,
 .asb-model-menu {
-  position: absolute;
-  top: calc(100% + var(--asb-space-unit));
-  right: 0;
-  z-index: 60;
   display: flex;
   flex-direction: column;
-  width: min(22rem, calc(100vw - 3rem));
   overflow: hidden;
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius);
   background: var(--asb-surface-menu);
   color: var(--asb-text);
   box-shadow: var(--asb-shadow-modal), var(--asb-inset-highlight);
+}
+
+.asb-font-menu {
+  position: absolute;
+  top: calc(100% + var(--asb-space-unit));
+  right: 0;
+  z-index: 60;
+  width: min(22rem, calc(100vw - 3rem));
+}
+
+/* The model menu portals to <body>: ModelPicker pins it to its trigger with
+   fixed coordinates, flips it above near the window bottom, and lets it grow
+   to fit long model ids inside the viewport. */
+.asb-model-menu {
+  position: fixed;
+  z-index: 60;
+  width: auto;
+  min-width: min(22rem, calc(100vw - 3rem));
+  max-width: calc(100vw - 1.5rem);
 }
 
 .asb-font-search,
@@ -406,11 +420,9 @@
   color: var(--asb-text-muted);
 }
 
-/* Quick model picker: the same searchable-menu material as the font picker,
-   fed by the provider's fetched model list and grouped by vendor. */
-.asb-model-picker {
-  position: relative;
-}
+/* Quick model picker: the trigger stays in the field row while its searchable
+   menu (same material as the font picker, grouped by vendor) portals to
+   <body>, so this wrapper only groups the row, not the menu. */
 
 .asb-model-trigger {
   display: flex;
@@ -516,23 +528,6 @@
 .asb-editor-frame .asb-panel-title {
   font: var(--asb-text-title);
   letter-spacing: -0.02em;
-}
-
-.asb-editor-back {
-  width: auto;
-  height: auto;
-  min-width: var(--asb-touch-target);
-  flex-direction: column;
-  gap: var(--asb-space-hairline);
-  padding: var(--asb-space-1) var(--asb-space-2);
-  font: var(--asb-text-label);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.asb-editor-back > span[aria-hidden="true"] {
-  font-size: 1.25rem;
-  line-height: 1;
 }
 
 .asb-editor-frame > .asb-edit-panel {

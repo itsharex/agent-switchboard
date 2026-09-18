@@ -47,11 +47,13 @@ function SubagentModelRow({ spec, value, baselineValue, editor, busy }: {
         </div>
         <span className="asb-setting-actual" aria-live="polite">当前设置：{choiceLabel(spec, baselineValue)}</span>
       </div>
-      <div className="asb-subagent-controls" role="radiogroup" aria-label={`${spec.label}配置方式`}>
-        <RadioOption name={`${spec.key}-mode`} checked={!custom} disabled={busy} label="自动"
-          onChange={() => setValue(automatic)} />
-        <RadioOption name={`${spec.key}-mode`} checked={custom} disabled={busy} label="指定"
-          onChange={() => setValue(explicit(current || defaultModel))} />
+      <div className="asb-choice-controls">
+        <div className="asb-segments" role="radiogroup" aria-label={`${spec.label}配置方式`}>
+          <RadioOption name={`${spec.key}-mode`} checked={!custom} disabled={busy} label="自动"
+            onChange={() => setValue(automatic)} />
+          <RadioOption name={`${spec.key}-mode`} checked={custom} disabled={busy} label="指定"
+            onChange={() => setValue(explicit(current || defaultModel))} />
+        </div>
         {custom && (
           <div className="asb-model-control asb-provider-subagent-model-control">
             <Input code aria-label={`${spec.label}值`} autoComplete="off" disabled={busy}
