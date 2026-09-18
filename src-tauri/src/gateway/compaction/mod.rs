@@ -81,6 +81,7 @@ pub(crate) fn expand_input(
 }
 
 #[cfg(test)]
+#[allow(dead_code)] // compaction harness
 pub(crate) fn seal_for_test(summary: &str, key: &[u8; 32]) -> Result<String, TransformError> {
     payload::seal(summary, key)
 }

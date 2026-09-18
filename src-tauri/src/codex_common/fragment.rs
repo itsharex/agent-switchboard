@@ -48,6 +48,7 @@ pub(crate) fn view(root: &Path) -> Result<FragmentView, String> {
         revision,
     })
 }
+#[allow(dead_code)] // reserved: fragment write path (test-covered)
 pub(crate) fn save(
     state: &crate::local_state::LocalState,
     text: &str,
@@ -89,6 +90,7 @@ pub(crate) fn save(
 /// 已绑定到 Codex 用户配置（App 作用域）的托管 MCP 键名。项目作用域写的是
 /// 另一份文档，与用户级片段无关；停用的绑定同样计数——它的键随时可能被
 /// 重新启用，且停用本身也要经过这些键。
+#[allow(dead_code)] // reserved: fragment write path (test-covered)
 fn managed_codex_mcp_keys(state: &crate::local_state::LocalState) -> Result<Vec<String>, String> {
     let store = crate::extensions::store::ExtensionStore::from_state(state);
     let bindings = store

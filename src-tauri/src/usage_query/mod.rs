@@ -32,6 +32,7 @@ pub(crate) fn validate_persisted(query: &UsageQuery) -> Result<(), String> {
 /// explicit `request` input. It is never echoed in errors or the returned
 /// summary.
 #[cfg(test)]
+#[allow(dead_code)] // usage query harness
 pub fn run_usage_query(
     query: &UsageQuery,
     api_key: &str,

@@ -2,18 +2,19 @@
 mod budget;
 mod contracts;
 mod pricing;
-mod query;
+// Reserved: the session-usage replay and ledger query slates are built but
+// not yet wired to commands; expect-annotations drop once they are.
+#[expect(dead_code)]
 mod session_parse;
+#[expect(dead_code)]
 mod session_sync;
 mod settings;
 mod store;
 pub(crate) use contracts::*;
 pub(crate) use pricing::{estimate, CodexModelPrice};
-pub(crate) use query::{CodexLedgerFilter, CodexLedgerPage, CodexLedgerSummary};
+#[expect(unused_imports)] // reserved: session-usage sync slate
 pub(crate) use session_sync::{
     rebuild_codex_session_usage, sync_codex_session_usage, CodexSessionSyncReport,
 };
-pub(crate) use settings::{
-    read_settings, save_settings, CodexMeteringSettings, CodexMeteringSnapshot,
-};
+pub(crate) use settings::{read_settings, CodexMeteringSettings};
 pub(crate) use store::CodexRequestLedger;

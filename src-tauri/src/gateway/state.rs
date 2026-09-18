@@ -42,6 +42,7 @@ impl GatewayStateFile {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // verification harness
     pub(crate) fn has_routes(&self) -> bool {
         self.codex_route.is_some() || self.claude_route.is_some()
     }

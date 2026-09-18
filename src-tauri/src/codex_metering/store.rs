@@ -1,7 +1,8 @@
-use super::{CodexLedgerFilter, CodexModelPrice, CodexRequestRecord};
+use super::CodexRequestRecord;
 
 /// Persistent per-file cursor of the session usage sync pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(dead_code)] // reserved: session-usage sync slate
 pub(super) struct SessionSyncCursor {
     pub file_path: String,
     pub modified_nanos: i64,
@@ -10,6 +11,7 @@ pub(super) struct SessionSyncCursor {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+#[expect(dead_code)] // reserved: session-usage sync slate
 pub(super) struct SessionInsertOutcome {
     pub imported: u32,
     pub skipped: u32,
@@ -18,9 +20,12 @@ pub(super) struct SessionInsertOutcome {
 
 /// Cross-source dedup window: a session event whose exact token fingerprint
 /// matches a successful gateway record within this window was already billed.
+#[expect(dead_code)] // reserved: session-usage sync slate
 const SESSION_PROXY_DEDUP_WINDOW_MS: i64 = 10 * 60 * 1000;
 
 impl CodexRequestLedger {
+    // Whole block belongs to the reserved session-usage sync slate.
+    #[expect(dead_code)]
     pub(super) fn load_session_cursors(
         &self,
     ) -> Result<std::collections::BTreeMap<String, SessionSyncCursor>, String> {
@@ -151,6 +156,7 @@ impl CodexRequestLedger {
     }
 }
 
+#[expect(dead_code)] // reserved: session-usage sync slate
 fn upsert_session_cursor(
     transaction: &Connection,
     cursor: &SessionSyncCursor,
@@ -173,6 +179,7 @@ fn upsert_session_cursor(
 
 /// Same-model exact token counts inside the dedup window were already billed by
 /// the gateway. Cache creation is unknown in session logs and matches any value.
+#[expect(dead_code)] // reserved: session-usage sync slate
 fn proxy_fingerprint_exists(
     transaction: &Connection,
     record: &CodexRequestRecord,
@@ -201,6 +208,7 @@ fn proxy_fingerprint_exists(
         .map_err(db_error)
 }
 
+#[expect(dead_code)] // reserved: session-usage sync slate
 fn id_exists(transaction: &Connection, id: &str) -> Result<bool, String> {
     transaction
         .query_row(
@@ -211,6 +219,7 @@ fn id_exists(transaction: &Connection, id: &str) -> Result<bool, String> {
         .map_err(db_error)
 }
 
+#[expect(dead_code)] // reserved: session-usage sync slate
 fn suspected_session_duplicate(
     transaction: &Connection,
     record: &CodexRequestRecord,
@@ -241,7 +250,6 @@ fn suspected_session_duplicate(
 
 use rusqlite::{params, Connection};
 use std::{
-    collections::BTreeMap,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -390,46 +398,6 @@ impl CodexRequestLedger {
             }
         }
         transaction.commit().map_err(db_error)
-    }
-    /// Price backfill retains the originally accepted provider, model and multiplier.
-    pub(crate) fn reprice(
-        &self,
-        filter: &CodexLedgerFilter,
-        prices: &BTreeMap<String, CodexModelPrice>,
-    ) -> Result<u64, String> {
-        filter.validate()?;
-        for price in prices.values() {
-            price.validate()?;
-        }
-        if self.open_read()?.is_none() {
-            return Ok(0);
-        }
-        let mut connection = self.open_write()?;
-        let transaction = connection.transaction().map_err(db_error)?;
-        let sql = format!("SELECT payload FROM codex_requests {}", super::query::WHERE);
-        let rows = {
-            let mut statement = transaction.prepare(&sql).map_err(db_error)?;
-            let rows = statement
-                .query_map(filter.params(), |row| row.get::<_, String>(0))
-                .map_err(db_error)?;
-            rows.collect::<Result<Vec<_>, _>>().map_err(db_error)?
-        };
-        for raw in &rows {
-            let mut record: CodexRequestRecord =
-                serde_json::from_str(raw).map_err(|_| "Codex 请求记录格式无效；未回填费用")?;
-            record.cost = super::estimate(&record, prices)?;
-            record.pricing_error = None;
-            record.validate()?;
-            let payload = serde_json::to_string(&record).map_err(|error| error.to_string())?;
-            transaction
-                .execute(
-                    "UPDATE codex_requests SET cost_micros=?1,payload=?2 WHERE id=?3",
-                    params![record.cost_micros()?, payload, record.id],
-                )
-                .map_err(db_error)?;
-        }
-        transaction.commit().map_err(db_error)?;
-        Ok(rows.len() as u64)
     }
 }
 fn initialize(connection: &mut Connection) -> Result<(), String> {

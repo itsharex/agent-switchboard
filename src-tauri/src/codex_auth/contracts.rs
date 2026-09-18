@@ -79,24 +79,5 @@ impl Default for AccountsFile {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AccountSummary {
-    pub id: String,
-    pub email: Option<String>,
-    pub plan: Option<String>,
-    pub account_label: String,
-    pub is_default: bool,
-    pub generation: u64,
-    pub expires_at: i64,
-    pub bound_profile_ids: Vec<String>,
-    pub native_sync_pending: bool,
-    pub native_sync_error: Option<String>,
-}
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AccountsView {
-    pub revision: String,
-    pub accounts: Vec<AccountSummary>,
-    pub bindings: BTreeMap<String, AccountSelection>,
-}
+
+

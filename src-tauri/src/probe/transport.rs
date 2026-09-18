@@ -254,6 +254,7 @@ pub fn probe(url: &str) -> Result<ProbeResult, String> {
 /// The warm-up is deliberately untimed and its outcome discarded: a host that
 /// only answers the second request is still reported from the timed phase, and
 /// a host that fails both still surfaces exactly one classified error.
+#[expect(dead_code)] // reserved: warmed probe surface
 pub fn probe_warmed(url: &str, attempt_timeout: Duration) -> Result<ProbeResult, String> {
     measure(url, &client(), attempt_timeout, true)
 }

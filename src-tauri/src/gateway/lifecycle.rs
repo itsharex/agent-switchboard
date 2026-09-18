@@ -345,6 +345,7 @@ impl GatewayController {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)] // verification harness
     pub(crate) fn is_listening(&self) -> bool {
         self.listening().is_some()
     }

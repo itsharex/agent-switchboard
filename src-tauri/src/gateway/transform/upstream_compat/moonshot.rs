@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn ref_siblings_move_into_allof_only_where_present() {
-        let mut body = json!({
+        let body = json!({
             "tools": [
                 { "type": "function", "function": { "name": "automation_update", "parameters": desktop_like_schema() } },
                 { "type": "function", "function": { "name": "clean", "parameters": { "type": "object" } } }

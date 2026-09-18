@@ -62,17 +62,3 @@ pub(crate) fn read_settings(root: &Path) -> Result<CodexMeteringSnapshot, String
         revision: asb_switch::sha256_hex(text.as_deref().unwrap_or("")),
     })
 }
-pub(crate) fn save_settings(
-    root: &Path,
-    settings: CodexMeteringSettings,
-    expected_revision: &str,
-) -> Result<CodexMeteringSnapshot, String> {
-    settings.validate()?;
-    if read_settings(root)?.revision != expected_revision {
-        return Err("Codex 计量配置已更改，请重新读取".into());
-    }
-    let text = serde_json::to_string_pretty(&settings).map_err(|error| error.to_string())?;
-    crate::config_store::write_json_atomic(&root.join("codex/metering.json"), &text)
-        .map_err(|error| format!("无法保存 Codex 计量配置：{error}"))?;
-    read_settings(root)
-}

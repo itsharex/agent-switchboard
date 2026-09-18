@@ -84,6 +84,7 @@ impl OutboundProxySettings {
 }
 
 /// Masks credentials in a proxy URL for logs and diagnostics.
+#[expect(dead_code)] // reserved: proxy log surface
 pub(crate) fn mask_url(url: &str) -> String {
     let Some(position) = url.find("://") else {
         return "[代理]".into();
@@ -110,6 +111,7 @@ pub(crate) fn read(state_root: &Path) -> Result<OutboundProxySettings, String> {
     Ok(settings)
 }
 
+#[expect(dead_code)] // reserved: proxy settings editor
 pub(crate) fn save(
     state_root: &Path,
     settings: OutboundProxySettings,

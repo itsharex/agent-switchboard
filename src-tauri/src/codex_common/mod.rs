@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, path::Path, sync::Mutex};
 
 mod fragment;
-pub(crate) use fragment::{resolve as resolve_fragment, save as save_fragment};
+pub(crate) use fragment::resolve as resolve_fragment;
+#[allow(unused_imports)] // reserved: fragment write path (test-covered)
+pub(crate) use fragment::save as save_fragment;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CommonPolicy {
@@ -31,6 +33,7 @@ pub(crate) struct CommonView {
     pub settings: ClientSettingsSnapshot,
     pub fragment: fragment::FragmentView,
 }
+#[allow(dead_code)] // reserved: fragment write path (test-covered)
 static LOCK: Mutex<()> = Mutex::new(());
 fn path(root: &Path) -> std::path::PathBuf {
     root.join("codex/common-config-policy.json")
@@ -77,6 +80,7 @@ pub(crate) fn resolve(
         view.settings.settings
     })
 }
+#[allow(dead_code)] // reserved: fragment enable toggle (test-covered)
 pub(crate) fn set_enabled(
     state: &crate::local_state::LocalState,
     profile_id: &str,
@@ -107,6 +111,7 @@ pub(crate) fn set_enabled(
     )?;
     view(state)
 }
+#[allow(dead_code)] // reserved: fragment extraction (test-covered)
 pub(crate) fn extract(target: &Path) -> Result<SettingsValues, String> {
     let text =
         std::fs::read_to_string(target).map_err(|_| "无法读取 Codex 原生配置，请先检查配置文件")?;

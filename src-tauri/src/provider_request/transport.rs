@@ -38,6 +38,7 @@ fn client_builder(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
         .retry(reqwest::retry::never())
 }
 #[cfg(test)]
+#[allow(dead_code)] // request harness
 fn fresh_client_builder() -> reqwest::ClientBuilder {
     client_builder(reqwest::Client::builder())
 }

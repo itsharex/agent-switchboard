@@ -38,18 +38,3 @@ pub(crate) fn load(root: &Path) -> Result<AuthPolicyView, String> {
         revision: asb_switch::sha256_hex(raw.as_deref().unwrap_or("")),
     })
 }
-pub(crate) fn save(root: &Path, preserve: bool, expected: &str) -> Result<AuthPolicyView, String> {
-    let _guard = super::lock()?;
-    if load(root)?.revision != expected {
-        return Err("Codex 认证策略已变化，请重新读取".into());
-    }
-    let policy = AuthPolicy {
-        version: 1,
-        preserve_official_login: preserve,
-    };
-    crate::config_store::write_json_atomic(
-        &path(root),
-        &serde_json::to_string_pretty(&policy).map_err(|_| "Codex 认证策略无法序列化")?,
-    )?;
-    load(root)
-}

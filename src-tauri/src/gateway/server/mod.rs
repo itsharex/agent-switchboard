@@ -183,4 +183,6 @@ fn forward_request(
 }
 
 #[cfg(test)]
+// Opt-in external verification harness; tests enable it per-run.
+#[allow(dead_code)]
 mod live_support;

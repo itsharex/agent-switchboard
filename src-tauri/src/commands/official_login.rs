@@ -4,7 +4,7 @@
 //! inside a single poll call between the vendor exchange and the native
 //! credential write, and are never part of a response, log entry, or error.
 
-use super::error::{blocking, operation_error, state, CommandError};
+use super::error::{blocking, state, CommandError};
 use crate::local_state::LocalState;
 use crate::official_login::{
     self, claude, codex, credentials, LoginSession, OfficialLoginPhase, OfficialLoginStart,

@@ -5,12 +5,11 @@
 //! can be shown or aggregated after a restart; request bodies, URLs, headers,
 //! credentials, and provider response text never cross this module's API.
 
-mod query;
+
 mod spend;
 use crate::config_store::write_json_atomic;
 use asb_core::contracts::UpstreamProtocol;
 use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
-pub(crate) use query::ClaudeLedgerFilter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
@@ -90,35 +89,6 @@ pub(crate) struct ClaudeRequestLedgerFile {
     pub(crate) spend_by_day_utc: spend::DailySpend,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ClaudeRequestLedgerPage {
-    pub(crate) entries: Vec<ClaudeRequestRecord>,
-    pub(crate) offset: usize,
-    pub(crate) limit: usize,
-    pub(crate) total: usize,
-    pub(crate) has_more: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ClaudeRequestLedgerSummary {
-    pub(crate) total_requests: usize,
-    pub(crate) failed_requests: usize,
-    pub(crate) input_tokens: Option<u64>,
-    pub(crate) output_tokens: Option<u64>,
-    pub(crate) cache_read_tokens: Option<u64>,
-    pub(crate) cache_creation_tokens: Option<u64>,
-    pub(crate) reasoning_tokens: Option<u64>,
-    pub(crate) total_duration_ms: u64,
-    pub(crate) average_duration_ms: Option<u64>,
-    pub(crate) average_first_byte_latency_ms: Option<u64>,
-    pub(crate) average_first_token_latency_ms: Option<u64>,
-    pub(crate) estimated_cost_usd: String,
-    pub(crate) priced_requests: usize,
-    pub(crate) unpriced_requests: usize,
-}
-
 /// Process-local handle to the Claude request ledger. Multiple gateway
 /// controllers can point at different test directories; the mutation lock is
 /// shared so two handles can never interleave an atomic read-modify-write.
@@ -147,70 +117,37 @@ impl ClaudeRequestLedger {
         self.save(&ledger)
     }
 
-    pub(crate) fn page(
-        &self,
-        offset: usize,
-        limit: usize,
-        filter: Option<&ClaudeLedgerFilter>,
-    ) -> Result<ClaudeRequestLedgerPage, String> {
-        validate_page(limit)?;
-        let entries = self.filtered_entries(filter)?;
-        let total = entries.len();
-        let entries = entries
-            .into_iter()
-            .rev()
-            .skip(offset)
-            .take(limit)
-            .collect::<Vec<_>>();
-        Ok(ClaudeRequestLedgerPage {
-            total,
-            has_more: offset.saturating_add(entries.len()) < total,
-            entries,
-            offset,
-            limit,
-        })
-    }
 
-    pub(crate) fn summary(
+    /// Local-calendar spend guard for daily/monthly reference limits; the
+    /// pre-request check lives on the ledger because it owns the spend index.
+    pub(crate) fn budget_exceeded(
         &self,
-        filter: Option<&ClaudeLedgerFilter>,
-    ) -> Result<ClaudeRequestLedgerSummary, String> {
-        let entries = self.filtered_entries(filter)?;
-        let total_requests = entries.len();
-        let failed_requests = entries.iter().filter(|entry| failed(entry.status)).count();
-        let total_duration_ms = entries
-            .iter()
-            .map(|entry| entry.duration_ms)
-            .fold(0_u64, u64::saturating_add);
-        let first_byte_values = entries
-            .iter()
-            .filter_map(|entry| entry.first_byte_latency_ms)
-            .collect::<Vec<_>>();
-        let (estimated_cost_usd, priced_requests) = cost_summary(&entries)?;
-        Ok(ClaudeRequestLedgerSummary {
-            total_requests,
-            failed_requests,
-            input_tokens: sum_known(&entries, |entry| entry.input_tokens),
-            output_tokens: sum_known(&entries, |entry| entry.output_tokens),
-            cache_read_tokens: sum_known(&entries, |entry| entry.cache_read_tokens),
-            cache_creation_tokens: sum_known(&entries, |entry| entry.cache_creation_tokens),
-            reasoning_tokens: sum_known(&entries, |entry| entry.reasoning_tokens),
-            total_duration_ms,
-            average_duration_ms: (total_requests > 0)
-                .then(|| total_duration_ms / total_requests as u64),
-            average_first_byte_latency_ms: average(&first_byte_values),
-            average_first_token_latency_ms: average(
-                &entries
-                    .iter()
-                    .filter_map(|entry| entry.first_token_latency_ms)
-                    .collect::<Vec<_>>(),
-            ),
-            estimated_cost_usd,
-            priced_requests,
-            unpriced_requests: total_requests - priced_requests,
-        })
+        profile: &str,
+        billing: Option<&asb_core::contracts::ClaudeBilling>,
+    ) -> Result<Option<String>, String> {
+        use asb_core::contracts::decimal_micros;
+        let Some(billing) = billing.filter(|billing| {
+            billing.daily_limit_usd.is_some() || billing.monthly_limit_usd.is_some()
+        }) else {
+            return Ok(None);
+        };
+        let ledger = self.load()?.unwrap_or_else(empty_ledger);
+        let today = chrono::Utc::now().date_naive().to_string();
+        let (daily, monthly) = spend::totals(&ledger.spend_by_day_utc, profile, &today);
+        for (name, spent, limit) in [
+            ("当日", daily, &billing.daily_limit_usd),
+            ("当月", monthly, &billing.monthly_limit_usd),
+        ] {
+            if let Some(limit) = limit {
+                if spent >= decimal_micros(limit)? {
+                    return Ok(Some(format!(
+                        "Claude 供应商 UTC {name}参考费用已达到本地限额 {limit} USD"
+                    )));
+                }
+            }
+        }
+        Ok(None)
     }
-
     fn load(&self) -> Result<Option<ClaudeRequestLedgerFile>, String> {
         let text = match fs::read_to_string(&self.path) {
             Ok(text) => text,
@@ -242,14 +179,6 @@ fn empty_ledger() -> ClaudeRequestLedgerFile {
         version: LEDGER_VERSION,
         entries: Vec::new(),
         spend_by_day_utc: Default::default(),
-    }
-}
-
-fn validate_page(limit: usize) -> Result<(), String> {
-    if (1..=200).contains(&limit) {
-        Ok(())
-    } else {
-        Err("Claude 请求账本分页大小必须是 1–200".to_string())
     }
 }
 
@@ -330,39 +259,4 @@ fn prune(entries: &mut Vec<ClaudeRequestRecord>) {
         let keep_from = entries.len() - MAX_ENTRIES;
         entries.drain(..keep_from);
     }
-}
-
-fn failed(status: Option<u16>) -> bool {
-    status.is_none_or(|status| status >= 400)
-}
-
-fn sum_known<F>(entries: &[ClaudeRequestRecord], value: F) -> Option<u64>
-where
-    F: Fn(&ClaudeRequestRecord) -> Option<u64>,
-{
-    let mut total: Option<u64> = None;
-    for entry in entries {
-        if let Some(value) = value(entry) {
-            total = Some(total.unwrap_or_default().saturating_add(value));
-        }
-    }
-    total
-}
-
-fn average(values: &[u64]) -> Option<u64> {
-    (!values.is_empty())
-        .then(|| values.iter().copied().fold(0_u64, u64::saturating_add) / values.len() as u64)
-}
-
-
-fn cost_summary(entries: &[ClaudeRequestRecord]) -> Result<(String, usize), String> {
-    let mut total = 0u64;
-    let mut count = 0usize;
-    for cost in entries.iter().filter_map(|entry| entry.cost.as_ref()) {
-        total = total
-            .checked_add(asb_core::contracts::decimal_micros(&cost.total_usd)?)
-            .ok_or_else(|| "Claude 费用汇总超出范围".to_string())?;
-        count += 1;
-    }
-    Ok((asb_core::contracts::format_usd_micros(total), count))
 }

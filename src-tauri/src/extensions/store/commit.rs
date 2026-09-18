@@ -31,6 +31,7 @@ impl ExtensionStore {
     /// Takes the process-wide save lock and commits one batch without any
     /// currency precondition (recovery uses this).
     #[cfg(test)]
+    #[allow(dead_code)] // recovery-path harness
     pub fn commit_batch(&self, commit: &LibraryCommit) -> Result<(), ExtensionStoreError> {
         let _guard = save_lock();
         self.commit_batch_locked(commit)

@@ -84,6 +84,7 @@ impl CodexUsageOrigin {
 /// `codex-session-v1:<thread uuid>:<event index>`; the owner of session row identity.
 pub(crate) const CODEX_SESSION_ID_PREFIX: &str = "codex-session-v1";
 
+#[expect(dead_code)] // reserved: session-usage sync slate
 pub(crate) fn session_request_id(thread_id: &str, event_index: u32) -> String {
     format!("{CODEX_SESSION_ID_PREFIX}:{thread_id}:{event_index}")
 }

@@ -3,7 +3,6 @@ mod ccswitch_source;
 mod client_config_watcher;
 mod claude_auth;
 mod claude_integration;
-mod claude_mcp_source;
 mod cloud_backup;
 mod codex_auth;
 mod codex_common;

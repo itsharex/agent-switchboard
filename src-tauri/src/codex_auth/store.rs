@@ -1,4 +1,4 @@
-use super::contracts::{AccountSelection, AccountSummary, AccountsFile, AccountsView};
+use super::contracts::{AccountSelection, AccountsFile};
 use asb_switch::{io::FsIo, sha256_hex, SwitchIo};
 use std::{
     collections::HashSet,
@@ -96,43 +96,4 @@ pub(super) fn save(root: &Path, file: &AccountsFile, expected: &str) -> Result<S
         let _ = fs::remove_file(&temporary);
     }
     result
-}
-pub(super) fn view(file: &AccountsFile, revision: String) -> AccountsView {
-    let accounts = file
-        .accounts
-        .iter()
-        .map(|account| AccountSummary {
-            id: account.id.clone(),
-            email: account.identity.email.clone(),
-            plan: account.identity.plan.clone(),
-            account_label: sha256_hex(&format!(
-                "{}:{}",
-                account.identity.subject, account.identity.account_id
-            ))[..12]
-                .into(),
-            is_default: file.default_id.as_ref() == Some(&account.id),
-            generation: account.generation,
-            expires_at: account.expires_at,
-            native_sync_pending: account.native_sync.is_some(),
-            native_sync_error: account.native_sync_error.clone(),
-            bound_profile_ids: file
-                .bindings
-                .iter()
-                .filter_map(|(id, binding)| match binding {
-                    AccountSelection::Account { id: bound } if bound == &account.id => {
-                        Some(id.clone())
-                    }
-                    AccountSelection::Default if file.default_id.as_ref() == Some(&account.id) => {
-                        Some(id.clone())
-                    }
-                    _ => None,
-                })
-                .collect(),
-        })
-        .collect();
-    AccountsView {
-        revision,
-        accounts,
-        bindings: file.bindings.clone(),
-    }
 }

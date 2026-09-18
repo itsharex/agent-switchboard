@@ -81,19 +81,26 @@ mod tests {
                 upstream: base,
             },
         );
-        auth.save_account(
-            ClaudeAccount {
-                id: "account".into(),
-                label: "label".into(),
-                provider: ClaudeAuthProvider::CodexOauth,
-                access_token: "expired-access".into(),
-                refresh_token: Some("old-refresh".into()),
-                expires_at_ms: Some(1),
-                upstream_account_id: Some("workspace".into()),
-                github_domain: None,
+        let fresh_hash = store::load(dir.path()).unwrap().1;
+        store::save(
+            dir.path(),
+            &AccountFile {
+                schema_version: 1,
+                defaults: [(ClaudeAuthProvider::CodexOauth, "account".into())]
+                    .into_iter()
+                    .collect(),
+                accounts: vec![ClaudeAccount {
+                    id: "account".into(),
+                    label: "label".into(),
+                    provider: ClaudeAuthProvider::CodexOauth,
+                    access_token: "expired-access".into(),
+                    refresh_token: Some("old-refresh".into()),
+                    expires_at_ms: Some(1),
+                    upstream_account_id: Some("workspace".into()),
+                    github_domain: None,
+                }],
             },
-            &auth.view().unwrap().file_hash,
-            true,
+            &fresh_hash,
         )
         .unwrap();
         let block_path = path.clone();

@@ -38,6 +38,7 @@ fn require_revision(root: &Path, expected: &str) -> Result<PromptsFile, String> 
     }
     Ok(file)
 }
+#[expect(dead_code)] // reserved: prompt editor command surface
 pub(crate) fn save(
     root: &Path,
     target: &Path,
@@ -87,6 +88,7 @@ pub(crate) fn save(
     }
     view(root, target)
 }
+#[expect(dead_code)] // reserved: prompt editor command surface
 pub(crate) fn delete(
     root: &Path,
     target: &Path,
@@ -194,6 +196,7 @@ fn backfill(file: &mut PromptsFile, content: String) {
         });
     }
 }
+#[expect(dead_code)] // reserved: prompt editor command surface
 pub(crate) fn recover(root: &Path, target: &Path) -> Result<PromptsView, String> {
     let _guard = LOCK.lock().map_err(|_| "Codex 指令库锁不可用")?;
     match asb_switch::lockfile::probe_lock(&FsIo, target) {

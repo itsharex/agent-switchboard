@@ -169,13 +169,6 @@ impl ProviderHealth {
         }
     }
 
-    pub(crate) fn reset(&self) {
-        let mut inner = self.lock();
-        let generation = inner.generation.wrapping_add(1);
-        *inner = Inner::closed();
-        inner.generation = generation;
-    }
-
     pub fn config(&self) -> ProviderHealthConfig {
         self.config
     }
@@ -193,15 +186,6 @@ impl ProviderHealth {
 
     pub fn consecutive_failures(&self) -> u32 {
         self.lock().consecutive_failures
-    }
-
-    /// Returns the serializable state without exposing a monotonic timestamp.
-    pub(crate) fn snapshot(&self) -> ProviderHealthSnapshot {
-        self.snapshot_at(Instant::now(), unix_now_ms())
-    }
-
-    pub(crate) fn snapshot_at(&self, now: Instant, now_ms: u64) -> ProviderHealthSnapshot {
-        snapshot_of(&self.lock(), self.config.open_cooldown, now, now_ms)
     }
 
     /// Acquires permission for one request, or returns None while the circuit is open.

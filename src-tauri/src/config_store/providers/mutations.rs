@@ -426,6 +426,7 @@ impl ConfigStore {
     /// The stored provider with the same routing identity as an import draft.
     /// The failover import uses this to map source queue rows onto local ids;
     /// the identity rule stays owned by this store, never reimplemented.
+    #[expect(dead_code)] // reserved: duplicate-route audit
     pub fn find_routing_match(&self, draft: &ProviderDraft) -> Option<ProviderRecord> {
         match load_all(self) {
             Ok((codex, claude)) => {

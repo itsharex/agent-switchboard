@@ -137,29 +137,3 @@ impl ActiveRoute {
 pub(crate) fn claude_uses_gateway(configuration: &str) -> bool {
     routing::config_points_at_gateway(AppKind::Claude, configuration)
 }
-
-impl GatewayController {
-    pub(crate) fn claude_health_snapshot(
-        &self,
-        profile: &ProviderProfile,
-    ) -> Result<provider_health::ProviderHealthSnapshot, String> {
-        let route = self.route_for_profile(profile)?;
-        Ok(self.inner.health_for(&route).snapshot())
-    }
-    pub(crate) fn claude_health_warning(&self) -> Option<String> {
-        self.inner.health_store.warning()
-    }
-    pub(crate) fn reset_claude_health(&self, profile: &ProviderProfile) -> Result<(), String> {
-        let route = self.route_for_profile(profile)?;
-        let key = health_state::route_key(
-            &route.profile_id,
-            &route.fingerprint,
-            &route.upstream_base_url,
-        );
-        self.inner
-            .health_store
-            .save_snapshot(&key, &Default::default())?;
-        self.inner.health_for(&route).reset();
-        Ok(())
-    }
-}

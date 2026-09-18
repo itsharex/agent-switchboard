@@ -66,8 +66,7 @@ use health_state::ClaudeHealthStore;
 use identity::*;
 pub(crate) use identity::{codex_catalog_file_name, codex_route_fingerprint};
 pub(crate) use provider_health::{
-    is_retryable_http_status, ProviderHealth, ProviderHealthConfig, ProviderHealthSnapshot,
-    ProviderHealthState,
+    is_retryable_http_status, ProviderHealth, ProviderHealthConfig, ProviderHealthState,
 };
 use request_ledger::ClaudeRequestLedger;
 use state::*;

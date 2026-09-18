@@ -1,5 +1,5 @@
 use super::{
-    contracts::{AccountSelection, AccountsView},
+    contracts::AccountSelection,
     store,
 };
 use std::path::Path;
@@ -12,30 +12,6 @@ pub(crate) fn binding(root: &Path, profile_id: &str) -> Result<AccountSelection,
         .get(profile_id)
         .cloned()
         .unwrap_or_default())
-}
-pub(crate) fn set_binding(
-    root: &Path,
-    profile_id: &str,
-    selection: AccountSelection,
-    expected: &str,
-) -> Result<AccountsView, String> {
-    let _guard = store::lock()?;
-    let (mut file, _) = store::load(root)?;
-    if let AccountSelection::Account { id } = &selection {
-        if !file.accounts.iter().any(|a| &a.id == id) {
-            return Err("所选 Codex 账号不存在".into());
-        }
-    }
-    if selection == AccountSelection::Default && file.default_id.is_none() {
-        return Err("请先指定 Codex 默认账号".into());
-    }
-    if selection == AccountSelection::Native {
-        file.bindings.remove(profile_id);
-    } else {
-        file.bindings.insert(profile_id.to_string(), selection);
-    }
-    let revision = store::save(root, &file, expected)?;
-    Ok(store::view(&file, revision))
 }
 
 pub(crate) fn clear_bindings(root: &Path) -> Result<(), String> {

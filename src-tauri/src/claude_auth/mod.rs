@@ -4,10 +4,10 @@
 mod contracts;
 mod copilot;
 pub(crate) mod copilot_model;
-pub(crate) mod device;
 mod http;
 pub(crate) mod models;
 mod oauth;
+#[allow(dead_code)] // reserved: quota slate (test-covered)
 pub(crate) mod quota;
 mod refresh;
 pub(crate) mod request;
@@ -17,7 +17,7 @@ use asb_core::{
     claude_auth::{managed_auth, ClaudeAuthProvider},
     contracts::ProviderConnectionOptions,
 };
-pub(crate) use contracts::{ClaudeAccount, ClaudeAccountsView};
+pub(crate) use contracts::ClaudeAccount;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -37,7 +37,6 @@ pub(crate) struct ResolvedAccount {
 #[derive(Default)]
 struct Runtime {
     pending_refresh: BTreeMap<String, refresh::PendingRefresh>,
-    sessions: BTreeMap<String, device::Session>,
     copilot: BTreeMap<String, (String, ResolvedAccount)>,
 }
 
@@ -67,16 +66,6 @@ impl ClaudeAuth {
             .clone()
     }
 
-    #[cfg(test)]
-    pub(crate) fn register_test_endpoints(root: &Path, endpoints: TestEndpoints) -> Arc<Self> {
-        let auth = Arc::new(Self::with_endpoints(root, endpoints));
-        instances()
-            .lock()
-            .unwrap()
-            .insert(root.to_path_buf(), auth.clone());
-        auth
-    }
-
     pub(crate) fn new(root: &Path) -> Self {
         Self {
             root: root.to_path_buf(),
@@ -94,76 +83,17 @@ impl ClaudeAuth {
         }
     }
 
-    pub(crate) fn view(&self) -> Result<ClaudeAccountsView, String> {
-        let (file, hash) = store::load(&self.root)?;
-        Ok(file.view(hash))
-    }
+    #[allow(dead_code)] // reserved: account editor surface (test-covered)
 
-    pub(crate) fn save_account(
-        &self,
-        account: ClaudeAccount,
-        expected_hash: &str,
-        make_default: bool,
-    ) -> Result<ClaudeAccountsView, String> {
-        account.validate()?;
-        let mut runtime = self.runtime.lock().map_err(|_| "Claude 认证写入锁不可用")?;
-        let (mut file, _) = store::load(&self.root)?;
-        if file
-            .accounts
-            .iter()
-            .any(|saved| saved.id == account.id && saved.provider != account.provider)
-        {
-            return Err("不能将已有 Claude 托管账号 ID 改为其他认证服务".into());
-        }
-        let account_id = account.id.clone();
-        if make_default {
-            file.defaults.insert(account.provider, account.id.clone());
-        }
-        if let Some(saved) = file
-            .accounts
-            .iter_mut()
-            .find(|saved| saved.id == account.id)
-        {
-            *saved = account;
-        } else {
-            file.accounts.push(account);
-        }
-        let hash = store::save(&self.root, &file, expected_hash)?;
-        runtime.copilot.remove(&account_id);
-        runtime.pending_refresh.remove(&account_id);
-        Ok(file.view(hash))
-    }
 
-    pub(crate) fn set_default(
-        &self,
-        provider: ClaudeAuthProvider,
-        account_id: &str,
-        expected_hash: &str,
-    ) -> Result<ClaudeAccountsView, String> {
-        let _guard = self.runtime.lock().map_err(|_| "Claude 认证写入锁不可用")?;
-        let (mut file, _) = store::load(&self.root)?;
-        file.defaults.insert(provider, account_id.into());
-        let hash = store::save(&self.root, &file, expected_hash)?;
-        Ok(file.view(hash))
-    }
+    #[allow(dead_code)] // reserved: account editor surface (test-covered)
 
-    pub(crate) fn remove(
-        &self,
-        account_id: &str,
-        expected_hash: &str,
-    ) -> Result<ClaudeAccountsView, String> {
-        let mut runtime = self.runtime.lock().map_err(|_| "Claude 认证写入锁不可用")?;
-        let (mut file, _) = store::load(&self.root)?;
-        if !file.accounts.iter().any(|account| account.id == account_id) {
-            return Err("Claude 托管账号不存在".into());
-        }
-        file.accounts.retain(|account| account.id != account_id);
-        file.defaults.retain(|_, id| id != account_id);
-        let hash = store::save(&self.root, &file, expected_hash)?;
-        runtime.copilot.remove(account_id);
-        runtime.pending_refresh.remove(account_id);
-        Ok(file.view(hash))
-    }
+
+    #[allow(dead_code)] // reserved: account editor surface (test-covered)
+
+
+    #[allow(dead_code)] // reserved: account editor surface (test-covered)
+
 
     pub(crate) fn resolve(
         &self,

@@ -40,6 +40,7 @@ impl LocalState {
     /// Runs after the single-instance guard and before commands or the
     /// gateway are published. Runtime state lookup never migrates a store.
     #[cfg(test)]
+    #[allow(dead_code)] // verification harness
     pub(crate) fn initialize_schemas(&self) -> Result<(), String> {
         self.initialize_configuration_schema()?;
         self.initialize_extension_schema()

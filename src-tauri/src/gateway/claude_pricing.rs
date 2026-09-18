@@ -134,12 +134,6 @@ impl ClaudePriceBook {
         Ok(book)
     }
 
-    pub(crate) fn save(&self, root: &Path) -> Result<(), String> {
-        self.validate()?;
-        let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        crate::config_store::write_json_atomic(&root.join(FILE), &text).map_err(|e| e.to_string())
-    }
-
     pub(crate) fn estimate(
         &self,
         record: &ClaudeRequestRecord,
@@ -189,51 +183,6 @@ impl ClaudePriceBook {
             total_usd: format_usd_micros(micros),
         }))
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn invalid_prices_never_replace_the_previous_book() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut book = ClaudePriceBook::default();
-        book.save(dir.path()).unwrap();
-        book.models
-            .values_mut()
-            .next()
-            .unwrap()
-            .input_usd_per_million = "NaN".into();
-        assert!(book.save(dir.path()).is_err());
-        assert_eq!(
-            ClaudePriceBook::load(dir.path()).unwrap(),
-            ClaudePriceBook::default()
-        );
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ClaudePriceBookSnapshot {
-    pub(crate) book: ClaudePriceBook,
-    pub(crate) file_hash: String,
-}
-
-pub(crate) fn read_snapshot(root: &Path) -> Result<ClaudePriceBookSnapshot, String> {
-    let text = crate::config_store::read_optional(&root.join(FILE)).map_err(|e| e.to_string())?;
-    let book = match &text {
-        Some(text) => {
-            let stored: ClaudePriceBook =
-                crate::config_store::parse_strict(text).map_err(|e| e.to_string())?;
-            stored.filled_from_older_seed()
-        }
-        None => ClaudePriceBook::default(),
-    };
-    book.validate()?;
-    Ok(ClaudePriceBookSnapshot {
-        book,
-        file_hash: asb_switch::sha256_hex(text.as_deref().unwrap_or("")),
-    })
 }
 
 #[cfg(test)]

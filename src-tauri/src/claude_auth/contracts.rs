@@ -35,25 +35,6 @@ impl Default for AccountFile {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ClaudeAccountView {
-    pub id: String,
-    pub label: String,
-    pub provider: ClaudeAuthProvider,
-    pub expires_at_ms: Option<i64>,
-    pub upstream_account_id: Option<String>,
-    pub github_domain: Option<String>,
-    pub is_default: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ClaudeAccountsView {
-    pub file_hash: String,
-    pub accounts: Vec<ClaudeAccountView>,
-}
-
 impl ClaudeAccount {
     pub(super) fn validate(&self) -> Result<(), String> {
         validate_text(&self.id, "账号 ID", 128)?;
@@ -130,24 +111,5 @@ impl AccountFile {
             }
         }
         Ok(())
-    }
-
-    pub fn view(&self, file_hash: String) -> ClaudeAccountsView {
-        ClaudeAccountsView {
-            file_hash,
-            accounts: self
-                .accounts
-                .iter()
-                .map(|account| ClaudeAccountView {
-                    id: account.id.clone(),
-                    label: account.label.clone(),
-                    provider: account.provider,
-                    expires_at_ms: account.expires_at_ms,
-                    upstream_account_id: account.upstream_account_id.clone(),
-                    github_domain: account.github_domain.clone(),
-                    is_default: self.defaults.get(&account.provider) == Some(&account.id),
-                })
-                .collect(),
-        }
     }
 }

@@ -16,6 +16,7 @@ mod transport;
 pub(crate) use models::{parse_models_value, provider_auth_headers};
 pub use models::{fetch_models, ProviderModel};
 pub use transport::{
-    http_get, http_get_with_options, http_request, http_request_with_options, probe, probe_warmed,
-    ProbeResult,
+    http_get, http_get_with_options, http_request, http_request_with_options, probe, ProbeResult,
 };
+#[expect(unused_imports)] // reserved: warmed probe surface
+pub use transport::probe_warmed;
