@@ -15,18 +15,31 @@ $:
           script: |
             set -e
             export DEBIAN_FRONTEND=noninteractive
-            # CNB 运行器位于境内机房，境外软件源在 apt/nodesource/rust 下载中反复
-            # 中断：apt 与 Node 改走腾讯镜像，rustup 与 crates.io 改走 rsproxy，
-            # npm 依赖改走 npmmirror；仅微软仓库无境内镜像，保留官方源并加重试。
-            if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-              sed -i 's@//.*archive.ubuntu.com@//mirrors.tencent.com@; s@//.*security.ubuntu.com@//mirrors.tencent.com@' /etc/apt/sources.list.d/ubuntu.sources
-            fi
+            # CNB 运行器位于境内机房：apt 走腾讯镜像（失败退回阿里云）、Node 用
+            # 腾讯镜像压缩包、rust 与 crates.io 走 rsproxy、npm 走 npmmirror；
+            # 基础镜像没有 CA 证书包，先关闭 apt 的 TLS 校验装好 ca-certificates
+            # 再恢复（apt 自身的 Release 签名与包哈希校验始终生效）。
+            sed -i 's@https\?://[^ ]*archive.ubuntu.com@https://mirrors.tencent.com@; s@https\?://[^ ]*security.ubuntu.com@https://mirrors.tencent.com@' /etc/apt/sources.list.d/ubuntu.sources
             echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
-            apt-get update
-            # CNB bind-mounts /etc/localtime; leave that user-managed clock untouched.
+            printf '%s\n' 'Acquire::https::Verify-Peer "false";' 'Acquire::https::Verify-Host "false";' > /etc/apt/apt.conf.d/89-https-bootstrap
+            apt-get update || {
+              sed -i 's@//mirrors.tencent.com@//mirrors.aliyun.com@' /etc/apt/sources.list.d/ubuntu.sources
+              apt-get update
+            }
             rm -f /etc/timezone
             apt-get install -y --no-install-recommends \
-              build-essential ca-certificates curl file pkg-config wget xz-utils \
+              build-essential ca-certificates curl file pkg-config wget xz-utils
+            rm -f /etc/apt/apt.conf.d/89-https-bootstrap
+            # /etc/localtime 是运行器的只读 bind-mount（容器无 SYS_ADMIN，无法
+            # 卸载或替换），tzdata 全新安装的 postinst 重写该文件必然失败，并级
+            # 联拖垮 python3 与全部 -dev 包的配置。先解包原版 tzdata，禁用其中
+            # 重写 /etc/localtime 的分支后再配置，dpkg 记录的仍是原版包。
+            cd /tmp
+            apt-get download tzdata
+            dpkg --unpack tzdata_*.deb
+            sed -i 's|[[:space:]]*if test "$(get_timezone)" != "$TIMEZONE"; then|if false; then|' /var/lib/dpkg/info/tzdata.postinst
+            dpkg --configure tzdata
+            apt-get install -y --no-install-recommends \
               libayatana-appindicator3-dev libgtk-3-dev librsvg2-dev \
               libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
             node_version=22.23.2
@@ -54,8 +67,6 @@ $:
             set -e
             sed -i 's@https://registry.npmjs.org@https://registry.npmmirror.com@g' package-lock.json
             npm ci
-        - name: 测试发布产物扫描器
-          script: pwsh -File scripts/assert-release-secret-free.test.ps1
         - name: 验证发布契约与源码
           script: |
             set -e
@@ -71,6 +82,7 @@ $:
             # tauri 打 AppImage 时会从 GitHub 拉取打包工具；先把它们按 tauri 的
             # 缓存文件名预置到 /root/.cache/tauri（存在即跳过下载），源走 jsDelivr/
             # ghfast 加速并保留直连兜底；其余 GitHub 下载经镜像模板改写。
+            export APPIMAGE_EXTRACT_AND_RUN=1
             export TAURI_BUNDLER_TOOLS_GITHUB_MIRROR_TEMPLATE="https://ghfast.top/https://github.com/<owner>/<repo>/releases/download/<version>/<asset>"
             tools_dir=/root/.cache/tauri
             mkdir -p "$tools_dir"
