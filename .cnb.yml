@@ -41,7 +41,7 @@ $:
             dpkg --configure tzdata
             apt-get install -y --no-install-recommends \
               libayatana-appindicator3-dev libgtk-3-dev librsvg2-dev \
-              libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+              libssl-dev libwebkit2gtk-4.1-dev libxdo-dev xdg-utils
             node_version=22.23.2
             curl -fsSL "https://mirrors.tencent.com/nodejs-release/v${node_version}/node-v${node_version}-linux-x64.tar.xz" \
               | tar -xJ -C /usr/local --strip-components=1
@@ -94,21 +94,25 @@ $:
               fi
               for url in "$@"; do
                 rm -f "$target.part"
-                if curl -fsSL --retry 3 --connect-timeout 15 -o "$target.part" "$url"; then
+                if curl -fsSL --retry 2 --connect-timeout 8 -o "$target.part" "$url"; then
                   mv "$target.part" "$target"
                   chmod +x "$target"
                   return 0
                 fi
               done
               rm -f "$target.part"
-              echo "下载 AppImage 打包工具失败：$name" >&2
-              return 1
+              echo "预置打包工具失败：$name，交由 tauri 经镜像模板自行下载" >&2
+              return 0
             }
+            proxy1="https://ghfast.top/https://github.com"
+            proxy2="https://ghproxy.link/https://github.com"
             seed_tool AppRun-x86_64 \
-              "https://ghfast.top/https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64" \
+              "$proxy1/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64" \
+              "$proxy2/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64" \
               "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64"
             seed_tool linuxdeploy-x86_64.AppImage \
-              "https://ghfast.top/https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage" \
+              "$proxy1/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage" \
+              "$proxy2/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage" \
               "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage"
             seed_tool linuxdeploy-plugin-gtk.sh \
               "https://cdn.jsdelivr.net/gh/tauri-apps/linuxdeploy-plugin-gtk@master/linuxdeploy-plugin-gtk.sh" \
@@ -119,7 +123,8 @@ $:
               "https://ghfast.top/https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gstreamer/master/linuxdeploy-plugin-gstreamer.sh" \
               "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gstreamer/master/linuxdeploy-plugin-gstreamer.sh"
             if ! seed_tool linuxdeploy-plugin-appimage.AppImage \
-              "https://ghfast.top/https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage" \
+              "$proxy1/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage" \
+              "$proxy2/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage" \
               "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage"; then
               echo "linuxdeploy-plugin-appimage 预置失败，tauri 将回退到内置版本"
             fi
