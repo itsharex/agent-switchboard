@@ -13,34 +13,104 @@ $:
       stages:
         - name: 安装构建依赖
           script: |
+            set -e
             export DEBIAN_FRONTEND=noninteractive
+            # CNB 运行器位于境内机房，境外软件源在 apt/nodesource/rust 下载中反复
+            # 中断：apt 与 Node 改走腾讯镜像，rustup 与 crates.io 改走 rsproxy，
+            # npm 依赖改走 npmmirror；仅微软仓库无境内镜像，保留官方源并加重试。
+            if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+              sed -i 's@//.*archive.ubuntu.com@//mirrors.tencent.com@; s@//.*security.ubuntu.com@//mirrors.tencent.com@' /etc/apt/sources.list.d/ubuntu.sources
+            fi
+            echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
             apt-get update
             # CNB bind-mounts /etc/localtime; leave that user-managed clock untouched.
             rm -f /etc/timezone
             apt-get install -y --no-install-recommends \
-              build-essential ca-certificates curl file pkg-config wget \
+              build-essential ca-certificates curl file pkg-config wget xz-utils \
               libayatana-appindicator3-dev libgtk-3-dev librsvg2-dev \
               libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
-            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            node_version=22.23.2
+            curl -fsSL "https://mirrors.tencent.com/nodejs-release/v${node_version}/node-v${node_version}-linux-x64.tar.xz" \
+              | tar -xJ -C /usr/local --strip-components=1
+            node --version
+            npm --version
+            export RUSTUP_DIST_SERVER="https://rsproxy.cn"
+            export RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+            curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh -s -- -y --profile minimal
+            mkdir -p /root/.cargo
+            printf '%s\n' \
+              '[source.crates-io]' \
+              'replace-with = "rsproxy-sparse"' \
+              '[source.rsproxy-sparse]' \
+              'registry = "sparse+https://rsproxy.cn/index/"' \
+              > /root/.cargo/config.toml
             wget -q -O /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
             dpkg -i /tmp/packages-microsoft-prod.deb
             apt-get update
-            apt-get install -y --no-install-recommends nodejs powershell
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            apt-get install -y --no-install-recommends powershell
+            pwsh --version
         - name: 安装前端依赖
-          script: npm ci
+          script: |
+            set -e
+            sed -i 's@https://registry.npmjs.org@https://registry.npmmirror.com@g' package-lock.json
+            npm ci
         - name: 测试发布产物扫描器
           script: pwsh -File scripts/assert-release-secret-free.test.ps1
         - name: 验证发布契约与源码
           script: |
+            set -e
             export PATH="/root/.cargo/bin:$PATH"
             export RUSTUP_TOOLCHAIN=stable
             cargo test --workspace
             npm run build
         - name: 构建与汇集 Linux 安装包
           script: |
+            set -e
             export PATH="/root/.cargo/bin:$PATH"
             export RUSTUP_TOOLCHAIN=stable
+            # tauri 打 AppImage 时会从 GitHub 拉取打包工具；先把它们按 tauri 的
+            # 缓存文件名预置到 /root/.cache/tauri（存在即跳过下载），源走 jsDelivr/
+            # ghfast 加速并保留直连兜底；其余 GitHub 下载经镜像模板改写。
+            export TAURI_BUNDLER_TOOLS_GITHUB_MIRROR_TEMPLATE="https://ghfast.top/https://github.com/<owner>/<repo>/releases/download/<version>/<asset>"
+            tools_dir=/root/.cache/tauri
+            mkdir -p "$tools_dir"
+            seed_tool() {
+              name="$1"; shift
+              target="$tools_dir/$name"
+              if [ -s "$target" ]; then
+                return 0
+              fi
+              for url in "$@"; do
+                rm -f "$target.part"
+                if curl -fsSL --retry 3 --connect-timeout 15 -o "$target.part" "$url"; then
+                  mv "$target.part" "$target"
+                  chmod +x "$target"
+                  return 0
+                fi
+              done
+              rm -f "$target.part"
+              echo "下载 AppImage 打包工具失败：$name" >&2
+              return 1
+            }
+            seed_tool AppRun-x86_64 \
+              "https://ghfast.top/https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64" \
+              "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64"
+            seed_tool linuxdeploy-x86_64.AppImage \
+              "https://ghfast.top/https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage" \
+              "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage"
+            seed_tool linuxdeploy-plugin-gtk.sh \
+              "https://cdn.jsdelivr.net/gh/tauri-apps/linuxdeploy-plugin-gtk@master/linuxdeploy-plugin-gtk.sh" \
+              "https://ghfast.top/https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh" \
+              "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
+            seed_tool linuxdeploy-plugin-gstreamer.sh \
+              "https://cdn.jsdelivr.net/gh/tauri-apps/linuxdeploy-plugin-gstreamer@master/linuxdeploy-plugin-gstreamer.sh" \
+              "https://ghfast.top/https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gstreamer/master/linuxdeploy-plugin-gstreamer.sh" \
+              "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gstreamer/master/linuxdeploy-plugin-gstreamer.sh"
+            if ! seed_tool linuxdeploy-plugin-appimage.AppImage \
+              "https://ghfast.top/https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage" \
+              "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage"; then
+              echo "linuxdeploy-plugin-appimage 预置失败，tauri 将回退到内置版本"
+            fi
             npm run tauri:build:linux
             version="$(node scripts/updater-release.mjs workspace-version --cargo-manifest Cargo.toml)"
             node scripts/updater-release.mjs stage \
@@ -50,6 +120,7 @@ $:
               --version "$version"
         - name: 扫描发布资产中的凭据
           script: |
+            set -e
             for artifact in release-assets/*; do
               pwsh -File scripts/assert-release-secret-free.ps1 -ArtifactPath "$artifact"
             done
