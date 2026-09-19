@@ -195,7 +195,7 @@ export function UsageQueryWorkspace({
   const modeScope = useId();
 
   return (
-    <EditorFrame title="用量查询" backLabel="返回供应商" busy={controlsDisabled} onBack={onClose}
+    <EditorFrame className="asb-usage-editor" title="用量查询" backLabel="返回供应商" busy={controlsDisabled} onBack={onClose}
       primary={
         <>
           <p className="asb-usage-provider">{providerName.trim() || "未命名供应商"}</p>
@@ -209,7 +209,7 @@ export function UsageQueryWorkspace({
         </>
       }
       footer={
-        <Button variant="primary" disabled={controlsDisabled} onClick={() => void save()}>
+        <Button variant="primary" className="asb-editor-submit" disabled={controlsDisabled} onClick={() => void save()}>
           {saving ? "保存中…" : "保存查询"}
         </Button>
       }>
@@ -218,9 +218,9 @@ export function UsageQueryWorkspace({
           if (event.key === "Escape" && !querying && !saving && !busy) onClose();
         }}>
         {/* Both tabpanels stay mounted so each tab's aria-controls always
-            resolves; the inactive editor unmounts inside its hidden panel. */}
+            resolves; the inactive editor unmounts inside its hidden card. */}
         <div
-          className="asb-usage-config"
+          className="asb-editor-section"
           role="tabpanel"
           id={`${modeScope}-declarative-panel`}
           aria-labelledby={`${modeScope}-declarative-tab`}
@@ -228,69 +228,72 @@ export function UsageQueryWorkspace({
         >
           {kind === "declarative" && (
             <>
-              <label className="asb-field">
-                <span>查询地址</span>
-                <Input
-                  aria-label="用量查询地址"
-                  value={declarative.url}
-                  disabled={controlsDisabled}
-                  placeholder="{{baseUrl}}/user/balance"
-                  onChange={(event) => patchDeclarative({ url: event.target.value })}
-                />
-              </label>
-              <div className="asb-usage-paths">
+              <h3 className="asb-section-title">查询配置</h3>
+              <div className="asb-editor-section-fields">
                 <label className="asb-field">
-                  <span>余额路径</span>
+                  <span>查询地址</span>
                   <Input
-                    code
-                    aria-label="余额提取路径"
-                    value={declarative.remainingPath ?? ""}
+                    aria-label="用量查询地址"
+                    value={declarative.url}
                     disabled={controlsDisabled}
-                    placeholder="data/balance"
-                    onChange={(event) => patchDeclarative({ remainingPath: optional(event.target.value) })}
+                    placeholder="{{baseUrl}}/user/balance"
+                    onChange={(event) => patchDeclarative({ url: event.target.value })}
                   />
                 </label>
-                <label className="asb-field">
-                  <span>已用路径</span>
-                  <Input
-                    code
-                    aria-label="已用提取路径"
-                    value={declarative.usedPath ?? ""}
-                    disabled={controlsDisabled}
-                    placeholder="data/used"
-                    onChange={(event) => patchDeclarative({ usedPath: optional(event.target.value) })}
-                  />
-                </label>
-                <label className="asb-field">
-                  <span>总量路径</span>
-                  <Input
-                    code
-                    aria-label="总量提取路径"
-                    value={declarative.totalPath ?? ""}
-                    disabled={controlsDisabled}
-                    placeholder="data/total"
-                    onChange={(event) => patchDeclarative({ totalPath: optional(event.target.value) })}
-                  />
-                </label>
-                <label className="asb-field">
-                  <span>单位</span>
-                  <Input
-                    aria-label="用量单位"
-                    value={declarative.unit ?? ""}
-                    disabled={controlsDisabled}
-                    placeholder="USD"
-                    onChange={(event) => patchDeclarative({ unit: optional(event.target.value) })}
-                  />
-                </label>
+                <div className="asb-usage-paths">
+                  <label className="asb-field">
+                    <span>余额路径</span>
+                    <Input
+                      code
+                      aria-label="余额提取路径"
+                      value={declarative.remainingPath ?? ""}
+                      disabled={controlsDisabled}
+                      placeholder="data/balance"
+                      onChange={(event) => patchDeclarative({ remainingPath: optional(event.target.value) })}
+                    />
+                  </label>
+                  <label className="asb-field">
+                    <span>已用路径</span>
+                    <Input
+                      code
+                      aria-label="已用提取路径"
+                      value={declarative.usedPath ?? ""}
+                      disabled={controlsDisabled}
+                      placeholder="data/used"
+                      onChange={(event) => patchDeclarative({ usedPath: optional(event.target.value) })}
+                    />
+                  </label>
+                  <label className="asb-field">
+                    <span>总量路径</span>
+                    <Input
+                      code
+                      aria-label="总量提取路径"
+                      value={declarative.totalPath ?? ""}
+                      disabled={controlsDisabled}
+                      placeholder="data/total"
+                      onChange={(event) => patchDeclarative({ totalPath: optional(event.target.value) })}
+                    />
+                  </label>
+                  <label className="asb-field">
+                    <span>单位</span>
+                    <Input
+                      aria-label="用量单位"
+                      value={declarative.unit ?? ""}
+                      disabled={controlsDisabled}
+                      placeholder="USD"
+                      onChange={(event) => patchDeclarative({ unit: optional(event.target.value) })}
+                    />
+                  </label>
+                </div>
+                <p className="asb-scope-note">
+                  以一次 GET 请求读取 JSON；地址可使用 {"{{baseUrl}}"} 与 {"{{apiKey}}"}。
+                </p>
               </div>
-              <p className="asb-scope-note">
-                以一次 GET 请求读取 JSON；地址可使用 {"{{baseUrl}}"} 与 {"{{apiKey}}"}。
-              </p>
             </>
           )}
         </div>
         <div
-          className="asb-usage-config"
+          className="asb-editor-section"
           role="tabpanel"
           id={`${modeScope}-script-panel`}
           aria-labelledby={`${modeScope}-script-tab`}
@@ -298,75 +301,91 @@ export function UsageQueryWorkspace({
         >
           {kind === "script" && (
             <>
-              <label className="asb-field">
-                <span>用量查询脚本</span>
-                <Textarea
-                  code
-                  aria-label="用量查询脚本"
-                  rows={16}
-                  value={draft?.kind === "script" ? draft.source : ""}
-                  disabled={controlsDisabled}
-                  placeholder={SCRIPT_TEMPLATE}
-                  spellCheck={false}
-                  onChange={(event) => patchScript(event.target.value)}
-                />
-              </label>
-              <div className="asb-usage-script-contract">
-                <span>输入</span>
-                <code>{"request({ baseUrl, apiKey })"}</code>
-                <span>输出</span>
-                <code>{"extract({ body, status })"}</code>
+              <h3 className="asb-section-title">查询配置</h3>
+              <div className="asb-editor-section-fields">
+                <label className="asb-field">
+                  <span>用量查询脚本</span>
+                  <Textarea
+                    code
+                    aria-label="用量查询脚本"
+                    rows={16}
+                    value={draft?.kind === "script" ? draft.source : ""}
+                    disabled={controlsDisabled}
+                    placeholder={SCRIPT_TEMPLATE}
+                    spellCheck={false}
+                    onChange={(event) => patchScript(event.target.value)}
+                  />
+                </label>
+                <div className="asb-usage-script-contract">
+                  <span>输入</span>
+                  <code>{"request({ baseUrl, apiKey })"}</code>
+                  <span>输出</span>
+                  <code>{"extract({ body, status })"}</code>
+                </div>
+                <p className="asb-scope-note">
+                  脚本只能生成一次 GET / POST 请求并提取 JSON 数值；网络请求由应用执行。
+                </p>
               </div>
-              <p className="asb-scope-note">
-                脚本只能生成一次 GET / POST 请求并提取 JSON 数值；网络请求由应用执行。
-              </p>
             </>
           )}
         </div>
 
-        <label className="asb-field asb-usage-interval">
-          <span>自动刷新间隔（分钟，0 为关闭）</span>
-          <Input
-            type="number"
-            min={0}
-            max={1440}
-            step={1}
-            aria-label="自动刷新间隔（分钟，0 为关闭）"
-            value={intervalText}
-            disabled={controlsDisabled}
-            onChange={(event) => setIntervalText(event.target.value)}
-            onBlur={commitInterval}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") commitInterval();
-            }}
-          />
-        </label>
+        <section className="asb-editor-section" aria-label="自动刷新">
+          <h3 className="asb-section-title">自动刷新</h3>
+          <div className="asb-editor-section-fields">
+            <label className="asb-field is-narrow">
+              <span>间隔（分钟，0 为关闭）</span>
+              <Input
+                type="number"
+                min={0}
+                max={1440}
+                step={1}
+                aria-label="自动刷新间隔（分钟，0 为关闭）"
+                value={intervalText}
+                disabled={controlsDisabled}
+                onChange={(event) => setIntervalText(event.target.value)}
+                onBlur={commitInterval}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") commitInterval();
+                }}
+              />
+            </label>
+          </div>
+        </section>
 
-        {/* The query error sits directly under the fields it validates, above
-            the run action; the result readout stays after the run action so
-            the flow stays chronological. The commit action (保存查询) lives in
-            the frame's fixed action bar. */}
-        {error && <p className="asb-warn-text" role="alert">{error}</p>}
-
-        <div className="asb-usage-actions">
-          <Button
-            variant="secondary"
-            className="asb-usage-run"
-            disabled={controlsDisabled || !canRun(draft)}
-            onClick={() => void run()}
-          >
-            <UsageIcon />
-            {querying ? "查询中…" : "查询用量"}
-          </Button>
-        </div>
+        {/* The run action stays in the module area (DESIGN.md: the commit
+            action alone lives in the frame's fixed bar); its error sits in the
+            same card, directly under the trigger it explains. */}
+        <section className="asb-editor-section" aria-label="查询测试">
+          <h3 className="asb-section-title">查询测试</h3>
+          <div className="asb-editor-section-fields">
+            <div className="asb-editor-action-row">
+              <Button
+                variant="secondary"
+                className="asb-usage-run"
+                disabled={controlsDisabled || !canRun(draft)}
+                onClick={() => void run()}
+              >
+                <UsageIcon />
+                {querying ? "查询中…" : "查询用量"}
+              </Button>
+              <span className="asb-field-help">
+                {querying ? "正在查询" : canRun(draft) ? "准备就绪" : "请先完成查询配置"}
+              </span>
+            </div>
+            {error && <p className="asb-warn-text" role="alert">{error}</p>}
+          </div>
+        </section>
 
         {summary && (
-          <section className="asb-usage-readout" aria-label="本次用量结果">
-            <div className="asb-usage-readout-head">
-              <span>本次结果</span>
-              <Time iso={summary.at} />
+          <section className="asb-editor-section" aria-label="本次用量结果">
+            <h3 className="asb-section-title">本次结果</h3>
+            <div className="asb-editor-section-fields">
+              <div className="asb-usage-readout-head">
+                <Time iso={summary.at} />
+              </div>
+              <UsageReadingsTable readings={summary.readings} ariaLabel="本次用量读数" />
             </div>
-            <UsageReadingsTable readings={summary.readings} ariaLabel="本次用量读数" />
           </section>
         )}
       </section>

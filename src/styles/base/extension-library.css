@@ -17,23 +17,13 @@
   min-height: 0;
 }
 
-/* The library is one operational surface: filter controls followed by the
-   only scroll region. Kind totals live in the corresponding tab trigger. */
+/* The library is the workspace's only scroll region; the search row lives in
+   the page header's secondary row. */
 .asb-ext-library-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  gap: var(--asb-space-3);
   min-height: 0;
-}
-
-.asb-ext-library-panel > .asb-ext-toolbar {
-  margin: 0;
-}
-
-.asb-ext-library-panel > .asb-ext-toolbar {
-  padding-bottom: var(--asb-space-3);
-  border-bottom: 1px solid var(--asb-hairline);
 }
 
 .asb-ext[data-view="discovery"] > [role="tabpanel"]:not([hidden]),
@@ -80,6 +70,14 @@
   flex-wrap: wrap;
   gap: var(--asb-space-2);
   margin-bottom: var(--asb-space-3);
+}
+
+/* Inside the page header the header's own gap owns the row spacing, and the
+   row is a flex line: grow to fill so the search field stays full-width. */
+.asb-workspace-header .asb-ext-toolbar {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 .asb-ext-toolbar-summary {

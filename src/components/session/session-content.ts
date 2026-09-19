@@ -26,11 +26,6 @@ export function messageRole(role: string): string {
   }
 }
 
-export function directoryName(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
-
 export function previewLine(content: string): string {
   return content.split(/\s+/).join(" ").trim();
 }

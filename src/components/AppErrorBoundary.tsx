@@ -26,7 +26,7 @@ export class AppErrorBoundary extends Component<Props, State> {
     if (this.state.failed) {
       return (
         <section className="asb-panel asb-recovery-panel" role="alert" aria-label="界面恢复">
-          <h2 className="asb-panel-title">界面未能加载</h2>
+          <h2 className="asb-recovery-title">界面未能加载</h2>
           <p className="asb-scope-note">可关闭窗口后从系统托盘重新打开应用。</p>
         </section>
       );

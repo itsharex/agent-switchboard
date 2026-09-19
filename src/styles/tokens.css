@@ -147,19 +147,21 @@
   --asb-gradient-energy: linear-gradient(96deg, #30d158 0%, #0a84ff 50%, #8b7cff 100%);
   --asb-slider-thumb-bg: #ffffff;
 
-  /* Active overview cards use a cool-to-warm cloud gradient; idle cards keep
-     their neutral surface and starlight treatment. */
+  /* Top connection cards breathe: the active card carries the cool-to-warm
+     cloud gradient, idle cards a faint blue/violet glow on their neutral
+     base. Anchor and size percentages are LAYER-relative — the drift layer
+     is 132% of the card (geometry owned by route-cards.css) and the values
+     are tuned so the resting frame matches the designed composition. */
   --asb-route-active-gradient:
-    radial-gradient(ellipse 42% 126% at 90% 82%, rgb(255 216 61 / 0.98) 0%, rgb(255 216 61 / 0.84) 26%, transparent 70%),
-    radial-gradient(ellipse 34% 104% at 100% 16%, rgb(237 199 244 / 0.9) 0%, rgb(237 199 244 / 0.38) 33%, transparent 73%),
-    radial-gradient(ellipse 50% 128% at 65% 47%, rgb(239 251 252 / 0.96) 0%, rgb(222 243 247 / 0.78) 34%, transparent 72%),
+    radial-gradient(ellipse 32% 96% at 80% 74%, rgb(255 216 61 / 0.98) 0%, rgb(255 216 61 / 0.84) 26%, transparent 70%),
+    radial-gradient(ellipse 26% 79% at 88% 24%, rgb(237 199 244 / 0.9) 0%, rgb(237 199 244 / 0.38) 33%, transparent 73%),
+    radial-gradient(ellipse 38% 97% at 61% 48%, rgb(239 251 252 / 0.96) 0%, rgb(222 243 247 / 0.78) 34%, transparent 72%),
     linear-gradient(110deg, #1598f5 0%, #12b9ed 42%, #d9eff5 68%, #ff8c68 100%);
+  --asb-route-idle-glow:
+    radial-gradient(ellipse 47% 91% at 70% 29%, rgb(70 124 222 / 0.1) 0%, transparent 68%),
+    radial-gradient(ellipse 44% 89% at 27% 74%, rgb(133 106 207 / 0.08) 0%, transparent 70%);
   --asb-route-idle-bg: #f8f9fc;
   --asb-route-inner-bg: #edf1f8;
-  --asb-route-particle-base-rgb: 239 248 255;
-  --asb-route-particle-flare-rgb: 255 255 255;
-  --asb-route-particle-idle-base-rgb: 70 124 222;
-  --asb-route-particle-idle-flare-rgb: 133 106 207;
   --asb-route-shadow: 0 8px 24px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04);
   --asb-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
 
@@ -256,8 +258,9 @@
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
     --asb-route-idle-bg: #071725;
     --asb-route-inner-bg: #0d2133;
-    --asb-route-particle-idle-base-rgb: 133 176 255;
-    --asb-route-particle-idle-flare-rgb: 173 150 235;
+    --asb-route-idle-glow:
+      radial-gradient(ellipse 47% 91% at 70% 29%, rgb(133 176 255 / 0.14) 0%, transparent 68%),
+      radial-gradient(ellipse 44% 89% at 27% 74%, rgb(173 150 235 / 0.12) 0%, transparent 70%);
     --asb-route-shadow: 0 8px 24px rgb(0 0 0 / 0.32), 0 1px 2px rgb(0 0 0 / 0.24);
     --asb-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
   }
@@ -298,8 +301,9 @@
     --asb-shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
     --asb-route-idle-bg: #071725;
     --asb-route-inner-bg: #0d2133;
-    --asb-route-particle-idle-base-rgb: 133 176 255;
-    --asb-route-particle-idle-flare-rgb: 173 150 235;
+    --asb-route-idle-glow:
+      radial-gradient(ellipse 47% 91% at 70% 29%, rgb(133 176 255 / 0.14) 0%, transparent 68%),
+      radial-gradient(ellipse 44% 89% at 27% 74%, rgb(173 150 235 / 0.12) 0%, transparent 70%);
     --asb-route-shadow: 0 8px 24px rgb(0 0 0 / 0.32), 0 1px 2px rgb(0 0 0 / 0.24);
     --asb-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
 }

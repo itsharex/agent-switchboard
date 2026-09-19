@@ -28,6 +28,7 @@ mod outbound_proxy;
 mod probe;
 mod provider_diagnostics;
 mod provider_request;
+mod provider_transfer;
 mod runtime_log;
 mod session_manager;
 #[cfg(test)]
@@ -111,7 +112,7 @@ pub fn run() {
         // before the gateway, tray, or any window state is created. The
         // callback runs in the surviving instance and restores its window.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Err(error) = tray::tray_open_main(app.clone(), false) {
+            if let Err(error) = tray::tray_open_main(app.clone()) {
                 log::warn!("重复启动已拦截，恢复主窗口失败: {error}");
             }
         }))

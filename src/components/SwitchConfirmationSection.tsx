@@ -24,9 +24,9 @@ export function SwitchConfirmationSection({
 }: Props) {
   return (
     <section className="asb-preview-inline" aria-label="确认切换">
-      <div className="asb-panel-heading">
+      <div className="asb-preview-inline-heading">
         <h3 className="asb-section-title">确认切换</h3>
-        <div className="asb-panel-actions">
+        <div className="asb-preview-inline-actions">
           <Button variant="secondary" disabled={busy} onClick={onCancel}>
             取消切换
           </Button>

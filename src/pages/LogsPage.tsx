@@ -1,38 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
 import {
-  listRuntimeLogs,
-  openRuntimeLogDir,
-  type CommandError,
   type RuntimeLogAction,
   type RuntimeLogEntry,
-  type RuntimeLogLevel,
-  type RuntimeLogSeverity,
 } from "../api/client";
-import { Button } from "../components/Button";
-import { RadioOption } from "../components/RadioOption";
-import { Select } from "../components/Select";
 import { Table, type TableColumn } from "../components/Table";
 import { Time } from "../components/Time";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { SearchIcon } from "../components/icons";
-
-type LevelFilter = "all" | RuntimeLogSeverity;
-
-const LEVEL_FILTERS: ReadonlyArray<{ value: LevelFilter; label: string }> = [
-  { value: "all", label: "全部" },
-  { value: "debug", label: "调试" },
-  { value: "info", label: "信息" },
-  { value: "warn", label: "警告" },
-  { value: "error", label: "错误" },
-];
-
-const LOG_LEVEL_OPTIONS: ReadonlyArray<{ value: RuntimeLogLevel; label: string }> = [
-  { value: "debug", label: "调试" },
-  { value: "info", label: "信息" },
-  { value: "warn", label: "警告" },
-  { value: "error", label: "错误" },
-  { value: "silent", label: "静默" },
-];
+import { levelLabel, useRuntimeLogs } from "./use-runtime-logs";
 
 const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   appStarted: "应用已启动",
@@ -58,19 +32,6 @@ const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   ccSwitchProfilesImported: "已导入本机档案",
   officialLoginCompleted: "已完成官方登录",
 };
-
-function levelLabel(level: RuntimeLogSeverity): string {
-  switch (level) {
-    case "debug":
-      return "调试";
-    case "info":
-      return "信息";
-    case "warn":
-      return "警告";
-    case "error":
-      return "错误";
-  }
-}
 
 const LOG_COLUMNS: Array<TableColumn<RuntimeLogEntry>> = [
   {
@@ -100,97 +61,14 @@ const LOG_COLUMNS: Array<TableColumn<RuntimeLogEntry>> = [
   },
 ];
 
-interface LogsPageProps {
-  logLevel: RuntimeLogLevel | null;
-  busy: boolean;
-  onLogLevelChange: (level: RuntimeLogLevel) => void;
-}
-
-/** Read-only view of the application's own bounded diagnostic event files. */
-export function LogsPage({ logLevel, busy, onLogLevelChange }: LogsPageProps) {
-  const [entries, setEntries] = useState<RuntimeLogEntry[]>([]);
-  const [filter, setFilter] = useState<LevelFilter>("all");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<CommandError | null>(null);
-  const [openingFolder, setOpeningFolder] = useState(false);
-  const [folderError, setFolderError] = useState<CommandError | null>(null);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setEntries(await listRuntimeLogs());
-    } catch (caught) {
-      setError(caught as CommandError);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const openLogDirectory = useCallback(async () => {
-    setOpeningFolder(true);
-    setFolderError(null);
-    try {
-      await openRuntimeLogDir();
-    } catch (caught) {
-      setFolderError(caught as CommandError);
-    } finally {
-      setOpeningFolder(false);
-    }
-  }, []);
-
-  const visibleEntries = filter === "all" ? entries : entries.filter((entry) => entry.level === filter);
-
+/** Read-only view of the application's own bounded diagnostic event files.
+ * The record-level setting, level filter and refresh actions live in the
+ * diagnostics page header; the card renders the entries it receives. */
+export function LogsPage({ logs }: { logs: ReturnType<typeof useRuntimeLogs> }) {
+  const { entries, visibleEntries, filter, loading, error, folderError } = logs;
   return (
     <section className="asb-panel asb-runtime-logs" aria-label="日志">
-      <ModuleHeader
-        title="日志"
-        secondary={
-          <>
-            <div className="asb-runtime-log-level-control">
-              <span className="asb-runtime-log-level-label">记录级别</span>
-              <Select
-                value={logLevel}
-                options={LOG_LEVEL_OPTIONS}
-                ariaLabel="记录级别"
-                placeholder="加载中"
-                disabled={busy || logLevel === null}
-                onChange={(level) => onLogLevelChange(level as RuntimeLogLevel)}
-              />
-            </div>
-            <div className="asb-segments" role="radiogroup" aria-label="日志级别筛选">
-              {LEVEL_FILTERS.map((option) => (
-                <RadioOption
-                  key={option.value}
-                  name="runtime-log-level-filter"
-                  checked={filter === option.value}
-                  disabled={false}
-                  label={option.label}
-                  onChange={() => setFilter(option.value)}
-                />
-              ))}
-            </div>
-            <Button
-              variant="secondary"
-              disabled={loading}
-              onClick={() => void refresh()}
-            >
-              {loading ? "刷新中" : "刷新"}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={openingFolder}
-              onClick={() => void openLogDirectory()}
-            >
-              {openingFolder ? "打开中" : "打开日志文件夹"}
-            </Button>
-          </>
-        }
-      />
+      <ModuleHeader title="日志" />
       {error && (
         <p className="asb-runtime-log-notice" role="alert">
           无法读取应用日志：{error.message}

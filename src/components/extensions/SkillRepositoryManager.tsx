@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ArrowLeft, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { SkillRepository } from "../../api/extensions/skill-sources";
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
 import { Tooltip } from "../Tooltip";
+import { ModuleHeader } from "../WorkspaceHeader";
 import { SkillRepositoryForm } from "./SkillRepositoryForm";
 import { SkillSourceLink } from "./SkillSourceCandidate";
 import { skillRepositoryName, skillSourceUrl } from "./skill-repository-model";
@@ -52,21 +53,24 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
   const disabled = busy || !repositories.ready || repositories.loading || state.loading || state.imports.busy;
   return (
     <section className="asb-skill-repository-manager" aria-label="Skill 仓库">
-      <header className="asb-skill-repository-manager-heading">
-        <div>
-          <h2 className="asb-section-title">Skill 仓库</h2>
-          <p className="asb-scope-note">管理发现来源，已安装的 Skill 不会被移除。</p>
-        </div>
-        <Button variant="secondary" disabled={repositories.loading} onClick={() => state.setManagerOpen(false)}>
-          <ArrowLeft size={16} />返回发现
-        </Button>
-      </header>
-      <div className="asb-skill-source-toolbar">
-        <span className="asb-skill-source-catalog-count asb-num">{repositories.items.length} 个仓库</span>
-        <Button variant="secondary" disabled={disabled} onClick={() => { setEditing(null); setFormOpen(true); }}>
-          <Plus size={16} />添加仓库
-        </Button>
-      </div>
+      <ModuleHeader
+        title="Skill 仓库"
+        primary={
+          <p className="asb-scope-note">
+            管理发现来源，已安装的 Skill 不会被移除。共 <span className="asb-num">{repositories.items.length}</span> 个仓库
+          </p>
+        }
+        primaryActions={
+          <>
+            <Button variant="secondary" disabled={disabled} onClick={() => { setEditing(null); setFormOpen(true); }}>
+              <Plus size={16} />添加仓库
+            </Button>
+            <Button variant="secondary" disabled={repositories.loading} onClick={() => state.setManagerOpen(false)}>
+              返回发现
+            </Button>
+          </>
+        }
+      />
       {repositories.error && <div className="asb-skill-source-error" role="alert">
         <span>{repositories.error}</span>
         <Button variant="secondary" disabled={busy || repositories.loading || state.imports.busy}

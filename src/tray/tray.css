@@ -27,10 +27,18 @@ html, body, #root { background: transparent; overflow: hidden; }
   flex-shrink: 0;
 }
 .tray-header {
+  /* Single identity cluster; the shared space-between belongs to the
+     footer's two-ended command layout. */
+  justify-content: flex-start;
   padding: var(--asb-space-1) var(--asb-space-4);
   border-bottom: 1px solid var(--asb-hairline);
 }
 .tray-app-logo { width: 24px; height: 24px; object-fit: contain; }
+.tray-app-name {
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+  font-weight: 600;
+}
 .tray-list {
   min-height: 0;
   overflow: auto;
@@ -56,77 +64,103 @@ html, body, #root { background: transparent; overflow: hidden; }
 }
 .tray-client-logo { width: 20px; height: 20px; padding: var(--asb-space-hairline); border-radius: var(--asb-radius); background: var(--asb-text-on-action); }
 
-/* Each provider is one compact line: identity, inline balance, and the fixed
-   right switch rail. Detailed readings stay in the main window. */
-.tray-provider-item {
-  padding: var(--asb-space-hairline) var(--asb-space-unit);
+/* Provider rows. .tray-provider is the single owner of the row contract:
+   one native full-width button, four fixed columns, no wrapper element. A
+   button's auto width is fit-content, so width: 100% is what lets the switch
+   rail pin to the panel's right edge on every row. */
+.tray-provider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: calc(var(--asb-space-unit) + var(--asb-space-hairline));
+  min-height: var(--asb-control-height-compact);
+  padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid transparent;
   border-radius: var(--asb-radius);
+  background: transparent;
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+  text-align: left;
 }
 
-.tray-provider-item + .tray-provider-item {
+.tray-provider + .tray-provider {
   margin-top: var(--asb-space-hairline);
 }
 
-.tray-provider-item.is-active {
+/* Disabled marks the current row and rows locked during a switch, not
+   unavailable controls; the global button dim must not apply. */
+.tray-provider:disabled { opacity: 1; }
+
+.tray-provider:not(:disabled):hover { background: var(--asb-content-muted); }
+
+.tray-provider.is-active {
   border-color: var(--asb-action);
   background: var(--asb-row-selected);
 }
 
-/* `unstyled` variant: this class owns every visual property outright instead
-   of fighting the (0,3,0) base geometry rules, which silently overrode the
-   full-width flex layout before. */
-.tray-provider {
+/* Fixed-width slot, always rendered: inactive rows keep it empty so the name
+   column starts at the same x on every row and state. */
+.tray-provider-check {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: calc(var(--asb-space-unit) + var(--asb-space-hairline));
-  min-height: var(--asb-control-height-compact);
-  padding: var(--asb-space-hairline) var(--asb-space-2);
-  border: 0;
-  border-radius: var(--asb-radius);
-  background: transparent;
-  text-align: left;
+  flex: none;
+  width: var(--asb-icon-size-md);
+  color: var(--asb-action);
 }
-.tray-provider:disabled { opacity: 1; }
-.tray-provider:not(:disabled):hover { background: var(--asb-content-muted); }
-.tray-check { display: flex; flex: none; width: var(--asb-icon-size-md); color: var(--asb-action); }
+
 .tray-provider-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--asb-text);
-  font: var(--asb-text-label);
   font-weight: 600;
 }
-.tray-switch {
-  /* Fixed-width, always-reserved right slot: the widest state text (切换中)
-     sets the rail width so every row state keeps an identical name column. */
-  flex: none;
-  min-width: calc(3em + var(--asb-space-hairline));
-  text-align: right;
-  color: var(--asb-action);
-  font: var(--asb-text-label);
-}
-.tray-usage-balance {
-  /* Content-sized slot right-anchored against the switch rail: right edges
-     align across rows through the flex layout, so no width floor is needed
-     and the name column keeps every spare pixel. Rendered only when a cached
-     reading exists. */
+
+/* Content-sized, right-anchored against the switch rail; rendered only when
+   a cached reading exists. */
+.tray-provider-balance {
   flex: none;
   overflow: hidden;
   white-space: nowrap;
   text-align: right;
   color: var(--asb-text-muted);
-  font: var(--asb-text-label);
+}
+
+/* Fixed right rail: the widest state text (切换中) reserves the width so
+   every row and state keeps an identical name column. 切换 is a hover-only
+   affordance — hidden on idle rows, revealed under the pointer — while a
+   switching row always shows its 切换中 feedback. */
+.tray-provider-switch {
+  flex: none;
+  min-width: 3em;
+  text-align: right;
+  color: var(--asb-action);
+  visibility: hidden;
+}
+.tray-provider:not(:disabled):hover .tray-provider-switch,
+.tray-provider.is-switching .tray-provider-switch {
+  visibility: visible;
 }
 .tray-footer {
   padding: var(--asb-space-1);
   border-top: 1px solid var(--asb-hairline);
 }
-.tray-ghost-button.asb-btn { border-color: transparent; background: transparent; min-width: 0; }
+/* Header/footer commands. Quiet tray chrome: paired with the `unstyled`
+   Button marker, this class owns every property outright instead of
+   stripping the secondary variant surface. */
+.tray-ghost-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--asb-space-unit) + var(--asb-space-hairline));
+  min-height: var(--asb-touch-target);
+  padding: 0 var(--asb-space-3);
+  border: 0;
+  border-radius: var(--asb-radius);
+  background: transparent;
+  color: var(--asb-text);
+}
+.tray-ghost-button:not(:disabled):hover { background: var(--asb-content-muted); }
 .tray-error {
   padding: var(--asb-space-1) var(--asb-space-4);
   color: var(--asb-danger);

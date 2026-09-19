@@ -1,7 +1,6 @@
 import { ClientSettingsPanel } from "../components/ClientSettingsPanel";
 import { CodexSubagentSettingsPanel } from "../components/CodexSubagentSettingsPanel";
 import { GlobalPromptManager } from "../components/GlobalPromptManager";
-import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function ClientConfigurationWorkspace({ model }: { model: SwitchboardModel }) {
@@ -16,7 +15,6 @@ export function ClientConfigurationWorkspace({ model }: { model: SwitchboardMode
   const promptDocument = prompts.documents[app];
   return (
     <section className="asb-panel" aria-label="客户端配置">
-      <WorkspaceHeader title="客户端配置" />
       <ClientSettingsPanel
         key={app}
         app={app}

@@ -3,8 +3,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  --asb-route-card-min-height: 224px;
-  min-height: var(--asb-route-card-min-height);
+  min-height: 224px;
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--asb-hairline);
@@ -21,31 +20,46 @@
   --asb-hairline-strong: rgb(16 38 59 / 0.3);
   --asb-route-inner-bg: rgb(255 255 255 / 0.48);
   border-color: rgb(255 255 255 / 0.78);
-  background: var(--asb-route-active-gradient);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.56),
     var(--asb-route-shadow);
 }
 
-.asb-route-card[data-app="claude"].is-on {
-  border-color: rgb(255 255 255 / 0.78);
-}
-
-/* The idle-card point matrix is decorative only; active overview cards use
-   the cloud gradient without a competing texture. */
-.asb-card-particle-canvas {
+/* The dynamic gradient is one oversized layer drifting inside the card's
+   overflow clip; transform-only keyframes keep the loop compositor-driven.
+   Contract: the layer is 132% of the card (16% bleed per side) and the
+   gradient anchors in tokens.css are LAYER-relative to this geometry —
+   retune them if the bleed changes. Keyframe excursions (translate plus
+   scale growth) must stay below the 16% bleed. */
+.asb-route-card::before {
+  content: "";
   position: absolute;
-  inset: 0;
+  inset: -16%;
   z-index: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
   pointer-events: none;
+  background: var(--asb-route-idle-glow);
+  animation: asb-route-gradient-drift 24s var(--asb-easing) infinite alternate;
 }
 
-.asb-route-card.is-on .asb-card-particle-canvas {
-  display: none;
+.asb-route-card[data-app="claude"]::before {
+  /* Half of one cycle, so the twin cards drift in opposite phase. */
+  animation-delay: -12s;
 }
+
+.asb-route-card.is-on::before {
+  background: var(--asb-route-active-gradient);
+}
+
+@keyframes asb-route-gradient-drift {
+  from { transform: translate3d(-3.5%, -2.5%, 0) scale(1); }
+  to { transform: translate3d(3.5%, 2.5%, 0) scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asb-route-card::before { animation: none; }
+}
+
+:root[data-motion="reduce"] .asb-route-card::before { animation: none; }
 
 .asb-route-card-body {
   position: relative;
@@ -69,10 +83,6 @@
   color: var(--asb-text-muted);
 }
 
-.asb-route-card.is-on .asb-route-client {
-  color: var(--asb-text-muted);
-}
-
 .asb-route-provider {
   margin: var(--asb-space-hairline) 0 0;
   /* Aligned with the client name text, not the logo tile beside it. */
@@ -80,10 +90,6 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   font: var(--asb-text-title);
-  color: var(--asb-text);
-}
-
-.asb-route-card.is-on .asb-route-provider {
   color: var(--asb-text);
 }
 

@@ -20,7 +20,6 @@ import { SessionMessageView } from "./session/SessionMessageView";
 import {
   codexOutlinePreview,
   copyText,
-  directoryName,
   previewLine,
   sessionMatchesSearch,
 } from "./session/session-content";
@@ -485,31 +484,38 @@ export function SessionManager({ active }: { active: boolean }) {
                   >
                     复制工作目录
                   </Button>
+                  <Button
+                    variant="danger"
+                    disabled={deleting}
+                    onClick={() => setPendingDelete(selected)}
+                  >
+                    删除会话
+                  </Button>
                 </div>
               </header>
-              <div className="asb-session-danger-row">
-                <Button
-                  variant="danger"
-                  disabled={deleting}
-                  onClick={() => setPendingDelete(selected)}
-                >
-                  删除会话
-                </Button>
-              </div>
-              <p className="asb-session-meta-line">
-                <span className="asb-code asb-session-meta-id">{selected.sessionId}</span>
-                <span>{selected.lastActiveAt ? <Time iso={selected.lastActiveAt} /> : "时间未知"}</span>
+              <dl className="asb-session-facts">
+                <dt>会话 ID</dt>
+                <dd>
+                  <code className="asb-code">{selected.sessionId}</code>
+                </dd>
+                <dt>最近活动</dt>
+                <dd>{selected.lastActiveAt ? <Time iso={selected.lastActiveAt} /> : "时间未知"}</dd>
                 {selected.projectDir && (
-                  <Button
-                    variant="unstyled"
-                    className="asb-session-meta-dir"
-                    title={`${selected.projectDir}（点击复制）`}
-                    onClick={() => selected.projectDir && void copy(selected.projectDir, "工作目录")}
-                  >
-                    {directoryName(selected.projectDir)}
-                  </Button>
+                  <>
+                    <dt>工作目录</dt>
+                    <dd>
+                      <Button
+                        variant="unstyled"
+                        className="asb-session-fact-dir"
+                        title={`${selected.projectDir}（点击复制）`}
+                        onClick={() => selected.projectDir && void copy(selected.projectDir, "工作目录")}
+                      >
+                        {selected.projectDir}
+                      </Button>
+                    </dd>
+                  </>
                 )}
-              </p>
+              </dl>
               <div className="asb-session-command">
                 <code className="asb-code">{selected.resumeCommand}</code>
               </div>

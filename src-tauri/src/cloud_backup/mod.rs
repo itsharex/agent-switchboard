@@ -58,7 +58,6 @@ with check ((select auth.uid()) = user_id);"#;
 pub struct CloudBackupResult {
     pub updated_at: String,
     pub profile_count: usize,
-    pub migrated: bool,
 }
 
 #[derive(Debug, Serialize)]

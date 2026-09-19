@@ -33,13 +33,12 @@
   .asb-session-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--asb-space-2);
     min-height: 0;
   }
 
   .asb-session-list {
     max-height: 40vh;
-    border-right: 0;
-    border-bottom: 1px solid var(--asb-hairline);
   }
 
   /* Stacked mode trades the fixed detail chrome for a taller list: the whole
@@ -70,14 +69,14 @@
 }
 
 @media (max-width: 600px) {
-  /* The log header's view-controls row stacks by control group. */
-  .asb-runtime-logs .asb-header-secondary {
+  /* The log view-controls row in the diagnostics header stacks by control group. */
+  .asb-diagnostics .asb-header-secondary {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .asb-runtime-log-level-control,
-  .asb-runtime-logs .asb-header-secondary .asb-btn-secondary {
+  .asb-diagnostics .asb-header-secondary .asb-btn-secondary {
     width: 100%;
   }
 
@@ -120,12 +119,6 @@
   .asb-session-actions {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .asb-session-message.is-assistant,
-  .asb-session-message.is-user {
-    margin-right: 0;
-    margin-left: 0;
   }
 }
 

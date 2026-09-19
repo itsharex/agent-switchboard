@@ -106,13 +106,30 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             "import_discovered_claude_profile" => {
                 command!(commands::import_discovered_claude_profile(app.clone()))
             }
-            "scan_ccswitch" => command!(commands::scan_ccswitch(app.clone())),
+            "scan_ccswitch" => command!(commands::scan_ccswitch(
+                app.clone(),
+                argument::<Option<String>>(&request.args, "dbDirectory")?,
+            )),
             "import_ccswitch_claude_profiles" => {
                 command!(commands::import_ccswitch_claude_profiles(
                     app.clone(),
                     argument(&request.args, "keys")?,
+                    argument::<Option<String>>(&request.args, "dbDirectory")?,
                 ))
             }
+            "export_providers_sql" => command!(commands::export_providers_sql(
+                app.clone(),
+                argument(&request.args, "targetPath")?,
+            )),
+            "apply_providers_sql" => command!(commands::apply_providers_sql(
+                app.clone(),
+                argument(&request.args, "sqlPath")?,
+            )),
+            "import_providers_sql" => command!(commands::import_providers_sql(
+                app.clone(),
+                argument(&request.args, "ids")?,
+                argument(&request.args, "sqlPath")?,
+            )),
             "get_provider_parameters_catalog" => as_json(Ok::<_, CommandError>(
                 commands::client_settings::get_provider_parameters_catalog(argument::<AppKind>(
                     &request.args,

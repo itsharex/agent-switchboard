@@ -154,7 +154,8 @@ impl ConfigStore {
 
     /// Restores a previously validated Codex provider preimage. This is
     /// deliberately crate-visible: only the active-save recovery transaction
-    /// may overwrite a specialized provider file.
+    /// and the provider-transfer import may overwrite a specialized provider
+    /// file.
     pub(crate) fn overwrite_codex_provider_file(
         &self,
         file: CodexProviderFile,

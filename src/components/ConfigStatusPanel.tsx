@@ -12,7 +12,6 @@ export interface ConfigStatusPanelProps {
   profiles: ProviderProfile[];
   locks: Partial<Record<AppKind, LockStatus>>;
   busy: boolean;
-  onRefresh: () => void;
   onRecoverLock: (app: AppKind) => void;
 }
 
@@ -122,15 +121,10 @@ function ConfigStatusCard({ status, profiles, lock, busy, onRecoverLock }: {
   );
 }
 
-export function ConfigStatusPanel({ statuses, profiles, locks, busy, onRefresh, onRecoverLock }: ConfigStatusPanelProps) {
+export function ConfigStatusPanel({ statuses, profiles, locks, busy, onRecoverLock }: ConfigStatusPanelProps) {
   return (
     <section className="asb-panel" aria-label="配置状态">
-      <ModuleHeader
-        title="配置状态"
-        primaryActions={
-          <Button variant="secondary" disabled={busy} onClick={onRefresh}>刷新状态</Button>
-        }
-      />
+      <ModuleHeader title="配置状态" />
       {statuses === null ? (
         <div className="asb-status-grid" role="status" aria-label="正在读取配置状态">
           {Array.from({ length: 4 }, (_, index) => (

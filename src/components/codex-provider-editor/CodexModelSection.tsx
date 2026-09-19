@@ -252,9 +252,9 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
     }));
   };
   return (
-    <section className="asb-provider-section" aria-label="模型">
+    <section className="asb-editor-section" aria-label="模型">
       <h3 className="asb-section-title">模型</h3>
-      <div className="asb-provider-section-fields">
+      <div className="asb-editor-section-fields">
         <div className="asb-provider-model-toolbar">
           <label className="asb-field">
             <span>默认模型</span>

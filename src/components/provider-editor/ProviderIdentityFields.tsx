@@ -29,9 +29,9 @@ interface AccessModeProps {
 export function ProviderAccessMode({ editor, busy, officialTakenApps, onOpenOfficial }: AccessModeProps) {
   const { draft, setDraft, setLoginDone } = editor;
   return (
-    <section className="asb-provider-section" aria-label="接入方式">
+    <section className="asb-editor-section" aria-label="接入方式">
       <h3 className="asb-section-title">接入方式</h3>
-      <div className="asb-provider-section-fields">
+      <div className="asb-editor-section-fields">
         <div className="asb-field">
           <span>选择连接类型</span>
           <div className="asb-segments" role="radiogroup" aria-label="接入方式">
@@ -93,9 +93,9 @@ export function ProviderIdentityFields(props: IdentityProps) {
   const { editor, busy } = props;
   const { draft, setDraft } = editor;
   return (
-    <section className="asb-provider-section" aria-label="基本资料">
+    <section className="asb-editor-section" aria-label="基本资料">
       <h3 className="asb-section-title">基本资料</h3>
-      <div className="asb-provider-section-fields">
+      <div className="asb-editor-section-fields">
         <div className="asb-provider-field-grid"><ClientField {...props} /></div>
         <div className="asb-provider-field-grid">
           <label className="asb-field"><span>名称</span>

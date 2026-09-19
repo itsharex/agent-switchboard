@@ -13,6 +13,7 @@ import {
 import { ClaudeExtraConfigurationEditor } from "./ClaudeExtraConfigurationEditor";
 import { OfficialSettingsDirectory } from "./OfficialSettingsDirectory";
 import { SettingsFields } from "./SettingsFields";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 
 interface ClientSettingsPanelProps {
   app: AppKind;
@@ -54,7 +55,7 @@ function clientConfigStatus(
 
 function actionStatus(props: ClientSettingsPanelProps) {
   if (props.configStatus?.exists && !props.configStatus.syntaxOk) {
-    return { message: "真实客户端配置格式错误，请在“配置审阅”中生成自动修复预览", error: true };
+    return { message: "真实客户端配置格式错误，请在“通用配置文件”中生成自动修复预览", error: true };
   }
   if (props.editorState.phase === "dirty") return { message: "有未应用修改", error: false };
   const message = clientConfigStatus(props.configStatus);
@@ -79,7 +80,7 @@ function ClientConfigurationReviewButton({
 }: ConfigurationReviewButtonProps) {
   const label = state.currentConfigurationLoading
     ? "正在读取配置"
-    : open ? "收起配置审阅" : "配置审阅";
+    : open ? "收起通用配置文件" : "通用配置文件";
   return (
     <Button
       variant="secondary"
@@ -103,7 +104,7 @@ function ClientConfigurationReview({
 }: ConfigurationReviewProps) {
   const source = state.currentConfiguration;
   if (!source && !state.currentConfigurationLoading && !state.currentConfigurationError) {
-    return <p className="asb-field-help" role="status">正在准备配置审阅。</p>;
+    return <p className="asb-field-help" role="status">正在准备通用配置文件。</p>;
   }
   return (
     <div className="asb-client-configuration-review">
@@ -126,7 +127,7 @@ function ClientConfigurationReview({
       <section className="asb-client-configuration-review-scope" aria-label="ASB 管理范围">
         <h3 className="asb-section-title">ASB 管理范围</h3>
         <p className="asb-field-help">
-          标准通用设置由本页表单管理；关闭配置审阅后，请使用对应设置项修改。
+          标准通用设置由本页表单管理；收起通用配置文件后，请使用对应设置项修改。
         </p>
         {app === "codex" && (
           <p className="asb-field-help">Codex 子 agent 的三项全局运行设置由“子 agent 运行”模块管理。</p>
@@ -246,6 +247,8 @@ interface ClientSettingsToolbarProps {
   onSectionChange: (section: ClientSettingsSection | null, trigger: HTMLButtonElement) => void;
 }
 
+/** The page header: the client picker leads the navigation row, the four
+ * disclosure entries sit right of it like every workspace's page actions. */
 function ClientSettingsToolbar({
   panel,
   openSection,
@@ -261,59 +264,64 @@ function ClientSettingsToolbar({
   const instructionsOpen = openSection === "instructions";
   const resetOpen = openSection === "reset";
   return (
-    <div className="asb-client-preferences-toolbar">
-      <ClientPicker
-        app={panel.app}
-        disabled={panel.busy}
-        label="客户端配置客户端"
-        onChange={(target) => panel.onSelectApp(target)}
-      />
-      <div className="asb-client-preferences-toolbar-actions">
-        <Button
-          variant="secondary"
-          aria-expanded={directoryOpen}
-          aria-controls={directoryId}
-          disabled={!panel.editorState.editor}
-          onClick={(event) => onSectionChange(directoryOpen ? null : "directory", event.currentTarget)}
-        >
-          {directoryOpen ? "返回客户端配置" : "官方设置目录"}
-        </Button>
-        <ClientConfigurationReviewButton
-          {...panel}
-          open={reviewOpen}
-          reviewId={reviewId}
-          onToggle={(trigger) => {
-            const next = !reviewOpen;
-            onSectionChange(next ? "review" : null, trigger);
-            if (next) panel.onReview(panel.app);
-          }}
-        />
-        <Button
-          variant="secondary"
-          aria-expanded={instructionsOpen}
-          aria-controls={instructionsId}
+    <WorkspaceHeader
+      title="客户端配置"
+      primary={
+        <ClientPicker
+          app={panel.app}
           disabled={panel.busy}
-          onClick={(event) => onSectionChange(instructionsOpen ? null : "instructions", event.currentTarget)}
-        >
-          {instructionsOpen ? "收起全局指令" : "全局指令"}
-        </Button>
-        <Button
-          variant="danger"
-          aria-expanded={resetOpen}
-          aria-controls={resetId}
-          disabled={!configuration.canNativeReset || panel.busy || configuration.applying}
-          onClick={(event) => {
-            const next = !resetOpen;
-            onSectionChange(next ? "reset" : null, event.currentTarget);
-            if (next) configuration.prepareNativeReset("nativeDefaults");
-          }}
-        >
-          {resetOpen && configuration.applying
-            ? configuration.resetView === "clearExtraConfiguration" ? "正在生成清空预览" : "正在生成恢复预览"
-            : resetOpen ? "收起恢复设置" : "恢复为客户端原生默认值"}
-        </Button>
-      </div>
-    </div>
+          label="客户端配置客户端"
+          onChange={(target) => panel.onSelectApp(target)}
+        />
+      }
+      primaryActions={
+        <>
+          <Button
+            variant="secondary"
+            aria-expanded={directoryOpen}
+            aria-controls={directoryId}
+            disabled={!panel.editorState.editor}
+            onClick={(event) => onSectionChange(directoryOpen ? null : "directory", event.currentTarget)}
+          >
+            {directoryOpen ? "返回客户端配置" : "官方设置目录"}
+          </Button>
+          <ClientConfigurationReviewButton
+            {...panel}
+            open={reviewOpen}
+            reviewId={reviewId}
+            onToggle={(trigger) => {
+              const next = !reviewOpen;
+              onSectionChange(next ? "review" : null, trigger);
+              if (next) panel.onReview(panel.app);
+            }}
+          />
+          <Button
+            variant="secondary"
+            aria-expanded={instructionsOpen}
+            aria-controls={instructionsId}
+            disabled={panel.busy}
+            onClick={(event) => onSectionChange(instructionsOpen ? null : "instructions", event.currentTarget)}
+          >
+            {instructionsOpen ? "收起全局指令" : "全局指令"}
+          </Button>
+          <Button
+            variant="danger"
+            aria-expanded={resetOpen}
+            aria-controls={resetId}
+            disabled={!configuration.canNativeReset || panel.busy || configuration.applying}
+            onClick={(event) => {
+              const next = !resetOpen;
+              onSectionChange(next ? "reset" : null, event.currentTarget);
+              if (next) configuration.prepareNativeReset("nativeDefaults");
+            }}
+          >
+            {resetOpen && configuration.applying
+              ? configuration.resetView === "clearExtraConfiguration" ? "正在生成清空预览" : "正在生成恢复预览"
+              : resetOpen ? "收起恢复设置" : "恢复为客户端原生默认值"}
+          </Button>
+        </>
+      }
+    />
   );
 }
 
@@ -385,7 +393,7 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
         configuration={configuration}
         onSectionChange={changeSection}
       />
-      <ClientSettingsDisclosure id={reviewId} label="配置审阅" section="review" open={reviewOpen}>
+      <ClientSettingsDisclosure id={reviewId} label="通用配置文件" section="review" open={reviewOpen}>
         <ClientConfigurationReview {...props} open={reviewOpen} />
       </ClientSettingsDisclosure>
       <ClientSettingsDisclosure id={instructionsId} label="全局指令编辑器" section="instructions" open={instructionsOpen}>

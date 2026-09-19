@@ -46,10 +46,10 @@ export function ProviderConnectionTest({
       },
     } : null,
   [app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, valid]);
-  return <section className="asb-provider-section" aria-label="连接测试">
+  return <section className="asb-editor-section" aria-label="连接测试">
     <h3 className="asb-section-title">连接测试</h3>
-    <div className="asb-provider-section-fields">
-      <div className="asb-provider-test-action">
+    <div className="asb-editor-section-fields">
+      <div className="asb-editor-action-row">
         <Button ref={trigger} variant="secondary" disabled={busy} aria-expanded={open && active}
           aria-controls={id} onClick={() => setOpen((value) => !value)}>
           <ConnectivityIcon />{open ? "收起测试" : "测试供应商"}

@@ -30,7 +30,6 @@ where
     Ok(CloudBackupResult {
         updated_at,
         profile_count: snapshot.provider_count(),
-        migrated: false,
     })
 }
 
@@ -63,27 +62,11 @@ where
     let mut cleartext = decrypt(&record.payload, backup_password)?;
     let decoded = decode_cloud_backup_snapshot(&cleartext);
     cleartext.fill(0);
-    let decoded = decoded?;
-    let updated_at = if decoded.migrated {
-        let payload = encrypt(&decoded.snapshot, backup_password)
-            .map_err(|error| format!("云端备份格式升级失败，本机配置未改变：{error}"))?;
-        let updated_at = backup_updated_at();
-        upload_payload_with_request(&settings, &user, &payload, &updated_at, request)
-            .map_err(|error| format!("云端备份格式升级失败，本机配置未改变：{error}"))?;
-        updated_at
-    } else {
-        record.updated_at
-    };
-    if let Err(error) = enable_snapshot(&state.configuration(), &decoded.snapshot) {
-        if decoded.migrated {
-            return Err(format!("云端备份已升级，但本机恢复失败：{error}"));
-        }
-        return Err(error);
-    }
+    let snapshot = decoded?;
+    enable_snapshot(&state.configuration(), &snapshot)?;
     Ok(CloudBackupResult {
-        updated_at,
-        profile_count: decoded.snapshot.provider_count(),
-        migrated: decoded.migrated,
+        updated_at: record.updated_at,
+        profile_count: snapshot.provider_count(),
     })
 }
 

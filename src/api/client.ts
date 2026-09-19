@@ -34,7 +34,7 @@ export interface TraySnapshot {
 export const getTraySnapshot = (): Promise<TraySnapshot> => invoke("tray_snapshot");
 export const trayReady = (): Promise<void> => invoke("tray_ready");
 export const hideTray = (): Promise<void> => invoke("tray_hide");
-export const openTrayMain = (providers: boolean): Promise<void> => invoke("tray_open_main", { providers });
+export const openTrayMain = (): Promise<void> => invoke("tray_open_main");
 export const switchTrayProvider = (profileId: string): Promise<void> => invoke("tray_switch", { profileId });
 export const quitTray = (): Promise<void> => invoke("tray_quit");
 export const resizeTray = (height: number): Promise<void> => invoke("tray_resize", { height });
@@ -46,10 +46,6 @@ export function onTrayChanged(handler: () => void): Promise<() => void> {
 export function onClientConfigChanged(handler: () => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen("client-config-changed", handler);
-}
-export function onTrayNavigate(handler: () => void): Promise<() => void> {
-  if (isBrowserDevelopment) return Promise.resolve(() => {});
-  return listen("tray-navigate", handler);
 }
 export function onTrayError(handler: (message: string) => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});

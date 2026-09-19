@@ -23,8 +23,11 @@
   padding-inline: var(--asb-space-2);
 }
 
-.asb-settings-sidebar-heading .asb-panel-title {
+/* The sidebar's page title: the workspace-title type step on the sidebar's
+ * own surface, an owned class rather than the header component's internals. */
+.asb-settings-sidebar-title {
   margin: 0;
+  font: var(--asb-text-title);
 }
 
 .asb-settings-navigation {
@@ -63,19 +66,12 @@
   min-width: 0;
 }
 
-.asb-client-preferences-toolbar,
-.asb-client-preferences-toolbar-actions,
 .asb-client-provider-help,
 .asb-client-preference-save {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--asb-space-2);
-}
-
-.asb-client-preferences-toolbar {
-  justify-content: space-between;
-  margin-bottom: var(--asb-space-4);
 }
 
 /* Client configuration keeps its expanded modules on the muted-gray module

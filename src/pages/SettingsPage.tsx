@@ -65,7 +65,7 @@ function ApplicationSettings(props: SettingsPageProps) {
               <span className="asb-checkbox-label">设置加载失败：{props.loadError}</span>
               <span className="asb-app-setting-detail">读取失败期间，外观与关闭行为使用默认值</span>
             </div>
-            <div className="asb-panel-actions">
+            <div className="asb-app-settings-error-actions">
               <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>重试</Button>
             </div>
           </div>
@@ -120,7 +120,7 @@ export function SettingsPage(props: SettingsPageProps) {
     <section className="asb-settings-workspace" aria-label="设置">
       <aside className="asb-settings-sidebar">
         <div className="asb-settings-sidebar-heading">
-          <h2 className="asb-panel-title">设置</h2>
+          <h2 className="asb-settings-sidebar-title">设置</h2>
           {props.onReturnToProviders && <Button variant="secondary" onClick={props.onReturnToProviders}>返回供应商</Button>}
         </div>
         <nav className="asb-settings-navigation" aria-label="设置分类">
@@ -132,9 +132,9 @@ export function SettingsPage(props: SettingsPageProps) {
       </aside>
       <div className="asb-settings-content">
         <SettingsPanel section="application" selected={section}><ApplicationSettings {...props} /></SettingsPanel>
-        {section === "backups" && props.backups}
-        <div hidden={section !== "gateway"}>{props.gateway}</div>
         {section === "client-management" && props.clientManagement}
+        <div hidden={section !== "gateway"}>{props.gateway}</div>
+        {section === "backups" && props.backups}
         <div hidden={section !== "diagnostics"}>{props.diagnostics}</div>
         <SettingsPanel section="about" selected={section}><AboutSettings {...props} /></SettingsPanel>
       </div>

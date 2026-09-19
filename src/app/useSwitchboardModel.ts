@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { onTrayError, onTrayNavigate, openBackupDir, type AppKind, type CommandError } from "../api/client";
-import type { Page } from "./navigation";
+import { onTrayError, openBackupDir, type AppKind, type CommandError } from "../api/client";
 import { useAppSettings } from "./useAppSettings";
 import { useCcImport } from "./useCcImport";
 import { useCloudBackup } from "./useCloudBackup";
@@ -11,21 +10,13 @@ import { useDiscovery } from "./useDiscovery";
 import { useOperationFrame } from "./useOperationFrame";
 import { usePromptDocuments } from "./usePromptDocuments";
 import { useProviders } from "./useProviders";
+import { useSqlImport } from "./useSqlImport";
 import { latestOverall, useSwitchOperations } from "./useSwitchOperations";
 import { useProviderSwitchFlow } from "./useProviderSwitchFlow";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 
-function useTrayEvents(setPage: (page: Page) => void, reportError: (error: CommandError) => void) {
-  useEffect(() => {
-    let disposed = false;
-    let stop: (() => void) | undefined;
-    void onTrayNavigate(() => setPage("供应商切换")).then((unlisten) => {
-      if (disposed) unlisten();
-      else stop = unlisten;
-    }).catch((error: unknown) => reportError({ code: "TRAY_EVENT", message: error instanceof Error ? error.message : String(error) }));
-    return () => { disposed = true; stop?.(); };
-  }, [reportError, setPage]);
+function useTrayEvents(reportError: (error: CommandError) => void) {
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
@@ -44,7 +35,7 @@ export function useSwitchboardModel() {
   const [appFilter, setAppFilter] = useState<AppKind>("codex");
   const frame = useOperationFrame();
   const { busy, reportError, clearError, setBusy } = frame;
-  useTrayEvents(setPage, reportError);
+  useTrayEvents(reportError);
   const operationContext = { busy, onError: reportError, clearError, setBusy };
   const snapshot = useConfigSnapshot({ onError: reportError });
   const { targetProfileId, setTargetProfileId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
@@ -77,6 +68,8 @@ export function useSwitchboardModel() {
   });
   const ccImport = useCcImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
     records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, setTargetProfile, setAppFilter });
+  const sqlImport = useSqlImport({ ...operationContext, invalidateCandidates, refresh: refreshSnapshot,
+    records, codexRecords: snapshot.codexRecords, preferredApp: appFilter, setTargetProfile, setAppFilter });
   const targetRecord = records.find((record) => record.profile.id === targetProfileId) ?? null;
   const targetProfile = targetRecord?.profile ?? null;
   const operations = useSwitchOperations({
@@ -97,7 +90,7 @@ export function useSwitchboardModel() {
 
   return { ...navigation, appFilter, ...frame, snapshot, activeProfileId, providerSwitch,
     clientSettings, codexSubagentSettings, promptDocuments, appSettingsState, cloudBackup, updateCheck, discoveryState,
-    ccImport, targetProfile, operations, providers, lastSwitchOverall, openBackupFolder };
+    ccImport, sqlImport, targetProfile, operations, providers, lastSwitchOverall, openBackupFolder };
 }
 
 export type SwitchboardModel = ReturnType<typeof useSwitchboardModel>;

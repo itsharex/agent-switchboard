@@ -157,6 +157,22 @@
   border-top: 1px solid var(--asb-hairline);
 }
 
+/* The confirmation's own heading line — an owned flex row, not the page
+   header's internals. */
+.asb-preview-inline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--asb-space-2);
+}
+
+.asb-preview-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
 /* Drag handle: the only drag affordance, so pointer drags never compete
    with the row's click-to-select. touch-action none lets PointerSensor
    own touch gestures on the handle. */

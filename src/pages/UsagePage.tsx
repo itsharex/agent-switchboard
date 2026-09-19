@@ -1,30 +1,18 @@
-import { useState } from "react";
 import {
   type ModelUsageGroup,
-  type ModelUsageRange,
   type ModelUsageReport,
 } from "../api/client";
-import { Button } from "../components/Button";
 import {
   ModelUsageDistributionChart,
 } from "../components/charts/ModelUsageDistributionChart";
 import { UsageTrendChart } from "../components/charts/UsageTrendChart";
-import { RadioOption } from "../components/RadioOption";
 import { StatCards } from "../components/charts/stat-cards";
 import { Table, type TableColumn } from "../components/Table";
-import { Time } from "../components/Time";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { UsageIcon } from "../components/icons";
 import { clientName } from "../lib/client-name";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenCount } from "../lib/token-format";
 import { useModelUsageReport } from "./use-model-usage-report";
-
-const RANGE_OPTIONS: ReadonlyArray<{ value: ModelUsageRange; label: string }> = [
-  { value: "today", label: "今日" },
-  { value: "last7Days", label: "近 7 天" },
-  { value: "last30Days", label: "近 30 天" },
-  { value: "all", label: "全部" },
-];
 
 function cachedTokenCount(group: ModelUsageGroup): number {
   return group.cacheReadInputTokens + group.cacheCreationInputTokens;
@@ -107,16 +95,14 @@ const USAGE_COLUMNS: Array<TableColumn<ModelUsageGroup>> = [
   },
 ];
 
-/** Read-only local session token totals. Provider quota remains in provider panels. */
-export function UsagePage({ active }: { active: boolean }) {
-  const [range, setRange] = useState<ModelUsageRange>("last7Days");
-  const { read, loading, error, refresh } = useModelUsageReport(active, range);
+/** Read-only local session token totals. Provider quota remains in provider panels.
+ * Range selection, refresh and the snapshot status line live in the page header;
+ * the card renders the report it receives. */
+export function UsagePage({ usage }: {
+  usage: ReturnType<typeof useModelUsageReport>;
+}) {
+  const { read, loading, error } = usage;
   const report = read?.report ?? null;
-
-  const changeRange = (nextRange: ModelUsageRange) => {
-    if (nextRange === range) return;
-    setRange(nextRange);
-  };
 
   const freshInput = report ? reportTotal(report, (group) => group.inputTokens) : 0;
   const cachedInput = report ? reportTotal(report, cachedTokenCount) : 0;
@@ -126,40 +112,7 @@ export function UsagePage({ active }: { active: boolean }) {
 
   return (
     <section className="asb-panel asb-model-usage" aria-label="模型消耗">
-      <ModuleHeader
-        title="模型消耗"
-        primary={
-          <p className="asb-model-usage-snapshot" role="status">
-            {report ? (
-              <>
-                {read?.freshness === "cached" ? "本地快照" : "本次汇总"}：<Time iso={report.generatedAt} />
-                {loading ? " · 正在更新" : null}
-              </>
-            ) : (
-              "尚无本地汇总"
-            )}
-          </p>
-        }
-        primaryActions={
-          <div className="asb-model-usage-controls">
-            <div className="asb-segments" role="radiogroup" aria-label="模型消耗时间范围">
-              {RANGE_OPTIONS.map((option) => (
-                <RadioOption
-                  key={option.value}
-                  name="model-usage-range"
-                  checked={range === option.value}
-                  disabled={!active}
-                  label={option.label}
-                  onChange={() => changeRange(option.value)}
-                />
-              ))}
-            </div>
-            <Button variant="secondary" disabled={loading || !active} onClick={() => void refresh()}>
-              {loading ? "刷新中" : "刷新"}
-            </Button>
-          </div>
-        }
-      />
+      <ModuleHeader title="模型消耗" />
       {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}
       {read?.cacheWarning && <p className="asb-warn-text" role="alert">{read.cacheWarning}</p>}
       {report?.issues.length ? (

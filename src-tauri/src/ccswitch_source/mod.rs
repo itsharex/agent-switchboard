@@ -2,9 +2,11 @@
 //!
 //! A read-only transaction observes committed WAL changes without modifying
 //! provider data. Only the providers table and its column metadata are read.
-//! Source credentials never cross the IPC boundary: scans expose routing
-//! facts and field names only, and both Claude and Codex rows are imported
-//! entirely inside the backend through the batch command.
+//! The source location has one owner, [`db::resolve_db_path`]: the default
+//! home database, or a user-picked folder that directly contains
+//! `cc-switch.db`. Source credentials never cross the IPC boundary: scans
+//! expose routing facts and field names only, and both Claude and Codex rows
+//! are imported entirely inside the backend through the batch command.
 
 mod claude_endpoints;
 mod claude_order;
@@ -16,7 +18,7 @@ use crate::config_store::StoreOperationError;
 use crate::local_state::LocalState;
 use asb_core::ccswitch;
 use asb_core::contracts::{AppKind, RouteMode};
-use db::{db_path, scan_db};
+use db::{resolve_db_path, scan_db};
 use serde::Serialize;
 use std::path::Path;
 
@@ -68,9 +70,11 @@ pub struct CcSwitchImportOutcome {
     pub not_imported: Vec<ccswitch::CcSwitchSkip>,
 }
 
-/// Scans the real user database and marks store duplicates.
-pub fn scan(state: &LocalState) -> Result<CcSwitchScan, String> {
-    scan_at(&db_path()?, state)
+/// Scans the real user database and marks store duplicates. `directory` is a
+/// user-picked folder that directly contains `cc-switch.db`; absence keeps
+/// the default home location.
+pub fn scan(state: &LocalState, directory: Option<&str>) -> Result<CcSwitchScan, String> {
+    scan_at(&resolve_db_path(directory)?, state)
 }
 
 /// Scans an explicit database path (test entry point; still strictly
@@ -99,12 +103,15 @@ pub fn scan_at(path: &Path, state: &LocalState) -> Result<CcSwitchScan, String> 
 /// Re-scans the real user database (so a stale preview can never import) and
 /// imports the requested keys: Claude rows and the Codex official record go
 /// to the generic store, third-party Codex rows complete into the strict
-/// store inside the backend. Writes only the app's own profile store.
+/// store inside the backend. `directory` selects the same folder the scan
+/// used, so the freshness check reads the database the user previewed. Writes
+/// only the app's own profile store.
 pub fn import(
     state: &LocalState,
     keys: &[String],
+    directory: Option<&str>,
 ) -> Result<CcSwitchImportOutcome, StoreOperationError> {
-    import_at(&db_path()?, state, keys)
+    import_at(&resolve_db_path(directory)?, state, keys)
 }
 
 /// Imports requested Claude keys from an explicit database path (test entry

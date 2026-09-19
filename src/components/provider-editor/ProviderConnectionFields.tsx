@@ -51,9 +51,9 @@ function RouteNotice({ editor }: Pick<Props, "editor">) {
 export function ProviderConnectionFields({ editor, busy }: Props) {
   const { draft, setDraft, connection } = editor;
   return (
-    <section className="asb-provider-section" aria-label="连接配置">
+    <section className="asb-editor-section" aria-label="连接配置">
       <h3 className="asb-section-title">连接配置</h3>
-      <div className="asb-provider-section-fields">
+      <div className="asb-editor-section-fields">
         <div className="asb-provider-connection-choice">
           <ProtocolField editor={editor} busy={busy || !!draft.connection?.claudeNative} />
         </div>

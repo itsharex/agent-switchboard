@@ -69,8 +69,8 @@
   padding-bottom: var(--asb-space-4);
 }
 
-.asb-provider-section-fields > .asb-provider-disclosure { border-bottom: 0; }
-.asb-provider-section-fields > .asb-provider-disclosure > .asb-provider-disclosure-body { padding-bottom: 0; }
+.asb-editor-section-fields > .asb-provider-disclosure { border-bottom: 0; }
+.asb-editor-section-fields > .asb-provider-disclosure > .asb-provider-disclosure-body { padding-bottom: 0; }
 
 /* The editor starts with the facts needed to connect. Optional protocol and
    profile controls live behind one explicit disclosure instead of extending
@@ -87,11 +87,11 @@
 
 /* Advanced settings is one top-level disclosure. Once open, each independent
    concern remains a separate shallow module rather than a continuous list. */
-.asb-provider-advanced > .asb-provider-section-fields > .asb-provider-disclosure {
+.asb-provider-advanced > .asb-editor-section-fields > .asb-provider-disclosure {
   border-bottom: 0;
 }
 
-.asb-provider-advanced > .asb-provider-section-fields > .asb-provider-disclosure > summary {
+.asb-provider-advanced > .asb-editor-section-fields > .asb-provider-disclosure > summary {
   min-height: var(--asb-control-height);
   padding-top: 0;
 }
@@ -152,13 +152,6 @@
 .asb-provider-advanced-action strong { font: var(--asb-text-label); font-weight: 600; }
 .asb-provider-advanced-action span { color: var(--asb-text-muted); font: var(--asb-text-label); }
 .asb-provider-advanced-group { display: grid; gap: var(--asb-space-2); }
-
-.asb-provider-test-action {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--asb-space-2);
-}
 
 .asb-provider-test-disclosure {
   display: grid;

@@ -1,3 +1,7 @@
+import type { ReactNode } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { SessionMessage } from "../../api/client";
 import { Time } from "../Time";
 import { Button } from "../Button";
@@ -5,7 +9,25 @@ import { toast } from "../use-toast";
 import { copyText, messageRole } from "./session-content";
 
 const MESSAGE_COLLAPSE_THRESHOLD = 3000;
-const MESSAGE_COLLAPSED_LENGTH = 1500;
+
+/* Transcript links leave the webview the same way every external link in the
+   app does — through the OS opener; anything that is not http(s) stays inert
+   text so recorded payloads cannot smuggle other schemes into the shell. */
+function MarkdownLink({ href, children }: { href?: string; children?: ReactNode }) {
+  const target = typeof href === "string" && /^https?:\/\//i.test(href) ? href : null;
+  if (!target) return <span>{children}</span>;
+  return (
+    <a
+      href={target}
+      onClick={(event) => {
+        event.preventDefault();
+        void openUrl(target);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
 
 interface Props {
   message: SessionMessage;
@@ -25,7 +47,6 @@ export function SessionMessageView({
 }: Props) {
   const isLong = message.content.length > MESSAGE_COLLAPSE_THRESHOLD;
   const collapsed = isLong && !expanded;
-  const display = collapsed ? `${message.content.slice(0, MESSAGE_COLLAPSED_LENGTH)}…` : message.content;
 
   const copy = async () => {
     try {
@@ -50,7 +71,11 @@ export function SessionMessageView({
           复制
         </Button>
       </header>
-      <pre>{display}</pre>
+      <div className={`asb-session-message-body${collapsed ? " is-collapsed" : ""}`}>
+        <Markdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink }}>
+          {message.content}
+        </Markdown>
+      </div>
       {isLong && (
         <Button
           variant="unstyled"

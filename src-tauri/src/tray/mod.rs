@@ -72,7 +72,7 @@ pub fn setup(app: &AppHandle) -> Result<(), String> {
                     button_state: MouseButtonState::Up,
                     ..
                 } => {
-                    if let Err(error) = tray_open_main(tray.app_handle().clone(), false) {
+                    if let Err(error) = tray_open_main(tray.app_handle().clone()) {
                         log::warn!("无法通过托盘打开主窗口: {error}");
                     }
                 }
@@ -130,16 +130,11 @@ pub fn tray_hide(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn tray_open_main(app: AppHandle, providers: bool) -> Result<(), String> {
+pub fn tray_open_main(app: AppHandle) -> Result<(), String> {
     let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
     window.show().map_err(|error| error.to_string())?;
     if window.is_minimized().map_err(|error| error.to_string())? {
         window.unminimize().map_err(|error| error.to_string())?;
-    }
-    if providers {
-        window
-            .emit("tray-navigate", ())
-            .map_err(|error| error.to_string())?;
     }
     window.set_focus().map_err(|error| error.to_string())?;
     popup::hide(&app)
@@ -147,7 +142,7 @@ pub fn tray_open_main(app: AppHandle, providers: bool) -> Result<(), String> {
 
 pub(crate) fn recover_main(app: &AppHandle, error: &str) {
     log::warn!("托盘浮层不可用: {error}");
-    if let Err(open_error) = tray_open_main(app.clone(), false) {
+    if let Err(open_error) = tray_open_main(app.clone()) {
         log::warn!("恢复主窗口失败: {open_error}");
     }
     if let Some(window) = app.get_webview_window("main") {

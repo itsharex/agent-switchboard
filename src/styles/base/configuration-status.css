@@ -132,29 +132,6 @@
 
 /* Public reset signals are a two-part reading surface: one current-day answer
    and a compact source ledger. They remain separate from local configuration. */
-.asb-codex-reset-read-state {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--asb-control-height-micro);
-  padding: var(--asb-space-hairline) var(--asb-space-2);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content);
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.asb-codex-reset-read-state.is-cached {
-  background: var(--asb-content-muted);
-}
-
-.asb-codex-reset-read-state.is-live {
-  border-color: var(--asb-safe);
-  color: var(--asb-safe);
-}
-
 .asb-codex-reset-board {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);

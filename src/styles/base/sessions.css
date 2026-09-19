@@ -1,8 +1,8 @@
 /* Session manager — a restrained master/detail workspace. The list stays
-   compact and operational; transcript text is intentionally near-solid so
-   project paths and past instructions remain easy to audit. The panel fills
-   the main area and every long region scrolls inside the module, never the
-   page (DESIGN.md: 列表保留独立的固定高度滚动区，长记录在详情内滚动). */
+   compact and operational; transcript entries render as GitHub-flavored
+   markdown inside side-aligned chat bubbles (user right, other roles left).
+   The panel fills the main area and every long region scrolls inside the
+   module, never the page. */
 .asb-panel:has(.asb-sessions) {
   display: flex;
   flex-direction: column;
@@ -56,8 +56,9 @@
   list-style: none;
 }
 
-/* The outer .asb-panel owns the surface, so the master/detail split keeps
-   only its one structural divider (.asb-session-list's border-right). */
+/* The outer .asb-panel owns the base surface; the list reads as its own
+   rounded muted module inside it, so the master/detail split needs no
+   structural divider and the detail sits directly on the panel surface. */
 .asb-session-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -65,7 +66,6 @@
   flex: 1;
   --asb-session-layout-min-height: 520px;
   min-height: var(--asb-session-layout-min-height);
-  background: var(--asb-content-muted);
 }
 
 .asb-session-list,
@@ -78,7 +78,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-2);
-  border-right: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content-muted);
 }
 
 .asb-session-list-heading,
@@ -169,7 +170,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-3);
-  background: var(--asb-content);
 }
 
 .asb-session-detail-head {
@@ -207,45 +207,41 @@
   gap: var(--asb-space-2);
 }
 
-/* Deleting a session reads after the session it acts on, on its own hairline
-   row below the safe action cluster. */
-.asb-session-danger-row {
-  display: flex;
-  justify-content: flex-end;
-  border-top: 1px solid var(--asb-hairline);
-  padding-top: var(--asb-space-3);
+/* Detail facts read as a labeled list so each value owns a full row: the
+   session id and project path display completely and wrap instead of
+   truncating against their neighbors. Delete lives at the end of the header
+   action cluster, so no fact row carries a destructive control. */
+.asb-session-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--asb-space-1) var(--asb-space-2);
+  margin: 0;
 }
 
-/* One compact fact line replaces the former meta grid so the transcript
-   keeps as much height as possible: id, last-active, directory name. */
-.asb-session-meta-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--asb-space-1) var(--asb-space-3);
+.asb-session-facts dt {
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
 
-.asb-session-meta-id {
-  --asb-session-meta-id-max-width: 280px;
-  max-width: var(--asb-session-meta-id-max-width);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.asb-session-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: var(--asb-text-body);
 }
 
-.asb-session-meta-dir {
-  min-height: var(--asb-control-height-micro);
+.asb-session-fact-dir {
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--asb-text-muted);
-  font: var(--asb-text-label);
+  font: var(--asb-text-code);
+  text-align: left;
   cursor: pointer;
 }
 
-.asb-session-meta-dir:hover {
+.asb-session-fact-dir:hover {
   color: var(--asb-text);
   text-decoration: underline;
 }
@@ -380,12 +376,23 @@
   min-height: 44px;
 }
 
-.asb-session-message.is-assistant {
-  margin-left: var(--asb-space-5);
+/* Chat-bubble layout: the user reads on the right with the selected-row tint;
+   every other role (assistant, system, tool) reads on the left on the plain
+   content surface. Both sides share the same hairline bubble. */
+.asb-session-message {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  max-width: min(100%, var(--asb-measure-prose));
+  padding: var(--asb-space-2) var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-content);
 }
 
 .asb-session-message.is-user {
-  margin-right: var(--asb-space-5);
+  align-self: flex-end;
+  background: var(--asb-row-selected);
 }
 
 .asb-session-message header {
@@ -454,13 +461,109 @@
   color: var(--asb-text);
 }
 
-.asb-session-message pre {
-  max-width: var(--asb-measure-prose);
-  padding: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  word-break: break-word;
+/* Transcript content renders as GitHub-flavored markdown (react-markdown +
+   remark-gfm). The body owns wrapping; block children get the token spacing
+   steps, and headings stay at the section step so a document title inside a
+   bubble never shouts over the detail's own h3. */
+.asb-session-message-body {
   font: var(--asb-text-body);
+  overflow-wrap: anywhere;
+}
+
+/* Long messages collapse visually, never by slicing the markdown source —
+   the rendered preview is always the head of a complete, valid document. */
+.asb-session-message-body.is-collapsed {
+  max-height: 320px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent);
+  mask-image: linear-gradient(to bottom, #000 78%, transparent);
+}
+
+.asb-session-message-body > :first-child {
+  margin-top: 0;
+}
+
+.asb-session-message-body > :last-child {
+  margin-bottom: 0;
+}
+
+.asb-session-message-body p {
+  margin: var(--asb-space-1) 0;
+}
+
+.asb-session-message-body h1,
+.asb-session-message-body h2,
+.asb-session-message-body h3,
+.asb-session-message-body h4,
+.asb-session-message-body h5,
+.asb-session-message-body h6 {
+  margin: var(--asb-space-2) 0 var(--asb-space-1);
+  font: var(--asb-text-section);
+}
+
+.asb-session-message-body ul,
+.asb-session-message-body ol {
+  margin: var(--asb-space-1) 0;
+  padding-left: calc(var(--asb-space-3) + var(--asb-space-1));
+}
+
+.asb-session-message-body li {
+  margin: var(--asb-space-hairline) 0;
+}
+
+.asb-session-message-body code {
+  padding: 0 var(--asb-space-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-code-bg);
+  font: var(--asb-text-code);
+}
+
+.asb-session-message-body pre {
+  margin: var(--asb-space-1) 0;
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-code-bg);
+  overflow-x: auto;
+}
+
+.asb-session-message-body pre code {
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.asb-session-message-body blockquote {
+  margin: var(--asb-space-1) 0;
+  padding-left: var(--asb-space-2);
+  border-left: 2px solid var(--asb-hairline-strong);
+  color: var(--asb-text-muted);
+}
+
+.asb-session-message-body table {
+  margin: var(--asb-space-1) 0;
+  border-collapse: collapse;
+  font: var(--asb-text-label);
+}
+
+.asb-session-message-body th,
+.asb-session-message-body td {
+  padding: var(--asb-space-unit) var(--asb-space-1);
+  border: 1px solid var(--asb-hairline);
+  text-align: left;
+}
+
+.asb-session-message-body a {
+  color: var(--asb-link);
+}
+
+.asb-session-message-body img {
+  max-width: 100%;
+}
+
+.asb-session-message-body hr {
+  margin: var(--asb-space-2) 0;
+  border: 0;
+  border-top: 1px solid var(--asb-hairline);
 }
 

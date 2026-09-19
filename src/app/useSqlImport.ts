@@ -1,18 +1,18 @@
 import { useCallback, useState } from "react";
 import {
-  importCcswitchClaudeProfiles,
-  scanCcswitch,
-  type CcSwitchImportOutcome,
-  type CcSwitchScan,
+  applyProvidersSql,
+  importProvidersSql,
   type CommandError,
   type AppKind,
   type CodexProviderRecord,
   type ProviderRecord,
+  type ProviderSqlImportOutcome,
+  type ProviderSqlScan,
 } from "../api/client";
 import { toast } from "../components/use-toast";
 import type { ProviderInventory } from "./useConfigSnapshot";
 
-interface CcImportDeps {
+interface SqlImportDeps {
   busy: boolean;
   onError: (error: CommandError) => void;
   clearError: () => void;
@@ -27,10 +27,11 @@ interface CcImportDeps {
 }
 
 /**
- * Read-only scanning and selection import. API keys never cross
- * the scan boundary; import re-resolves selected source rows in the backend.
+ * Applies one exported SQL file into the app-owned scratch database and
+ * imports the previewed selection. Re-applying the same file inside the
+ * import is the freshness guard, so a stale preview can never import.
  */
-export function useCcImport({
+export function useSqlImport({
   busy,
   onError,
   clearError,
@@ -42,51 +43,52 @@ export function useCcImport({
   preferredApp,
   setTargetProfile,
   setAppFilter,
-}: CcImportDeps) {
-  const [ccScan, setCcScan] = useState<CcSwitchScan | null>(null);
-  const [ccSelected, setCcSelected] = useState<Record<string, boolean>>({});
-  const [ccResult, setCcResult] = useState<CcSwitchImportOutcome | null>(null);
-  const [ccDirectory, setCcDirectory] = useState<string | null>(null);
+}: SqlImportDeps) {
+  const [sqlScan, setSqlScan] = useState<ProviderSqlScan | null>(null);
+  const [sqlSelected, setSqlSelected] = useState<Record<string, boolean>>({});
+  const [sqlResult, setSqlResult] = useState<ProviderSqlImportOutcome | null>(null);
+  const [sqlPath, setSqlPath] = useState<string | null>(null);
 
-  const runCcScan = useCallback(async () => {
+  const runSqlApply = useCallback(async (path: string) => {
     if (busy) return;
     setBusy(true);
     clearError();
     try {
-      const scan = await scanCcswitch(ccDirectory);
-      setCcScan(scan);
-      setCcResult(null);
-      // Fresh scan: batch-select every importable row (Claude, Codex
-      // third-party, and the Codex official record); duplicates stay off.
+      const scan = await applyProvidersSql(path);
+      setSqlPath(path);
+      setSqlScan(scan);
+      setSqlResult(null);
+      // Fresh preview: batch-select every new row; overwriting an existing
+      // provider stays an explicit opt-in.
       const selection: Record<string, boolean> = {};
       for (const item of scan.providers) {
         selection[item.key] = !item.existing;
       }
-      setCcSelected(selection);
+      setSqlSelected(selection);
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
-  }, [busy, ccDirectory, clearError, onError, setBusy]);
+  }, [busy, clearError, onError, setBusy]);
 
-  const runCcImport = useCallback(async () => {
-    if (busy || !ccScan) return false;
-    const keys = ccScan.providers
-      .filter((item) => !item.existing && ccSelected[item.key])
+  const runSqlImport = useCallback(async () => {
+    if (busy || !sqlScan || !sqlPath) return false;
+    const ids = sqlScan.providers
+      .filter((item) => sqlSelected[item.key])
       .map((item) => item.key);
-    if (keys.length === 0) return false;
+    if (ids.length === 0) return false;
     invalidateCandidates();
     setBusy(true);
     clearError();
     try {
-      const result = await importCcswitchClaudeProfiles(keys, ccDirectory);
-      setCcResult(result);
+      const result = await importProvidersSql(ids, sqlPath);
+      setSqlResult(result);
       toast({ kind: result.notImported.length > 0 ? "warning" : "success",
-        title: `已导入 ${result.importedCount} 项 · 已导入用量脚本 ${result.usageScriptImportedCount} 项`,
+        title: `已导入 ${result.importedCount} 项${result.updatedCount > 0 ? ` · 覆盖更新 ${result.updatedCount} 项` : ""}`,
         description: result.notImported.length > 0 ? `${result.notImported.length} 项未导入，请查看导入结果` : undefined });
-      setCcScan(null);
-      setCcSelected({});
+      setSqlScan(null);
+      setSqlSelected({});
       const nextInventory = await refresh();
       if (nextInventory && result.importedCount > 0) {
         const previousIds = new Set([...records, ...codexRecords].map((record) => record.profile.id));
@@ -107,16 +109,8 @@ export function useCcImport({
     } finally {
       setBusy(false);
     }
-  }, [busy, ccDirectory, ccScan, ccSelected, clearError, invalidateCandidates, onError, refresh, setBusy,
+  }, [busy, sqlPath, sqlScan, sqlSelected, clearError, invalidateCandidates, onError, refresh, setBusy,
     records, codexRecords, preferredApp, setTargetProfile, setAppFilter]);
 
-  /** Changing the source folder voids the previewed scan; the import's
-   * freshness guard would reject its keys against the new database anyway. */
-  const changeCcDirectory = useCallback((directory: string | null) => {
-    setCcDirectory(directory);
-    setCcScan(null);
-    setCcSelected({});
-  }, []);
-
-  return { ccScan, ccSelected, setCcSelected, ccResult, ccDirectory, changeCcDirectory, runCcScan, runCcImport };
+  return { sqlScan, sqlSelected, setSqlSelected, sqlResult, sqlPath, runSqlApply, runSqlImport };
 }

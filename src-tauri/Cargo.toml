@@ -58,9 +58,11 @@ reqwest = { version = "0.12", default-features = false, features = [
     "socks",
     "system-proxy",
 ] }
-# Read-only access to the import source's SQLite database. `bundled` compiles
-# libsqlite3-sys with the system cc (scoop gcc on this windows-gnu host).
-rusqlite = { version = "0.32", features = ["bundled", "backup"], default-features = false }
+# Read-only access to the import source's SQLite database, plus the guarded
+# applier for exported provider SQL. `bundled` compiles libsqlite3-sys with
+# the system cc (scoop gcc on this windows-gnu host); `hooks` powers the
+# statement authorizer.
+rusqlite = { version = "0.32", features = ["bundled", "backup", "hooks"], default-features = false }
 rquickjs = "0.12.2"
 serde = { workspace = true }
 serde_json = { workspace = true }

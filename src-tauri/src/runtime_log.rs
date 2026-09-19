@@ -95,6 +95,7 @@ pub enum RuntimeLogAction {
     SessionResumed,
     SessionDeleted,
     CcSwitchProfilesImported,
+    ProvidersSqlImported,
     OfficialLoginCompleted,
 }
 

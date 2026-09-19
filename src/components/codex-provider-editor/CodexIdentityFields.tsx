@@ -23,9 +23,9 @@ interface AccessModeProps {
 
 export function CodexAccessMode({ busy, onSwitchAccessMode }: AccessModeProps) {
   return (
-    <section className="asb-provider-section" aria-label="接入方式">
+    <section className="asb-editor-section" aria-label="接入方式">
       <h3 className="asb-section-title">接入方式</h3>
-      <div className="asb-provider-section-fields">
+      <div className="asb-editor-section-fields">
         <div className="asb-field">
           <span>选择连接类型</span>
           <div className="asb-segments" role="radiogroup" aria-label="接入方式">
@@ -64,9 +64,9 @@ function ClientField({ busy, editing, onSwitchClient }: IdentityProps) {
 export function CodexIdentityFields(props: IdentityProps) {
   const { draft, busy, setDraft } = props;
   return (
-    <section className="asb-provider-section" aria-label="基本资料">
+    <section className="asb-editor-section" aria-label="基本资料">
       <h3 className="asb-section-title">基本资料</h3>
-      <div className="asb-provider-section-fields">
+      <div className="asb-editor-section-fields">
         <div className="asb-provider-field-grid"><ClientField {...props} /></div>
         <div className="asb-provider-field-grid">
           <label className="asb-field"><span>名称</span>

@@ -15,8 +15,8 @@ function errorMessage(reason: unknown): string {
 
 /** Owns a rendered panel's read-only history request. A completed live query
  * calls `refresh` to show its newly persisted point without any second
- * provider request. */
-export function useUsageHistory(request: UsageHistoryRequest, revalidationKey = "") {
+ * provider request. Fetches only while `enabled`. */
+export function useUsageHistory(request: UsageHistoryRequest, enabled: boolean) {
   const key = requestKey(request);
   const currentRequest = useMemo<UsageHistoryRequest>(
     () => (request.kind === "provider" ? { kind: "provider", profileId: request.profileId } : { kind: "official" }),
@@ -43,13 +43,14 @@ export function useUsageHistory(request: UsageHistoryRequest, revalidationKey = 
   }, [currentRequest]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     setSeries([]);
     setError(null);
     void refresh();
     return () => {
       version.current += 1;
     };
-  }, [refresh, revalidationKey]);
+  }, [enabled, refresh]);
 
   return { series, loading, error, refresh };
 }

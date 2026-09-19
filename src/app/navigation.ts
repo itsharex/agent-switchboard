@@ -8,12 +8,12 @@ export type ProviderView =
   | { kind: "usage"; profile: ProviderProfile };
 
 export const SETTINGS_SECTIONS = [
-  { value: "application", label: "应用偏好" },
-  { value: "backups", label: "备份与恢复" },
+  { value: "application", label: "偏好设置" },
+  { value: "client-management", label: "客户端工具" },
   { value: "gateway", label: "本机网关" },
-  { value: "client-management", label: "客户端管理" },
+  { value: "backups", label: "备份恢复" },
   { value: "diagnostics", label: "诊断" },
-  { value: "about", label: "关于与更新" },
+  { value: "about", label: "关于" },
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["value"];
 

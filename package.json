@@ -32,7 +32,9 @@
     "react": "^19.1.0",
     "react-aria-components": "^1.21.0",
     "react-dom": "^19.1.0",
-    "recharts": "^3.9.2"
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.9.2",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@anthropic-ai/claude-code": "2.1.275",

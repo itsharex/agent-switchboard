@@ -1,38 +1,17 @@
 @import "./provider-editor-disclosures.css";
 
-.asb-provider-form,
-.asb-provider-section-fields {
+.asb-provider-form {
   display: grid;
   gap: var(--asb-space-3);
   min-width: 0;
 }
 
-.asb-provider-form { gap: var(--asb-space-3); }
-.asb-provider-form .asb-scope-note { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
 .asb-provider-form .asb-field { min-width: 0; }
 
-/* Frame structure (route pinning, header/body/footer rows, back control) is
-   owned by the shared editor frame in forms.css; this file keeps only the
-   provider-specific visuals scoped under the root modifier class. */
-
-.asb-provider-section {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(9.5rem, 12rem) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--asb-space-4);
-  padding: var(--asb-space-4);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content);
-}
-
-.asb-provider-section > .asb-section-title {
-  padding-top: var(--asb-space-hairline);
-  color: var(--asb-text);
-  font: var(--asb-text-section);
-  letter-spacing: -0.01em;
-}
+/* Frame structure (route pinning, header/body/footer rows, back control),
+   the section card, and the shared editor prose (labels, controls, notes)
+   are owned by forms.css; this file keeps only the provider-specific
+   visuals scoped under the root modifier class. */
 .asb-provider-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--asb-space-3); }
 .asb-provider-field-grid > .asb-field { align-self: start; }
 .asb-provider-field-grid > .asb-field:has(textarea) { grid-column: 1 / -1; }
@@ -110,10 +89,6 @@
 .asb-provider-mapping-arrow { color: var(--asb-text-muted); }
 .asb-provider-chat-reasoning { padding-top: var(--asb-space-2); }
 
-@media (max-width: 820px) {
-  .asb-provider-section { grid-template-columns: minmax(0, 1fr); gap: var(--asb-space-3); }
-}
-
 @media (max-width: 580px) {
   .asb-provider-field-grid { grid-template-columns: minmax(0, 1fr); }
   .asb-provider-model-toolbar { grid-template-columns: minmax(0, 1fr); align-items: start; }
@@ -125,13 +100,12 @@
   .asb-provider-mapping-arrow { display: none; }
   .asb-provider-advanced-action { align-items: stretch; flex-direction: column; }
   .asb-provider-advanced-action > .asb-btn { width: 100%; }
-  .asb-provider-section { padding: var(--asb-space-3); }
 }
 
 /* Apple-like typography here is deliberately local: the user-selected app font
    remains authoritative, while hierarchy comes from tighter tracking and a
-   restrained 600/400 weight contrast. */
-.asb-provider-editor .asb-field > span,
+   restrained 600/400 weight contrast. Shared editor prose (field labels,
+   controls, notes) lives in forms.css; these rules are provider-specific. */
 .asb-provider-editor .asb-provider-advanced-action strong {
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -139,21 +113,12 @@
   letter-spacing: -0.01em;
 }
 
-.asb-provider-editor .asb-input,
-.asb-provider-editor .asb-select-trigger,
 .asb-provider-editor .asb-provider-identity-value {
   letter-spacing: -0.01em;
 }
 
-.asb-provider-editor .asb-scope-note,
 .asb-provider-editor .asb-provider-disclosure-value,
 .asb-provider-editor .asb-provider-advanced-action span {
   font: var(--asb-text-caption);
   letter-spacing: -0.005em;
-}
-
-.asb-provider-editor > .asb-editor-footer .asb-btn-primary {
-  min-width: 7rem;
-  border-radius: var(--asb-radius-pill);
-  padding-inline: var(--asb-space-4);
 }

@@ -86,19 +86,6 @@
   min-width: 0;
 }
 
-.asb-skill-repository-manager-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--asb-space-3);
-  margin-bottom: var(--asb-space-3);
-}
-
-.asb-skill-repository-manager-heading .asb-section-title,
-.asb-skill-repository-manager-heading .asb-scope-note {
-  margin-block: 0;
-}
-
 .asb-skill-source-search {
   position: relative;
 }

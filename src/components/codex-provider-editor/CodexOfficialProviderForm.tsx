@@ -28,9 +28,9 @@ function BasicDetails({ busy, name, websiteUrl, onNameChange, onWebsiteChange, o
   onWebsiteChange: (value: string) => void;
   onSwitchAccessMode: () => void;
 }) {
-  return <section className="asb-provider-section" aria-label="基本资料">
+  return <section className="asb-editor-section" aria-label="基本资料">
     <h3 className="asb-section-title">基本资料</h3>
-    <div className="asb-provider-section-fields">
+    <div className="asb-editor-section-fields">
       <div className="asb-provider-field-grid">
         <div className="asb-field"><span>接入方式</span>
           <div className="asb-segments" role="radiogroup" aria-label="接入方式">
@@ -92,9 +92,9 @@ export function CodexOfficialProviderForm({
     onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
     <BasicDetails busy={busy} name={name} websiteUrl={websiteUrl} onNameChange={onNameChange}
       onWebsiteChange={onWebsiteChange} onSwitchAccessMode={onSwitchAccessMode} />
-    <section className="asb-provider-section" aria-label="官方登录">
+    <section className="asb-editor-section" aria-label="官方登录">
       <h3 className="asb-section-title">官方登录</h3>
-      <div className="asb-provider-section-fields"><OfficialLoginPanel app="codex" /></div>
+      <div className="asb-editor-section-fields"><OfficialLoginPanel app="codex" /></div>
     </section>
     <ProviderAdvancedSettings>
       <SubscriptionSettings busy={busy} value={quotaMinutes} onChange={onQuotaMinutesChange} />

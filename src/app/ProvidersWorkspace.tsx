@@ -7,7 +7,7 @@ import type { SwitchboardModel } from "./useSwitchboardModel";
 export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel; active: boolean }) {
   const importing = model.providerView.kind === "import";
   const { snapshot, appFilter, activeProfileId, providers, providerSwitch, appSettingsState, busy, operations } = model;
-  const { discoveryState, ccImport } = model;
+  const { discoveryState, ccImport, sqlImport } = model;
   const editorApp = providers.editorSession?.app ?? appFilter;
   const userConfigRoute = snapshot.statuses?.find((status) => status.app === editorApp)?.route ?? null;
   const codexEditorSession = providers.editorSession?.app === "codex" ? providers.editorSession : null;
@@ -20,10 +20,16 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       {importing && <div className="asb-editor-route" hidden={!active}>
         <ProviderImportPage appFilter={appFilter} discovery={discoveryState.discovery} busy={busy}
           ccScan={ccImport.ccScan} ccSelected={ccImport.ccSelected} ccResult={ccImport.ccResult}
+          ccDirectory={ccImport.ccDirectory}
+          sqlScan={sqlImport.sqlScan} sqlSelected={sqlImport.sqlSelected} sqlResult={sqlImport.sqlResult}
           onBack={() => model.setProviderView({ kind: "list" })}
           onScanLocal={() => void discoveryState.runDiscovery()} onImportLocal={discoveryState.runImport}
           onScanCc={() => void ccImport.runCcScan()} onImportCc={ccImport.runCcImport}
-          onSelectCc={(key, checked) => ccImport.setCcSelected((current) => ({ ...current, [key]: checked }))} />
+          onSelectCc={(key, checked) => ccImport.setCcSelected((current) => ({ ...current, [key]: checked }))}
+          onCcDirectory={ccImport.changeCcDirectory}
+          onApplySql={(path) => void sqlImport.runSqlApply(path)} onImportSql={sqlImport.runSqlImport}
+          onSelectSql={(key, checked) => sqlImport.setSqlSelected((current) => ({ ...current, [key]: checked }))}
+          onError={model.reportError} />
       </div>}
       <CodexProvidersPage
         active={active && !importing && appFilter === "codex"} records={snapshot.codexRecords}

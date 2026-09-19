@@ -350,7 +350,6 @@ export function CloudBackupPanel({
         >
           <ul className="asb-dialog-details">
             <li>将以云端加密备份替换本机供应商档案、客户端设置和切换记录，包含运行参数、API 格式和最大输出 token；认证请求头会按 API 格式自动推导。</li>
-            <li>若备份来自三协议升级前的版本，会先升级并重新加密保存到云端。</li>
             <li>不会修改 Codex 或 Claude Code 当前实际配置，也不会删除本地文件备份。</li>
             <li>恢复后需要重新预览，才能把任一档案应用到客户端配置。</li>
           </ul>

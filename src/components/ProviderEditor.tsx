@@ -38,9 +38,9 @@ function ModelSection({ editor, busy, userConfigModel, userConfigWarnings, profi
   const { draft, setDraft, connection } = editor;
   const claudeSettings = draft.modelOptions?.kind === "claude" ? draft.modelOptions : null;
   return (
-    <section className="asb-provider-section" aria-label="模型">
+    <section className="asb-editor-section" aria-label="模型">
       <h3 className="asb-section-title">模型</h3>
-      <div className="asb-provider-section-fields">
+      <div className="asb-editor-section-fields">
         <MainModelField draft={draft} busy={busy} baseUrl={connection.baseUrl}
           claudeSettings={claudeSettings}
           models={connection.models} modelsBusy={connection.modelsBusy} modelsError={connection.modelsError}
@@ -92,9 +92,9 @@ function ProviderForm({ editor, formId, ...props }: Props & { editor: ProviderEd
         <ModelSection editor={editor} busy={busy} profile={profile}
           userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
       </>}
-      {official && <section className="asb-provider-section" aria-label="官方登录">
+      {official && <section className="asb-editor-section" aria-label="官方登录">
         <h3 className="asb-section-title">官方登录</h3>
-        <div className="asb-provider-section-fields"><OfficialLoginPanel app={draft.app} onFinished={editor.setLoginDone} /></div>
+        <div className="asb-editor-section-fields"><OfficialLoginPanel app={draft.app} onFinished={editor.setLoginDone} /></div>
       </section>}
       <AdvancedSettings {...props} editor={editor} />
     </form>

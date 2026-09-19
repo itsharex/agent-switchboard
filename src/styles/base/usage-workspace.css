@@ -1,9 +1,12 @@
 /* Usage query workspace — a dedicated provider subview entered from its card.
-   Its result is the shared UsageReadingsTable under one "本次结果" label. */
+   Modules are the shared editor section cards and prose owned by forms.css
+   (.asb-editor-section / .asb-usage-editor scope); this file keeps only the
+   usage-specific pieces: the paths grid, the script contract inset, the run
+   trigger, and the result caption. */
 .asb-usage-workspace {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-4);
+  display: grid;
+  gap: var(--asb-space-3);
+  min-width: 0;
 }
 
 /* Provider context beside the mode tabs in the header's primary row. */
@@ -16,23 +19,20 @@
   white-space: nowrap;
 }
 
-.asb-usage-config {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-3);
-}
-
 .asb-usage-paths {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--asb-space-2);
 }
 
+/* Script I/O contract — the one muted inset nested in the white section. */
 .asb-usage-script-contract {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--asb-space-1) var(--asb-space-3);
   padding: var(--asb-space-3);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
   background: var(--asb-code-bg);
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -47,28 +47,14 @@
   white-space: nowrap;
 }
 
-.asb-usage-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--asb-space-3);
-  padding-top: var(--asb-space-3);
-  border-top: 1px solid var(--asb-hairline);
-}
-
 .asb-usage-run {
   display: inline-flex;
   align-items: center;
   gap: var(--asb-space-1);
 }
 
-/* The workspace result surface: a plain labelled column — the framed,
-   rounded table itself is the visual boundary. */
-.asb-usage-readout {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-2);
-}
-
+/* Result module: the timestamp caption above the framed readings table —
+   the rounded table itself remains the data boundary inside the card. */
 .asb-usage-readout-head {
   display: flex;
   justify-content: space-between;

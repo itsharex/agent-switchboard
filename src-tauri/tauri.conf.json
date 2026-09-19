@@ -51,6 +51,9 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "y4Nkk",
+    "homepage": "https://github.com/y4Nkk/agent-switchboard",
+    "copyright": "Copyright (c) 2026 y4Nkk",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

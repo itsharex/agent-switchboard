@@ -10,7 +10,7 @@ import { Input } from "../../components/Input";
 import { Tabs } from "../../components/Tabs";
 import { WorkspaceHeader } from "../../components/WorkspaceHeader";
 import { CloseIcon, PlusIcon, SearchIcon, UpdateIcon } from "../../components/icons";
-import { Download, History, RefreshCw } from "lucide-react";
+import { Download } from "lucide-react";
 import { Tooltip } from "../../components/Tooltip";
 import { MANAGEMENT_CLIENTS } from "../../components/extensions/client-presentation";
 import { pendingDeployment } from "./pending-deployment";
@@ -74,7 +74,7 @@ export function ExtensionSearch({ kind, search, onSearch, summary }: {
   );
 }
 
-export function ExtensionClientSummary({ workspace }: { workspace: ExtensionWorkspace }) {
+function ExtensionClientSummary({ workspace }: { workspace: ExtensionWorkspace }) {
   const { kindItems, writeBlocked } = workspace;
   return (
     <div className="asb-ext-client-summary" role="group" aria-label="客户端部署数量">
@@ -110,7 +110,7 @@ export function ExtensionClientSummary({ workspace }: { workspace: ExtensionWork
 }
 
 function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
-  const { nav, writeBlocked } = workspace;
+  const { nav, writeBlocked, kindItems, updates, busy } = workspace;
   return (
     <MenuTrigger>
       <MenuButton className="asb-btn asb-btn-secondary" aria-label="更多扩展操作">
@@ -128,6 +128,24 @@ function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
               新建本地 Skill
             </MenuItem>
           )}
+          {nav.kind === "skill" && (
+            <MenuItem
+              id="check-updates"
+              className="asb-ext-menu-item"
+              isDisabled={writeBlocked || kindItems.length === 0}
+              onAction={() => void updates.check(kindItems.map((item) => item.id))}
+            >
+              检查更新
+            </MenuItem>
+          )}
+          <MenuItem
+            id="history"
+            className="asb-ext-menu-item"
+            isDisabled={busy}
+            onAction={() => nav.setDialog({ type: "history" })}
+          >
+            操作历史
+          </MenuItem>
           <MenuItem
             id="portable"
             className="asb-ext-menu-item"
@@ -150,8 +168,10 @@ function ExtensionMoreMenu({ workspace }: { workspace: ExtensionWorkspace }) {
   );
 }
 
+/** The action cluster mirrors the client configuration toolbar: uniform
+ * bordered commands only; low-frequency upkeep lives in the overflow menu. */
 function ExtensionResourceActions({ workspace }: { workspace: ExtensionWorkspace }) {
-  const { nav, writeBlocked, kindItems, updates } = workspace;
+  const { nav, writeBlocked, updates } = workspace;
   if (nav.kind === null) return null;
   return (
     <>
@@ -165,21 +185,6 @@ function ExtensionResourceActions({ workspace }: { workspace: ExtensionWorkspace
           全部更新（{updates.updatable.length}）
         </Button>
       )}
-      {nav.kind === "skill" && (
-        <Tooltip label="检查更新">
-          <Button variant="icon" aria-label="检查更新"
-            disabled={writeBlocked || kindItems.length === 0}
-            onClick={() => void updates.check(kindItems.map((item) => item.id))}>
-            <RefreshCw />
-          </Button>
-        </Tooltip>
-      )}
-      <Tooltip label="操作历史">
-        <Button variant="icon" aria-label="操作历史" disabled={workspace.busy}
-          onClick={() => nav.setDialog({ type: "history" })}>
-          <History />
-        </Button>
-      </Tooltip>
       <Button
         variant="secondary"
         disabled={workspace.busy}
@@ -203,8 +208,19 @@ function ExtensionResourceActions({ workspace }: { workspace: ExtensionWorkspace
   );
 }
 
+/** The one header following the workspace-header grammar: row 2 pairs the
+ * kind tabs with the page actions, row 3 carries the library search and the
+ * client deployment summary that qualify the visible list below. */
 export function ExtensionToolbar({ workspace }: { workspace: ExtensionWorkspace }) {
   const { nav } = workspace;
+  const controls = nav.kind !== null && workspace.ext.loaded && workspace.ext.workspace ? (
+    <ExtensionSearch
+      kind={nav.kind}
+      search={nav.search}
+      onSearch={nav.setSearch}
+      summary={<ExtensionClientSummary workspace={workspace} />}
+    />
+  ) : undefined;
   return (
     <WorkspaceHeader
       title="扩展"
@@ -213,6 +229,7 @@ export function ExtensionToolbar({ workspace }: { workspace: ExtensionWorkspace 
           tabs={extensionTabs(workspace)} scope="ext-workspace" label="扩展内容" />
       }
       primaryActions={nav.kind !== null ? <ExtensionResourceActions workspace={workspace} /> : undefined}
+      secondary={controls}
     />
   );
 }

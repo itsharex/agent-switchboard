@@ -1,19 +1,12 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useRef, useState } from "react";
 import {
-  checkCodexResetStatus,
-  getCachedCodexResetStatus,
-  type CodexResetRead,
   type ResetSignal,
 } from "../api/client";
 import { Button } from "./Button";
 import { Time } from "./Time";
 import { UpdateIcon } from "./icons";
 import { ModuleHeader } from "./WorkspaceHeader";
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
-}
+import { useCodexResetSignal } from "./quota-reads";
 
 function signalTime(signal: ResetSignal): string {
   return signal.effectiveAt ?? signal.announcedAt;
@@ -50,86 +43,17 @@ function isSignalOnFeedDay(signal: ResetSignal | null, generatedAt: string): boo
   ].every(Boolean);
 }
 
-/** An explicit, read-only view of public reset signals. */
-export function CodexResetPanel() {
-  const [snapshot, setSnapshot] = useState<CodexResetRead | null>(null);
-  const [cacheLoading, setCacheLoading] = useState(true);
-  const [cacheError, setCacheError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [readError, setReadError] = useState<string | null>(null);
-  const requestRef = useRef<Promise<CodexResetRead> | null>(null);
-  const cacheRevisionRef = useRef(0);
-
-  useEffect(() => {
-    let active = true;
-    const revision = ++cacheRevisionRef.current;
-
-    const loadCache = async () => {
-      try {
-        const cached = await getCachedCodexResetStatus();
-        if (active && cacheRevisionRef.current === revision) setSnapshot(cached);
-      } catch (reason) {
-        if (active && cacheRevisionRef.current === revision) setCacheError(errorMessage(reason));
-      } finally {
-        if (active && cacheRevisionRef.current === revision) setCacheLoading(false);
-      }
-    };
-
-    void loadCache();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const readStatus = async () => {
-    if (requestRef.current !== null) return;
-
-    cacheRevisionRef.current += 1;
-    setCacheLoading(false);
-    setCacheError(null);
-    setLoading(true);
-    setReadError(null);
-    const request = Promise.resolve().then(() => checkCodexResetStatus());
-    requestRef.current = request;
-
-    try {
-      setSnapshot(await request);
-    } catch (reason) {
-      setReadError(errorMessage(reason));
-    } finally {
-      if (requestRef.current === request) requestRef.current = null;
-      setLoading(false);
-    }
-  };
+/** An explicit, read-only view of public reset signals; the refresh action
+ * and freshness state live in the usage page header. */
+export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexResetSignal> }) {
+  const { snapshot, cacheLoading, cacheError, readError } = read;
 
   const status = snapshot?.status ?? null;
   const hasSignalOnFeedDay = status !== null && isSignalOnFeedDay(status.latestConfirmedSignal, status.generatedAt);
 
   return (
     <section className="asb-panel asb-codex-reset" aria-labelledby="codex-reset-heading">
-      <ModuleHeader
-        id="codex-reset-heading"
-        title="Codex 重置信号"
-        primaryActions={
-          <>
-            {snapshot !== null && (
-              <span
-                className={`asb-codex-reset-read-state is-${snapshot.freshness}`}
-                aria-live="polite"
-              >
-                {snapshot.freshness === "cached" ? "本地缓存" : "刚刚刷新"}
-              </span>
-            )}
-            <Button
-              variant="secondary"
-              disabled={loading}
-              onClick={() => void readStatus()}
-            >
-              {loading ? "读取中…" : "刷新重置信号"}
-            </Button>
-          </>
-        }
-      />
+      <ModuleHeader id="codex-reset-heading" title="Codex 重置信号" />
       {cacheLoading && status === null && <p className="asb-empty" role="status">正在读取本地缓存</p>}
       {status === null && !cacheLoading && readError === null && (
         <div className="asb-empty-state">

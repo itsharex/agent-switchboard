@@ -21,9 +21,9 @@ export function ClientManagementPage({ onChanged }: ClientManagementPageProps) {
   const contentId = "client-management-content";
 
   return (
-    <section className="asb-panel" aria-label="客户端管理">
+    <section className="asb-panel" aria-label="客户端工具">
       <ModuleHeader
-        title="客户端管理"
+        title="客户端工具"
         primary={
           <Tabs scope="client-management-client" label="客户端" value={client} onChange={setClient}
             tabs={[

@@ -118,6 +118,14 @@
   gap: var(--asb-space-2);
 }
 
+/* The one status line a header's secondary row carries: snapshot freshness,
+ * read state — metadata about the page's data, never body copy. */
+.asb-header-status {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
 /* ---------------------------------------------------------------------------
  * Inline note — one muted line inside a surface that already has content:
  * "still reading…", "no changes", "nothing recorded for this field". It is a

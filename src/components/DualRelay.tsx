@@ -2,7 +2,6 @@ import type { AppKind, ConfigFileStatus, LockStatus, ProviderProfile, RouteState
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
 import { ClientLogo } from "./ClientLogo";
-import { MatrixStarlightCanvas } from "./experience/MatrixStarlightCanvas";
 import "../styles/base/route-cards.css";
 
 interface RouteCardProps {
@@ -54,7 +53,6 @@ function RouteCard({
   if (lockWarning) notes.push(lockWarning);
   return (
     <section className={`asb-route-card${route ? " is-on" : ""}`} data-app={app} aria-label={`${clientName(app)} 当前连接`}>
-      <MatrixStarlightCanvas variant={route ? "route-active" : "route-idle"} />
       <div className="asb-route-card-body">
         <div>
           <div className="asb-route-ident">

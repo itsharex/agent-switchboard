@@ -39,7 +39,7 @@ export function ProviderEditorFrame({
       footer={
         <>
           <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
-          <Button type={formId ? "submit" : "button"} form={formId} variant="primary" disabled={!canSubmit}>
+          <Button type={formId ? "submit" : "button"} form={formId} variant="primary" className="asb-editor-submit" disabled={!canSubmit}>
             保存供应商
           </Button>
         </>

@@ -50,7 +50,7 @@ export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props)
       if (revision.current !== currentRevision) return;
       onChange(next);
       setEditing(false);
-      setNotice("已加入当前通用设置草稿；关闭配置审阅后可保存并预览应用。");
+      setNotice("已加入当前通用设置草稿；收起通用配置文件后可保存并预览应用。");
     }).catch((caught: { message?: string }) => {
       if (revision.current === currentRevision) {
         setError(caught.message ?? "Claude 额外通用配置无效");

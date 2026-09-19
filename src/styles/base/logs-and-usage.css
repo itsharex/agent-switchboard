@@ -128,12 +128,6 @@
   margin: 0;
 }
 
-.asb-model-usage-snapshot {
-  margin: 0;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
-}
-
 .asb-model-usage-notice,
 .asb-model-usage-issues {
   margin: 0 0 var(--asb-space-3);

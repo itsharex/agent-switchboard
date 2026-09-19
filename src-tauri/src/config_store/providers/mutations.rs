@@ -58,8 +58,9 @@ impl ConfigStore {
     }
 
     /// Rewrites one provider file through the validating atomic boundary,
-    /// preserving its stored position. Only the save transaction's rollback
-    /// path calls this, always with a file that was previously persisted.
+    /// preserving its stored position. The save transaction's rollback path
+    /// and the provider-transfer import call this, always with a file that
+    /// was previously persisted by this application or exported by it.
     pub fn overwrite_provider_file(
         &self,
         app: AppKind,

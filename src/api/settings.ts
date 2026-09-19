@@ -326,8 +326,6 @@ export interface CloudBackupSettings {
 export interface CloudBackupResult {
   updatedAt: string;
   profileCount: number;
-  /** The restored encrypted backup was upgraded to the current snapshot schema. */
-  migrated: boolean;
 }
 
 export function getAppSettings(): Promise<AppSettings> {

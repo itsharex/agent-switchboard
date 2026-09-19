@@ -35,10 +35,10 @@ export function BackupsPage({
   const [activeTab, setActiveTab] = useState<BackupTab>("local");
 
   return (
-    <section className="asb-panel" aria-label="备份">
+    <section className="asb-panel" aria-label="备份恢复">
       {/* 设置内容区的子页：模块级 h3 标题独占第一行，备份类型页签在第二行。 */}
       <ModuleHeader
-        title="备份"
+        title="备份恢复"
         primary={
           <Tabs value={activeTab} onChange={setActiveTab} scope="backup" label="备份类型"
             tabs={[{ value: "local", label: "本地备份", controls: "backup-local-panel" },

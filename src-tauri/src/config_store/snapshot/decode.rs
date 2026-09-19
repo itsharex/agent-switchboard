@@ -2,15 +2,9 @@ use super::{validate_snapshot, ConfigurationSnapshot, CLOUD_BACKUP_SNAPSHOT_SCHE
 
 pub(super) const UNSUPPORTED_CLOUD_BACKUP_SNAPSHOT: &str = "云端备份不是当前支持的配置数据格式";
 
-#[derive(Debug)]
-pub(crate) struct DecodedCloudBackupSnapshot {
-    pub snapshot: ConfigurationSnapshot,
-    pub migrated: bool,
-}
-
 pub(crate) fn decode_cloud_backup_snapshot(
     cleartext: &[u8],
-) -> Result<DecodedCloudBackupSnapshot, String> {
+) -> Result<ConfigurationSnapshot, String> {
     let value: serde_json::Value = serde_json::from_slice(cleartext)
         .map_err(|_| UNSUPPORTED_CLOUD_BACKUP_SNAPSHOT.to_string())?;
     let version = value
@@ -24,8 +18,5 @@ pub(crate) fn decode_cloud_backup_snapshot(
         _ => return Err("云端备份配置快照版本不受支持".to_string()),
     };
     validate_snapshot(&snapshot)?;
-    Ok(DecodedCloudBackupSnapshot {
-        snapshot,
-        migrated: false,
-    })
+    Ok(snapshot)
 }

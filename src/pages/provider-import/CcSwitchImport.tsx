@@ -1,4 +1,5 @@
 import type { CcSwitchImportOutcome, CcSwitchScan, CcSwitchScanItem } from "../../api/client";
+import { pickDirectory } from "../../api/client";
 import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { Table, type TableColumn } from "../../components/Table";
@@ -20,7 +21,10 @@ interface CcSwitchImportProps {
   selected: Record<string, boolean>;
   result: CcSwitchImportOutcome | null;
   busy: boolean;
+  /** Picked source folder containing `cc-switch.db`; null keeps the default. */
+  directory: string | null;
   onSelect: (key: string, checked: boolean) => void;
+  onDirectoryChange: (directory: string | null) => void;
   onScan: () => void;
   onImport: () => void;
 }
@@ -89,19 +93,48 @@ function ImportResult({ result }: { result: CcSwitchImportOutcome | null }) {
 }
 
 /** One click imports every selected row: Claude relays, third-party Codex
- * rows (completed inside the backend), and the Codex official record. */
+ * rows (completed inside the backend), and the Codex official record. The
+ * source folder defaults to the home database location and stays editable
+ * through the native directory picker. */
 export function CcSwitchImport(props: CcSwitchImportProps) {
   const rows = importRows(props.scan);
   const selectedCount = rows.filter(({ item }) => item && !item.existing && props.selected[item.key]).length;
+  const pickFolder = async () => {
+    if (props.busy) return;
+    const picked = await pickDirectory();
+    if (picked) props.onDirectoryChange(picked);
+  };
   return (
     <>
       <ModuleHeader
         title="本机数据库"
         primaryActions={
-          <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>扫描本机数据库（只读）</Button>
+          <>
+            <Button variant="secondary" disabled={props.busy} onClick={() => void pickFolder()}>
+              选择数据库文件夹
+            </Button>
+            <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>
+              {props.directory ? "扫描所选文件夹（只读）" : "扫描本机数据库（只读）"}
+            </Button>
+          </>
         }
       />
+      {props.directory && (
+        <div className="asb-kv">
+          <span className="asb-kv-label">所选文件夹</span>
+          <span className="asb-kv-value asb-code">{props.directory}</span>
+          <div className="asb-kv-actions">
+            <Button variant="secondary" disabled={props.busy} onClick={() => props.onDirectoryChange(null)}>
+              恢复默认位置
+            </Button>
+          </div>
+        </div>
+      )}
       {props.scan ? <div className="asb-ccscan">
+        <div className="asb-kv">
+          <span className="asb-kv-label">数据库文件</span>
+          <span className="asb-kv-value asb-code">{props.scan.dbPath}</span>
+        </div>
         {rows.length === 0 ? (
           <div className="asb-empty-state">
             <span className="asb-empty-state-icon" aria-hidden="true">
@@ -120,7 +153,7 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
           <span className="asb-empty-state-icon" aria-hidden="true">
             <SearchIcon />
           </span>
-          <h3 className="asb-section-title">扫描后选择可导入的供应商档案。</h3>
+          <h3 className="asb-section-title">扫描后选择可导入的供应商档案；默认读取本机数据库，也可选择其他包含 cc-switch.db 的文件夹。</h3>
         </div>
       )}
       <ImportResult result={props.result} />

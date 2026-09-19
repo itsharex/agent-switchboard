@@ -17,6 +17,7 @@ pub mod endpoint;
 pub mod extensions;
 pub mod lock;
 pub mod ownership;
+pub mod provider_transfer;
 pub mod redact;
 pub mod validate;
 pub mod website_assembly;

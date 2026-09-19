@@ -22,7 +22,7 @@ impl StatusNotifierItem {
     fn open_main(&self) {
         let app = self.app.clone();
         if let Err(error) = self.app.run_on_main_thread(move || {
-            if let Err(error) = super::tray_open_main(app, false) {
+            if let Err(error) = super::tray_open_main(app) {
                 log::warn!("无法通过 Linux 托盘打开主窗口: {error}");
             }
         }) {

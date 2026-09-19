@@ -23,16 +23,21 @@ const TRAY_MAX_HEIGHT = 560;
 
 type TrayApp = "codex" | "claude";
 
+/** In-flight tray action. A provider switch carries the row id so that row
+ * can show 切换中; panel commands (open/manage/quit) share one shape. The two
+ * kinds never share an id namespace. */
+type PendingAction = { kind: "switch"; providerId: string } | { kind: "panel" };
+
 interface TrayGroupProps {
   app: TrayApp;
   providers: TraySnapshot["providers"];
   loaded: boolean;
   busy: boolean;
-  pending: string | null;
+  switchingId: string | null;
   onSwitch: (providerId: string) => void;
 }
 
-function TrayGroup({ app, providers, loaded, busy, pending, onSwitch }: TrayGroupProps) {
+function TrayGroup({ app, providers, loaded, busy, switchingId, onSwitch }: TrayGroupProps) {
   const label = app === "codex" ? "Codex" : "Claude Code";
   return (
     <section aria-label={label} className="tray-group">
@@ -43,7 +48,7 @@ function TrayGroup({ app, providers, loaded, busy, pending, onSwitch }: TrayGrou
           key={provider.id}
           provider={provider}
           busy={busy}
-          pending={pending}
+          switchingId={switchingId}
           onSwitch={() => onSwitch(provider.id)}
         />
       ))}
@@ -54,7 +59,7 @@ function TrayGroup({ app, providers, loaded, busy, pending, onSwitch }: TrayGrou
 export function TrayPanel() {
   const { snapshot, error: readError, initialized, refresh } = useTraySnapshot();
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
   const actionInFlight = useRef(false);
   const readySent = useRef(false);
   const mounted = useRef(true);
@@ -116,10 +121,10 @@ export function TrayPanel() {
     return () => { disposed = true; observer.disconnect(); };
   }, [snapshot, readError, actionError, initialized]);
 
-  const act = async (id: string, action: () => Promise<void>) => {
+  const run = async (mark: PendingAction, action: () => Promise<void>) => {
     if (actionInFlight.current) return;
     actionInFlight.current = true;
-    setPending(id);
+    setPending(mark);
     setActionError(null);
     try { await action(); }
     catch (caught) { if (mounted.current) setActionError(trayError(caught)); }
@@ -130,8 +135,9 @@ export function TrayPanel() {
   };
   const error = actionError ?? readError ?? snapshot?.error;
   const providers = snapshot?.providers ?? [];
+  const switchingId = pending?.kind === "switch" ? pending.providerId : null;
   const switchProvider = (providerId: string) => {
-    void act(providerId, async () => {
+    void run({ kind: "switch", providerId }, async () => {
       await switchTrayProvider(providerId);
       await refresh();
     });
@@ -140,10 +146,7 @@ export function TrayPanel() {
     <div ref={panel} className="tray-panel" aria-label="Agent Switchboard 托盘">
       <header className="tray-header">
         <img src={appIcon} alt="" className="tray-app-logo" aria-hidden="true" />
-        <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("open", () => openTrayMain(false))}>
-          <ArrowUpRight size={16} aria-hidden="true" />
-          打开主界面
-        </Button>
+        <span className="tray-app-name">Agent Switchboard</span>
       </header>
       {error && <div role="alert" className="tray-error">{error}</div>}
       <div ref={list} className="tray-list">
@@ -156,15 +159,18 @@ export function TrayPanel() {
               providers={providers.filter((provider) => provider.app === app)}
               loaded={snapshot !== null}
               busy={busy}
-              pending={pending}
+              switchingId={switchingId}
               onSwitch={switchProvider}
             />
           ))}
         </div>
       </div>
       <footer className="tray-footer">
-        <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("manage", () => openTrayMain(true))}>管理供应商</Button>
-        <Button variant="secondary" className="tray-ghost-button" disabled={busy} onClick={() => void act("quit", quitTray)}><LogOut size={16} aria-hidden="true" />退出</Button>
+        <Button variant="unstyled" className="tray-ghost-button" disabled={busy} onClick={() => void run({ kind: "panel" }, openTrayMain)}>
+          <ArrowUpRight size={16} aria-hidden="true" />
+          打开主界面
+        </Button>
+        <Button variant="unstyled" className="tray-ghost-button" disabled={busy} onClick={() => void run({ kind: "panel" }, quitTray)}><LogOut size={16} aria-hidden="true" />退出</Button>
       </footer>
     </div>
   );

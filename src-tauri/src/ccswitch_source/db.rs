@@ -8,10 +8,32 @@ pub(super) struct RawScan {
     pub(super) skipped: Vec<ccswitch::CcSwitchSkip>,
 }
 
-/// Locates the source database under the user home directory.
-pub(super) fn db_path() -> Result<PathBuf, String> {
+/// Locates the default source database under the user home directory.
+fn db_path() -> Result<PathBuf, String> {
     let home = crate::local_state::user_home_dir()?;
     Ok(Path::new(&home).join(".cc-switch").join("cc-switch.db"))
+}
+
+/// Resolves the source database file for a scan or import. A user-picked
+/// folder (chosen with the native directory picker) must directly contain
+/// `cc-switch.db`; absence keeps the default home location. This is the one
+/// owner of the source-path contract shared by both commands.
+pub(super) fn resolve_db_path(directory: Option<&str>) -> Result<PathBuf, String> {
+    let Some(directory) = directory
+        .map(str::trim)
+        .filter(|directory| !directory.is_empty())
+    else {
+        return db_path();
+    };
+    let directory = Path::new(directory);
+    if !directory.is_dir() {
+        return Err("所选文件夹不存在".to_string());
+    }
+    let path = directory.join("cc-switch.db");
+    if !path.is_file() {
+        return Err("所选文件夹中没有 cc-switch.db".to_string());
+    }
+    Ok(path)
 }
 
 pub(super) fn open_read_only(path: &Path) -> Result<Connection, String> {

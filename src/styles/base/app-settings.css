@@ -78,6 +78,19 @@
   align-self: stretch;
 }
 
+/* The crash fallback renders without the workspace header, so it owns its
+ * title class instead of borrowing the header component's internals. */
+.asb-recovery-title {
+  margin: 0 0 var(--asb-space-2);
+  font: var(--asb-text-title);
+}
+
+.asb-app-settings-error-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
 @media (max-width: 680px) {
   .asb-app-setting-row {
     grid-template-columns: minmax(0, 1fr);
