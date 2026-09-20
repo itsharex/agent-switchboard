@@ -53,7 +53,7 @@ pub(crate) fn send_upstream_request(
     )
 }
 
-pub(super) fn send_with_timeouts(
+pub(crate) fn send_with_timeouts(
     client: &UpstreamClient,
     route: &ActiveRoute,
     url: &str,

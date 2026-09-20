@@ -49,6 +49,7 @@ function lockLabel(status: LockStatus | undefined): string {
 }
 
 function statusPill(status: ConfigFileStatus): { ok: boolean; text: string } {
+  if (status.recoveryIssue) return { ok: false, text: "等待配置恢复" };
   if (status.readError) return { ok: false, text: "读取失败" };
   if (!status.exists) return { ok: false, text: "未找到配置文件" };
   if (!status.syntaxOk) return { ok: false, text: "语法错误" };
@@ -68,6 +69,12 @@ function ConfigStatusDetails({ status, profiles, lock }: {
   return (
     <dl className="asb-status-rows">
       <StatusField label="配置文件" className="asb-code">{status.path}</StatusField>
+      {status.recoveryIssue && (
+        <StatusField label="恢复阻塞" className="asb-warn-text">
+          <span role="status" className="asb-status-warn">{status.recoveryIssue}</span>
+          <span className="asb-status-warn">配置写入暂不可用。请前往「设置 → 备份恢复」查看对应备份与差异；恢复后刷新状态。</span>
+        </StatusField>
+      )}
       {status.readError && <StatusField label="读取错误" className="asb-warn-text">{status.readError}</StatusField>}
       {readable && <>
         <StatusField label="当前服务">{currentProviderName(status, profiles)} · {status.route?.model ?? "默认模型"}</StatusField>

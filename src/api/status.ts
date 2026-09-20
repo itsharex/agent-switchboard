@@ -57,6 +57,8 @@ export interface ConfigFileStatus {
   syntaxOk: boolean;
   route: RouteState | null;
   readError: string | null;
+  /** Derived from pending configuration transactions; no separate persisted status. */
+  recoveryIssue: string | null;
   /** Values read from the real client configuration, never from ASB storage. */
   clientSettings: SettingsValues | null;
   clientSettingsError: string | null;

@@ -26,6 +26,8 @@ pub struct ConfigFileStatus {
     pub syntax_ok: bool,
     pub route: Option<RouteState>,
     pub read_error: Option<String>,
+    /// Current durable transaction state; diagnostics remain readable while writes are blocked.
+    pub recovery_issue: Option<String>,
     /// Read-only client-owned values extracted from the real configuration file.
     pub client_settings: Option<SettingsValues>,
     /// A valid client file can still contain an invalid value for an owned setting.

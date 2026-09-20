@@ -39,6 +39,8 @@ pub(crate) fn remove_unmanaged(text: &str) -> Result<String, AdapterError> {
 
 fn preserved(path: &str, native: &BTreeSet<String>, common: &BTreeSet<String>) -> bool {
     is_owned(AppKind::Claude, path)
+        || crate::ownership::is_claude_extension_path(path)
+        || crate::ownership::is_claude_credential_path(path)
         || native.contains(path)
         || common.contains(path)
         || common
@@ -127,6 +129,27 @@ mod tests {
     #[test]
     fn empty_text_passes_through() {
         assert_eq!(remove_unmanaged("").expect("prune"), "");
+    }
+
+    #[test]
+    fn extension_and_credential_resources_survive_deep_reset() {
+        let original = serde_json::json!({
+            "enabledPlugins": {"plugin@market": true},
+            "extraKnownMarketplaces": {"market": {"source": {"source": "github", "repo": "a/b"}}},
+            "enabledMcpjsonServers": ["one"],
+            "disabledMcpjsonServers": ["two"],
+            "enableAllProjectMcpServers": false,
+            "mcpServers": {"one": {"command": "server"}},
+            "skillOverrides": {"one": {"enabled": false}},
+            "apiKeyHelper": "read-credential",
+            "otelHeadersHelper": "read-headers"
+        });
+        let mut current = original.clone();
+        current["unmanaged"] = serde_json::json!(true);
+        let pruned: serde_json::Value = serde_json::from_str(
+            &remove_unmanaged(&current.to_string()).expect("prune")
+        ).expect("document");
+        assert_eq!(pruned, original);
     }
 
     #[test]

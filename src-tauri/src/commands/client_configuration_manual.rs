@@ -28,7 +28,10 @@ fn candidate(
     let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
     let current = match std::fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
+        Err(error) if error.kind() == ErrorKind::NotFound => match target {
+            AppKind::Codex => String::new(),
+            AppKind::Claude => "{}".to_string(),
+        },
         Err(_) => return Err(CommandError::new("client-configuration-unreadable", "无法读取真实客户端配置文件")),
     };
     if sha256_hex(&current) != expected_source_hash {
@@ -122,6 +125,7 @@ pub async fn commit_manual_client_configuration(
         )?;
         commit_rendered_client_configuration(
             &state,
+            app.state::<crate::gateway::GatewayController>().inner(),
             target,
             &current,
             existed,

@@ -7,10 +7,9 @@ use super::{
     SUPPORTED_PROTOCOL_VERSIONS,
 };
 use super::{MAX_LINE_BYTES, RECEIVE_POLL};
+use crate::process_control::terminate_process_tree;
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, SyncSender};
 use std::time::Duration;
@@ -78,11 +77,7 @@ pub(super) fn check_stdio(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        builder.creation_flags(CREATE_NO_WINDOW);
-    }
+    crate::process_control::suppress_window(&mut builder);
     let mut child = match builder.spawn() {
         Ok(child) => child,
         Err(_) => return ProbeOutcome::failed("spawn", "无法启动检测命令"),
@@ -195,23 +190,6 @@ pub(super) fn read_line_capped<R: BufRead>(
         line.extend_from_slice(buffer);
         reader.consume(length);
     }
-}
-
-pub(super) fn terminate_process_tree(child: &mut Child) {
-    #[cfg(windows)]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        let pid = child.id().to_string();
-        let _ = Command::new("taskkill")
-            .args(["/PID", &pid, "/T", "/F"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .creation_flags(CREATE_NO_WINDOW)
-            .status();
-    }
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 pub(super) fn negotiate_stdio(

@@ -89,10 +89,12 @@ pub async fn gateway_commit_port_change(
     let recovery_app = app.clone();
     let refresh_app = app.clone();
     let result = blocking(move || {
-        let _write_guard = gate
-            .lock()
-            .map_err(|error| CommandError::new("gateway-port-change-gate-unavailable", error))?;
-        crate::commands::switching::ensure_profile_save_recovered(&recovery_app)?;
+        {
+            let _write_guard = gate
+                .lock()
+                .map_err(|error| CommandError::new("gateway-port-change-gate-unavailable", error))?;
+            crate::commands::switching::ensure_profile_save_recovered(&recovery_app)?;
+        }
         port_change::commit(&gateway, &local, &preparations, &preparation_id)
             .map_err(|error| CommandError::new("gateway-port-change-failed", error))
     })

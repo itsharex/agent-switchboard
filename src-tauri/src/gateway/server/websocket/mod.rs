@@ -4,17 +4,15 @@
 
 mod connections;
 mod context;
+mod forward;
 
 use self::context::{ConversationContext, PendingRequest, PreparedResponse};
 use super::super::metrics::RequestSpan;
-use super::super::transform::{
-    convert_request, convert_response, ReasoningTransport, SseTranscoder,
-};
+use super::super::transform::{convert_response, ReasoningTransport, SseTranscoder};
 use super::*;
 use asb_core::contracts::ResponsesRequestMode;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use reqwest::header::CONTENT_TYPE;
 use serde_json::{json, Value};
 use sha1::{Digest, Sha1};
 use std::io::{Read, Write};
@@ -223,6 +221,7 @@ fn serve_connection<S>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExchangeOutcome {
     Served,
+    Incomplete,
     Rejected,
     Disconnect,
 }
@@ -233,7 +232,7 @@ impl ExchangeOutcome {
     fn completed_status(self) -> Option<u16> {
         match self {
             Self::Served => Some(200),
-            Self::Rejected | Self::Disconnect => None,
+            Self::Incomplete | Self::Rejected | Self::Disconnect => None,
         }
     }
 }
@@ -293,7 +292,7 @@ where
                 ExchangeOutcome::Disconnect
             }
         }
-        Ok(PreparedResponse::Upstream(request)) => execute_prepared_request(
+        Ok(PreparedResponse::Upstream(request)) => forward::execute(
             socket,
             client,
             inner,
@@ -341,44 +340,6 @@ fn reject_unavailable<S: Read + Write>(
     None
 }
 
-fn execute_prepared_request<S: Read + Write>(
-    socket: &mut WebSocket<S>,
-    client: &UpstreamClient,
-    inner: &GatewayInner,
-    route: &ActiveRoute,
-    context: &mut ConversationContext,
-    mut request: PendingRequest,
-    request_url: &str,
-    request_headers: &[Header],
-    span: &mut RequestSpan,
-) -> ExchangeOutcome {
-    match super::codex::resolve_model_and_validate(route, CodexOperation::Responses, request.body) {
-        Ok(body) => request.body = body,
-        Err(message) => {
-            let diagnostic = request_diagnostic(inner, route, request_url, &message);
-            return reject_context(socket, &diagnostic, "invalid_request");
-        }
-    }
-    if let Err((_, message)) = span.admit_codex_route(route, true) {
-        return if send_failed(socket, "codex_budget_unavailable", &message) {
-            ExchangeOutcome::Rejected
-        } else {
-            ExchangeOutcome::Disconnect
-        };
-    }
-    execute_request(
-        socket,
-        client,
-        &inner.configured_base_url(),
-        route,
-        context,
-        request,
-        request_url,
-        request_headers,
-        span,
-    )
-}
-
 fn request_diagnostic(
     inner: &GatewayInner,
     route: &ActiveRoute,
@@ -407,6 +368,5 @@ mod send;
 mod stream;
 
 use decode::*;
-use exchange::*;
 use handshake::*;
 use send::*;

@@ -53,3 +53,8 @@ pub(super) fn read_target(target: &Path, app: AppKind) -> Result<(String, bool),
 pub(super) fn error(message: impl Into<String>) -> CommandError {
     CommandError::new("config-recovery-required", message)
 }
+
+pub(super) fn save(state: &LocalState, intent: &SwitchIntent) -> Result<(), CommandError> {
+    let text = serde_json::to_string(intent).map_err(|_| error("配置事务意图无法编码"))?;
+    crate::config_store::write_json_atomic(&path(state), &text).map_err(error)
+}

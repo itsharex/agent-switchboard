@@ -3,6 +3,8 @@
 //! 每次写入只改这一个键，经写入锁、外改校验、备份与原子替换；备份放在独立目录，
 //! 不进入配置切换的备份列表，也不参与切换事务日志。
 
+mod recovery;
+
 use crate::local_state::LocalState;
 use asb_core::contracts::{AppKind, ChangeKind, KeyChange, RouteMode};
 use asb_switch::{execute_rendered, sha256_hex, FsIo, RenderedWriteRequest};
@@ -221,6 +223,7 @@ pub(crate) fn apply(
     root: &Path,
     preview_plan: &ClaudeIntegrationPreview,
 ) -> Result<ClaudeIntegrationView, String> {
+    recovery::recover(root)?;
     let (current, rendered) = preview(preview_plan.flag, preview_plan.enable)?;
     if current != *preview_plan {
         return Err("Claude 客户端文件在预览后已变化，请重新预览".into());
@@ -229,7 +232,7 @@ pub(crate) fn apply(
         return view(root);
     }
     let target = PathBuf::from(&current.target);
-    execute_rendered(
+    let execution = execute_rendered(
         &FsIo,
         &RenderedWriteRequest {
             target: &target,
@@ -241,14 +244,20 @@ pub(crate) fn apply(
             reason: current.flag.reason(),
         },
         |_| Ok(()),
-    )
-    .map_err(|error| error.to_string())?;
+    );
+    if let Err(error) = execution {
+        return match recovery::recover(root) {
+            Ok(()) => Err(error.to_string()),
+            Err(recovery) => Err(format!("{error}；{recovery}")),
+        };
+    }
     view(root)
 }
 
 /// After a Claude switch, keeps the plugin marker in step with the new
 /// route when the policy asks for it. Returns whether the marker changed.
 pub(crate) fn reconcile_after_switch(root: &Path, route_mode: RouteMode) -> Result<bool, String> {
+    recovery::recover(root)?;
     if !load_policy(root)?.plugin_integration {
         return Ok(false);
     }
@@ -261,4 +270,3 @@ pub(crate) fn reconcile_after_switch(root: &Path, route_mode: RouteMode) -> Resu
     }
     apply(root, &plan).map(|_| true)
 }
-

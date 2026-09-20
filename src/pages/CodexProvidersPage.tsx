@@ -7,6 +7,7 @@ import {
 } from "../api/client";
 import type { CodexEditorSource } from "../app/useProviders";
 import { useProviderSwitchFlow } from "../app/useProviderSwitchFlow";
+import { notifyWriteOutcome } from "../app/notifications";
 import { CodexOfficialRow, CodexProviderRow, ConfiguredCodexProviderRow } from "../components/CodexProviderRows";
 import { CodexProviderEditor } from "../components/codex-provider-editor/CodexProviderEditor";
 import { ProviderWorkspaceShell, SortableProviderRows } from "../components/ProviderWorkspaceShell";
@@ -84,9 +85,10 @@ function useCodexProvidersState(props: Props) {
     const candidate = activationCandidate;
     if (!candidate) return;
     void run(async () => {
-      await executeSwitch(candidate.profileId, candidate.file.contentHash,
+      const outcome = await executeSwitch(candidate.profileId, candidate.file.contentHash,
         candidate.file.renderedHash, true, candidate.file);
       clearCandidates();
+      notifyWriteOutcome("已切换 Codex 供应商", "codex", outcome.warnings);
       await props.onRefresh();
     });
   };

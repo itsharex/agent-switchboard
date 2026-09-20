@@ -218,7 +218,7 @@ fn scan_sources() -> Result<(Vec<SessionSource>, Vec<SessionIssue>), String> {
 
 /// The Codex root every Codex-owned sidecar (sessions, rename index, state
 /// database) hangs off; honours the same `CODEX_HOME` as the config file.
-fn codex_root() -> Result<PathBuf, String> {
+pub(crate) fn codex_root() -> Result<PathBuf, String> {
     let codex = crate::local_state::LocalState::user_config_path(AppKind::Codex)?;
     codex
         .parent()

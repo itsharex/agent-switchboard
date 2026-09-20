@@ -9,6 +9,7 @@ namespace AgentSwitchboard.Installer
         WebViewRuntime,
         EngineLaunch,
         EngineExecution,
+        ElevationDeclined,
     }
 
     internal sealed class InstallerException : Exception

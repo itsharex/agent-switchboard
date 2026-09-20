@@ -186,7 +186,9 @@ namespace AgentSwitchboard.Installer
             primary.IsEnabled = true;
             cancel.IsEnabled = true;
             close.IsEnabled = true;
-            if (!completed && invocation.Kind == InstallerInvocationKind.Interactive)
+            if (!completed
+                && invocation.Kind == InstallerInvocationKind.Interactive
+                && !InstallerProductMetadata.UsesMsiEngine)
             {
                 directory.IsEnabled = true;
                 browse.IsEnabled = true;

@@ -10,6 +10,7 @@ mod directory;
 mod lookup;
 mod models;
 mod provider;
+mod resources;
 mod spec;
 mod toggles;
 
@@ -24,6 +25,7 @@ pub use provider::{
     CLAUDE_GATEWAY_REVISION_KEY, CODEX_MODEL_CATALOG_KEY, CODEX_PROVIDER_BASE_URL_KEY,
     CODEX_PROVIDER_ID, CODEX_WEB_SEARCH_KEY,
 };
+pub use resources::{is_claude_extension_path, is_claude_credential_path};
 pub use spec::{
     ChoiceControl, ChoiceOption, ChoiceSpec, ModelSpec, OfficialSettingDisposition,
     OfficialSettingEntry, ProviderAbsentAction, SettingControl, SettingOwner, SettingSpec,

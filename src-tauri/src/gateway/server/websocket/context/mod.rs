@@ -30,7 +30,7 @@ struct ConversationBinding {
     session_id: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct PendingRequest {
     pub(super) body: Vec<u8>,
     pub(super) stream: bool,
@@ -38,6 +38,14 @@ pub(super) struct PendingRequest {
     native: bool,
     template: Map<String, Value>,
     full_input: Vec<Value>,
+}
+
+impl PendingRequest {
+    pub(super) fn for_upstream(&self, native: bool) -> Self {
+        let mut request = self.clone();
+        request.native = native;
+        request
+    }
 }
 
 #[derive(Debug)]

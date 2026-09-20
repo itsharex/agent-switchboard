@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:build:windows": "npm run icons:sync && pwsh -NoProfile -File scripts/build-windows-installer.ps1",
+    "tauri:build:windows:msi": "npm run icons:sync && pwsh -NoProfile -File scripts/build-windows-installer.ps1 -Engine Msi",
     "msix:package:raw": "pwsh -NoProfile -File scripts/package-msix.ps1 -ExecutablePath target/release/agent-switchboard.exe -WebView2LoaderPath target/release/WebView2Loader.dll",
     "msix:package": "npm run icons:sync && npm run msix:package:raw",
     "msix:build": "npm run tauri:build:windows && npm run msix:package:raw",

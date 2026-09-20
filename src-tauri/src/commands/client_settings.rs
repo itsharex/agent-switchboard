@@ -7,7 +7,7 @@ use asb_core::ownership::{
     self, ChoiceControl, OfficialSettingDisposition, SettingControl, SettingOwner,
 };
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// A catalog option available for a typed setting control.
 #[derive(Debug, Clone, Serialize)]
@@ -207,6 +207,8 @@ pub async fn save_client_settings(
 ) -> Result<ClientSettingsSnapshot, CommandError> {
     let state = state(&app)?;
     blocking(move || {
+        let gate = app.state::<super::ConfigWriteGate>();
+        let _guard = gate.lock().map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
         super::switching::ensure_profile_save_recovered(&app)?;
         state
             .configuration()
@@ -230,7 +232,10 @@ pub async fn get_current_client_configuration(
             .map_err(|error| CommandError::new("config-path-unavailable", error))?;
         let (exists, raw) = match std::fs::read_to_string(&path) {
             Ok(content) => (true, content),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (false, String::new()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (
+                false,
+                match target { AppKind::Codex => String::new(), AppKind::Claude => "{}".to_string() },
+            ),
             Err(_) => return Err(CommandError::new("client-configuration-unreadable", "无法读取真实客户端配置文件")),
         };
         let source = if raw.is_empty() && target == AppKind::Claude { "{}" } else { &raw };

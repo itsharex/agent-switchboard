@@ -12,6 +12,8 @@ pub(crate) fn execute(
     request_url: &str,
     body: &[u8],
     incoming: Option<&[Header]>,
+    timeouts: server::transport::Timeouts,
+    cancelled: Option<&dyn Fn() -> bool>,
 ) -> Result<CompactionResult, ProviderDiagnostic> {
     let url = server::upstream_url(route, gateway_base, request_url).map_err(|message| {
         ProviderDiagnostic::new(
@@ -51,7 +53,7 @@ pub(crate) fn execute(
     if request.body.len() as u64 > server::MAX_REQUEST_BYTES {
         return Err(invalid(TransformError("压缩历史超过网关请求预算".into())));
     }
-    let upstream = server::send_upstream_request(
+    let upstream = server::transport::send_with_timeouts(
         client,
         route,
         &url,
@@ -60,6 +62,8 @@ pub(crate) fn execute(
         incoming,
         None,
         beta.as_deref(),
+        timeouts,
+        cancelled,
     )?;
     if !upstream.status().is_success() {
         return Err(server::read_upstream_diagnostic(

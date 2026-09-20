@@ -183,9 +183,10 @@ pub(crate) fn config_status_report(
         }
     }
     let profiles = applicable;
+    let recovery_issue = crate::commands::switching::transaction::recovery_status(state);
     [AppKind::Codex, AppKind::Claude]
         .into_iter()
-        .map(|kind| observe_client_file(state, gateway, &profiles, kind))
+        .map(|kind| observe_client_file(state, gateway, &profiles, kind, recovery_issue.as_deref()))
         .collect()
 }
 
@@ -194,6 +195,7 @@ fn observe_client_file(
     gateway: &crate::gateway::GatewayController,
     profiles: &[ProviderProfile],
     kind: AppKind,
+    recovery_issue: Option<&str>,
 ) -> Result<ConfigFileStatus, CommandError> {
     let target = state
         .target(kind)
@@ -205,6 +207,7 @@ fn observe_client_file(
         syntax_ok: false,
         route: None,
         read_error: None,
+        recovery_issue: recovery_issue.map(str::to_owned),
         client_settings: None,
         client_settings_error: None,
         match_status: MatchStatus::Unknown,
@@ -239,7 +242,19 @@ fn observe_client_file(
         Ok(settings) => status.client_settings = Some(settings),
         Err(error) => status.client_settings_error = Some(error.to_string()),
     }
-    let mut route = adapter::route_state(kind, &text);
+    populate_route_status(state, gateway, profiles, &text, &mut status)?;
+    Ok(status)
+}
+
+fn populate_route_status(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+    profiles: &[ProviderProfile],
+    text: &str,
+    status: &mut ConfigFileStatus,
+) -> Result<(), CommandError> {
+    let kind = status.app;
+    let mut route = adapter::route_state(kind, text);
     // Route URLs cross the redact boundary under their ownership key: hosts
     // stay readable, token-shaped values still mask.
     route.base_url = route.base_url.map(|url| match kind {
@@ -250,14 +265,14 @@ fn observe_client_file(
         AppKind::Claude => asb_core::redact::redact("env.ANTHROPIC_BASE_URL", &url),
     });
     status.route = Some(route);
-    status.match_status = match_status_for(state, Some(gateway), kind, &text)?;
+    status.match_status = match_status_for(state, Some(gateway), kind, text)?;
     status.active_profile_id = if kind == AppKind::Codex {
         let routed = gateway
-            .active_profile_id(AppKind::Codex, &text)
+            .active_profile_id(AppKind::Codex, text)
             .map_err(|e| CommandError::new("codex-state-unavailable", e))?;
         let identity = match routed {
             Some(id) => Some(id),
-            None => super::codex::active_direct(state, &text)?,
+            None => super::codex::active_direct(state, text)?,
         };
         match identity {
             Some(id) => Some(id),
@@ -268,7 +283,7 @@ fn observe_client_file(
                 profiles,
                 Some(gateway),
                 kind,
-                &text,
+                text,
                 status.last_switch.as_ref(),
             )?,
         }
@@ -277,9 +292,9 @@ fn observe_client_file(
             profiles,
             Some(gateway),
             kind,
-            &text,
+            text,
             status.last_switch.as_ref(),
         )?
     };
-    Ok(status)
+    Ok(())
 }

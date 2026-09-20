@@ -39,10 +39,12 @@ pub(crate) fn back_up_current<Io: SwitchIo>(
             message: error.to_string(),
             recovery: RecoveryOutcome::NotNeeded,
         })?;
-    if backup_text != current || adapter::validate_syntax(app, &backup_text).is_err() {
+    // The snapshot is the recovery preimage, including malformed input to an
+    // explicitly confirmed repair. Only the replacement must satisfy syntax.
+    if backup_text != current {
         return Err(SwitchError::CommitFailed {
             stage: "backup-verify",
-            message: "备份回读内容或语法不匹配".to_string(),
+            message: "备份回读内容不匹配".to_string(),
             recovery: RecoveryOutcome::NotNeeded,
         });
     }

@@ -8,6 +8,7 @@
 mod commit;
 mod prepare;
 mod recovery;
+mod executor_recovery;
 
 
 pub(crate) use commit::commit;

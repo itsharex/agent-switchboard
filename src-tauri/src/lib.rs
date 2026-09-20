@@ -8,6 +8,7 @@ mod codex_auth;
 mod codex_common;
 mod codex_metering;
 mod codex_official_quota;
+mod codex_probe;
 mod codex_project_plans;
 mod codex_prompts;
 mod codex_reset;
@@ -26,6 +27,7 @@ mod model_usage_cache;
 mod official_login;
 mod outbound_proxy;
 mod probe;
+mod process_control;
 mod provider_diagnostics;
 mod provider_request;
 mod provider_transfer;
@@ -168,9 +170,11 @@ pub fn run() {
             app.manage(commands::switching::CodexProfileSavePreparations::default());
             app.manage(commands::switching::CodexPolicyPreparations::default());
             app.manage(provider_request::ProviderRequests::default());
+            app.manage(codex_probe::ProbeRegistry::new());
             if configuration_ready {
-                commands::switching::recover_pending_profile_save(app.handle())
-                    .map_err(std::io::Error::other)?;
+                if let Err(error) = commands::switching::recover_pending_profile_save(app.handle()) {
+                    log::error!("配置事务需要恢复，已保留事务和备份：{error}");
+                }
             }
             if let Err(error) = commands::switching::codex_policy::recover_on_startup(
                 &local, app.state::<gateway::GatewayController>().inner()) {

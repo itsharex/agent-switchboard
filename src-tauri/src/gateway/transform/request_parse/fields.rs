@@ -157,6 +157,7 @@ pub(super) fn parse_chat_stop_sequences(
     match value {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(value)) => Ok(Some(vec![nonempty_stop(value, "stop")?])),
+        Some(Value::Array(values)) if values.is_empty() => Ok(None),
         Some(Value::Array(values)) => Ok(Some(
             values
                 .iter()
@@ -177,6 +178,7 @@ pub(super) fn parse_anthropic_stop_sequences(
 ) -> Result<Option<Vec<String>>, TransformError> {
     match value {
         None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(values)) if values.is_empty() => Ok(None),
         Some(Value::Array(values)) => Ok(Some(
             values
                 .iter()

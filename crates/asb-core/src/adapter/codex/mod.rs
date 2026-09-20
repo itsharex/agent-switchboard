@@ -9,18 +9,16 @@ mod common_fragment;
 mod document;
 pub use common::extract_client_settings;
 pub use common_fragment::{declared_mcp_server_keys, fragment_is_applied, validate_fragment};
-mod legacy;
 mod overlay;
 mod preview;
 mod render;
+mod restore;
 mod state;
 mod subagents;
 mod unmanaged;
 
 pub(crate) use document::{check_syntax, parse};
-pub use legacy::{
-    normalize_legacy_codex_configuration, CodexLegacyMigration, RETIRED_CODEX_PROVIDER_IDS,
-};
+pub use restore::validate_restore_configuration;
 pub(crate) use preview::preview;
 pub(crate) use render::{render, render_client_settings_into_file, render_gateway_base_url};
 pub(crate) use state::{full_diff, matches_provider_settings, owned_diff};

@@ -22,6 +22,9 @@ pub(crate) fn recover_pending(
             }))
         }
     };
+    if let Err(reason) = executor_recovery::reconcile(local, &journal, false) {
+        return Ok(Some(blocked(&journal, reason)));
+    }
     match journal.stage {
         JournalStage::Prepared => match rollback_clients(local, &journal)
             .and_then(|_| rollback_state(state_path, state, &journal))
@@ -51,6 +54,7 @@ pub(super) fn rollback_runtime(
     local: &LocalState,
     journal: &PortChangeJournal,
 ) -> Result<(), String> {
+    executor_recovery::reconcile(local, journal, false)?;
     rollback_clients(local, journal)?;
     let current_port = controller.configured_port();
     if current_port == journal.to_port {
@@ -87,7 +91,10 @@ pub(crate) fn discard_blocked(
     }
     controller.synchronize_port_to_listener()?;
     match read_journal(local) {
-        Ok(Some(journal)) => cleanup_transaction(local, &journal)?,
+        Ok(Some(journal)) => {
+            executor_recovery::reconcile(local, &journal, true)?;
+            cleanup_transaction(local, &journal)?;
+        }
         Ok(None) => {}
         Err(_) => match fs::remove_file(journal_path(local)) {
             Ok(()) => {}

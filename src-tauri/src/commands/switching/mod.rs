@@ -7,15 +7,17 @@ mod codex_backfill;
 pub(crate) mod codex_policy;
 mod codex_profile_save;
 mod codex_restore_auth;
+mod internal;
 mod plan;
 mod profile_rollback;
 mod profile_save;
 mod projection_transaction;
 mod recovery;
-mod transaction;
+pub(super) mod transaction;
 
 pub(crate) use codex_policy::CodexPolicyPreparations;
 pub(crate) use codex_profile_save::CodexProfileSavePreparations;
+pub(crate) use internal::switch_provider_internal;
 pub use profile_save::ProfileSavePreparation;
 pub(crate) use profile_save::ProfileSavePreparations;
 pub(crate) use recovery::{ensure_profile_save_recovered, recover_pending_profile_save};
@@ -288,44 +290,6 @@ pub async fn execute_switch(
         )
         .await
     })
-    .await
-}
-
-/// Programmable switch entry for orchestrators that have already confirmed
-/// the write themselves (the Codex profile apply). Same core as
-/// [`execute_switch`]; no separate confirmation prompt.
-pub(crate) async fn switch_provider_internal(
-    app: AppHandle,
-    profile_id: String,
-) -> Result<SwitchOutcome, CommandError> {
-    // The expected hashes for an orchestrator-driven switch come from the
-    // just-built projection's own preview: the caller has explicitly asked
-    // for this switch in the same tick, so the optimistic lock is computed
-    // here instead of round-tripping through the UI.
-    let (expected_hash, expected_rendered_hash) = blocking({
-        let app = app.clone();
-        let profile_id = profile_id.clone();
-        move || {
-            let state = state(&app)?;
-            let gateway = app
-                .state::<crate::gateway::GatewayController>()
-                .inner()
-                .clone();
-            let projection = build_plan(&state, &gateway, &profile_id)?;
-            let preview = preview_projection(&state, &projection)?;
-            Ok((preview.content_hash, preview.rendered_hash))
-        }
-    })
-    .await?;
-    execute_switch_core(
-        app,
-        profile_id,
-        expected_hash,
-        expected_rendered_hash,
-        None,
-        None,
-        None,
-    )
     .await
 }
 

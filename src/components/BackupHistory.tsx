@@ -16,12 +16,14 @@ interface Props {
 
 function reasonLabel(reason: string): string {
   if (reason === "switch") return "切换前备份";
+  if (reason === "provider-projection") return "供应商切换前备份";
   if (reason === "restore-precheck") return "恢复前备份";
   if (reason === "gateway-port-change") return "网关端口修改前备份";
   if (reason === "gateway-port-rollback") return "网关端口恢复前备份";
   if (reason === "client-configuration-apply") return "应用客户端配置前备份";
   if (reason === "client-configuration-repair") return "自动修复客户端配置前备份";
   if (reason === "client-configuration-native-defaults") return "恢复客户端原生默认值前备份";
+  if (reason === "client-configuration-native-defaults-unmanaged") return "恢复默认值并移除界面外字段前备份";
   if (reason === "client-configuration-clear-extra-configuration") return "清空额外通用配置前备份";
   return reason;
 }

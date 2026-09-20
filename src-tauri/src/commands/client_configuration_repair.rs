@@ -82,7 +82,11 @@ pub async fn commit_client_configuration_repair(
         let file_target = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
         let backup_dir = state.backup_dir();
         let config = state.configuration();
-        execute_rendered(&FsIo, &RenderedWriteRequest {
+        let gateway = app.state::<crate::gateway::GatewayController>();
+        super::switching::transaction::begin_client_configuration(
+            &state, gateway.inner(), target, &expected_rendered_hash, None,
+        )?;
+        let execution = execute_rendered(&FsIo, &RenderedWriteRequest {
             target: &file_target,
             app: target,
             backup_dir: &backup_dir,
@@ -100,7 +104,8 @@ pub async fn commit_client_configuration_repair(
                 at: outcome.backup.created_at.clone(),
                 operation: WriteOperation::Projection,
             }).map_err(|error| error.to_string())
-        }).map_err(CommandError::from)?;
+        });
+        super::switching::transaction::finish(&state, gateway.inner(), execution)?;
         Ok(())
     }).await
 }

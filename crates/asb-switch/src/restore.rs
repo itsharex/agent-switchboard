@@ -7,6 +7,8 @@
 
 mod codex_auth;
 mod transaction;
+#[cfg(test)]
+mod tests;
 use codex_auth::{
     linked_auth_backup, read_optional_file, read_verified_auth_source, write_auth_restore_candidate,
 };
@@ -161,23 +163,12 @@ fn validate_restore_contract(backup: &BackupRecord, content: &str) -> Result<(),
     if backup.app != asb_core::AppKind::Codex {
         return Ok(());
     }
-    let document = content
-        .parse::<toml_edit::DocumentMut>()
-        .expect("syntax validated");
-    let retired = document
-        .get("model_provider")
-        .is_some_and(|value| value.as_str() != Some("openai"));
-    let native_override = document
-        .get("model_providers")
-        .and_then(|value| value.get("openai"))
-        .is_some();
-    if retired || native_override {
-        return Err(SwitchError::PlanRejected {
-            message: "备份不符合当前 openai 配置契约".into(),
-            line: None,
-        });
-    }
-    Ok(())
+    adapter::codex::validate_restore_configuration(content).map_err(|error| {
+        SwitchError::PlanRejected {
+            message: error.message,
+            line: error.line,
+        }
+    })
 }
 
 fn write_pre_restore_backup<Io: SwitchIo>(

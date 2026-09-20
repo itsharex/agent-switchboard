@@ -1,8 +1,10 @@
-use super::{append_event, json_data, responses_complete, Frame};
-use crate::gateway::transform::response::responses_reasoning_item;
+use super::{append_event, json_data, output, Frame};
+use crate::gateway::transform::response::{
+    responses_reasoning_item, responses_status, responses_tool_call_item,
+};
 use crate::gateway::transform::tool_names::parse_target_name;
 use crate::gateway::transform::{
-    CanonicalResponse, Reasoning, ReasoningTransport, ResponsePart, StopReason, ToolKind,
+    Reasoning, ReasoningTransport, StopReason, ToolKind,
     TransformError, Usage,
 };
 use serde_json::{json, Map, Value};
@@ -15,6 +17,7 @@ pub(super) struct AnthropicToResponses {
     stop: StopReasonState,
     started: bool,
     blocks: BTreeMap<u64, Block>,
+    output_indices: BTreeMap<u64, u64>,
     completed: bool,
     reasoning_transport: Option<ReasoningTransport>,
 }
@@ -28,6 +31,7 @@ impl AnthropicToResponses {
             stop: StopReasonState::default(),
             started: false,
             blocks: BTreeMap::new(),
+            output_indices: BTreeMap::new(),
             completed: false,
             reasoning_transport,
         }
@@ -75,7 +79,21 @@ enum Block {
     },
 }
 
+impl Block {
+    fn stopped(&self) -> bool {
+        match self {
+            Self::Text { stopped, .. } | Self::Thinking { stopped, .. }
+            | Self::Redacted { stopped, .. } | Self::Tool { stopped, .. } => *stopped,
+        }
+    }
+}
+
 impl AnthropicToResponses {
+    fn output_index(&mut self, source_index: u64) -> u64 {
+        let next = self.output_indices.len() as u64;
+        *self.output_indices.entry(source_index).or_insert(next)
+    }
+
     pub(super) fn on_frame(&mut self, frame: Frame) -> Result<Vec<u8>, TransformError> {
         if self.completed {
             return Err(TransformError(

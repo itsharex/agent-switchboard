@@ -143,6 +143,7 @@ mod tests {
             syntax_ok: true,
             route: None,
             read_error: None,
+            recovery_issue: None,
             client_settings: None,
             client_settings_error: None,
             match_status: asb_core::contracts::MatchStatus::ExternallyModified {

@@ -297,3 +297,68 @@ export function getModelUsageReport(request: ModelUsageRequest): Promise<ModelUs
 export function getUsageHistory(request: UsageHistoryRequest): Promise<UsageHistorySeries[]> {
   return invoke<UsageHistorySeries[]>("get_usage_history", { request });
 }
+
+// ------------------------------------------------------------- codex probe
+
+/** `questionId` that selects the user-authored question. */
+export const CUSTOM_PROBE_QUESTION_ID = "custom";
+
+/** One selectable probe question from the backend-owned catalog. */
+export interface CodexProbeQuestion {
+  id: string;
+  label: string;
+}
+
+export type CodexProbePhase = "running" | "completed" | "cancelled" | "failed";
+
+/** One finished probe run: the pass result plus the real token usage read
+ * back from the session record Codex wrote for that run. */
+export interface CodexProbeRun {
+  passed: boolean;
+  reasoningTokens: number | null;
+  totalTokens: number | null;
+  model: string | null;
+  durationMs: number;
+  error: string | null;
+}
+
+/** Live or final state of one probe batch; readable repeatedly while the
+ * batch runs. */
+export interface CodexProbeStatus {
+  phase: CodexProbePhase;
+  questionLabel: string;
+  runCount: number;
+  completedRuns: number;
+  startedAt: string;
+  runs: CodexProbeRun[];
+  error: string | null;
+}
+
+export interface CodexProbeRequest {
+  runCount: number;
+  /** A built-in catalog id, or `custom` with the question and answer. */
+  questionId: string;
+  customQuestion?: string;
+  customAnswer?: string;
+}
+
+/** The built-in question catalog; the backend owns the bank. */
+export function listCodexProbeQuestions(): Promise<CodexProbeQuestion[]> {
+  return invoke<CodexProbeQuestion[]>("list_codex_probe_questions");
+}
+
+/** Starts one probe batch against the active Codex configuration. Every run
+ * is a real Codex call and spends quota. */
+export function startCodexProbe(request: CodexProbeRequest): Promise<{ probeId: string }> {
+  return invoke<{ probeId: string }>("start_codex_probe", { request });
+}
+
+/** Repeatable progress read; `null` once the probe id is no longer current. */
+export function getCodexProbe(probeId: string): Promise<CodexProbeStatus | null> {
+  return invoke<CodexProbeStatus | null>("get_codex_probe", { probeId });
+}
+
+/** Requests cancellation; the in-flight run is terminated. */
+export function cancelCodexProbe(probeId: string): Promise<boolean> {
+  return invoke<boolean>("cancel_codex_probe", { probeId });
+}

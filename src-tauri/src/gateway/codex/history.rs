@@ -84,6 +84,9 @@ impl CodexToolHistory {
         let Ok(value) = serde_json::from_slice::<Value>(rendered) else {
             return;
         };
+        if value.get("status").and_then(Value::as_str) != Some("completed") {
+            return;
+        }
         let Some(id) = value
             .get("id")
             .and_then(Value::as_str)
@@ -408,3 +411,26 @@ fn find_block_end(buffer: &[u8]) -> Option<usize> {
         .map(|position| position + 2)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn incomplete_tool_calls_never_enter_continuation_history() {
+        let history = CodexToolHistory::default();
+        let binding = HistoryBinding::for_request(br#"{"model":"test"}"#, None);
+        let mut response = serde_json::json!({
+            "id": "response-1", "status": "incomplete",
+            "output": [{"type":"function_call", "call_id":"call-1",
+                "name":"read_file", "arguments":"{", "status":"incomplete"}],
+        });
+        history.record_response(&binding, response.to_string().as_bytes());
+        assert!(history.inner.read().unwrap().entries.is_empty());
+
+        response["status"] = serde_json::json!("completed");
+        response["output"][0]["arguments"] = serde_json::json!("{}");
+        response["output"][0]["status"] = serde_json::json!("completed");
+        history.record_response(&binding, response.to_string().as_bytes());
+        assert!(history.inner.read().unwrap().entries.contains_key("response-1"));
+    }
+}

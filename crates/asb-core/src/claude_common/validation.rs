@@ -30,15 +30,7 @@ pub(super) fn path(path: &[String]) -> Result<(), String> {
         return Err("Claude 通用配置字段名无效".into());
     }
     let first = path[0].as_str();
-    if matches!(
-        first,
-        "mcpServers"
-            | "enabledMcpjsonServers"
-            | "disabledMcpjsonServers"
-            | "enableAllProjectMcpServers"
-            | "enabledPlugins"
-            | "extraKnownMarketplaces"
-    ) {
+    if crate::ownership::is_claude_extension_path(first) {
         return Err(format!(
             "{first} 由 Claude MCP/扩展模块管理，不能重复放入通用配置"
         ));

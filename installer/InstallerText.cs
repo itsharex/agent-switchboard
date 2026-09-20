@@ -44,12 +44,22 @@ namespace AgentSwitchboard.Installer
 
         internal string NewInstallationNotice
         {
-            get { return T("仅为当前 Windows 帐户安装。", "Available to this Windows account only."); }
+            get
+            {
+                return InstallerProductMetadata.UsesMsiEngine
+                    ? T("将为这台电脑的所有用户安装；安装时 Windows 将请求管理员权限。", "For all users of this PC. Windows will ask for administrator approval.")
+                    : T("仅为当前 Windows 帐户安装。", "Available to this Windows account only.");
+            }
         }
 
         internal string ExistingInstallationNotice
         {
-            get { return T("将更新此位置中的 Agent Switchboard，并保留应用数据。", "This copy will be updated and its application data will be kept."); }
+            get
+            {
+                return InstallerProductMetadata.UsesMsiEngine
+                    ? T("将更新这台电脑上的 Agent Switchboard，并保留应用数据。", "This PC's copy will be updated and its application data will be kept.")
+                    : T("将更新此位置中的 Agent Switchboard，并保留应用数据。", "This copy will be updated and its application data will be kept.");
+            }
         }
 
         internal string Cancel
@@ -140,6 +150,8 @@ namespace AgentSwitchboard.Installer
                     return T("选择另一个位置", "Choose another location");
                 case InstallerFailureKind.WebViewRuntime:
                     return T("无法准备安装环境", "Unable to prepare setup");
+                case InstallerFailureKind.ElevationDeclined:
+                    return T("已取消安装", "Installation cancelled");
                 default:
                     return T("安装未完成", "Installation did not complete");
             }
@@ -163,6 +175,8 @@ namespace AgentSwitchboard.Installer
                     return T("无法启动安装引擎。请重新下载安装包后再试。", "The installation engine could not start. Download the installer again and try again.");
                 case InstallerFailureKind.EngineExecution:
                     return T("请确认目标文件夹未被占用，并且当前帐户可以写入。", "Make sure the destination is not in use and this account can write to it.");
+                case InstallerFailureKind.ElevationDeclined:
+                    return T("这台电脑的安装需要管理员权限。请在权限请求中选择“是”后重试。", "Installing on this PC requires administrator approval. Accept the prompt and try again.");
                 default:
                     return T("请再试一次。", "Try again.");
             }

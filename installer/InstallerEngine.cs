@@ -15,7 +15,7 @@ namespace AgentSwitchboard.Installer
 
     internal static class InstallerEngine
     {
-        private const string PayloadResource = "AgentSwitchboard.Installer.Engine.exe";
+        private const string PayloadResource = "AgentSwitchboard.Installer.Engine.payload";
 
         private enum InstalledDirectoryState
         {
@@ -26,6 +26,16 @@ namespace AgentSwitchboard.Installer
 
         internal static string DetectDirectory()
         {
+            if (InstallerProductMetadata.UsesMsiEngine)
+            {
+                // The WiX engine installs per-machine under Program Files; the
+                // Windows Installer uninstall entry is the only live source.
+                string located = TryReadMsiInstallLocation();
+                if (!String.IsNullOrWhiteSpace(located)) return located;
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    InstallerProductMetadata.ProductName);
+            }
             string installed = TryReadInstalledDirectory();
             if (!String.IsNullOrWhiteSpace(installed))
             {
@@ -54,8 +64,8 @@ namespace AgentSwitchboard.Installer
             {
                 await EnsureWebViewRuntime(temporary);
                 string engine = await ExtractEngine(temporary);
-                int exitCode = await RunEngine(engine, request.EngineArguments());
-                if (exitCode != 0)
+                int exitCode = await RunEngine(engine, request);
+                if (exitCode != 0 && !(InstallerProductMetadata.UsesMsiEngine && exitCode == 3010))
                     throw new InstallerException(
                         InstallerFailureKind.EngineExecution,
                         "The installation engine returned a non-zero exit code.",
@@ -207,6 +217,50 @@ namespace AgentSwitchboard.Installer
             }
         }
 
+        /// Windows Installer owns the uninstall entry of the per-machine MSI;
+        /// the display name is the stable join key the WiX package carries.
+        private static string TryReadMsiInstallLocation()
+        {
+            try
+            {
+                const string uninstall = @"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+                using (var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+                using (var root = hive.OpenSubKey(uninstall))
+                {
+                    if (root == null) return null;
+                    foreach (var subKeyName in root.GetSubKeyNames())
+                    {
+                        using (var key = root.OpenSubKey(subKeyName))
+                        {
+                            if (key == null) continue;
+                            if (!String.Equals(
+                                    key.GetValue("DisplayName") as string,
+                                    InstallerProductMetadata.ProductName,
+                                    StringComparison.OrdinalIgnoreCase)) continue;
+                            string location = key.GetValue("InstallLocation") as string;
+                            if (!String.IsNullOrWhiteSpace(location)) return location;
+                        }
+                    }
+                }
+                return null;
+            }
+            catch (IOException error)
+            {
+                Trace.TraceWarning("Installer directory lookup: " + error.Message);
+                return null;
+            }
+            catch (UnauthorizedAccessException error)
+            {
+                Trace.TraceWarning("Installer directory lookup: " + error.Message);
+                return null;
+            }
+            catch (System.Security.SecurityException error)
+            {
+                Trace.TraceWarning("Installer directory lookup: " + error.Message);
+                return null;
+            }
+        }
+
         private static void RemoveStaleInstalledDirectory()
         {
             try
@@ -230,7 +284,10 @@ namespace AgentSwitchboard.Installer
 
         private static async Task<string> ExtractEngine(string temporary)
         {
-            string engine = Path.Combine(temporary, "engine.exe");
+            // msiexec rejects a database whose file extension is not .msi.
+            string engine = Path.Combine(
+                temporary,
+                InstallerProductMetadata.UsesMsiEngine ? "engine.msi" : "engine.exe");
             try
             {
                 using (var input = Assembly.GetExecutingAssembly().GetManifestResourceStream(PayloadResource))
@@ -265,7 +322,11 @@ namespace AgentSwitchboard.Installer
                         new Uri("https://go.microsoft.com/fwlink/p/?LinkId=2124703"),
                         bootstrapper);
 
-                await RunProcess(bootstrapper, "/silent /install");
+                await RunProcess(bootstrapper, "/silent /install", delegate(ProcessStartInfo start)
+                {
+                    start.UseShellExecute = false;
+                    start.CreateNoWindow = true;
+                });
                 if (!HasWebViewRuntime())
                     throw new IOException("WebView2 installation did not complete.");
             }
@@ -279,14 +340,42 @@ namespace AgentSwitchboard.Installer
             }
         }
 
-        private static async Task<int> RunEngine(string executable, string arguments)
+        /// One engine invocation. The command lines of both engines live here
+        /// and nowhere else: NSIS runs the extracted setup directly, the MSI
+        /// engine is driven through an elevated msiexec.
+        private static async Task<int> RunEngine(string engine, InstallationRequest request)
         {
+            if (!InstallerProductMetadata.UsesMsiEngine)
+                return await RunProcess(
+                    engine,
+                    BuildNsisArguments(request),
+                    delegate(ProcessStartInfo start)
+                    {
+                        start.UseShellExecute = false;
+                        start.CreateNoWindow = true;
+                    });
+
             try
             {
-                return await RunProcess(executable, arguments);
+                return await RunProcess(
+                    "msiexec.exe",
+                    "/i \"" + engine + "\" /qn /norestart",
+                    delegate(ProcessStartInfo start)
+                    {
+                        // The WiX package installs per-machine, so the engine
+                        // elevation goes through the shell's UAC prompt.
+                        start.UseShellExecute = true;
+                        start.Verb = "runas";
+                    });
             }
             catch (Exception error)
             {
+                if (IsElevationDeclined(error))
+                    throw new InstallerException(
+                        InstallerFailureKind.ElevationDeclined,
+                        "The administrator approval was declined.",
+                        error,
+                        null);
                 throw new InstallerException(
                     InstallerFailureKind.EngineLaunch,
                     "The installation engine could not start.",
@@ -295,16 +384,33 @@ namespace AgentSwitchboard.Installer
             }
         }
 
-        private static Task<int> RunProcess(string executable, string arguments)
+        private static string BuildNsisArguments(InstallationRequest request)
+        {
+            var arguments = new System.Text.StringBuilder("/S");
+            if (request.Update) arguments.Append(" /UPDATE");
+            arguments.Append(" /D=").Append(request.Directory);
+            return arguments.ToString();
+        }
+
+        private static bool IsElevationDeclined(Exception error)
+        {
+            var native = error as System.ComponentModel.Win32Exception;
+            return native != null && native.NativeErrorCode == 1223; // ERROR_CANCELLED
+        }
+
+        private static Task<int> RunProcess(
+            string executable,
+            string arguments,
+            Action<ProcessStartInfo> configure)
         {
             return Task.Run(() =>
             {
-                using (var process = Process.Start(new ProcessStartInfo(executable, arguments)
+                var start = new ProcessStartInfo(executable, arguments)
                 {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
                     WorkingDirectory = Path.GetDirectoryName(executable),
-                }))
+                };
+                configure(start);
+                using (var process = Process.Start(start))
                 {
                     if (process == null)
                         throw new IOException("The installer process could not start.");

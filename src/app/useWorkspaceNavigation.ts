@@ -22,7 +22,7 @@ export function useWorkspaceNavigation() {
   const returnToProviders = useCallback(() => setPage("供应商切换"), [setPage]);
   const openQuota = useCallback(() => {
     setUsageSection("quota");
-    setPage("用量");
+    setPage("用量监控");
   }, [setPage]);
   return { page, setPage, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
     extensionSection, setExtensionSection, usageSection, setUsageSection, settingsReturnToProviders,

@@ -23,6 +23,7 @@ fn prepare<Io: SwitchIo>(
         message: error.message,
         line: error.line,
     })?;
+    validate_restore_contract(backup, &content)?;
     let auth_backup = linked_auth_backup(io, backup)?;
     let auth_content = auth_backup
         .as_ref()

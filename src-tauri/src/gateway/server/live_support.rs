@@ -6,6 +6,7 @@
 //! product actually renders. The provider credential reaches the gateway
 //! profile only; it is never rendered into a client configuration.
 
+use crate::codex_probe::codex_executable;
 use crate::gateway::{GatewayActivation, GatewayController, GatewayProjection};
 use crate::local_state::LocalState;
 use asb_core::contracts::{
@@ -311,25 +312,6 @@ fn live_draft(route: &LiveRoute, api_key: &str) -> CodexProviderDraft {
         website_url: None,
         usage_query: None,
     }
-}
-
-/// Resolves the Codex launcher without relying on an interactive shell. The
-/// npm wrapper is a batch file, which `Command` cannot find by bare name.
-fn codex_executable() -> PathBuf {
-    if let Some(explicit) = env::var_os("ASB_TEST_CODEX_BIN") {
-        return PathBuf::from(explicit);
-    }
-    if let Some(path) = env::var_os("PATH") {
-        for directory in env::split_paths(&path) {
-            for name in ["codex.exe", "codex.cmd", "codex.bat"] {
-                let candidate = directory.join(name);
-                if candidate.is_file() {
-                    return candidate;
-                }
-            }
-        }
-    }
-    "codex".into()
 }
 
 fn fake_official_auth() -> Vec<u8> {

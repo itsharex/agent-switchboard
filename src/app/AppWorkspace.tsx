@@ -29,8 +29,8 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
       {visited("会话记录") && <section className="asb-panel" hidden={page !== "会话记录"} aria-label="会话管理">
         <SessionManager active={page === "会话记录"} />
       </section>}
-      {visited("用量") && <div hidden={page !== "用量"} className="asb-page-stack">
-        <UsageWorkspace active={page === "用量"} section={model.usageSection} onSectionChange={model.setUsageSection} />
+      {visited("用量监控") && <div hidden={page !== "用量监控"} className="asb-page-stack">
+        <UsageWorkspace active={page === "用量监控"} section={model.usageSection} onSectionChange={model.setUsageSection} />
       </div>}
       {visited("设置") && <div hidden={page !== "设置"} className="asb-page-stack">
         <SettingsWorkspace model={model} active={page === "设置"} />

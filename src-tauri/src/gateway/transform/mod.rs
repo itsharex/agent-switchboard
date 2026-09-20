@@ -17,6 +17,8 @@ mod stream;
 mod tool_names;
 mod upstream_compat;
 mod usage;
+#[cfg(test)]
+mod tests;
 pub(crate) use upstream_compat::{
     apply_request_compat, restore_native_json, wrap_native_sse_reader,
 };
@@ -245,4 +247,3 @@ pub(crate) struct Usage {
 pub(crate) fn error<T>(message: impl Into<String>) -> Result<T, TransformError> {
     Err(TransformError(message.into()))
 }
-

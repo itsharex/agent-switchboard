@@ -1,6 +1,6 @@
 //! Codex Responses failover. Every candidate re-renders the original request
 //! with its own immutable credentials/model snapshot; delivered streams never retry.
-mod attempt;
+pub(super) mod attempt;
 mod operations;
 use super::*;
 use crate::gateway::codex::policy::{self, CodexGatewayPolicy};
@@ -33,15 +33,7 @@ pub(super) fn respond(
                 .map(str::to_string),
         );
     }
-    let limit = if policy.enabled {
-        policy.max_retries as usize + 1
-    } else {
-        primary
-            .connection
-            .endpoint_candidates(&primary.upstream_base_url)
-            .len()
-            .max(1)
-    };
+    let limit = attempt_limit(&policy, &primary);
     Forward {
         request,
         span,
@@ -56,7 +48,19 @@ pub(super) fn respond(
     .run(candidates);
 }
 
-fn admit(
+pub(super) fn attempt_limit(policy: &CodexGatewayPolicy, primary: &ActiveRoute) -> usize {
+    if policy.enabled {
+        policy.max_retries as usize + 1
+    } else {
+        primary
+            .connection
+            .endpoint_candidates(&primary.upstream_base_url)
+            .len()
+            .max(1)
+    }
+}
+
+pub(super) fn admit(
     inner: &GatewayInner,
     route: &ActiveRoute,
     body: &[u8],
@@ -92,6 +96,13 @@ impl Forward {
             if attempted >= self.limit || self.request.is_cancelled() {
                 break;
             }
+            let candidate = match attempt::resolve_route(&candidate, &self.inner, self.request.headers()) {
+                Ok(route) => route,
+                Err(failure) => {
+                    self.last_failure = Some(failure);
+                    break;
+                }
+            };
             let health = self
                 .inner
                 .codex_health
@@ -172,26 +183,9 @@ impl Forward {
         route: &ActiveRoute,
         failure: attempt::Failure,
     ) -> Result<attempt::Failure, (UpstreamResponse, bool)> {
-        if self.media_retried
-            || !self.policy.media_fallback
-            || !crate::gateway::codex::media::is_unsupported_image_failure(&failure.diagnostic)
-        {
-            return Ok(failure);
-        }
-        let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&self.body) else {
-            return Ok(failure);
-        };
-        if !crate::gateway::codex::media::contains_images(&value) {
-            return Ok(failure);
-        }
-        self.media_retried = true;
-        let replaced = crate::gateway::codex::media::replace_images_with_marker(&mut value);
-        if replaced == 0 {
-            return Ok(failure);
-        }
-        let Ok(media_body) = serde_json::to_vec(&value) else {
-            return Ok(failure);
-        };
+        let Some(media_body) = attempt::media_fallback_body(
+            &self.body, &failure, self.policy.media_fallback, &mut self.media_retried,
+        ) else { return Ok(failure) };
         let original = std::mem::replace(&mut self.body, media_body);
         let outcome = match self.prepare_body(route, &self.body) {
             Ok(prepared) => self.send(route, prepared),
@@ -229,7 +223,8 @@ impl Forward {
         let outcome = attempt::send(
             &self.client,
             route,
-            &self.request,
+            self.request.headers(),
+            &|| self.request.is_cancelled(),
             prepared,
             &self.policy.traffic,
         );

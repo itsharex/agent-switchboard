@@ -1,9 +1,11 @@
 using System;
 using System.IO;
-using System.Text;
 
 namespace AgentSwitchboard.Installer
 {
+    /// The validated user intent of one install. Engine command lines are
+    /// owned by <see cref="InstallerEngine"/>; this type only asserts that
+    /// the requested directory is a writable-looking absolute path.
     internal sealed class InstallationRequest
     {
         private InstallationRequest(string directory, bool update)
@@ -19,14 +21,6 @@ namespace AgentSwitchboard.Installer
         internal static InstallationRequest Create(string directory, bool update)
         {
             return new InstallationRequest(NormalizeDirectory(directory), update);
-        }
-
-        internal string EngineArguments()
-        {
-            var arguments = new StringBuilder("/S");
-            if (Update) arguments.Append(" /UPDATE");
-            arguments.Append(" /D=").Append(Directory);
-            return arguments.ToString();
         }
 
         private static string NormalizeDirectory(string directory)

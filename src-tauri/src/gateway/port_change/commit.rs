@@ -16,6 +16,29 @@ pub(crate) fn commit(
 ) -> Result<GatewayPortChangeResult, String> {
     let _commit_lock = preparations.lock_commit()?;
     let prepared = preparations.take(preparation_id)?;
+    let _maintenance = MaintenanceGuard(controller);
+    if !controller.enter_maintenance_and_drain() {
+        return Err("存在长时间未结束的网关请求，本次修改已取消，服务未中断".to_string());
+    }
+    // Request completion persists endpoint metadata under this same lock.
+    // Drain first, then serialize and revalidate every preview fact.
+    let _write_guard = controller.inner.endpoint_write_lock.lock()
+        .map_err(|_| "客户端配置写入闸门不可用".to_string())?;
+    commit_drained(controller, local, prepared)
+}
+
+struct MaintenanceGuard<'a>(&'a GatewayController);
+impl Drop for MaintenanceGuard<'_> {
+    fn drop(&mut self) {
+        self.0.exit_maintenance();
+    }
+}
+
+fn commit_drained(
+    controller: &GatewayController,
+    local: &LocalState,
+    prepared: PreparedPortChange,
+) -> Result<GatewayPortChangeResult, String> {
     if !controller.state_available() {
         return Err("本机协议网关状态不可用，请先恢复状态文件后再修改端口".to_string());
     }
@@ -39,19 +62,13 @@ pub(crate) fn commit(
         return Err("客户端配置或供应商路由已在预览后变化，请重新发起修改".to_string());
     }
     let builds = endpoint_builds(local, observed)?;
-    if !controller.enter_maintenance_and_drain() {
-        controller.exit_maintenance();
-        return Err("存在长时间未结束的网关请求，本次修改已取消，服务未中断".to_string());
-    }
     if let Err(error) = controller.spawn_serve(prepared.listener.clone()) {
         prepared.listener.stop();
-        controller.exit_maintenance();
         return Err(error);
     }
     let result = apply_changes(controller, local, &prepared, &builds);
     if result.is_err() {
         prepared.listener.stop();
-        controller.exit_maintenance();
     }
     result
 }
@@ -152,7 +169,6 @@ fn apply_changes(
     if let Some(old_listener) = controller.replace_listener(prepared.listener.clone()) {
         old_listener.stop();
     }
-    controller.exit_maintenance();
     if let Err(error) = recovery::cleanup_transaction(local, &journal) {
         let warning = format!("监听端口已修改，但无法清理恢复材料：{error}");
         controller.block_port_change(blocked(&journal, warning.clone()));

@@ -2,20 +2,20 @@ use super::*;
 use crate::gateway::codex::policy::CodexTrafficSettings;
 use tiny_http::Header;
 
-pub(super) struct Prepared {
+pub(in crate::gateway::server) struct Prepared {
     url: String,
     converted: ConvertedRequest,
     pub model: Option<String>,
     anthropic_beta: Option<String>,
 }
-pub(super) struct Failure {
+pub(in crate::gateway::server) struct Failure {
     pub diagnostic: ProviderDiagnostic,
     pub status: u16,
     pub retryable: bool,
     pub penalize: bool,
 }
 
-pub(super) fn prepare(
+pub(in crate::gateway::server) fn prepare(
     route: &ActiveRoute,
     gateway_base: &str,
     request_url: &str,
@@ -80,10 +80,11 @@ pub(super) fn prepare(
     })
 }
 
-pub(super) fn send(
+pub(in crate::gateway::server) fn send(
     client: &UpstreamClient,
     route: &ActiveRoute,
-    request: &Request,
+    incoming: &[Header],
+    cancelled: &dyn Fn() -> bool,
     prepared: Prepared,
     settings: &CodexTrafficSettings,
 ) -> Result<(UpstreamResponse, bool), Failure> {
@@ -94,11 +95,11 @@ pub(super) fn send(
         &prepared.url,
         reqwest::Method::POST,
         prepared.converted.body,
-        Some(request.headers()),
+        Some(incoming),
         None,
         prepared.anthropic_beta.as_deref(),
         settings.timeouts(stream),
-        Some(&|| request.is_cancelled()),
+        Some(cancelled),
     )
     .map_err(classify)?;
     let status = response.status().as_u16();
@@ -138,7 +139,7 @@ pub(super) fn send(
     Ok((response, stream))
 }
 
-fn classify(diagnostic: ProviderDiagnostic) -> Failure {
+pub(in crate::gateway::server) fn classify(diagnostic: ProviderDiagnostic) -> Failure {
     let retryable = match diagnostic.kind {
         ProviderFailureKind::Dns
         | ProviderFailureKind::Tls
@@ -165,4 +166,46 @@ fn classify(diagnostic: ProviderDiagnostic) -> Failure {
         retryable,
         penalize: retryable,
     }
+}
+
+pub(in crate::gateway::server) fn resolve_route(
+    route: &ActiveRoute,
+    inner: &GatewayInner,
+    headers: &[Header],
+) -> Result<ActiveRoute, Failure> {
+    super::super::codex_account::resolve(route, inner, Some(headers)).map_err(|(status, message)| {
+        Failure {
+            diagnostic: ProviderDiagnostic::new(
+                ProviderFailureKind::Authentication,
+                &route.upstream_base_url,
+                &message,
+            ),
+            status,
+            retryable: false,
+            penalize: false,
+        }
+    })
+}
+
+pub(in crate::gateway::server) fn media_fallback_body(
+    body: &[u8],
+    failure: &Failure,
+    enabled: bool,
+    retried: &mut bool,
+) -> Option<Vec<u8>> {
+    if *retried || !enabled
+        || !crate::gateway::codex::media::is_unsupported_image_failure(&failure.diagnostic)
+    {
+        return None;
+    }
+    let mut value: serde_json::Value = serde_json::from_slice(body).ok()?;
+    if !crate::gateway::codex::media::contains_images(&value) {
+        return None;
+    }
+    if crate::gateway::codex::media::replace_images_with_marker(&mut value) == 0 {
+        return None;
+    }
+    let body = serde_json::to_vec(&value).ok()?;
+    *retried = true;
+    Some(body)
 }

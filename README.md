@@ -77,6 +77,7 @@ Agent Switchboard 将供应商档案、客户端配置、扩展管理和本机�
 ### 状态、恢复与诊断
 
 - 提供当前连接、用量、额度、会话、备份、日志、配置状态和网关诊断。
+- 用量页提供「降智雷达」：以内置或自定义题目在本机批量调用 Codex CLI 实测当前激活配置，展示每次通过结果、reasoning tokens 与真实消耗；检测会话计入用量统计，结论是参考信号而非模型判定。
 - 每次可恢复写入都会创建记录；可以从操作历史查看结果并执行恢复。
 - 外部编辑、配置缺失、语法错误、文件替换和恢复失败都会显示明确状态，不会静默覆盖或虚构结果。
 
@@ -96,7 +97,7 @@ npm ci
 npm run dev:desktop
 ```
 
-Windows 自绘安装器由 `installer/AgentSwitchboard.Installer.csproj` 构建；执行 `npm run tauri:build:windows` 还需要 MSBuild 和 .NET Framework 4.8.1 targeting pack（Visual Studio 或 Visual Studio Build Tools）。前端开发可使用：
+Windows 自绘安装器由 `installer/AgentSwitchboard.Installer.csproj` 构建；执行 `npm run tauri:build:windows`（NSIS 引擎，按当前帐户安装、目录可选）或 `npm run tauri:build:windows:msi`（MSI 引擎，按本机所有用户安装到 Program Files）还需要 MSBuild 和 .NET Framework 4.8.1 targeting pack（Visual Studio 或 Visual Studio Build Tools）。前端开发可使用：
 
 ```bash
 npm run dev:frontend

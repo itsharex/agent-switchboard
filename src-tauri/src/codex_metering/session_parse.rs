@@ -469,3 +469,73 @@ pub(super) fn parse_codex_file<R: std::io::Read>(
         has_billable_tokens,
     })
 }
+
+/// One-shot cumulative totals for one rollout file. The degradation probe
+/// consumes this directly; the sync engine keeps its own incremental state.
+pub(crate) struct SessionTokenSummary {
+    pub(crate) input: u64,
+    pub(crate) cached_input: u64,
+    pub(crate) output: u64,
+    pub(crate) reasoning_output: Option<u64>,
+    pub(crate) total: Option<u64>,
+    pub(crate) model: Option<String>,
+}
+
+/// Reads one rollout file and returns its final cumulative usage snapshot.
+/// Filename identity checks are skipped: the probe owns the observation that
+/// this exact file appeared during its run.
+pub(crate) fn summarize_token_usage<R: std::io::Read>(
+    reader: BufReader<R>,
+) -> Result<SessionTokenSummary, String> {
+    let parsed = parse_codex_file(reader, (None, None))?;
+    let Some(counters) = parsed
+        .token_events
+        .iter()
+        .rev()
+        .find_map(|event| event.signature.total.clone())
+    else {
+        return Err("会话记录中没有 token 统计".to_string());
+    };
+    let model = parsed
+        .token_events
+        .iter()
+        .rev()
+        .find(|event| event.model != "unknown")
+        .map(|event| event.model.clone());
+    Ok(SessionTokenSummary {
+        input: counters.input.unwrap_or(0),
+        cached_input: counters.cached_input.unwrap_or(0),
+        output: counters.output.unwrap_or(0),
+        reasoning_output: counters.reasoning_output,
+        total: counters.total,
+        model,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn summarize_reads_the_final_cumulative_snapshot() {
+        let rollout = concat!(
+            "{\"type\":\"session_meta\",\"timestamp\":\"2026-01-01T00:00:00.000Z\",\"payload\":{\"id\":\"11111111-1111-1111-1111-111111111111\"}}\n",
+            "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"payload\":{\"type\":\"token_count\",\"info\":{\"model\":\"gpt-test\",\"total_token_usage\":{\"input_tokens\":120,\"cached_input_tokens\":30,\"output_tokens\":40,\"reasoning_output_tokens\":77,\"total_tokens\":190},\"last_token_usage\":{\"input_tokens\":120,\"cached_input_tokens\":30,\"output_tokens\":40}}}}\n",
+        );
+        let summary =
+            summarize_token_usage(BufReader::new(rollout.as_bytes())).expect("rollout summary");
+        assert_eq!(summary.input, 120);
+        assert_eq!(summary.cached_input, 30);
+        assert_eq!(summary.output, 40);
+        assert_eq!(summary.reasoning_output, Some(77));
+        assert_eq!(summary.total, Some(190));
+        assert_eq!(summary.model.as_deref(), Some("gpt-test"));
+    }
+
+    #[test]
+    fn summarize_rejects_a_rollout_without_token_events() {
+        let empty = "{\"type\":\"session_meta\",\"timestamp\":\"2026-01-01T00:00:00.000Z\",\"payload\":{}}\n";
+        assert!(summarize_token_usage(BufReader::new(empty.as_bytes())).is_err());
+        assert!(summarize_token_usage(BufReader::new("".as_bytes())).is_err());
+    }
+}

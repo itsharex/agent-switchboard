@@ -213,3 +213,59 @@
 }
 
 
+
+/* The degradation radar is an opt-in probe, not a ledger: one status line,
+   the shared stat band and table, plus the custom-question form that only a
+   `custom` selection reveals. */
+.asb-panel.asb-codex-probe {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.asb-panel.asb-codex-probe > .asb-warn-text {
+  margin: var(--asb-space-2) 0 0;
+}
+
+.asb-codex-probe-custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--asb-space-2);
+  margin: 0 0 var(--asb-space-3);
+}
+
+.asb-codex-probe-custom label {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-codex-probe-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--asb-space-3);
+  min-width: 0;
+}
+
+.asb-codex-probe-progress {
+  margin: 0;
+  font: var(--asb-text-label);
+}
+
+.asb-codex-probe-table {
+  min-width: max-content;
+}
+
+.asb-codex-probe-meta,
+.asb-codex-probe-note {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  overflow-wrap: anywhere;
+}
+
+.asb-codex-probe-empty {
+  flex: 1;
+  justify-content: center;
+}

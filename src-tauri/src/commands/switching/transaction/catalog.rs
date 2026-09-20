@@ -109,7 +109,7 @@ mod tests {
 
     fn intent(path: PathBuf, before: Option<&str>, after: Option<&str>) -> SwitchIntent {
         SwitchIntent {
-            version: 1,
+            version: 2,
             app: AppKind::Codex,
             target: path
                 .with_file_name("config.toml")
@@ -133,6 +133,8 @@ mod tests {
             )),
             codex_backfill: None,
             auth: None,
+            operation: WriteOperation::Restore,
+            client_settings: None,
         }
     }
 

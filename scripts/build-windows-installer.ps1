@@ -1,5 +1,9 @@
 [CmdletBinding()]
 param(
+  # The silent engine the wizard embeds: NSIS (per-user, customizable
+  # directory) or MSI (per-machine, Program Files, elevated via UAC).
+  [ValidateSet('Nsis', 'Msi')]
+  [string]$Engine = 'Nsis',
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$TauriArguments
 )
@@ -69,18 +73,34 @@ try {
 
   $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'target' }
   $bundleRoot = [IO.Path]::GetFullPath((Join-Path $targetRoot 'release/bundle'))
-  & node node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.windows.conf.json @TauriArguments
+  $engineBundle = if ($Engine -eq 'Msi') { 'msi' } else { 'nsis' }
+  & node node_modules/@tauri-apps/cli/tauri.js build --config src-tauri/tauri.windows.conf.json --bundles $engineBundle @TauriArguments
   if ($LASTEXITCODE -ne 0) { throw "Tauri engine build failed (exit code $LASTEXITCODE)." }
 
-  $engine = (Resolve-Path -LiteralPath (Join-Path $bundleRoot "nsis/$($config.productName)_${version}_x64-setup.exe")).Path
-  $engineVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($engine).ProductVersion
-  if ($engineVersion -ne $version) {
-    throw "Installation engine version '$engineVersion' does not match workspace '$version'."
+  $enginePattern = if ($Engine -eq 'Msi') {
+    "$($config.productName)_${version}_x64_en-US.msi"
+  } else {
+    "$($config.productName)_${version}_x64-setup.exe"
   }
+  # PowerShell variable names are case-insensitive: the path must not reuse
+  # the $Engine parameter's name or the ValidateSet rejects the assignment.
+  $enginePath = (Resolve-Path -LiteralPath (Join-Path $bundleRoot "$engineBundle/$enginePattern")).Path
+  if ($Engine -ne 'Msi') {
+    $engineVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($enginePath).ProductVersion
+    if ($engineVersion -ne $version) {
+      throw "Installation engine version '$engineVersion' does not match workspace '$version'."
+    }
+  }
+  # An MSI database carries no executable version resource. Its file name is
+  # produced from the same workspace version and the Resolve-Path above only
+  # succeeds when this exact build emitted it.
 
   $outputDirectory = Join-Path $bundleRoot 'installer'
   $buildDirectory = Join-Path $targetRoot 'release/agent-switchboard-installer'
-  $intermediateDirectory = Join-Path $buildDirectory 'obj'
+  # Rebuild's clean pass deletes what the previous build recorded in the
+  # intermediate directory; keeping one per engine lets both setup artifacts
+  # coexist in the output directory.
+  $intermediateDirectory = Join-Path (Join-Path $buildDirectory 'obj') $engineBundle
   New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
   New-Item -ItemType Directory -Path $buildDirectory -Force | Out-Null
   New-Item -ItemType Directory -Path $intermediateDirectory -Force | Out-Null
@@ -101,12 +121,17 @@ namespace AgentSwitchboard.Installer
         internal const string ProductName = $(ConvertTo-VerbatimCSharpLiteral $config.productName);
         internal const string Version = $(ConvertTo-VerbatimCSharpLiteral $version);
         internal const string ApplicationFileStem = $(ConvertTo-VerbatimCSharpLiteral $package.name);
+        internal static readonly bool UsesMsiEngine = $($(if ($Engine -eq 'Msi') { 'true' } else { 'false' }));
     }
 }
 "@
   [IO.File]::WriteAllText($buildInfo, $buildInfoSource, [Text.UTF8Encoding]::new($false))
 
-  $targetName = "$($config.productName)_${version}_x64-setup"
+  $targetName = if ($Engine -eq 'Msi') {
+    "$($config.productName)_${version}_x64-msi-setup"
+  } else {
+    "$($config.productName)_${version}_x64-setup"
+  }
   $outputPath = [IO.Path]::GetFullPath($outputDirectory) + [IO.Path]::DirectorySeparatorChar
   $intermediatePath = [IO.Path]::GetFullPath($intermediateDirectory) + [IO.Path]::DirectorySeparatorChar
   $buildArguments = @(
@@ -119,7 +144,8 @@ namespace AgentSwitchboard.Installer
     "/p:OutputPath=$outputPath",
     "/p:IntermediateOutputPath=$intermediatePath",
     "/p:TargetName=$targetName",
-    "/p:InstallerEnginePath=$engine",
+    "/p:InstallerEnginePath=$enginePath",
+    "/p:InstallerEngineKind=$Engine",
     "/p:InstallerBuildInfoFile=$buildInfo"
   )
   & $msbuild @buildArguments

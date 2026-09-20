@@ -10,6 +10,8 @@ mod anthropic;
 mod chat;
 #[path = "stream/diagnostics.rs"]
 mod diagnostics;
+#[path = "stream/output.rs"]
+mod output;
 #[path = "stream/responses/mod.rs"]
 mod responses;
 
@@ -366,10 +368,6 @@ pub(super) fn append_event(output: &mut Vec<u8>, event: &str, value: Value) {
     output.extend(render_event(event, &value));
 }
 
-pub(super) fn responses_complete(response: &CanonicalResponse) -> Result<Value, TransformError> {
-    super::response::render_response(UpstreamProtocol::Responses, response)
-}
-
 pub(super) fn parse_responses_complete(
     value: &Value,
     reasoning_transport: Option<&ReasoningTransport>,
@@ -425,4 +423,3 @@ fn parse_frame(bytes: &[u8]) -> Result<Option<Frame>, TransformError> {
         data: data.join("\n"),
     }))
 }
-

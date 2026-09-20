@@ -12,6 +12,7 @@ mod settings;
 mod store;
 pub(crate) use contracts::*;
 pub(crate) use pricing::{estimate, CodexModelPrice};
+pub(crate) use session_parse::{summarize_token_usage, SessionTokenSummary};
 #[expect(unused_imports)] // reserved: session-usage sync slate
 pub(crate) use session_sync::{
     rebuild_codex_session_usage, sync_codex_session_usage, CodexSessionSyncReport,

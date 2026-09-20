@@ -168,7 +168,11 @@ namespace AgentSwitchboard.Installer
             directory.TextChanged += delegate { UpdateExisting(); };
             UpdateExisting();
 
-            if (invocation.Kind == InstallerInvocationKind.Updater)
+            // Two read-only flows share this card: the updater invocation
+            // (it reinstalls over the detected location) and the MSI engine
+            // (WiX owns the per-machine directory).
+            if (invocation.Kind == InstallerInvocationKind.Updater
+                || InstallerProductMetadata.UsesMsiEngine)
             {
                 directory.IsEnabled = false;
                 browse.Visibility = Visibility.Collapsed;

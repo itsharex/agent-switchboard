@@ -28,6 +28,14 @@ pub(super) fn respond(
         respond_diagnostic(request, UpstreamProtocol::Responses, 422, &diagnostic);
         return;
     }
+    let settings = match crate::gateway::codex::policy::load(&inner.state_root) {
+        Ok((policy, _)) => policy.traffic,
+        Err(error) => {
+            span.finish(Some(503), 0);
+            respond_error(request, Some(UpstreamProtocol::Responses), 503, &error);
+            return;
+        }
+    };
     let result = match super::super::compaction::execute(
         client,
         route,
@@ -35,6 +43,8 @@ pub(super) fn respond(
         request.url(),
         body,
         Some(request.headers()),
+        settings.timeouts(false),
+        Some(&|| request.is_cancelled()),
     ) {
         Ok(result) => result,
         Err(diagnostic) => {

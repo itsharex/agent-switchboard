@@ -14,6 +14,7 @@ pub(super) fn send_stream<S: Read + Write, R: Read>(
     let mut decoder = ResponseEventDecoder::default();
     let mut completed = false;
     let mut failed = false;
+    let mut incomplete = false;
     let mut buffer = [0_u8; 8 * 1024];
     loop {
         let count = match stream.read(&mut buffer) {
@@ -56,7 +57,9 @@ pub(super) fn send_stream<S: Read + Write, R: Read>(
                     return reject_diagnostic(socket, &diagnostic);
                 }
                 completed = true;
-            } else if matches!(kind, "response.failed" | "response.incomplete") {
+            } else if kind == "response.incomplete" {
+                incomplete = true;
+            } else if kind == "response.failed" {
                 failed = true;
             }
             if !send_value(socket, &event.value) {
@@ -64,12 +67,14 @@ pub(super) fn send_stream<S: Read + Write, R: Read>(
             }
         }
     }
-    if decoder.finish().is_err() || (!completed && !failed) {
+    if decoder.finish().is_err() || (!completed && !failed && !incomplete) {
         diagnostic.message = "上游 SSE 流未完整结束或没有终止事件".to_string();
         return reject_diagnostic(socket, &diagnostic);
     }
     if failed {
         ExchangeOutcome::Rejected
+    } else if incomplete {
+        ExchangeOutcome::Incomplete
     } else {
         ExchangeOutcome::Served
     }

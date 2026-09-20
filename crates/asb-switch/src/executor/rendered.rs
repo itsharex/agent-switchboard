@@ -77,21 +77,31 @@ where
         req.app,
         req.reason,
     )?;
-    commit_rendered(io, req.target, req.app, req.rendered, &backup, &current)?;
     let outcome = RenderedWriteOutcome {
         backup,
         final_hash: sha256_hex(req.rendered),
         warnings: vec![],
     };
-    if let Err(message) = commit(&outcome) {
-        let recovery = restore_backup_content(io, req.target, &outcome.backup);
-        return Err(SwitchError::CommitFailed {
-            stage: "state-save",
-            message,
-            recovery,
-        });
-    }
-    Ok(outcome)
+    crate::config_journal::track(io, crate::PendingConfigWrite {
+        version: 1,
+        app: req.app,
+        profile_id: None,
+        backup: outcome.backup.clone(),
+        after_hash: outcome.final_hash.clone(),
+        after_existed: true,
+        auth: None,
+    }, || {
+        commit_rendered(io, req.target, req.app, req.rendered, &outcome.backup, &current)?;
+        if let Err(message) = commit(&outcome) {
+            let recovery = restore_backup_content(io, req.target, &outcome.backup);
+            return Err(SwitchError::CommitFailed {
+                stage: "state-save",
+                message,
+                recovery,
+            });
+        }
+        Ok(outcome)
+    })
 }
 
 #[cfg(test)]
@@ -99,6 +109,51 @@ mod tests {
     use super::*;
     use crate::io::FsIo;
     use asb_core::{adapter, AppKind};
+
+    #[test]
+    fn rendered_write_journals_before_application_commit_and_recovers_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("settings.json");
+        let backup_dir = directory.path().join("backups");
+        let current = "{}";
+        let rendered = r#"{"spinnerTipsEnabled":false}"#;
+        std::fs::write(&target, current).unwrap();
+        let before_hash = sha256_hex(current);
+        let request = RenderedWriteRequest {
+            target: &target, app: AppKind::Claude, backup_dir: &backup_dir,
+            expected_hash: &before_hash, expected_target_existed: true,
+            rendered, reason: "client-configuration-native-defaults",
+        };
+        let error = execute_rendered(&FsIo, &request, |outcome| {
+            let pending = crate::pending_config_write(&FsIo, &backup_dir, AppKind::Claude)
+                .unwrap().expect("durable before application state");
+            assert_eq!(pending.backup.id, outcome.backup.id);
+            assert_eq!(pending.after_hash, sha256_hex(rendered));
+            Err("application state unavailable".into())
+        }).unwrap_err();
+        assert!(matches!(error, SwitchError::CommitFailed { .. }));
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), current);
+        let pending = crate::pending_config_write(&FsIo, &backup_dir, AppKind::Claude)
+            .unwrap().expect("retain recovery until application compensation");
+        crate::finish_config_recovery(&FsIo, &backup_dir, &pending, &before_hash, true, || Ok(())).unwrap();
+        execute_rendered(&FsIo, &request, |_| Ok(())).unwrap();
+        assert!(crate::pending_config_write(&FsIo, &backup_dir, AppKind::Claude).unwrap().is_none());
+    }
+
+    #[test]
+    fn repair_backs_up_exact_invalid_source_before_replacing_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("settings.json");
+        let backup_dir = directory.path().join("backups");
+        let current = "{\"spinnerTipsEnabled\":false,}";
+        std::fs::write(&target, current).unwrap();
+        let outcome = execute_rendered(&FsIo, &RenderedWriteRequest {
+            target: &target, app: AppKind::Claude, backup_dir: &backup_dir,
+            expected_hash: &sha256_hex(current), expected_target_existed: true,
+            rendered: r#"{"spinnerTipsEnabled":false}"#, reason: "client-configuration-repair",
+        }, |_| Ok(())).unwrap();
+        assert_eq!(std::fs::read_to_string(outcome.backup.backup_path).unwrap(), current);
+    }
 
     #[test]
     fn endpoint_only_write_keeps_unowned_client_content_and_rolls_back_callback_failure() {

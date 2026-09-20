@@ -68,46 +68,23 @@ impl GatewayController {
         configuration: &str,
     ) -> Result<String, String> {
         adapter::validate_syntax(app, configuration).map_err(|error| error.to_string())?;
-        let configuration: String = if app == AppKind::Codex {
-            // Explicit legacy migration: parse, rewrite only ASB-owned
-            // routing facts, and surface every dropped fact in the runtime
-            // log before the write. Undeterminable shapes fail closed.
-            match asb_core::adapter::codex::normalize_legacy_codex_configuration(configuration)? {
-                Some(migration) => {
-                    log::info!(
-                        "Codex 备份使用已停用的 provider 契约，已迁移：{}；{}",
-                        migration.summary(),
-                        migration
-                            .credential_hints
-                            .iter()
-                            .chain(migration.warnings.iter())
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join("；")
-                    );
-                    migration.normalized
-                }
-                None => configuration.to_string(),
-            }
-        } else {
-            configuration.to_string()
-        };
         if app == AppKind::Codex {
-            validate_codex_provider(&configuration)?;
-            let route = adapter::route_state(app, &configuration);
+            adapter::codex::validate_restore_configuration(configuration)
+                .map_err(|error| error.to_string())?;
+            let route = adapter::route_state(app, configuration);
             if route.base_url.is_none() {
-                return Ok(configuration);
+                return Ok(configuration.to_string());
             }
-            if !routing::config_points_at_gateway(app, &configuration) {
-                return Ok(configuration);
+            if !routing::config_points_at_gateway(app, configuration) {
+                return Ok(configuration.to_string());
             }
-        } else if !routing::config_points_at_gateway(app, &configuration) {
+        } else if !routing::config_points_at_gateway(app, configuration) {
             return Ok(configuration.to_string());
         }
         if self.listening().is_none() || self.blocked_recovery().is_some() {
             return Err("本机网关尚未恢复监听或存在未完成的端口恢复，无法恢复第三方路由".into());
         }
-        let saved_base = adapter::route_state(app, &configuration)
+        let saved_base = adapter::route_state(app, configuration)
             .base_url
             .ok_or_else(|| "恢复目标缺少本机网关地址".to_string())?;
         let saved_origin = restored_origin(&saved_base)?;
@@ -141,7 +118,7 @@ impl GatewayController {
             if route.client_endpoint(&saved_origin) == saved_base {
                 let candidate = adapter::render_gateway_base_url(
                     app,
-                    &configuration,
+                    configuration,
                     &route.client_endpoint(&self.configured_base_url()),
                 )
                 .map_err(|error| error.to_string())?;
@@ -152,28 +129,6 @@ impl GatewayController {
         }
         Err("恢复目标的供应商或连接凭据已变化，请重新应用供应商".to_string())
     }
-}
-
-fn validate_codex_provider(configuration: &str) -> Result<(), String> {
-    let document = configuration
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(|_| "恢复目标配置无法解析".to_string())?;
-    let provider = document
-        .get("model_provider")
-        .map(|item| item.as_str())
-        .unwrap_or(Some("openai"));
-    let retired_provider_table = document
-        .get("model_providers")
-        .and_then(|providers| {
-            asb_core::adapter::codex::RETIRED_CODEX_PROVIDER_IDS
-                .into_iter()
-                .find(|id| providers.get(*id).is_some())
-        })
-        .is_some();
-    if provider != Some("openai") || retired_provider_table {
-        return Err("该备份使用已停用的 Codex provider 契约，请重新应用供应商".to_string());
-    }
-    Ok(())
 }
 
 fn restored_origin(saved_base: &str) -> Result<String, String> {

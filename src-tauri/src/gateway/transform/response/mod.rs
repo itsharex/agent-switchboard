@@ -104,10 +104,14 @@ mod custom;
 pub(super) mod lifecycle;
 mod parse;
 mod render;
+mod responses;
 
-
-pub(super) use render::responses_reasoning_item;
+pub(super) use responses::{
+    responses_envelope, responses_reasoning_item, responses_status, responses_text_item,
+    responses_tool_call_item,
+};
 
 use custom::*;
 use parse::*;
 use render::*;
+use responses::render_responses;
