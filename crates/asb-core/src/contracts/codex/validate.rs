@@ -258,6 +258,7 @@ fn validate_subagent_route(profile: &CodexProviderProfile) -> Result<(), String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contracts::codex::CodexSubagentRoute;
     use crate::contracts::ResponsesRequestMode;
 
     #[test]
