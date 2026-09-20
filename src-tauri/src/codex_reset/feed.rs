@@ -1,10 +1,15 @@
-use super::{CodexResetFeedStatus, CodexResetStatus, ResetSignal, ResetType, TiboPost};
+use super::{
+    CodexResetFeedStatus, CodexResetHeatmap, CodexResetHeatmapDay, CodexResetStatus, ResetSignal,
+    ResetType, TiboPost,
+};
 use serde::Deserialize;
+use std::collections::HashSet;
 
 pub(super) const STATUS_URL: &str = "https://www.codexrunway.com/api/status.json";
 const STATUS_SCHEMA_VERSION: u32 = 1;
 const TIBO_HANDLE: &str = "thsottiaux";
 const MAX_POST_TEXT_CHARS: usize = 600;
+const HEATMAP_TIMEZONE: &str = "UTC";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +22,8 @@ struct Feed {
     events: Vec<FeedEvent>,
     #[serde(default)]
     reset_timeline: ResetTimeline,
+    #[serde(default)]
+    heatmap: Option<FeedHeatmap>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +39,8 @@ struct ResetTimeline {
     fulfilled_schedules: Vec<TimelineCompletion>,
     #[serde(default)]
     manual_completions: Vec<TimelineCompletion>,
+    #[serde(default)]
+    suppressed_post_ids: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -42,6 +51,24 @@ struct TimelineCompletion {
     schedule: Option<FeedEvent>,
     #[serde(default)]
     schedules: Vec<FeedEvent>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FeedHeatmap {
+    timezone: String,
+    weeks: u32,
+    total: u32,
+    #[serde(default)]
+    days: Vec<FeedHeatmapDay>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FeedHeatmapDay {
+    date: String,
+    count: u32,
+    level: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,9 +91,12 @@ struct FeedEvent {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct FeedSource {
     handle: Option<String>,
     url: Option<String>,
+    #[serde(default)]
+    post_id: Option<String>,
 }
 
 fn parse_timestamp(value: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
@@ -140,6 +170,73 @@ fn latest_confirmed_signal(feed: &Feed) -> Option<ResetSignal> {
         .map(|(_, signal)| signal)
 }
 
+/// A post id is the feed's own numeric `source.postId`; events without one
+/// cannot be matched against completion or suppression entries.
+fn event_post_id(event: &FeedEvent) -> Option<&str> {
+    let id = event.source.as_ref()?.post_id.as_deref()?;
+    (!id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit())).then_some(id)
+}
+
+/// The site's forecast answer comes from the newest `reset_scheduled` event
+/// that no timeline completion or suppression entry has consumed — the same
+/// pending schedule `resetTimeline.nextSchedule` points at while it is
+/// unfulfilled. This fallback keeps the forecast visible whenever the
+/// timeline pointer is absent but the pending announcement still exists.
+fn pending_scheduled_signal(feed: &Feed) -> Option<ResetSignal> {
+    let consumed: HashSet<&str> = feed
+        .reset_timeline
+        .fulfilled_schedules
+        .iter()
+        .chain(&feed.reset_timeline.manual_completions)
+        .flat_map(|completion| completion_events(completion).filter_map(event_post_id))
+        .chain(
+            feed.reset_timeline
+                .suppressed_post_ids
+                .iter()
+                .map(String::as_str),
+        )
+        .collect();
+    feed.events
+        .iter()
+        .filter(|event| {
+            event.kind == "reset_scheduled"
+                && event_post_id(event).is_none_or(|id| !consumed.contains(id))
+        })
+        .filter_map(|event| {
+            parse_timestamp(&event.announced_at).zip(reset_signal(event).ok())
+        })
+        .max_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, signal)| signal)
+}
+
+fn heatmap(raw: &FeedHeatmap) -> Result<CodexResetHeatmap, String> {
+    if raw.timezone != HEATMAP_TIMEZONE {
+        return Err("公开 feed 的热力图时区不受支持".to_string());
+    }
+    if raw.weeks == 0 || raw.days.len() > raw.weeks as usize * 7 {
+        return Err("公开 feed 的热力图周数无效".to_string());
+    }
+    let mut days = Vec::with_capacity(raw.days.len());
+    for day in &raw.days {
+        chrono::NaiveDate::parse_from_str(&day.date, "%Y-%m-%d")
+            .map_err(|_| "公开 feed 的热力图日期无效".to_string())?;
+        if day.level > 4 {
+            return Err("公开 feed 的热力图等级无效".to_string());
+        }
+        days.push(CodexResetHeatmapDay {
+            date: day.date.clone(),
+            count: day.count,
+            level: day.level,
+        });
+    }
+    Ok(CodexResetHeatmap {
+        timezone: raw.timezone.clone(),
+        weeks: raw.weeks,
+        total: raw.total,
+        days,
+    })
+}
+
 pub(super) fn is_tibo_post_url(url: &str) -> bool {
     let Some(post_id) = url.strip_prefix("https://x.com/thsottiaux/status/") else {
         return false;
@@ -195,12 +292,15 @@ pub(super) fn parse_feed(text: &str, checked_at: String) -> Result<CodexResetSta
     validate_timestamp(&feed.last_successful_check_at, "最近成功检查时间")?;
 
     let latest_confirmed_signal = latest_confirmed_signal(&feed);
-    let next_scheduled_reset = feed
-        .reset_timeline
-        .next_schedule
-        .as_ref()
-        .map(reset_signal)
-        .transpose()?;
+    let next_scheduled_reset = match feed.reset_timeline.next_schedule.as_ref() {
+        Some(event) => Some(reset_signal(event)?),
+        None => pending_scheduled_signal(&feed),
+    };
+    let feed_heatmap = heatmap(
+        feed.heatmap
+            .as_ref()
+            .ok_or_else(|| "公开 feed 缺少热力图".to_string())?,
+    )?;
     let feed_status = if feed.monitor.status == "ok" {
         CodexResetFeedStatus::Ok
     } else {
@@ -229,6 +329,7 @@ pub(super) fn parse_feed(text: &str, checked_at: String) -> Result<CodexResetSta
                         .flat_map(completion_events),
                 ),
         ),
+        heatmap: feed_heatmap,
         source_warning,
     })
 }

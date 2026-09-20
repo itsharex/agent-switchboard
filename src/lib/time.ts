@@ -30,3 +30,20 @@ export function countdownLabel(iso: string): string {
   if (hours >= 1) return `约 ${hours} 小时 ${minutes} 分钟后`;
   return `约 ${minutes} 分钟后`;
 }
+
+/**
+ * A coarse relative label for an RFC 3339 timestamp, signed by direction
+ * ("8 天前" / "约 45 小时后"), computed against the current time at render.
+ * Like the countdown label there is no timer: a refresh re-renders it.
+ */
+export function relativeLabel(iso: string): string {
+  const delta = new Date(iso).getTime() - Date.now();
+  const suffix = delta >= 0 ? "后" : "前";
+  const totalMinutes = Math.floor(Math.abs(delta) / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days >= 1) return `${days} 天 ${hours} 小时${suffix}`;
+  if (hours >= 1) return `${hours} 小时 ${minutes} 分钟${suffix}`;
+  return `${minutes} 分钟${suffix}`;
+}

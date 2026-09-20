@@ -256,6 +256,21 @@ export interface TiboPost {
   url: string;
 }
 
+/** The public feed's coarse per-UTC-day reset history (levels 0–4); days
+ * without an entry had no signal. */
+export interface CodexResetHeatmap {
+  timezone: string;
+  weeks: number;
+  total: number;
+  days: CodexResetHeatmapDay[];
+}
+
+export interface CodexResetHeatmapDay {
+  date: string;
+  count: number;
+  level: number;
+}
+
 export interface CodexResetStatus {
   sourceUrl: string;
   feedStatus: CodexResetFeedStatus;
@@ -265,6 +280,7 @@ export interface CodexResetStatus {
   latestConfirmedSignal: ResetSignal | null;
   nextScheduledReset: ResetSignal | null;
   latestRelevantTiboPost: TiboPost | null;
+  heatmap: CodexResetHeatmap;
   sourceWarning: string | null;
 }
 

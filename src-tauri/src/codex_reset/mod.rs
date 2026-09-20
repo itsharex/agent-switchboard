@@ -1,8 +1,9 @@
 //! Read-only Codex reset signals from Codex Runway's public status feed.
 //!
 //! The feed is an independent public monitor, not an OpenAI account API. This
-//! module normalizes only the three facts shown in the overview and never
-//! reads local credentials, session data, or account quotas.
+//! module normalizes only the facts shown on the reset panel — the forecast
+//! answer, the completion ledger, the Tibo post, and the history heatmap — and
+//! never reads local credentials, session data, or account quotas.
 
 mod feed;
 
@@ -27,6 +28,7 @@ pub struct CodexResetStatus {
     pub latest_confirmed_signal: Option<ResetSignal>,
     pub next_scheduled_reset: Option<ResetSignal>,
     pub latest_relevant_tibo_post: Option<TiboPost>,
+    pub heatmap: CodexResetHeatmap,
     pub source_warning: Option<String>,
 }
 
@@ -106,6 +108,25 @@ pub struct TiboPost {
     pub url: String,
 }
 
+/// The feed's coarse reset history for roughly the past year: per-UTC-day
+/// signal counts graded into levels 0–4. Days with no entry had no signal.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodexResetHeatmap {
+    pub timezone: String,
+    pub weeks: u32,
+    pub total: u32,
+    pub days: Vec<CodexResetHeatmapDay>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodexResetHeatmapDay {
+    pub date: String,
+    pub count: u32,
+    pub level: u32,
+}
+
 impl CodexResetStatus {
     /// Rejects malformed local cache data without rewriting it. The caller can
     /// then preserve the original file for inspection and ask for a refresh.
@@ -137,6 +158,21 @@ impl CodexResetStatus {
             validate_timestamp(&post.announced_at, "Tibo 动态时间")?;
             if post.text.trim().is_empty() || !is_tibo_post_url(&post.url) {
                 return Err("缓存的 Tibo 动态无效".to_string());
+            }
+        }
+
+        let heatmap = &self.heatmap;
+        if heatmap.timezone != "UTC" {
+            return Err("缓存的重置热力图时区不受支持".to_string());
+        }
+        if heatmap.weeks == 0 || heatmap.days.len() > heatmap.weeks as usize * 7 {
+            return Err("缓存的重置热力图范围无效".to_string());
+        }
+        for day in &heatmap.days {
+            chrono::NaiveDate::parse_from_str(&day.date, "%Y-%m-%d")
+                .map_err(|_| "缓存的重置热力图日期无效".to_string())?;
+            if day.level > 4 {
+                return Err("缓存的重置热力图等级无效".to_string());
             }
         }
         Ok(())
