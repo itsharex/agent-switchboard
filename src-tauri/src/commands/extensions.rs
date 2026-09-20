@@ -31,9 +31,12 @@ pub use catalog::{
     __tauri_command_name_resolve_directory_skill, __tauri_command_name_save_skill_repository,
     __tauri_command_name_scan_skill_repositories, __tauri_command_name_search_skill_directory,
     list_skill_repositories, remove_skill_repository, resolve_directory_skill,
-    save_skill_repository, scan_skill_repositories, search_skill_directory, SkillDirectoryEntry,
-    SkillRepositoryInput,
+    save_skill_repository, scan_skill_repositories, search_skill_directory,
 };
+// The two catalog types only surface through the browser-development IPC
+// dispatch, which release builds compile out.
+#[cfg(debug_assertions)]
+pub use catalog::{SkillDirectoryEntry, SkillRepositoryInput};
 pub use checks::{
     __cmd__cancel_mcp_check, __cmd__check_mcp_connection, __cmd__get_mcp_check,
     __tauri_command_name_cancel_mcp_check, __tauri_command_name_check_mcp_connection,

@@ -140,7 +140,6 @@ impl CodexProviderFile {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::contracts::{
         AppKind, CodexCatalogEntry, CodexEndpoint, CodexProviderDraft,
         ResponsesRequestMode, DEFAULT_CODEX_CAPABILITIES,

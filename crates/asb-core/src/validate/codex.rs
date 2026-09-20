@@ -104,7 +104,7 @@ mod tests {
         use std::collections::BTreeMap;
         let mut headers = BTreeMap::new();
         headers.insert("x-provider-tag".to_string(), "override".to_string());
-        let mut options = ProviderConnectionOptions {
+        let options = ProviderConnectionOptions {
             custom_user_agent: Some("fixture/1.0".to_string()),
             local_proxy_request_overrides: Some(LocalProxyRequestOverrides {
                 headers,
