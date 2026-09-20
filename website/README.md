@@ -15,14 +15,6 @@ npm run preview    # 预览生产构建
 
 类型检查、构建与自动化测试仅在当前请求明确要求时运行。
 
-配置积木台的静态证据由桌面端适配器生成；变更核心渲染规则后，在仓库根目录运行：
-
-```bash
-npm run verify:assembly
-```
-
-该检查保证已提交的官网展示文件仍与桌面端适配器输出一致；Vercel 只读取这一静态产物，不执行 Rust。
-
 ## Vercel 部署（Git 集成，无需令牌与脚本）
 
 1. 在 vercel.com 导入 GitHub 仓库 `<GitHub 用户名>/agent-switchboard`。

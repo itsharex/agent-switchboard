@@ -50,16 +50,4 @@
     transform: none;
     transition: none;
   }
-
-  .assembly-slider-fill,
-  .assembly-slider-particles,
-  .assembly-slider-thumb,
-  .assembly-slider-ticks span {
-    transition: none;
-  }
-
-  .assembly-slider-particle {
-    animation: none;
-  }
-
 }

@@ -1,12 +1,5 @@
-import type {
-  ConfigurationAssemblyClientId,
-  ConfigurationAssemblyControlValue,
-  ConfigurationAssemblyFieldKey,
-} from "../generated/configuration-assembly";
-
-/** 官网可见文案与链接的唯一来源；配置证据由桌面端适配器生成。 */
+/** 官网可见文案与链接的唯一来源；界面截图来自隔离沙箱中的实际应用。 */
 export type Locale = "zh-CN" | "en";
-export type RelayTone = "codex" | "claude";
 
 export interface SiteActionLink {
   label: string;
@@ -16,30 +9,29 @@ export interface SiteActionLink {
   icon?: "github" | "star";
 }
 
-export interface RouteCardData {
-  client: string;
-  tone: RelayTone;
-  provider: string;
-  model: string;
-  endpoint: string;
-  access: string;
+/** One real application screenshot captured in the isolated demo sandbox. */
+export interface SiteScreenshot {
+  src: string;
+  alt: string;
+  badge: string;
+  caption: string;
 }
 
-export interface StatusCardData {
-  client: string;
-  tone: RelayTone;
-  status: string;
-  rows: Array<[string, string]>;
+/** One showcase section: copy on one side, a sandbox screenshot on the other. */
+export interface SiteShowcase {
+  title: string;
+  description: string;
+  bullets: string[];
+  shot: SiteScreenshot;
 }
 
-interface AssemblyClientCopy {
-  parametersTitle: string;
-  providerTitle: string;
-  fileNote: string;
-  preservedLabel: string;
-  preservedState: string;
-  managedLabel: string;
-  managedState: string;
+/** One capability panel (text-only; never a software-UI replica). */
+export interface SiteCapability {
+  title: string;
+  description: string;
+  bullets: string[];
+  /** Optional real sandbox screenshot shown beneath the copy. */
+  shot?: SiteScreenshot;
 }
 
 export interface SiteContent {
@@ -59,36 +51,16 @@ export interface SiteContent {
   hero: {
     title: string;
     fact: string;
-    routeCardLabel: (client: string) => string;
-    routeFieldLabels: { model: string; endpoint: string; access: string };
     actions: SiteActionLink[];
-    appShell: {
-      nav: string[];
-      enabledPanel: string;
-      statusPanel: string;
-      statusAction: string;
-    };
-    cards: RouteCardData[];
-    status: StatusCardData[];
+    shot: SiteScreenshot;
   };
-  assembly: {
+  preview: SiteShowcase;
+  configuration: SiteShowcase;
+  capabilities: {
     title: string;
     description: string;
-    clientSelectorLabel: string;
-    combineLabel: string;
-    fieldLabels: Record<ConfigurationAssemblyFieldKey, string>;
-    controlLabels: Record<ConfigurationAssemblyControlValue, string>;
-    clients: Record<ConfigurationAssemblyClientId, AssemblyClientCopy>;
-  };
-  preview: {
-    title: string;
-    description: string;
-    changes: Array<{ key: string; from: string; to: string }>;
-    file: string;
-    fileNote: string;
-    codeLines: string[];
-    cancelLabel: string;
-    confirmLabel: string;
+    gateway: SiteCapability;
+    subagent: SiteCapability;
   };
   writeLifecycle: {
     title: string;
@@ -101,25 +73,6 @@ export interface SiteContent {
 
 const repoUrl = "https://github.com/y4Nkk/agent-switchboard";
 const releasesUrl = "https://github.com/y4Nkk/agent-switchboard/releases/latest";
-
-const sharedRouteCards: RouteCardData[] = [
-  {
-    client: "Codex",
-    tone: "codex",
-    provider: "Amazon Bedrock",
-    model: "GPT-6 Astra",
-    endpoint: "bedrock-runtime.us-east-1.amazonaws.com",
-    access: "自定义",
-  },
-  {
-    client: "Claude",
-    tone: "claude",
-    provider: "Amazon Bedrock",
-    model: "Claude Opus 5.1",
-    endpoint: "bedrock-runtime.us-east-1.amazonaws.com",
-    access: "自定义",
-  },
-];
 
 export const siteContentByLocale: Record<Locale, SiteContent> = {
   "zh-CN": {
@@ -142,122 +95,88 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
       ],
     },
     nav: [
-      { label: "配置如何生成", href: "#assembly", external: false },
-      { label: "预览", href: "#preview", external: false },
+      { label: "切换预览", href: "#preview", external: false },
+      { label: "客户端配置", href: "#configuration", external: false },
+      { label: "网关与子代理", href: "#capabilities", external: false },
+      { label: "安全写入", href: "#safety", external: false },
     ],
     hero: {
       title: "拼好配置，再写入真实文件。",
       fact: "面向 Codex 与 Claude Code 的本地配置控制台。",
-      routeCardLabel: (client) => `${client} 当前配置`,
-      routeFieldLabels: { model: "模型", endpoint: "服务地址", access: "接入方式" },
       actions: [
         { label: "GitHub", href: repoUrl, variant: "secondary", external: true, icon: "github" },
         { label: "下载版本", href: releasesUrl, variant: "primary", external: true },
       ],
-      appShell: {
-        nav: ["概览", "供应商", "会话", "设置", "更多"],
-        enabledPanel: "当前启用配置",
-        statusPanel: "配置状态",
-        statusAction: "刷新状态",
-      },
-      cards: sharedRouteCards,
-      status: [
-        {
-          client: "Codex",
-          tone: "codex",
-          status: "配置正常",
-          rows: [
-            ["配置文件", "C:\\Users\\demo\\.codex\\config.toml"],
-            ["当前服务", "Amazon Bedrock · GPT-6 Astra"],
-            ["匹配状态", "与档案「Amazon Bedrock」一致"],
-            ["上次切换", "2026年09月04日 16:20 · Amazon Bedrock"],
-            ["写入锁", "写入锁空闲"],
-          ],
-        },
-        {
-          client: "Claude",
-          tone: "claude",
-          status: "配置正常",
-          rows: [
-            ["配置文件", "C:\\Users\\demo\\.claude\\settings.json"],
-            ["当前服务", "Amazon Bedrock · Claude Opus 5.1"],
-            ["匹配状态", "与档案「Amazon Bedrock」一致"],
-            ["上次切换", "2026年09月04日 16:20 · Amazon Bedrock"],
-            ["写入锁", "写入锁空闲"],
-          ],
-        },
-      ],
-    },
-    assembly: {
-      title: "配置由组件组成，文件由适配器渲染。",
-      description: "每个供应商独立保存连接信息与运行参数，切换只更新受管字段。",
-      clientSelectorLabel: "选择客户端示例",
-      combineLabel: "合成实际配置文件",
-      fieldLabels: {
-        model_reasoning_effort: "推理强度",
-        hide_agent_reasoning: "隐藏推理摘要",
-        model: "模型",
-        model_provider: "模型提供方",
-        openai_base_url: "服务地址",
-        effortLevel: "推理强度",
-        autoCompactEnabled: "自动压缩上下文",
-        "env.ANTHROPIC_BASE_URL": "服务地址",
-        "env.ANTHROPIC_AUTH_TOKEN": "访问密钥",
-        "env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "关闭实验性 Beta",
-      },
-      controlLabels: {
-        automatic: "自动",
-        true: "开启",
-        false: "关闭",
-        minimal: "极低",
-        low: "低",
-        medium: "中",
-        high: "高",
-        xhigh: "极高",
-      },
-      clients: {
-        codex: {
-          parametersTitle: "Codex 运行参数",
-          providerTitle: "Amazon Bedrock 连接",
-          fileNote: "由桌面端适配器生成；密钥已脱敏",
-          preservedLabel: "未受管字段",
-          preservedState: "保持原样",
-          managedLabel: "独立模块",
-          managedState: "切换保留；由扩展等工作区管理",
-        },
-        claude: {
-          parametersTitle: "Claude Code 运行参数",
-          providerTitle: "Amazon Bedrock 连接",
-          fileNote: "由桌面端适配器生成；密钥已脱敏",
-          preservedLabel: "未受管字段",
-          preservedState: "保持原样",
-          managedLabel: "独立模块",
-          managedState: "切换保留；由扩展等工作区管理",
-        },
+      shot: {
+        src: "/media/screenshots/providers.png",
+        alt: "Agent Switchboard 供应商工作区实际界面：Codex 与 Claude Code 的档案列表、已应用状态与启用操作（隔离沙箱演示数据）",
+        badge: "隔离沙箱 · 演示数据",
+        caption: "供应商工作区：档案、启用状态与切换入口。",
       },
     },
     preview: {
       title: "写入前，先看变化。",
-      description: "真实差异预览，敏感值自动脱敏。",
-      changes: [
-        { key: "model", from: "gpt-5-codex", to: "GPT-6 Astra" },
-        {
-          key: "openai_base_url",
-          from: "https://relay.example.com/v1",
-          to: "https://bedrock-runtime.us-east-1.amazonaws.com/v1",
+      description:
+        "类型化差异预览列出每一个将写入的键，敏感值自动脱敏；只有点击确认，切换执行器才会触碰真实文件。",
+      bullets: [
+        "逐键差异：旧值 → 新值，未受管字段保持原样",
+        "密钥与令牌自动脱敏，预览不泄露凭据",
+        "确认后才写入，全程备份、校验、可恢复",
+      ],
+      shot: {
+        src: "/media/screenshots/switch-preview.png",
+        alt: "Agent Switchboard 切换确认界面实际截图：备用档案的脱敏配置差异、候选文件与确认操作（隔离沙箱演示数据）",
+        badge: "隔离沙箱 · 演示数据",
+        caption: "切换确认：对备用档案生成的真实类型化预览。",
+      },
+    },
+    configuration: {
+      title: "客户端配置，集中受控。",
+      description:
+        "两端通用配置、子 agent 运行设置与全局指令在同一个受控界面管理；界面未拥有的字段不会被覆盖。",
+      bullets: [
+        "通用设置与运行参数由界面状态归一化写入",
+        "配置草稿可读取脱敏后的本机真实配置",
+        "格式错误只提供可证明安全的修复候选",
+      ],
+      shot: {
+        src: "/media/screenshots/client-configuration.png",
+        alt: "Agent Switchboard 客户端配置工作区实际界面：通用设置分组与受控配置操作（隔离沙箱演示数据）",
+        badge: "隔离沙箱 · 演示数据",
+        caption: "客户端配置：分组设置与受控操作。",
+      },
+    },
+    capabilities: {
+      title: "网关与子代理，边界清晰。",
+      description:
+        "协议转换只发生在本机回环；跨档案的子代理路由也经同一网关，凭据与计量不越过这条边界。",
+      gateway: {
+        title: "本机网关，只在需要时启动。",
+        description:
+          "第三方上游协议与 Codex / Claude Code 协议不一致时，应用只在 127.0.0.1 启动本地转换网关；跨供应商的子代理请求也必须经它路由。",
+        bullets: [
+          "仅在协议不一致时启动，平时不驻留",
+          "只监听 127.0.0.1 本机回环，不提供公开代理",
+          "无遥测、无云中转，转换全部在本机完成",
+        ],
+      },
+      subagent: {
+        title: "跨档案子代理模型。",
+        description:
+          "Codex 档案可把默认子 agent 模型指向另一个供应商档案的模型；高级开关默认收起，展开后才露出跨档案选择器。Claude Code 侧保持不变。",
+        bullets: [
+          "写入 config.toml 的永远是路由引用 asb:<档案>/<模型>",
+          "跨供应商请求必须经本机网关；Direct 直连档案直接拒绝",
+          "目标档案凭据按请求替换，计量按实际目标归因",
+          "不参与跨供应商故障转移：目标档案失败即失败",
+        ],
+        shot: {
+          src: "/media/screenshots/subagent-route.png",
+          alt: "Agent Switchboard 的 Codex 运行参数实际界面：默认子 agent 模型以高级开关后的跨档案路由指向备用档案的模型（隔离沙箱演示数据）",
+          badge: "隔离沙箱 · 演示数据",
+          caption: "子 agent 模型路由：请求由本机网关转发，失败不回退主模型。",
         },
-        { key: "api key", from: "••••••••", to: "••••••••" },
-      ],
-      file: "C:\\Users\\demo\\.codex\\config.toml",
-      fileNote: "17 行",
-      codeLines: [
-        'model = "GPT-6 Astra"',
-        'model_provider = "openai"',
-        'openai_base_url = "https://bedrock-runtime.us-east-1.amazonaws.com/v1"',
-        "# —— 其余宿主自有键保持原样 ——",
-      ],
-      cancelLabel: "取消",
-      confirmLabel: "确认切换",
+      },
     },
     writeLifecycle: {
       title: "确认后，按事务写入。",
@@ -295,122 +214,88 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
       ],
     },
     nav: [
-      { label: "Configuration", href: "#assembly", external: false },
       { label: "Preview", href: "#preview", external: false },
+      { label: "Client settings", href: "#configuration", external: false },
+      { label: "Gateway & sub-agents", href: "#capabilities", external: false },
+      { label: "Safe writes", href: "#safety", external: false },
     ],
     hero: {
       title: "Compose settings. Write real files.",
       fact: "A local configuration console for Codex and Claude Code.",
-      routeCardLabel: (client) => `${client} current configuration`,
-      routeFieldLabels: { model: "Model", endpoint: "Endpoint", access: "Route" },
       actions: [
         { label: "GitHub", href: repoUrl, variant: "secondary", external: true, icon: "github" },
         { label: "Download", href: releasesUrl, variant: "primary", external: true },
       ],
-      appShell: {
-        nav: ["Overview", "Providers", "Sessions", "Settings", "More"],
-        enabledPanel: "Active configuration",
-        statusPanel: "Configuration status",
-        statusAction: "Refresh",
-      },
-      cards: sharedRouteCards.map((card) => ({ ...card, access: "Custom" })),
-      status: [
-        {
-          client: "Codex",
-          tone: "codex",
-          status: "Healthy",
-          rows: [
-            ["Config file", "C:\\Users\\demo\\.codex\\config.toml"],
-            ["Current service", "Amazon Bedrock · GPT-6 Astra"],
-            ["Match", "Matches Amazon Bedrock"],
-            ["Last switch", "Sep 04, 2026 16:20 · Amazon Bedrock"],
-            ["Write lock", "Idle"],
-          ],
-        },
-        {
-          client: "Claude",
-          tone: "claude",
-          status: "Healthy",
-          rows: [
-            ["Config file", "C:\\Users\\demo\\.claude\\settings.json"],
-            ["Current service", "Amazon Bedrock · Claude Opus 5.1"],
-            ["Match", "Matches Amazon Bedrock"],
-            ["Last switch", "Sep 04, 2026 16:20 · Amazon Bedrock"],
-            ["Write lock", "Idle"],
-          ],
-        },
-      ],
-    },
-    assembly: {
-      title: "Components in. Native files out.",
-      description: "Each provider keeps its own connection and runtime parameters. Switching updates only managed fields.",
-      clientSelectorLabel: "Choose a client example",
-      combineLabel: "Compose the native configuration file",
-      fieldLabels: {
-        model_reasoning_effort: "Reasoning effort",
-        hide_agent_reasoning: "Hide reasoning",
-        model: "Model",
-        model_provider: "Model provider",
-        openai_base_url: "Endpoint",
-        effortLevel: "Reasoning effort",
-        autoCompactEnabled: "Auto compact",
-        "env.ANTHROPIC_BASE_URL": "Endpoint",
-        "env.ANTHROPIC_AUTH_TOKEN": "Access token",
-        "env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "Disable experimental betas",
-      },
-      controlLabels: {
-        automatic: "Automatic",
-        true: "On",
-        false: "Off",
-        minimal: "Minimal",
-        low: "Low",
-        medium: "Medium",
-        high: "High",
-        xhigh: "Very high",
-      },
-      clients: {
-        codex: {
-          parametersTitle: "Codex runtime parameters",
-          providerTitle: "Amazon Bedrock connection",
-          fileNote: "Generated by the desktop adapter; secrets are redacted",
-          preservedLabel: "Host-owned fields",
-          preservedState: "Unchanged",
-          managedLabel: "Dedicated modules",
-          managedState: "Preserved by switching; managed by their own workspace",
-        },
-        claude: {
-          parametersTitle: "Claude Code runtime parameters",
-          providerTitle: "Amazon Bedrock connection",
-          fileNote: "Generated by the desktop adapter; secrets are redacted",
-          preservedLabel: "Host-owned fields",
-          preservedState: "Unchanged",
-          managedLabel: "Dedicated modules",
-          managedState: "Preserved by switching; managed by their own workspace",
-        },
+      shot: {
+        src: "/media/screenshots/providers.png",
+        alt: "Agent Switchboard providers workspace: profile lists for Codex and Claude Code with applied state and activate actions (isolated sandbox demo data)",
+        badge: "Isolated sandbox · demo data",
+        caption: "Providers workspace: profiles, applied state, and switching.",
       },
     },
     preview: {
       title: "Inspect changes before writing.",
-      description: "A real diff preview keeps sensitive values redacted.",
-      changes: [
-        { key: "model", from: "gpt-5-codex", to: "GPT-6 Astra" },
-        {
-          key: "openai_base_url",
-          from: "https://relay.example.com/v1",
-          to: "https://bedrock-runtime.us-east-1.amazonaws.com/v1",
+      description:
+        "A typed diff preview lists every key about to be written, with sensitive values redacted; the switch executor touches real files only after you confirm.",
+      bullets: [
+        "Key-by-key diff — old → new, unmanaged fields untouched",
+        "Keys and tokens redacted, so previews never leak credentials",
+        "Writes only after confirmation — backed up, validated, recoverable",
+      ],
+      shot: {
+        src: "/media/screenshots/switch-preview.png",
+        alt: "Agent Switchboard switch confirmation dialog: redacted configuration diff for a backup profile, candidate file, and confirm actions (isolated sandbox demo data)",
+        badge: "Isolated sandbox · demo data",
+        caption: "Switch confirmation: a real typed preview of the backup profile.",
+      },
+    },
+    configuration: {
+      title: "Client settings, under control.",
+      description:
+        "Shared settings, sub-agent runtime options, and global instructions live in one controlled workspace; fields the UI does not own are never overwritten.",
+      bullets: [
+        "Shared settings and runtime parameters are normalized on write",
+        "Drafts can read the redacted real local configuration",
+        "Only provably safe repair candidates for broken files",
+      ],
+      shot: {
+        src: "/media/screenshots/client-configuration.png",
+        alt: "Agent Switchboard client configuration workspace: grouped common settings and controlled configuration actions (isolated sandbox demo data)",
+        badge: "Isolated sandbox · demo data",
+        caption: "Client configuration: grouped settings, controlled actions.",
+      },
+    },
+    capabilities: {
+      title: "Gateway and sub-agents, clear boundaries.",
+      description:
+        "Protocol conversion happens on the loopback only; cross-profile sub-agent routing goes through the same gateway, with credentials and metering kept inside that boundary.",
+      gateway: {
+        title: "A local gateway, started only when needed.",
+        description:
+          "When a third-party upstream speaks a different protocol than Codex or Claude Code, the app starts a local conversion gateway on 127.0.0.1 only; cross-provider sub-agent requests must route through it too.",
+        bullets: [
+          "Started only on protocol mismatch — nothing resident otherwise",
+          "Loopback-only listener on 127.0.0.1, never a public proxy",
+          "No telemetry, no cloud relay — conversion stays on this machine",
+        ],
+      },
+      subagent: {
+        title: "Cross-profile sub-agent models.",
+        description:
+          "A Codex profile can point its default sub-agent model at another provider profile's model; an advanced toggle — collapsed by default — reveals the cross-profile picker. The Claude Code side stays unchanged.",
+        bullets: [
+          "config.toml always receives the route reference asb:<profile>/<model>",
+          "Cross-provider requests go through the local gateway; Direct profiles are rejected",
+          "Target-profile credentials swapped per request; usage metered to the actual target",
+          "No cross-provider failover: target-profile failure is failure",
+        ],
+        shot: {
+          src: "/media/screenshots/subagent-route.png",
+          alt: "Agent Switchboard Codex run parameters: the default sub-agent model configured as a cross-provider route to the backup profile's model behind the advanced toggle (isolated sandbox demo data)",
+          badge: "Isolated sandbox · demo data",
+          caption: "Sub-agent model route: forwarded by the local gateway, never falling back to the main model.",
         },
-        { key: "api key", from: "••••••••", to: "••••••••" },
-      ],
-      file: "C:\\Users\\demo\\.codex\\config.toml",
-      fileNote: "17 lines",
-      codeLines: [
-        'model = "GPT-6 Astra"',
-        'model_provider = "openai"',
-        'openai_base_url = "https://bedrock-runtime.us-east-1.amazonaws.com/v1"',
-        "# Host-owned keys remain unchanged",
-      ],
-      cancelLabel: "Cancel",
-      confirmLabel: "Confirm switch",
+      },
     },
     writeLifecycle: {
       title: "After confirmation, the transaction writes.",
@@ -437,9 +322,6 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
     },
   },
 };
-
-/** 默认中文内容供静态契约测试使用。运行时由 SitePreferences 选择语言。 */
-export const siteContent = siteContentByLocale["zh-CN"];
 
 export function actionProps(action: { href: string; external: boolean }) {
   return action.external

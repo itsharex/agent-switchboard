@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <path d="M 249,60 C 182,60 89,174 89,256 C 89,338 182,452 249,452 Z" fill="#0A84FF" />
-  <path d="M 263,60 C 330,60 423,174 423,256 C 423,338 330,452 263,452 Z" fill="#8B7CFF" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Switchboard</title>
+  <desc id="desc">Two minimal crossing paths that represent switching between clients.</desc>
+  <path d="M120 168C202 168 204 256 256 256C308 256 310 344 392 344" fill="none" stroke="#0A84FF" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M120 344C202 344 204 256 256 256C308 256 310 168 392 168" fill="none" stroke="#8B7CFF" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

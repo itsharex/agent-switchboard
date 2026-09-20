@@ -1,5 +1,4 @@
 @import "./site-layout.css";
-@import "./configuration-assembly.css";
-@import "./desktop-preview.css";
-@import "./switch-preview.css";
+@import "./app-shot.css";
+@import "./write-lifecycle.css";
 @import "./site-footer.css";

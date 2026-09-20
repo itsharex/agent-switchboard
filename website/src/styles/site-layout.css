@@ -276,13 +276,18 @@ a {
 
 .hero-inner {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 48px;
-  align-items: center;
+  gap: 44px;
+}
+
+.hero-copy {
+  max-width: 720px;
+  margin-inline: auto;
+  text-align: center;
 }
 
 .hero-copy h1 {
   max-width: 14em;
+  margin-inline: auto;
   font-size: clamp(30px, 4.2vw, 44px);
   font-weight: 600;
   line-height: 1.25;
@@ -298,8 +303,15 @@ a {
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 12px;
   margin-top: 28px;
+}
+
+.hero-shot {
+  width: 100%;
+  max-width: 940px;
+  margin-inline: auto;
 }
 
 @media (max-width: 1023px) {
@@ -309,8 +321,7 @@ a {
   }
 
   .hero-inner {
-    grid-template-columns: 1fr;
-    gap: 36px;
+    gap: 32px;
   }
 }
 
@@ -320,20 +331,76 @@ a {
   scroll-margin-top: 24px;
 }
 
-.section-head {
-  max-width: 620px;
+/* 能力说明区（网关与子代理）：纯文案面板，不做软件界面复刻 */
+.section-intro {
+  max-width: 640px;
   margin: 0 auto 40px;
   text-align: center;
 }
 
-.section-head h2 {
+.section-intro h2 {
   font-size: clamp(24px, 3vw, 32px);
   font-weight: 600;
 }
 
-.section-head p {
+.section-intro p {
   margin-top: 10px;
   color: var(--site-text-muted);
+}
+
+.capability-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.capability-panel {
+  padding: 26px 28px;
+  border: 1px solid var(--site-hairline);
+  border-radius: var(--site-radius-panel);
+  background: var(--site-content);
+}
+
+.capability-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.capability-panel h3 {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.capability-panel p {
+  margin-top: 10px;
+  color: var(--site-text-muted);
+}
+
+.capability-panel .site-bullets {
+  margin-top: 18px;
+  gap: 10px;
+}
+
+.capability-panel .site-bullets li {
+  font-size: 14px;
+}
+
+.capability-panel-shot {
+  margin-top: 20px;
+}
+
+.capability-panel-shot .app-shot-caption {
+  border-top-color: var(--site-hairline);
+}
+
+@media (max-width: 1023px) {
+  .capability-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 767px) {

@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 
-import { ConfigurationAssembly } from "./components/ConfigurationAssembly";
+import { AppScreenshot } from "./components/AppScreenshot";
 import { FinalCta } from "./components/FinalCta";
 import { Hero } from "./components/Hero";
 import { SiteHeader } from "./components/SiteHeader";
 import { WriteLifecycle } from "./components/WriteLifecycle";
+import type { SiteCapability, SiteShowcase } from "./content/site-content";
 import { SitePreferencesProvider } from "./site-preferences";
 import { useSitePreferences } from "./use-site-preferences";
 
@@ -31,44 +32,49 @@ function useReveal() {
   }, []);
 }
 
-function PreviewReplica() {
-  const { content } = useSitePreferences();
+function Showcase({ id, reverse = false, showcase }: {
+  id: string;
+  reverse?: boolean;
+  showcase: SiteShowcase;
+}) {
   return (
-    <div className="preview-replica" role="img" aria-label={content.preview.description}>
-      <div className="preview-replica-head">
-        <h3>{content.preview.title}</h3>
-        <div className="preview-replica-actions" aria-hidden="true">
-          <span className="preview-chip preview-chip-ghost">{content.preview.cancelLabel}</span>
-          <span className="preview-chip preview-chip-primary">{content.preview.confirmLabel}</span>
+    <section id={id} className="site-section">
+      <div className={`site-container site-split${reverse ? " site-split-reverse" : ""}`}>
+        <div className="site-split-copy reveal">
+          <h2>{showcase.title}</h2>
+          <p>{showcase.description}</p>
+          <ul className="site-bullets">
+            {showcase.bullets.map((bullet) => (
+              <li key={bullet}>{bullet}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="reveal">
+          <AppScreenshot shot={showcase.shot} />
         </div>
       </div>
-      <div className="preview-rows">
-        {content.preview.changes.map((change) => (
-          <div className="preview-row" key={change.key}>
-            <span className="preview-key">{change.key}</span>
-            <span className="preview-change">
-              <span className="preview-val preview-val-old">{change.from}</span>
-              <span className="preview-arrow" aria-hidden="true">
-                →
-              </span>
-              <span className="preview-val preview-val-new">{change.to}</span>
-            </span>
-          </div>
+    </section>
+  );
+}
+
+function CapabilityPanel({ capability }: { capability: SiteCapability }) {
+  return (
+    <article className="capability-panel reveal">
+      <div className="capability-panel-head">
+        <h3>{capability.title}</h3>
+      </div>
+      <p>{capability.description}</p>
+      <ul className="site-bullets">
+        {capability.bullets.map((bullet) => (
+          <li key={bullet}>{bullet}</li>
         ))}
-      </div>
-      <div className="preview-file">
-        <span>{content.preview.file}</span>
-        <span>{content.preview.fileNote}</span>
-      </div>
-      <div className="preview-code" aria-hidden="true">
-        {content.preview.codeLines.map((line, index) => (
-          <span className="preview-code-line" key={index}>
-            <span className="preview-code-no">{index + 1}</span>
-            <code>{line}</code>
-          </span>
-        ))}
-      </div>
-    </div>
+      </ul>
+      {capability.shot ? (
+        <div className="capability-panel-shot">
+          <AppScreenshot shot={capability.shot} />
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -80,25 +86,23 @@ function SitePage() {
       <SiteHeader />
       <main>
         <Hero />
-        <section id="assembly" className="site-section site-section-assembly">
+        <Showcase id="preview" showcase={content.preview} />
+        <Showcase id="configuration" reverse showcase={content.configuration} />
+        <section id="capabilities" className="site-section">
           <div className="site-container">
-            <div className="section-head reveal">
-              <h2>{content.assembly.title}</h2>
-              <p>{content.assembly.description}</p>
+            <div className="section-intro reveal">
+              <h2>{content.capabilities.title}</h2>
+              <p>{content.capabilities.description}</p>
             </div>
-            <div className="reveal">
-              <ConfigurationAssembly />
+            <div className="capability-row">
+              <CapabilityPanel capability={content.capabilities.gateway} />
+              <CapabilityPanel capability={content.capabilities.subagent} />
             </div>
           </div>
         </section>
-        <section id="preview" className="site-section">
+        <section id="safety" className="site-section">
           <div className="site-container">
-            <div className="section-head reveal">
-              <h2>{content.preview.title}</h2>
-              <p>{content.preview.description}</p>
-            </div>
             <div className="reveal">
-              <PreviewReplica />
               <WriteLifecycle />
             </div>
           </div>

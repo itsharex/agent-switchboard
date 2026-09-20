@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "verify:assembly": "cargo run -p asb-core --bin generate-website-assembly -- --check",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
