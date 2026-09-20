@@ -3,6 +3,57 @@ use crate::gateway::{ActiveRoute, GatewayController, GatewayInner};
 use asb_core::contracts::{AppKind, CodexProviderFile};
 
 impl GatewayInner {
+    /// Resolves the target route of a subagent wire model at request time.
+    /// The store is read live so an edited or deleted target profile fails
+    /// loudly instead of forwarding with stale credentials. Endpoint
+    /// variants of the target replace the whole candidate list: a subagent
+    /// route never falls over to another provider.
+    pub(crate) fn subagent_route_candidates(
+        &self,
+        wire: &asb_core::contracts::CodexSubagentRoute,
+    ) -> Result<(ActiveRoute, Vec<ActiveRoute>), String> {
+        let store = crate::config_store::ConfigStore::new(self.state_root.clone());
+        let file = store
+            .find_codex_provider_file(&wire.profile_id)
+            .map_err(|_| {
+                format!(
+                    "子代理路由引用的 Codex 供应商不存在：{}（模型 {}）",
+                    wire.profile_id, wire.model
+                )
+            })?;
+        if !file.profile.catalog.iter().any(|entry| entry.id == wire.model) {
+            return Err(format!(
+                "子代理路由的模型不在目标供应商目录中：{}（模型 {}）",
+                file.profile.name, wire.model
+            ));
+        }
+        if file.profile.connection.auth_binding.is_some() {
+            return Err(format!(
+                "子代理路由的目标供应商 {} 绑定了账号凭据，不能被其他路由转发",
+                file.profile.name
+            ));
+        }
+        let identity = self
+            .state
+            .lock()
+            .map_err(|_| "本机协议网关状态锁不可用".to_string())?
+            .identity
+            .clone();
+        let route =
+            crate::gateway::routing::codex_route_from_file(&self.state_root, &file, &identity)?;
+        let variants = route
+            .connection
+            .endpoint_candidates(&route.upstream_base_url)
+            .into_iter()
+            .map(|endpoint| {
+                let mut variant = route.clone();
+                variant.upstream_base_url = endpoint;
+                variant
+            })
+            .collect();
+        Ok((route, variants))
+    }
+
     /// Records a successful Codex custom endpoint and moves it to the front
     /// of its provider's candidates. Metadata only: the client configuration
     /// and the route identity are untouched, and the shared endpoint lock

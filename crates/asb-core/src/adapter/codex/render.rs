@@ -48,6 +48,75 @@ pub(crate) fn render_client_settings_into_file(
     render_entries(current, client_settings_overlay(client_settings))
 }
 
+#[cfg(test)]
+mod subagent_route_render_tests {
+    use super::render;
+    use crate::contracts::{
+        AppKind, CodexCatalogEntry, CodexEndpoint, CodexProviderDraft, CodexRouteMode,
+        CodexSubagentRoute, CodexUpstream, ResponsesRequestMode, SwitchPlan,
+        DEFAULT_CODEX_CAPABILITIES,
+    };
+
+    fn plan(subagent_route: Option<CodexSubagentRoute>) -> SwitchPlan {
+        let draft = CodexProviderDraft {
+            name: "Relay".into(),
+            endpoint: CodexEndpoint("https://relay.example/v1".into()),
+            api_key: "fixture-key".into(),
+            authentication: None,
+            connection: Default::default(),
+            upstream: CodexUpstream::Responses,
+            request_mode: ResponsesRequestMode::Standard,
+            default_model: "relay-model".into(),
+            catalog: vec![CodexCatalogEntry::default_entry("relay-model")],
+            model_routes: Vec::new(),
+            subagent_route,
+            capabilities: DEFAULT_CODEX_CAPABILITIES,
+            parameters: crate::ownership::default_provider_parameters(AppKind::Codex),
+            notes: None,
+            website_url: None,
+            usage_query: None,
+        };
+        let file = draft.into_file("01234567-89ab-cdef-0123-456789abcdef".to_string(), 1);
+        assert_eq!(
+            file.profile.route_mode,
+            if file.profile.subagent_route.is_some() {
+                CodexRouteMode::Gateway
+            } else {
+                CodexRouteMode::Direct
+            }
+        );
+        let profile = file.client_projection().into_profile(AppKind::Codex);
+        SwitchPlan::direct(
+            profile,
+            crate::ownership::default_client_settings(AppKind::Codex),
+        )
+    }
+
+    #[test]
+    fn a_subagent_route_renders_its_wire_id() {
+        let rendered = render(
+            "model_provider = 'openai'\n",
+            &plan(Some(CodexSubagentRoute {
+                profile_id: "01234567-89ab-cdef-0123-456789abcdef".to_string(),
+                model: "relay-model".to_string(),
+            })),
+        )
+        .expect("render");
+        assert!(rendered
+            .contains("default_subagent_model = \"asb:01234567-89ab-cdef-0123-456789abcdef/relay-model\""));
+    }
+
+    #[test]
+    fn a_missing_route_removes_the_managed_key() {
+        let rendered = render(
+            "[agents]\ndefault_subagent_model = \"asb:stale/route-model\"\n",
+            &plan(None),
+        )
+        .expect("render");
+        assert!(!rendered.contains("default_subagent_model"));
+    }
+}
+
 
 pub(crate) fn render_entries(
     current: &str,

@@ -17,6 +17,31 @@ pub(super) fn respond(
     client: Arc<UpstreamClient>,
     body: Vec<u8>,
 ) {
+    let requested_model = serde_json::from_slice::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("model")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        });
+    // A subagent wire model swaps the whole candidate list for its referenced
+    // profile and strips the wire prefix, so admission and per-attempt
+    // rendering validate against the target's own catalog and credentials.
+    let (primary, candidates, body) =
+        match resolve_subagent_routing(&inner, requested_model.as_deref(), body) {
+            Ok(SubagentOutcome::NotRouted(body)) => (primary, candidates, body),
+            Ok(SubagentOutcome::Routed {
+                route,
+                variants,
+                body,
+            }) => (route, variants, body),
+            Err((status, message)) => {
+                span.finish(Some(status), 0);
+                respond_error(request, Some(UpstreamProtocol::Responses), status, &message);
+                return;
+            }
+        };
     let policy = match admit(&inner, &primary, &body) {
         Ok(policy) => policy,
         Err((status, message)) => {
@@ -25,13 +50,8 @@ pub(super) fn respond(
             return;
         }
     };
-    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&body) {
-        span.note_request_model(
-            value
-                .get("model")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string),
-        );
+    if let Some(model) = requested_model {
+        span.note_request_model(Some(model));
     }
     let limit = attempt_limit(&policy, &primary);
     Forward {
@@ -46,6 +66,61 @@ pub(super) fn respond(
         media_retried: false,
     }
     .run(candidates);
+}
+
+pub(super) enum SubagentOutcome {
+    NotRouted(Vec<u8>),
+    Routed {
+        route: ActiveRoute,
+        variants: Vec<ActiveRoute>,
+        body: Vec<u8>,
+    },
+}
+
+/// Parses the subagent wire spelling. Any model carrying the `asb:` prefix
+/// but failing to parse fails closed here — it can never resolve as an
+/// ordinary catalog id either.
+pub(super) fn resolve_subagent_routing(
+    inner: &GatewayInner,
+    requested_model: Option<&str>,
+    body: Vec<u8>,
+) -> Result<SubagentOutcome, (u16, String)> {
+    use asb_core::contracts::CodexSubagentRoute;
+    let Some(model) = requested_model else {
+        return Ok(SubagentOutcome::NotRouted(body));
+    };
+    let parse_failure = |model: &str| {
+        (
+            422u16,
+            format!("请求模型 {model} 使用了 asb: 前缀但不是有效的子代理路由引用"),
+        )
+    };
+    let Some(wire) = CodexSubagentRoute::parse_wire_id(model) else {
+        return if model.starts_with(CodexSubagentRoute::WIRE_PREFIX) {
+            Err(parse_failure(model))
+        } else {
+            Ok(SubagentOutcome::NotRouted(body))
+        };
+    };
+    if !wire.has_canonical_profile_id() {
+        return Err(parse_failure(model));
+    }
+    let (route, variants) = inner
+        .subagent_route_candidates(&wire)
+        .map_err(|message| (422u16, message))?;
+    let mut value: serde_json::Value = serde_json::from_slice(&body)
+        .map_err(|_| (422u16, "Codex 请求体不是有效 JSON".to_string()))?;
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| (422u16, "Codex 请求体必须是 JSON 对象".to_string()))?;
+    object.insert("model".to_string(), serde_json::Value::String(wire.model));
+    let body = serde_json::to_vec(&value)
+        .map_err(|_| (422u16, "Codex 请求序列化失败".to_string()))?;
+    Ok(SubagentOutcome::Routed {
+        route,
+        variants,
+        body,
+    })
 }
 
 pub(super) fn attempt_limit(policy: &CodexGatewayPolicy, primary: &ActiveRoute) -> usize {

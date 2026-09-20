@@ -20,7 +20,6 @@ pub mod ownership;
 pub mod provider_transfer;
 pub mod redact;
 pub mod validate;
-pub mod website_assembly;
 
 pub use discovery::{discover, inspect, DiscoveredFile, DiscoveredState, DiscoveryReport};
 
@@ -32,7 +31,8 @@ pub use contracts::{
     ClaudeModelSettings, ClientSettingsSnapshot, CodexCapabilities,
     CodexCatalogEntry, CodexEndpoint, CodexModelRoute, CodexModelSettings, CodexOperation,
     CodexProviderDraft, CodexProviderFile, CodexProviderProfile, CodexProviderRecord,
-    CodexRouteMode, CodexRouteSnapshot, CodexSubagentKey, CodexSubagentSettings,
+    CodexRouteMode, CodexRouteSnapshot, CodexSubagentKey, CodexSubagentRoute,
+    CodexSubagentSettings,
     CodexSubagentSettingsSnapshot, CodexUpstream, ConfigValue,
     ConfigWriteRecord, ExplicitMaxOutputTokens, GlobalPromptDocument, KeyChange, MatchStatus,
     ModelOptions, ProviderDisplay, ProviderDraft, ProviderFile, ProviderProfile, ProviderRecord,

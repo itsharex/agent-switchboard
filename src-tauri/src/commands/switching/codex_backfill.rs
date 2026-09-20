@@ -158,7 +158,7 @@ pub(super) fn merge_live(
         .parse::<DocumentMut>()
         .map_err(|error| format!("TOML 格式无效：{error}"))?;
     let mut candidate = source.clone();
-    merge_model_projection(&mut candidate, &document);
+    merge_model_projection(&mut candidate, &document)?;
     merge_provider_parameters(
         &mut candidate.parameters,
         &document,
@@ -170,14 +170,29 @@ pub(super) fn merge_live(
     Ok(candidate)
 }
 
-fn merge_model_projection(file: &mut CodexProviderFile, document: &DocumentMut) {
+fn merge_model_projection(
+    file: &mut CodexProviderFile,
+    document: &DocumentMut,
+) -> Result<(), String> {
     if let Some(model) = top_string(document, "model") {
         if file.profile.catalog.iter().any(|entry| entry.id == model) {
             file.profile.default_model = model;
         }
     }
+    if let Some(item) = item_at(document, "agents.default_subagent_model") {
+        let live = item
+            .as_value()
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let route = asb_core::contracts::CodexSubagentRoute::parse_wire_id(live)
+            .filter(|route| route.has_canonical_profile_id() && !route.model.trim().is_empty())
+            .ok_or_else(|| {
+                format!("实时 config.toml 的 agents.default_subagent_model 不是有效的子代理路由引用：{live:?}")
+            })?;
+        file.profile.subagent_route = Some(route);
+    }
     let Some(context_window) = top_positive_integer(document, "model_context_window") else {
-        return;
+        return Ok(());
     };
     let model = &file.profile.default_model;
     if let Some(entry) = file
@@ -188,6 +203,7 @@ fn merge_model_projection(file: &mut CodexProviderFile, document: &DocumentMut) 
     {
         entry.context_window = context_window;
     }
+    Ok(())
 }
 
 fn merge_provider_parameters(
@@ -226,9 +242,6 @@ fn live_setting(
 fn accepts(spec: &asb_core::ownership::SettingSpec, value: &ConfigValue) -> bool {
     match spec.control {
         SettingControl::Toggle => matches!(value, ConfigValue::Bool(_)),
-        SettingControl::ModelPicker => {
-            matches!(value, ConfigValue::Str(text) if !text.trim().is_empty())
-        }
         SettingControl::Choice { .. } => {
             let ConfigValue::Str(value) = value else {
                 return false;
@@ -322,6 +335,7 @@ mod tests {
                 client_model: "model-a".into(),
                 upstream_model: "vendor-a".into(),
             }],
+            subagent_route: None,
             capabilities: CodexCapabilities {
                 responses: true,
                 compact: true,

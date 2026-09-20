@@ -33,6 +33,12 @@ Agent Switchboard brings provider profiles, client configuration, extension mana
 
 <p align="center"><sub>Switch preview: a real typed preview generated for “README Sandbox · Backup”; nothing is written to the isolated sandbox until you confirm.</sub></p>
 
+<p align="center">
+  <img src="docs/screenshots/subagent-route.png" width="100%" alt="Agent Switchboard Codex run parameters: the default sub-agent model configured as a cross-provider route to the backup profile's model behind the advanced toggle">
+</p>
+
+<p align="center"><sub>Sub-agent model route: the primary profile designates the backup profile's model as its default sub-agent model; the request is forwarded by the local gateway and never falls back to the main model.</sub></p>
+
 > **Screenshot data notice**: Screenshots are produced by the actual frontend launched from the current source together with the same Tauri local backend. The run redirects `APPDATA`, `LOCALAPPDATA`, `USERPROFILE`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` to isolated temporary directories; profile names, models, key placeholders, service addresses, and configuration contents are fictional README sandbox data (only `*.sandbox.example` / `example.com` are used). No real user Codex / Claude Code configuration, credentials, accounts, sessions, service addresses, or files were read, written, or captured.
 
 ## Product scope
@@ -49,6 +55,7 @@ Agent Switchboard brings provider profiles, client configuration, extension mana
 - Create, edit, reorder, import, and delete Codex and Claude Code provider profiles.
 - Export the complete configuration of every provider into a single SQL file, then pick that file in the app on another device to import — no command line involved.
 - Store models, authentication, request protocol, request mode, model mappings, and run parameters.
+- A Codex profile's default sub-agent model is a cross-profile route reference: any saved profile's catalog model may be designated, the request is forwarded by the local gateway to that profile, and a profile carrying such a route always activates through the gateway. An unresolvable reference fails loudly at save, switch, and request time — it never falls back to the main model, and a referenced profile cannot be deleted while the route exists.
 - Generate a typed preview before anything is written; real writes go through an executor that is observable, backed up, validated, and recoverable.
 - Client configuration keys that do not belong to the current profile are preserved, so existing user settings are never overwritten.
 
@@ -78,6 +85,7 @@ Agent Switchboard brings provider profiles, client configuration, extension mana
 - Fields and tools that cannot be expressed losslessly fail the request before forwarding instead of being dropped silently: for example `stop_sequences` to a Responses upstream, strict tools and audio to an Anthropic upstream, and server-side tools such as `web_search` to any cross-protocol upstream. Pure metadata that only affects metering or caching (such as `cache_control`, and `metadata.user_id` on the Gemini upstream) is dropped after validation.
 - Cross-protocol Codex requests must use `store=false`; `previous_response_id` and short continuations are backfilled into full context from the local tool history, while native Responses upstreams keep using the upstream's own storage.
 - Reasoning traces round-trip as encrypted continuation payloads bound to their route; after switching profiles or keys, old continuations are rejected.
+- A Codex sub-agent model route is resolved per request: a model id carrying the `asb:` prefix is matched against the referenced profile, its endpoint variants replace the whole candidate list (no cross-provider failover — failure fails), the wire prefix is stripped before admission against the target's own catalog, and usage is attributed to the target profile. Auxiliary operations reject such ids explicitly. The referenced model is also merged into the client's model-catalog file and `/v1/models` under its wire id.
 - Codex WebSocket transport terminates at the gateway and upstreams uniformly use HTTP/SSE; Claude failover follows only the explicit policy in the local `claude-failover.json` with circuit-breaker cooldowns — no implicit switching.
 
 ### Status, recovery, and diagnostics

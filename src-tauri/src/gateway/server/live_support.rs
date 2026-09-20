@@ -293,6 +293,7 @@ fn live_draft(route: &LiveRoute, api_key: &str) -> CodexProviderDraft {
             supports_parallel_tool_calls: None,
         }],
         model_routes: Vec::new(),
+        subagent_route: None,
         capabilities: CodexCapabilities {
             responses: true,
             compact: false,

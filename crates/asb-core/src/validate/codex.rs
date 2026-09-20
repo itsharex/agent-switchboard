@@ -76,6 +76,7 @@ mod tests {
             default_model: "relay-model".into(),
             catalog: vec![CodexCatalogEntry::default_entry("relay-model")],
             model_routes: Vec::new(),
+            subagent_route: None,
             capabilities: DEFAULT_CODEX_CAPABILITIES,
             parameters: crate::ownership::default_provider_parameters(crate::AppKind::Codex),
             notes: None,

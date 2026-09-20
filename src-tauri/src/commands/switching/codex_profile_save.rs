@@ -167,6 +167,9 @@ fn classify(
     candidate
         .validate()
         .map_err(|error| CommandError::new("codex-profile-save-invalid", error))?;
+    if let Some(route) = &candidate.profile.subagent_route {
+        validate_subagent_route_reference(state, route)?;
+    }
     if candidate == current {
         return Ok((stored, candidate, ProfileSaveKind::NoChange));
     }
@@ -189,6 +192,52 @@ fn classify(
         ProfileSaveKind::SaveOnly
     };
     Ok((stored, candidate, kind))
+}
+
+/// A subagent route names another provider profile by UUID. The reference
+/// must resolve at save time — the same fail-loud rule the gateway applies
+/// at request time — and its credentials must be statically expressible:
+/// an auth-bound profile cannot be forwarded to by another route.
+pub(crate) fn validate_subagent_route_reference(
+    state: &crate::local_state::LocalState,
+    route: &asb_core::contracts::CodexSubagentRoute,
+) -> Result<(), CommandError> {
+    let target = state
+        .configuration()
+        .find_codex_provider_file(&route.profile_id)
+        .map_err(|_| {
+            CommandError::new(
+                "codex-subagent-route-unresolved",
+                format!(
+                    "子代理路由引用的 Codex 供应商不存在：{}（模型 {}）",
+                    route.profile_id, route.model
+                ),
+            )
+        })?;
+    if !target
+        .profile
+        .catalog
+        .iter()
+        .any(|entry| entry.id == route.model)
+    {
+        return Err(CommandError::new(
+            "codex-subagent-route-unresolved",
+            format!(
+                "子代理路由的模型不在目标供应商目录中：{}（模型 {}）",
+                target.profile.name, route.model
+            ),
+        ));
+    }
+    if target.profile.connection.auth_binding.is_some() {
+        return Err(CommandError::new(
+            "codex-subagent-route-invalid",
+            format!(
+                "子代理路由的目标供应商 {} 绑定了账号凭据，不能被其他路由转发",
+                target.profile.name
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn apply(
@@ -357,6 +406,7 @@ mod tests {
                 client_model: "codex".to_string(),
                 upstream_model: "vendor-codex".to_string(),
             }],
+            subagent_route: None,
             capabilities: CodexCapabilities {
                 responses: true,
                 compact: true,
@@ -427,5 +477,38 @@ mod tests {
         assert_eq!(kind, ProfileSaveKind::SaveAndApply);
         assert!(preview.is_some());
         gateway.shutdown();
+    }
+
+    #[test]
+    fn a_subagent_route_reference_must_resolve_at_save_time() {
+        let _paths = crate::test_client_paths::redirect_client_paths();
+        let directory = tempfile::tempdir().unwrap();
+        let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
+        let record = state
+            .configuration()
+            .create_codex_provider(draft())
+            .unwrap();
+
+        let resolved = asb_core::contracts::CodexSubagentRoute {
+            profile_id: record.profile.id.clone(),
+            model: "codex".to_string(),
+        };
+        assert!(super::validate_subagent_route_reference(&state, &resolved).is_ok());
+
+        let missing = asb_core::contracts::CodexSubagentRoute {
+            profile_id: "01234567-89ab-cdef-0123-456789abcdef".to_string(),
+            model: "codex".to_string(),
+        };
+        let error = super::validate_subagent_route_reference(&state, &missing).unwrap_err();
+        assert_eq!(error.code, "codex-subagent-route-unresolved");
+        assert!(error.message.contains("不存在"), "{error:?}");
+
+        let unknown_model = asb_core::contracts::CodexSubagentRoute {
+            profile_id: record.profile.id.clone(),
+            model: "no-such-model".to_string(),
+        };
+        let error = super::validate_subagent_route_reference(&state, &unknown_model).unwrap_err();
+        assert_eq!(error.code, "codex-subagent-route-unresolved");
+        assert!(error.message.contains("目录"), "{error:?}");
     }
 }

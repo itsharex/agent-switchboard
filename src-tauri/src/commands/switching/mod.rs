@@ -17,6 +17,7 @@ pub(super) mod transaction;
 
 pub(crate) use codex_policy::CodexPolicyPreparations;
 pub(crate) use codex_profile_save::CodexProfileSavePreparations;
+pub(crate) use codex_profile_save::validate_subagent_route_reference;
 pub(crate) use internal::switch_provider_internal;
 pub use profile_save::ProfileSavePreparation;
 pub(crate) use profile_save::ProfileSavePreparations;

@@ -69,9 +69,6 @@ pub enum SettingControl {
     Choice {
         presentation: ChoiceControl,
     },
-    /// A free-form model id with an optional picker fed by the selected
-    /// provider's live model catalog.
-    ModelPicker,
 }
 
 /// One strongly typed entry in the ownership directory. `setting_spec` and
@@ -132,16 +129,4 @@ pub struct ChoiceSpec {
     pub group: &'static str,
     pub control: ChoiceControl,
     pub options: &'static [ChoiceOption],
-}
-
-/// One provider-scoped model setting. The provider exposes the selectable
-/// catalog at edit time, while a non-empty manually entered model id remains
-/// valid for endpoints that do not implement a models listing.
-#[derive(Debug, Clone, Copy)]
-pub struct ModelSpec {
-    pub app: AppKind,
-    pub key: &'static str,
-    pub owner: SettingOwner,
-    pub label: &'static str,
-    pub group: &'static str,
 }

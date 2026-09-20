@@ -10,7 +10,8 @@ pub(super) fn profile(profile: &CodexProviderProfile) -> Result<(), String> {
     validate_identity(profile)?;
     validate_capabilities(&profile.capabilities, profile.upstream)?;
     validate_catalog(profile)?;
-    validate_model_routes(profile)
+    validate_model_routes(profile)?;
+    validate_subagent_route(profile)
 }
 
 fn validate_identity(profile: &CodexProviderProfile) -> Result<(), String> {
@@ -29,6 +30,7 @@ fn validate_identity(profile: &CodexProviderProfile) -> Result<(), String> {
         &profile.connection,
         profile.authentication,
         Some(profile.endpoint.0.as_str()),
+        profile.subagent_route.as_ref(),
     );
     if profile.route_mode != expected_route {
         return Err("Codex 路由模式与上游协议、请求模式、认证或连接覆盖不一致".to_string());
@@ -237,6 +239,22 @@ fn validate_model_routes(profile: &CodexProviderProfile) -> Result<(), String> {
     Ok(())
 }
 
+/// The route's shape is validated here; whether the referenced profile still
+/// exists is a store-level check owned by the application.
+fn validate_subagent_route(profile: &CodexProviderProfile) -> Result<(), String> {
+    let Some(route) = &profile.subagent_route else {
+        return Ok(());
+    };
+    if !route.has_canonical_profile_id() {
+        return Err("Codex 子代理路由的供应商标识必须是标准 UUID".to_string());
+    }
+    required(&route.model, "Codex 子代理路由模型")?;
+    if route.model.contains('/') && route.model.split('/').any(|part| part.trim().is_empty()) {
+        return Err("Codex 子代理路由模型不能包含空路径段".to_string());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,6 +267,7 @@ mod tests {
                 CodexUpstream::Responses,
                 ResponsesRequestMode::Minimal,
                 &ProviderConnectionOptions::default(),
+                None,
                 None,
                 None,
             ),
@@ -265,8 +284,27 @@ mod tests {
                 &ProviderConnectionOptions::default(),
                 None,
                 None,
+                None,
             ),
             CodexRouteMode::Direct,
+        );
+    }
+
+    #[test]
+    fn a_subagent_route_always_requires_the_gateway() {
+        assert_eq!(
+            CodexRouteMode::for_profile(
+                CodexUpstream::Responses,
+                ResponsesRequestMode::Standard,
+                &ProviderConnectionOptions::default(),
+                None,
+                None,
+                Some(&CodexSubagentRoute {
+                    profile_id: "01234567-89ab-cdef-0123-456789abcdef".to_string(),
+                    model: "gpt-5-codex".to_string(),
+                }),
+            ),
+            CodexRouteMode::Gateway,
         );
     }
 }

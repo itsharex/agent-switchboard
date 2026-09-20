@@ -1,3 +1,4 @@
+use super::CodexSubagentRoute;
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize,
@@ -86,6 +87,10 @@ impl<'de> Deserialize<'de> for ExplicitMaxOutputTokens {
 pub struct CodexModelSettings {
     /// Optional model context window in tokens.
     pub context_window: Option<u64>,
+    /// The profile's sub-agent model route, projected from
+    /// `CodexProviderProfile::subagent_route` for the generic plan path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_route: Option<CodexSubagentRoute>,
 }
 
 /// Claude Code model mapping owned by one profile. The primary model is the

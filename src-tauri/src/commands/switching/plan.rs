@@ -370,6 +370,7 @@ mod tests {
                 client_model: "fixture-model".to_string(),
                 upstream_model: "vendor-model".to_string(),
             }],
+            subagent_route: None,
             capabilities: CodexCapabilities {
                 responses: true,
                 compact: true,

@@ -185,7 +185,15 @@ export interface CodexProviderProfile {
   defaultModel: string;
   catalog: CodexCatalogEntry[];
   modelRoutes: CodexModelRoute[];
+  subagentRoute?: CodexSubagentRoute | null;
   capabilities: CodexCapabilities;
+}
+
+/** The sub-agent model reference: a cross-profile route resolved by the
+ * local gateway. This is the only form the subagent model takes. */
+export interface CodexSubagentRoute {
+  profileId: string;
+  model: string;
 }
 
 export interface CodexProviderDraft {
@@ -199,6 +207,7 @@ export interface CodexProviderDraft {
   defaultModel: string;
   catalog: CodexCatalogEntry[];
   modelRoutes: CodexModelRoute[];
+  subagentRoute?: CodexSubagentRoute | null;
   capabilities: CodexCapabilities;
   parameters: SettingsValues;
   notes: string | null;

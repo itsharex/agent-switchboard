@@ -29,8 +29,9 @@ pub use codex::{
     CodexCatalogEntry, CodexChatEffortMode, CodexChatEffortParameter, CodexChatReasoning,
     CodexChatThinkingParameter, CodexEndpoint, CodexModelRoute, CodexOperation, CodexProviderDraft,
     CodexProviderFile, CodexProviderProfile, CodexProviderRecord, CodexReasoningLevel,
-    CodexRouteMode, CodexRouteSnapshot, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION,
-    CODEX_REASONING_LADDER, DEFAULT_CODEX_CAPABILITIES, XAI_API_BASE_URL, XAI_OAUTH_PLACEHOLDER,
+    CodexRouteMode, CodexRouteSnapshot, CodexSubagentRoute, CodexUpstream,
+    CODEX_PROVIDER_SCHEMA_VERSION, CODEX_REASONING_LADDER, DEFAULT_CODEX_CAPABILITIES,
+    XAI_API_BASE_URL, XAI_OAUTH_PLACEHOLDER,
 };
 pub use connection::{
     ClaudeApiKeyField, LocalProxyRequestOverrides, ProviderAuthBinding, ProviderConnectionOptions,

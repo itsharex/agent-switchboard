@@ -73,6 +73,7 @@ pub fn import_source(
         default_model: default_model.clone(),
         catalog,
         model_routes: Vec::new(),
+        subagent_route: None,
         capabilities,
         parameters,
         notes: None,

@@ -244,6 +244,62 @@ pub struct CodexModelRoute {
     pub upstream_model: String,
 }
 
+/// The model a Codex sub-agent runs on, resolved against another provider
+/// profile's catalog. This is the only form the subagent model takes: there
+/// is no in-provider spelling, so every subagent model routes through the
+/// local gateway by profile reference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodexSubagentRoute {
+    pub profile_id: String,
+    pub model: String,
+}
+
+impl CodexSubagentRoute {
+    /// The single wire spelling written into `config.toml` and echoed back by
+    /// Codex in request bodies. The first slash separates the profile id; a
+    /// model id may itself contain further slashes.
+    pub const WIRE_PREFIX: &'static str = "asb:";
+
+    pub fn wire_id(&self) -> String {
+        format!("{}{}/{}", Self::WIRE_PREFIX, self.profile_id, self.model)
+    }
+
+    /// Structural parse of the wire spelling. Format authority for the
+    /// profile id lives in [`Self::has_canonical_profile_id`].
+    pub fn parse_wire_id(value: &str) -> Option<Self> {
+        let rest = value.strip_prefix(Self::WIRE_PREFIX)?;
+        let slash = rest.find('/')?;
+        if slash == 0 {
+            return None;
+        }
+        let (profile_id, model) = rest.split_at(slash);
+        let model = &model[1..];
+        if model.is_empty() {
+            return None;
+        }
+        Some(Self {
+            profile_id: profile_id.to_string(),
+            model: model.to_string(),
+        })
+    }
+
+    /// Profile ids are the hyphenated UUIDs the store assigns. The check is
+    /// deliberately local: cross-file existence stays with the store.
+    pub fn has_canonical_profile_id(&self) -> bool {
+        let bytes = self.profile_id.as_bytes();
+        bytes.len() == 36
+            && bytes[8] == b'-'
+            && bytes[13] == b'-'
+            && bytes[18] == b'-'
+            && bytes[23] == b'-'
+            && bytes
+                .iter()
+                .enumerate()
+                .all(|(index, byte)| matches!(index, 8 | 13 | 18 | 23) || byte.is_ascii_hexdigit())
+    }
+}
+
 /// The sole persistent third-party Codex profile. Official login is a separate
 /// generic-store record, so it is never encoded here: a third-party file
 /// always means a custom route.
@@ -271,6 +327,11 @@ pub struct CodexProviderProfile {
     pub default_model: String,
     pub catalog: Vec<CodexCatalogEntry>,
     pub model_routes: Vec<CodexModelRoute>,
+    /// The sub-agent model route. Present only when this profile's sub-agents
+    /// run on a referenced profile's model; its wire id resolves at the
+    /// gateway, which every subagent-routed profile goes through.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_route: Option<CodexSubagentRoute>,
     pub capabilities: CodexCapabilities,
 }
 
@@ -292,6 +353,8 @@ pub struct CodexProviderDraft {
     pub default_model: String,
     pub catalog: Vec<CodexCatalogEntry>,
     pub model_routes: Vec<CodexModelRoute>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_route: Option<CodexSubagentRoute>,
     pub capabilities: CodexCapabilities,
     pub parameters: SettingsValues,
     pub notes: Option<String>,
@@ -491,6 +554,70 @@ impl CodexRouteSnapshot {
 
     pub fn resolve_model(&self, requested: &str) -> Result<String, String> {
         resolve_catalog_model(&self.catalog, &self.model_routes, requested)
+    }
+}
+
+#[cfg(test)]
+mod subagent_route_tests {
+    use super::CodexSubagentRoute;
+
+    fn route(profile_id: &str, model: &str) -> CodexSubagentRoute {
+        CodexSubagentRoute {
+            profile_id: profile_id.to_string(),
+            model: model.to_string(),
+        }
+    }
+
+    const UUID: &str = "01234567-89ab-cdef-0123-456789abcdef";
+
+    #[test]
+    fn wire_id_round_trips() {
+        let original = route(UUID, "gpt-5-codex");
+        let parsed = CodexSubagentRoute::parse_wire_id(&original.wire_id()).unwrap();
+        assert_eq!(parsed, original);
+        assert_eq!(
+            original.wire_id(),
+            "asb:01234567-89ab-cdef-0123-456789abcdef/gpt-5-codex"
+        );
+    }
+
+    #[test]
+    fn a_model_id_containing_slashes_survives_the_wire_spelling() {
+        let original = route(UUID, "meta-llama/Llama-4");
+        let parsed = CodexSubagentRoute::parse_wire_id(&original.wire_id()).unwrap();
+        assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn malformed_wire_spellings_are_rejected() {
+        for value in [
+            "gpt-5-codex",
+            "asb:",
+            "asb:gpt-5-codex",
+            "asb:/gpt-5-codex",
+            "asb:01234567-89ab-cdef-0123-456789abcdef/",
+        ] {
+            assert!(
+                CodexSubagentRoute::parse_wire_id(value).is_none(),
+                "{value} must not parse"
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_profile_id_shape_is_checked() {
+        assert!(route(UUID, "m").has_canonical_profile_id());
+        for malformed in [
+            "01234567-89ab-cdef-0123-456789abcdeg",
+            "0123456789ab-cdef-0123-456789abcdef",
+            "01234567-89ab-cdef-0123-456789abcd",
+            "",
+        ] {
+            assert!(
+                !route(malformed, "m").has_canonical_profile_id(),
+                "{malformed} must not be canonical"
+            );
+        }
     }
 }
 

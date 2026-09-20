@@ -74,6 +74,12 @@ fn validate_scope(
             .map_err(ValidationError::ClaudeCommonOptions)?;
     }
     for (key, value) in &values.settings {
+        if app == AppKind::Codex
+            && owner == SettingOwner::Provider
+            && key == crate::ownership::CODEX_SUBAGENT_MODEL_KEY
+        {
+            return Err(ValidationError::RetiredSubagentModelParameter);
+        }
         let spec = setting_spec(app, key)
             .filter(|spec| spec.owner == owner && spec.control != SettingControl::None)
             .ok_or_else(|| ValidationError::UnknownSettingKey {
@@ -123,12 +129,6 @@ fn validate_value(spec: &SettingSpec, value: &ConfigValue) -> Result<(), Validat
             }
             allowed.join("、")
         }
-        SettingControl::ModelPicker => {
-            if matches!(value, ConfigValue::Str(text) if !text.trim().is_empty()) {
-                return Ok(());
-            }
-            "非空模型标识".to_string()
-        }
         SettingControl::None => unreachable!("scope validation requires an editor control"),
     };
     Err(ValidationError::BadSettingValue {
@@ -136,4 +136,33 @@ fn validate_value(spec: &SettingSpec, value: &ConfigValue) -> Result<(), Validat
         value: value.display(),
         allowed,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::SettingsValues;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn a_retired_subagent_parameter_fails_with_its_own_message() {
+        let mut settings = BTreeMap::new();
+        settings.insert(
+            crate::ownership::CODEX_SUBAGENT_MODEL_KEY.to_string(),
+            SettingValue::Explicit {
+                value: ConfigValue::Str("gpt-5-codex".to_string()),
+            },
+        );
+        let values = SettingsValues {
+            settings,
+            claude_extra: Default::default(),
+        };
+        let error = values
+            .validate_provider_parameters(AppKind::Codex)
+            .expect_err("the retired parameter spelling must fail loudly");
+        assert!(matches!(
+            error,
+            ValidationError::RetiredSubagentModelParameter
+        ));
+    }
 }

@@ -48,6 +48,9 @@ pub async fn create_codex_profile(
     let result = observe(RuntimeLogAction::ProfileCreated, async move {
         let state = state(&app)?;
         blocking(move || {
+            if let Some(route) = &draft.subagent_route {
+                switching::validate_subagent_route_reference(&state, route)?;
+            }
             state
                 .configuration()
                 .create_codex_provider(draft)
@@ -71,6 +74,24 @@ fn ensure_codex_profile_deletable(state: &LocalState, id: &str) -> Result<(), Co
         return Err(CommandError::new(
             "codex-provider-in-failover-queue",
             "请先从 Codex 故障转移队列移除该供应商，再删除档案",
+        ));
+    }
+    let referenced_by_subagent_route = state
+        .configuration()
+        .list_codex_providers()
+        .map_err(store_error)?
+        .into_iter()
+        .any(|record| {
+            record.profile.id != id
+                && record
+                    .profile
+                    .subagent_route
+                    .is_some_and(|route| route.profile_id == id)
+        });
+    if referenced_by_subagent_route {
+        return Err(CommandError::new(
+            "codex-provider-referenced-by-subagent-route",
+            "该 Codex 供应商正被其他档案的子代理路由引用；请先移除引用后再删除档案",
         ));
     }
     let target = state
@@ -169,6 +190,51 @@ pub async fn delete_codex_profile(
         crate::tray::refresh(&refresh_app);
     }
     result
+}
+
+#[cfg(test)]
+mod subagent_reference_tests {
+    use super::ensure_codex_profile_deletable;
+
+    fn draft_with_route(
+        route: Option<asb_core::contracts::CodexSubagentRoute>,
+    ) -> asb_core::contracts::CodexProviderDraft {
+        let mut draft = crate::codex_common::test_draft();
+        draft.subagent_route = route;
+        draft
+    }
+
+    #[test]
+    fn a_profile_referenced_by_a_subagent_route_is_not_deletable() {
+        let _paths = crate::test_client_paths::redirect_client_paths();
+        let directory = tempfile::tempdir().unwrap();
+        let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
+        let target = state
+            .configuration()
+            .create_codex_provider(draft_with_route(None))
+            .unwrap();
+        state
+            .configuration()
+            .create_codex_provider(draft_with_route(Some(
+                asb_core::contracts::CodexSubagentRoute {
+                    profile_id: target.profile.id.clone(),
+                    model: "relay-model".to_string(),
+                },
+            )))
+            .unwrap();
+
+        let error = ensure_codex_profile_deletable(&state, &target.profile.id).unwrap_err();
+        assert_eq!(error.code, "codex-provider-referenced-by-subagent-route");
+
+        let referencing = state
+            .configuration()
+            .list_codex_providers()
+            .unwrap()
+            .into_iter()
+            .find(|record| record.profile.id != target.profile.id)
+            .unwrap();
+        assert!(ensure_codex_profile_deletable(&state, &referencing.profile.id).is_ok());
+    }
 }
 
 #[tauri::command]

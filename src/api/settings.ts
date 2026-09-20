@@ -49,13 +49,6 @@ export type SettingSpec =
       group: string;
       control: "slider" | "segment";
       options: SettingChoiceOption[];
-    }
-  | {
-      key: string;
-      label: string;
-      group: string;
-      control: "model";
-      options: [];
     };
 
 /** One official configuration family with its real editing boundary. Paths

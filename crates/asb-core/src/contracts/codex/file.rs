@@ -1,6 +1,6 @@
 use super::{
-    codex_model_catalog_document, CodexProviderDraft, CodexProviderFile, CodexProviderProfile,
-    CodexProviderRecord, CodexRouteMode, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION,
+    CodexProviderDraft, CodexProviderFile, CodexProviderProfile, CodexProviderRecord,
+    CodexRouteMode, CodexUpstream, CODEX_PROVIDER_SCHEMA_VERSION,
 };
 use crate::contracts::{
     CodexModelSettings, ExplicitMaxOutputTokens, ModelOptions, ProviderFile, ResponsesOptions,
@@ -21,6 +21,7 @@ impl CodexProviderDraft {
                     &self.connection,
                     self.authentication,
                     Some(self.endpoint.0.as_str()),
+                    self.subagent_route.as_ref(),
                 ),
                 endpoint: self.endpoint,
                 api_key: self.api_key,
@@ -31,6 +32,7 @@ impl CodexProviderDraft {
                 default_model: self.default_model,
                 catalog: self.catalog,
                 model_routes: self.model_routes,
+                subagent_route: self.subagent_route,
                 capabilities: self.capabilities,
             },
             parameters: self.parameters,
@@ -54,6 +56,7 @@ impl CodexProviderRecord {
             default_model: self.profile.default_model,
             catalog: self.profile.catalog,
             model_routes: self.profile.model_routes,
+            subagent_route: self.profile.subagent_route,
             capabilities: self.profile.capabilities,
             parameters: self.parameters,
             notes: self.notes,
@@ -93,12 +96,6 @@ impl CodexProviderFile {
         }
     }
 
-    pub fn model_catalog_json(&self) -> Result<String, String> {
-        self.validate()?;
-        serde_json::to_string_pretty(&codex_model_catalog_document(&self.profile.catalog))
-            .map_err(|_| "Codex 模型目录序列化失败".to_string())
-    }
-
     pub fn client_projection(&self) -> ProviderFile {
         let default = self
             .profile
@@ -128,6 +125,7 @@ impl CodexProviderFile {
             model: Some(self.profile.default_model.clone()),
             model_options: Some(ModelOptions::Codex(CodexModelSettings {
                 context_window: Some(default.context_window),
+                subagent_route: self.profile.subagent_route.clone(),
             })),
             parameters: self.parameters.clone(),
             claude_fragment: Default::default(),
@@ -160,6 +158,7 @@ mod tests {
             default_model: "relay-model".into(),
             catalog: vec![CodexCatalogEntry::default_entry("relay-model")],
             model_routes: Vec::new(),
+            subagent_route: None,
             capabilities: DEFAULT_CODEX_CAPABILITIES,
             parameters: crate::ownership::default_provider_parameters(AppKind::Codex),
             notes: None,

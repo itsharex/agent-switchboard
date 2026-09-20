@@ -143,6 +143,7 @@ pub(crate) fn test_draft() -> asb_core::contracts::CodexProviderDraft {
         default_model: "relay-model".into(),
         catalog: vec![CodexCatalogEntry::default_entry("relay-model")],
         model_routes: Vec::new(),
+        subagent_route: None,
         capabilities: DEFAULT_CODEX_CAPABILITIES,
         parameters: asb_core::ownership::default_provider_parameters(AppKind::Codex),
         notes: None,

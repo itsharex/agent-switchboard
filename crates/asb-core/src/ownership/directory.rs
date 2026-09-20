@@ -27,9 +27,10 @@ pub(super) const CODEX_DIRECTORY_FAMILIES: &[OfficialSettingEntry] = &[
             "agents.enabled",
             "agents.max_concurrent_threads_per_session",
             "agents.interrupt_message",
+            "agents.default_subagent_model",
         ],
         disposition: OfficialSettingDisposition::SeparateModule,
-        detail: "在偏好设置页的“子 agent 运行”模块中以独立事务直接读写用户级 config.toml；自动表示不写入该键，由 Codex 自行解析。默认模型和推理强度由供应商运行参数拥有。不支持任何旧别名。",
+        detail: "在偏好设置页的“子 agent 运行”模块中以独立事务直接读写用户级 config.toml；自动表示不写入该键，由 Codex 自行解析。默认模型是跨档案路由引用，经本机网关按档案解析；推理强度由供应商运行参数拥有。不支持任何旧别名。",
     },
     OfficialSettingEntry {
         title: "子 agent 角色",

@@ -39,7 +39,11 @@ impl GatewayController {
             .preserve_official_login;
         file.validate()?;
         let profile = file.client_projection().into_profile(AppKind::Codex);
-        let catalog = CodexCatalogProjection::from_file(file, &codex_route_fingerprint(file)?)?;
+        let catalog = CodexCatalogProjection::from_file(
+            &self.inner.state_root,
+            file,
+            &codex_route_fingerprint(file)?,
+        )?;
         if file.profile.route_mode == asb_core::contracts::CodexRouteMode::Direct
             && !policy.takeover
         {
@@ -69,7 +73,8 @@ impl GatewayController {
             .listening_base_url()
             .ok_or_else(|| "本机协议网关当前未在监听，无法写入 Codex 第三方配置".to_string())?;
         let route = self.route_for_codex_file(file)?;
-        let catalog = CodexCatalogProjection::from_file(file, &route.fingerprint)?;
+        let catalog =
+            CodexCatalogProjection::from_file(&self.inner.state_root, file, &route.fingerprint)?;
         let plan = attach_fragment(
             SwitchPlan::through_gateway(
                 profile,
@@ -242,5 +247,60 @@ fn attach_fragment(
     match fragment {
         Some(fragment) => plan.with_codex_common_fragment(fragment),
         None => plan,
+    }
+}
+
+#[cfg(test)]
+mod subagent_catalog_tests {
+    use crate::gateway::CodexCatalogProjection;
+
+    fn draft_with_route(
+        route: Option<asb_core::contracts::CodexSubagentRoute>,
+    ) -> asb_core::contracts::CodexProviderDraft {
+        let mut draft = crate::codex_common::test_draft();
+        draft.subagent_route = route;
+        draft
+    }
+
+    #[test]
+    fn a_subagent_route_merges_its_wire_entry_into_route_and_catalog() {
+        let _paths = crate::test_client_paths::redirect_client_paths();
+        let directory = tempfile::tempdir().unwrap();
+        let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
+        let gateway = crate::gateway::GatewayController::start(&state);
+        let target = state
+            .configuration()
+            .create_codex_provider(draft_with_route(None))
+            .unwrap();
+        let routed = state
+            .configuration()
+            .create_codex_provider(draft_with_route(Some(
+                asb_core::contracts::CodexSubagentRoute {
+                    profile_id: target.profile.id.clone(),
+                    model: "relay-model".to_string(),
+                },
+            )))
+            .unwrap();
+
+        let file = state
+            .configuration()
+            .find_codex_provider_file(&routed.profile.id)
+            .unwrap();
+        let route = gateway.route_for_codex_file(&file).unwrap();
+        let wire_id = format!("asb:{}/relay-model", target.profile.id);
+        let snapshot = route.codex.as_ref().unwrap();
+        assert!(snapshot.catalog.iter().any(|entry| entry.id == wire_id));
+        let merged = snapshot
+            .catalog
+            .iter()
+            .find(|entry| entry.id == wire_id)
+            .unwrap();
+        assert!(merged.display_name.as_deref().is_some_and(|name| name.contains("Relay")));
+
+        let revision = crate::gateway::codex_route_fingerprint(&file).unwrap();
+        let catalog =
+            CodexCatalogProjection::from_file(&state.root(), &file, &revision).unwrap();
+        assert!(catalog.content.contains(&wire_id));
+        gateway.shutdown();
     }
 }

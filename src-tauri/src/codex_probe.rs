@@ -296,6 +296,7 @@ pub(crate) fn spawn_probe(
 // --------------------------------------------------------------------- runner
 
 /// Fatal conditions that end the whole probe instead of one run.
+#[derive(Debug)]
 enum ProbeAbort {
     Cancelled,
     Spawn(String),

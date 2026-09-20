@@ -171,6 +171,10 @@ pub fn route_state(text: &str) -> RouteState {
                 .and_then(|item| item.as_value())
                 .and_then(|value| value.as_integer())
                 .and_then(|value| u64::try_from(value).ok()),
+            subagent_route: item_at(&doc, "agents.default_subagent_model")
+                .and_then(|item| item.as_value())
+                .and_then(|value| value.as_str())
+                .and_then(crate::contracts::CodexSubagentRoute::parse_wire_id),
         }),
         haiku_model: None,
         sonnet_model: None,

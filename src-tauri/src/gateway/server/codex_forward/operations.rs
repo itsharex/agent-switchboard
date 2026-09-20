@@ -82,6 +82,21 @@ impl Operation {
                 UpstreamProtocol::Responses,
                 &body,
             ));
+        // A subagent wire model only ever rides the main Responses path with
+        // its own candidate list; auxiliary operations reject it explicitly
+        // instead of forwarding a namespaced id to the active upstream.
+        if crate::gateway::usage_metadata::model_from_bytes(UpstreamProtocol::Responses, &body)
+            .as_deref()
+            .is_some_and(|model| {
+                model.starts_with(asb_core::contracts::CodexSubagentRoute::WIRE_PREFIX)
+            })
+        {
+            self.reject(
+                422,
+                "跨供应商子代理模型仅支持 /v1/responses 请求；此操作不支持子代理路由",
+            );
+            return;
+        }
         let body =
             match super::super::codex::resolve_model_and_validate(&self.route, operation, body) {
                 Ok(body) => body,

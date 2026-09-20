@@ -7,6 +7,7 @@ import type {
   CodexProviderRecord,
   CodexReasoningLevel,
   CodexRequestMode,
+  CodexSubagentRoute,
   CodexUpstream,
   ProviderConnectionOptions,
   CodexAuthenticationScheme,
@@ -30,6 +31,7 @@ export interface CodexEditorDraft {
   defaultModel: string;
   catalog: EditableCodexCatalogEntry[];
   modelRoutes: CodexModelRoute[];
+  subagentRoute: CodexSubagentRoute | null;
   capabilities: CodexCapabilities;
   parameters: SettingsValues | null;
   notes: string;
@@ -113,6 +115,7 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
       defaultModel: "",
       catalog: [],
       modelRoutes: [],
+      subagentRoute: null,
       capabilities: { ...DEFAULT_CODEX_CAPABILITIES },
       parameters: null,
       notes: "",
@@ -131,6 +134,9 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
     defaultModel: record.profile.defaultModel,
     catalog: record.profile.catalog.map((entry) => ({ ...entry, supportedReasoningLevels: [...entry.supportedReasoningLevels], imageInputEvidence: null })),
     modelRoutes: record.profile.modelRoutes.map((route) => ({ ...route })),
+    subagentRoute: record.profile.subagentRoute
+      ? { ...record.profile.subagentRoute }
+      : null,
     capabilities: { ...record.profile.capabilities },
     parameters: { settings: { ...record.parameters.settings } },
     notes: record.notes ?? "",
@@ -152,6 +158,7 @@ export function prepareCodexDraft(draft: CodexEditorDraft): CodexProviderDraft |
     defaultModel: draft.defaultModel.trim(),
     catalog: draft.catalog.map(prepareCatalogEntry),
     modelRoutes: draft.modelRoutes,
+    subagentRoute: draft.subagentRoute ? { ...draft.subagentRoute } : null,
     capabilities: draft.capabilities,
     parameters: draft.parameters,
     notes: optional(draft.notes),
@@ -240,8 +247,20 @@ export function validateCodexDraft(draft: CodexEditorDraft): string[] {
     if (routeSources.has(route.clientModel)) problems.push(`模型映射含有重复客户端模型：${route.clientModel}`);
     routeSources.add(route.clientModel);
   }
+  const subagentRoute = draft.subagentRoute;
+  if (subagentRoute) {
+    if (!UUID_PATTERN.test(subagentRoute.profileId)) {
+      problems.push("子代理路由的供应商标识无效；请从列表重新选择");
+    }
+    if (!subagentRoute.model.trim()) {
+      problems.push("子代理路由的模型不能为空；请从列表重新选择");
+    }
+  }
   return problems;
 }
+
+/** Hyphenated UUID shape, mirroring the backend's canonical profile-id check. */
+const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 /** Source facts that override the generated catalog-row defaults. Absent
  * facts keep the editable defaults; the capability declaration itself is

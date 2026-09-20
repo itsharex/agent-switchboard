@@ -39,12 +39,18 @@ impl GatewayController {
             if is_gateway {
                 let route = self.route_for_codex_file(&file)?;
                 if self.route_matches_config(&route, configuration)? {
-                    return CodexCatalogProjection::from_file(&file, &revision).map(Some);
+                    return CodexCatalogProjection::from_file(
+                        &self.inner.state_root,
+                        &file,
+                        &revision,
+                    )
+                    .map(Some);
                 }
             } else if catalog_pointer.as_deref()
                 == Some(codex_catalog_file_name(&file.profile.id, &revision).as_str())
             {
-                return CodexCatalogProjection::from_file(&file, &revision).map(Some);
+                return CodexCatalogProjection::from_file(&self.inner.state_root, &file, &revision)
+                    .map(Some);
             }
         }
         Err("恢复目标的 Codex 供应商或路由修订已变化，无法重建模型目录".into())

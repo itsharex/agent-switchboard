@@ -6,6 +6,11 @@ use crate::ownership::spec::{ProviderSettingSpec, SettingValueType};
 pub const CODEX_PROVIDER_ID: &str = "openai";
 pub const CODEX_PROVIDER_BASE_URL_KEY: &str = "openai_base_url";
 pub const CODEX_MODEL_CATALOG_KEY: &str = "model_catalog_json";
+/// The Codex sub-agent model key. Its value is derived at render time from
+/// the profile's typed `subagentRoute` reference, so it has no scalar editor
+/// control; a stored parameter spelling is a retired contract and fails
+/// validation.
+pub const CODEX_SUBAGENT_MODEL_KEY: &str = "agents.default_subagent_model";
 /// Codex's server-side web-search mode. A cross-protocol route cannot carry
 /// this Responses-only server tool, so the Codex adapter derives its effective
 /// value from the selected route at render time.
@@ -38,6 +43,11 @@ pub(super) const PROVIDER_SETTINGS: &[ProviderSettingSpec] = &[
     ProviderSettingSpec {
         app: AppKind::Codex,
         key: CODEX_MODEL_CATALOG_KEY,
+        value_type: SettingValueType::String,
+    },
+    ProviderSettingSpec {
+        app: AppKind::Codex,
+        key: CODEX_SUBAGENT_MODEL_KEY,
         value_type: SettingValueType::String,
     },
     ProviderSettingSpec {

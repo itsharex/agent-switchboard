@@ -2,10 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::contracts::{AppKind, SettingValue, SettingsValues};
 use crate::ownership::directory::{CLAUDE_DIRECTORY_FAMILIES, CODEX_DIRECTORY_FAMILIES};
-use crate::ownership::models::MODEL_SPECS;
 use crate::ownership::provider::PROVIDER_SETTINGS;
 use crate::ownership::spec::{
-    ChoiceSpec, ModelSpec, OfficialSettingDisposition, OfficialSettingEntry, ProviderAbsentAction,
+    ChoiceSpec, OfficialSettingDisposition, OfficialSettingEntry, ProviderAbsentAction,
     SettingControl, SettingOwner, SettingSpec, SettingValueType, ToggleSpec,
 };
 use crate::ownership::{CLAUDE_CHOICES, CLAUDE_TOGGLES, CODEX_CHOICES, CODEX_TOGGLES};
@@ -26,12 +25,6 @@ pub fn setting_choices(app: AppKind) -> &'static [ChoiceSpec] {
         AppKind::Codex => CODEX_CHOICES,
         AppKind::Claude => CLAUDE_CHOICES,
     }
-}
-
-/// Model-id fields are catalogued separately because their choices come from
-/// the selected provider rather than a static client-wide enum.
-pub fn setting_models(app: AppKind) -> impl Iterator<Item = &'static ModelSpec> {
-    MODEL_SPECS.iter().filter(move |spec| spec.app == app)
 }
 
 /// Section order on the settings page, the single owner of grouping.
@@ -134,18 +127,6 @@ pub fn setting_specs(app: AppKind) -> Vec<SettingSpec> {
         control: SettingControl::Choice {
             presentation: spec.control,
         },
-        label: Some(spec.label),
-        group: Some(spec.group),
-        provider_absent_action:
-            (spec.owner == SettingOwner::Provider).then_some(ProviderAbsentAction::Remove),
-    }));
-    specs.extend(setting_models(app).map(|spec| SettingSpec {
-        app,
-        key: spec.key,
-        owner: spec.owner,
-        value_type: SettingValueType::String,
-        allowed_values: &[],
-        control: SettingControl::ModelPicker,
         label: Some(spec.label),
         group: Some(spec.group),
         provider_absent_action:

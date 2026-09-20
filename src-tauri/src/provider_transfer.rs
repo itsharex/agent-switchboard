@@ -485,6 +485,7 @@ mod tests {
                 client_model: "gpt-5.2-mini".to_string(),
                 upstream_model: "provider-model-x".to_string(),
             }],
+            subagent_route: None,
             capabilities: DEFAULT_CODEX_CAPABILITIES,
             parameters: default_provider_parameters(AppKind::Codex),
             notes: None,

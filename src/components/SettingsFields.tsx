@@ -232,8 +232,7 @@ function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: Pr
   );
 }
 
-/** One catalog-driven settings row. Model pickers need the provider connection
- * and are rendered by the provider parameters page instead. */
+/** One catalog-driven settings row. */
 export function SettingsRow({
   spec,
   value,
@@ -245,7 +244,6 @@ export function SettingsRow({
   presentation,
   clientApp,
 }: ControlProps) {
-  if (spec.control === "model") return null;
   if (presentation === "client") return <ClientPreferenceRow spec={spec} value={value} baselineValue={baselineValue}
     actualValue={actualValue} showActual={showActual} busy={busy} onChange={onChange} clientApp={clientApp} />;
   if (presentation === "provider") return <ProviderParameterRow spec={spec} value={value}

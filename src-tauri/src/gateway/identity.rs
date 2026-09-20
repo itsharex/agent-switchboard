@@ -54,6 +54,7 @@ pub(crate) fn codex_route_fingerprint(
         "defaultModel": profile.default_model,
         "catalog": profile.catalog,
         "modelRoutes": profile.model_routes,
+        "subagentRoute": profile.subagent_route,
         "capabilities": profile.capabilities,
         "parameters": file.parameters,
     });
@@ -138,12 +139,23 @@ pub(crate) fn codex_catalog_file_name(profile_id: &str, revision: &str) -> Strin
 
 impl CodexCatalogProjection {
     pub(super) fn from_file(
+        state_root: &std::path::Path,
         file: &asb_core::contracts::CodexProviderFile,
         revision: &str,
     ) -> Result<Self, String> {
+        file.validate()?;
+        let mut catalog = file.profile.catalog.clone();
+        if let Some(route) = &file.profile.subagent_route {
+            catalog.push(super::routing::subagent_catalog_entry(state_root, route)?);
+        }
+        let content =
+            serde_json::to_string_pretty(&asb_core::contracts::codex_model_catalog_document(
+                &catalog,
+            ))
+            .map_err(|_| "Codex 模型目录序列化失败".to_string())?;
         Ok(Self {
             file_name: codex_catalog_file_name(&file.profile.id, revision),
-            content: file.model_catalog_json()?,
+            content,
         })
     }
 }

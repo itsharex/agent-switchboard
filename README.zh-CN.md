@@ -33,6 +33,12 @@ Agent Switchboard 将供应商档案、客户端配置、扩展管理和本机�
 
 <p align="center"><sub>切换预览：对「README 沙箱 · 备用」生成的真实类型化预览；只有点击确认后才会写入隔离沙箱。</sub></p>
 
+<p align="center">
+  <img src="docs/screenshots/subagent-route.png" width="100%" alt="当前 Agent Switchboard 的 Codex 运行参数：默认子 agent 模型以高级开关后的跨档案路由指向备用档案的模型">
+</p>
+
+<p align="center"><sub>子 agent 模型路由：主路由档案把备用档案的模型指定为默认子 agent 模型；请求由本机网关转发，失败不回退主模型。</sub></p>
+
 > **截图数据说明**：截图由当前源码启动的实际前端与同一 Tauri 本机后端生成。运行过程将 `APPDATA`、`LOCALAPPDATA`、`USERPROFILE`、`CODEX_HOME` 和 `CLAUDE_CONFIG_DIR` 全部重定向到隔离临时目录；档案名、模型、密钥占位、服务地址和配置内容均为虚构的 README 沙箱数据（仅使用 `*.sandbox.example` / `example.com`）。没有读取、写入或截图真实用户的 Codex / Claude Code 配置、凭据、账号、会话、服务地址或文件。
 
 ## 产品范围
@@ -49,6 +55,7 @@ Agent Switchboard 将供应商档案、客户端配置、扩展管理和本机�
 - 建立、编辑、排序、导入和删除 Codex 与 Claude Code 供应商档案。
 - 将全部供应商的完整配置导出为 SQL 文件，在其他设备的应用内选择该文件即可导入，无需命令行。
 - 保存模型、认证、请求协议、请求模式、模型映射和运行参数。
+- Codex 档案的默认子 agent 模型是跨档案路由引用：可指定任意已保存档案目录中的模型，请求由本机网关转发到该档案，携带路由的档案一律经网关激活。引用不可解析时在保存、切换与请求三个环节显式报错——绝不回退到主模型；被引用的档案在路由存在期间不可删除。
 - 在写入前生成类型化预览；真实写入由可观察、可备份、可校验、可恢复的执行器完成。
 - 保留不属于当前档案的客户端配置键，避免覆盖用户已有设置。
 
@@ -78,6 +85,7 @@ Agent Switchboard 将供应商档案、客户端配置、扩展管理和本机�
 - 无法无损表达的字段与工具在转发前报错，不做静默丢弃：例如 stop_sequences 到 Responses 上游、strict 工具与音频到 Anthropic 上游、web_search 等服务端工具到任意跨协议上游。仅影响计量或缓存的纯元数据（如 cache_control，以及 Gemini 上游的 metadata.user_id）在校验后丢弃。
 - Codex 跨协议请求必须 store=false；previous_response_id 与短续接由本机工具历史回填为完整上下文，原生 Responses 上游仍使用上游自身存储。
 - 推理轨迹以绑定路由的加密续接载荷往返；切换档案或密钥后旧续接会被拒绝。
+- Codex 子代理模型路由按请求解析：携带 `asb:` 前缀的模型 id 匹配到被引用档案后，其端点变体整体替换候选列表（无跨供应商故障转移，失败即失败），前缀剥离后按目标档案自身目录准入与改写，用量归因到目标档案。辅助操作对此类 id 显式拒绝。被引用的模型同时以路由 id 合入客户端模型目录文件与 `/v1/models`。
 - Codex 的 WebSocket 传输由网关终结，上游统一走 HTTP/SSE；Claude 故障转移只按本机 `claude-failover.json` 显式策略执行并配合熔断冷却，不做隐式切换。
 
 ### 状态、恢复与诊断

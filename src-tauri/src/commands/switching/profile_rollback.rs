@@ -218,6 +218,7 @@ mod tests {
                 client_model: "codex".to_string(),
                 upstream_model: "vendor-codex".to_string(),
             }],
+            subagent_route: None,
             capabilities: CodexCapabilities {
                 responses: true,
                 compact: true,

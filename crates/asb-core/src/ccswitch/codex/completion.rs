@@ -32,6 +32,7 @@ impl CodexImportSeed {
             default_model: self.default_model.trim().to_string(),
             catalog,
             model_routes: Vec::new(),
+            subagent_route: None,
             capabilities,
             parameters: self.parameters.clone(),
             notes: self.notes.clone(),

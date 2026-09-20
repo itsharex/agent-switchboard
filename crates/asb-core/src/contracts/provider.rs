@@ -221,12 +221,20 @@ impl ProviderProfile {
                 .responses_options
                 .map(|options| options.request_mode)
                 .unwrap_or(ResponsesRequestMode::Standard);
+            let subagent_route = match &self.model_options {
+                Some(ModelOptions::Codex(settings)) => settings.subagent_route.as_ref(),
+                None => None,
+                Some(ModelOptions::Claude(_)) => {
+                    unreachable!("profile validation rejects mismatched options")
+                }
+            };
             return CodexRouteMode::for_profile(
                 upstream,
                 request_mode,
                 &self.connection,
                 self.authentication,
                 self.base_url.as_deref(),
+                subagent_route,
             )
             .requires_gateway();
         }

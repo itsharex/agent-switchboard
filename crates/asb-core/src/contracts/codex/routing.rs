@@ -1,5 +1,6 @@
 use crate::contracts::{
-    AuthenticationScheme, ProviderConnectionOptions, ResponsesRequestMode, UpstreamProtocol,
+    AuthenticationScheme, CodexSubagentRoute, ProviderConnectionOptions, ResponsesRequestMode,
+    UpstreamProtocol,
 };
 use serde::{Deserialize, Serialize};
 
@@ -29,17 +30,21 @@ impl CodexRouteMode {
     /// shape and credential delivery both match the native client contract.
     /// `base_url` is the profile's primary service address: endpoint
     /// candidates equal to it give automatic routing nothing to choose.
-    /// Every route-affecting profile field participates here so construction,
-    /// validation, and later connection edits share one decision owner.
+    /// A sub-agent model route is a gateway capability, so a profile carrying
+    /// one always routes locally. Every route-affecting profile field
+    /// participates here so construction, validation, and later connection
+    /// edits share one decision owner.
     pub fn for_profile(
         upstream: CodexUpstream,
         request_mode: ResponsesRequestMode,
         connection: &ProviderConnectionOptions,
         authentication: Option<AuthenticationScheme>,
         base_url: Option<&str>,
+        subagent_route: Option<&CodexSubagentRoute>,
     ) -> Self {
         let default_authentication = upstream.protocol().authentication_scheme();
-        if upstream != CodexUpstream::Responses
+        if subagent_route.is_some()
+            || upstream != CodexUpstream::Responses
             || request_mode == ResponsesRequestMode::Minimal
             || connection.requires_gateway(base_url)
             || authentication.is_some_and(|selected| selected != default_authentication)

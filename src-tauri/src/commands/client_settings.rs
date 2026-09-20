@@ -122,7 +122,6 @@ fn editor_catalog(target: AppKind, owner: SettingOwner) -> Vec<SettingSpec> {
                         })
                         .collect(),
                 ),
-                SettingControl::ModelPicker => ("model".to_string(), vec![]),
                 SettingControl::None => unreachable!("editor controls are filtered above"),
             };
             SettingSpec {
