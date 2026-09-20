@@ -10,8 +10,8 @@ export function AppScreenshot({ shot, eager = false }: {
       <img
         src={shot.src}
         alt={shot.alt}
-        width={1440}
-        height={1080}
+        width={shot.width}
+        height={shot.height}
         decoding={eager ? "sync" : "async"}
         loading={eager ? "eager" : "lazy"}
         {...(eager ? { fetchPriority: "high" as const } : {})}

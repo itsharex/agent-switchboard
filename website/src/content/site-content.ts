@@ -15,6 +15,9 @@ export interface SiteScreenshot {
   alt: string;
   badge: string;
   caption: string;
+  /** Intrinsic pixel size of the PNG; keeps layout stable before load. */
+  width: number;
+  height: number;
 }
 
 /** One showcase section: copy on one side, a sandbox screenshot on the other. */
@@ -112,6 +115,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         alt: "Agent Switchboard 供应商工作区实际界面：Codex 与 Claude Code 的档案列表、已应用状态与启用操作（隔离沙箱演示数据）",
         badge: "隔离沙箱 · 演示数据",
         caption: "供应商工作区：档案、启用状态与切换入口。",
+        width: 1440,
+        height: 1080,
       },
     },
     preview: {
@@ -128,6 +133,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         alt: "Agent Switchboard 切换确认界面实际截图：备用档案的脱敏配置差异、候选文件与确认操作（隔离沙箱演示数据）",
         badge: "隔离沙箱 · 演示数据",
         caption: "切换确认：对备用档案生成的真实类型化预览。",
+        width: 1440,
+        height: 1080,
       },
     },
     configuration: {
@@ -144,6 +151,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         alt: "Agent Switchboard 客户端配置工作区实际界面：通用设置分组与受控配置操作（隔离沙箱演示数据）",
         badge: "隔离沙箱 · 演示数据",
         caption: "客户端配置：分组设置与受控操作。",
+        width: 1410,
+        height: 985,
       },
     },
     capabilities: {
@@ -175,6 +184,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
           alt: "Agent Switchboard 的 Codex 运行参数实际界面：默认子 agent 模型以高级开关后的跨档案路由指向备用档案的模型（隔离沙箱演示数据）",
           badge: "隔离沙箱 · 演示数据",
           caption: "子 agent 模型路由：请求由本机网关转发，失败不回退主模型。",
+        width: 1440,
+        height: 1080,
         },
       },
     },
@@ -231,6 +242,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         alt: "Agent Switchboard providers workspace: profile lists for Codex and Claude Code with applied state and activate actions (isolated sandbox demo data)",
         badge: "Isolated sandbox · demo data",
         caption: "Providers workspace: profiles, applied state, and switching.",
+        width: 1440,
+        height: 1080,
       },
     },
     preview: {
@@ -247,6 +260,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         alt: "Agent Switchboard switch confirmation dialog: redacted configuration diff for a backup profile, candidate file, and confirm actions (isolated sandbox demo data)",
         badge: "Isolated sandbox · demo data",
         caption: "Switch confirmation: a real typed preview of the backup profile.",
+        width: 1440,
+        height: 1080,
       },
     },
     configuration: {
@@ -263,6 +278,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
         alt: "Agent Switchboard client configuration workspace: grouped common settings and controlled configuration actions (isolated sandbox demo data)",
         badge: "Isolated sandbox · demo data",
         caption: "Client configuration: grouped settings, controlled actions.",
+        width: 1410,
+        height: 985,
       },
     },
     capabilities: {
@@ -294,6 +311,8 @@ export const siteContentByLocale: Record<Locale, SiteContent> = {
           alt: "Agent Switchboard Codex run parameters: the default sub-agent model configured as a cross-provider route to the backup profile's model behind the advanced toggle (isolated sandbox demo data)",
           badge: "Isolated sandbox · demo data",
           caption: "Sub-agent model route: forwarded by the local gateway, never falling back to the main model.",
+        width: 1440,
+        height: 1080,
         },
       },
     },
