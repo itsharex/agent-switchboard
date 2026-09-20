@@ -1,120 +1,126 @@
+<p align="center">
+  <img src="src/assets/app-icon.svg" width="96" alt="Agent Switchboard logo">
+</p>
+
 <h1 align="center">Agent Switchboard</h1>
 
 <p align="center">
-  面向 <strong>Codex</strong> 与 <strong>Claude Code</strong> 的本地配置控制台。<br>
-  用供应商档案、类型化预览与可恢复切换，替代直接手改客户端配置文件。
+  A local configuration console for <strong>Codex</strong> and <strong>Claude Code</strong>.<br>
+  Provider profiles, typed previews, and resumable switches — instead of hand-editing client config files.
 </p>
 
-Agent Switchboard 将供应商档案、客户端配置、扩展管理和本机状态收束在同一桌面应用中。真实配置只有在明确确认后才会由唯一的切换执行器写入；每次可恢复写入均可观察、备份、校验和恢复。
+<p align="center"><sup>English · <a href="README.zh-CN.md">简体中文</a></sup></p>
 
-## 当前界面（隔离演示数据）
+Agent Switchboard brings provider profiles, client configuration, extension management, and local status together in a single desktop app. Real configuration is written only by the one switch executor after an explicit confirmation; every resumable write is observable, backed up, validated, and recoverable.
+
+## Current UI (isolated demo data)
 
 <p align="center">
-  <img src="docs/screenshots/providers.png" width="100%" alt="当前 Agent Switchboard 供应商工作区：Codex 与 Claude Code 当前连接卡片、三个 README 沙箱供应商档案及启用操作">
+  <img src="docs/screenshots/providers.png" width="100%" alt="Agent Switchboard providers workspace: current Codex and Claude Code connection cards, three README sandbox provider profiles, and the apply action">
 </p>
 
-<p align="center"><sub>供应商工作区：当前源码实际渲染，展示已应用的「README 沙箱 · 主路由」以及两个可切换的虚构档案。</sub></p>
+<p align="center"><sub>Providers workspace: rendered by the current source, showing the applied “README Sandbox · Primary Route” profile and two fictional profiles ready to switch to.</sub></p>
 
 <p align="center">
-  <img src="docs/screenshots/client-configuration.png" width="100%" alt="当前 Agent Switchboard 客户端配置工作区：Codex 通用设置和受控配置操作">
+  <img src="docs/screenshots/client-configuration.png" width="100%" alt="Agent Switchboard client configuration workspace: Codex shared settings and controlled configuration actions">
 </p>
 
-<p align="center"><sub>客户端配置：在隔离客户端根目录中读取和编辑受控设置，保持真实界面的分组、状态与操作结构。</sub></p>
+<p align="center"><sub>Client configuration: reads and edits controlled settings inside an isolated client root, keeping the grouping, status, and action structure of the real UI.</sub></p>
 
 <p align="center">
-  <img src="docs/screenshots/switch-preview.png" width="100%" alt="当前 Agent Switchboard 的供应商切换确认界面：README 沙箱备用档案的脱敏配置差异、候选文件和确认操作">
+  <img src="docs/screenshots/switch-preview.png" width="100%" alt="Agent Switchboard provider switch confirmation: desensitized configuration diff, candidate files, and confirm actions for the README sandbox backup profile">
 </p>
 
-<p align="center"><sub>切换预览：对「README 沙箱 · 备用」生成的真实类型化预览；只有点击确认后才会写入隔离沙箱。</sub></p>
+<p align="center"><sub>Switch preview: a real typed preview generated for “README Sandbox · Backup”; nothing is written to the isolated sandbox until you confirm.</sub></p>
 
-> **截图数据说明**：截图由当前源码启动的实际前端与同一 Tauri 本机后端生成。运行过程将 `APPDATA`、`LOCALAPPDATA`、`USERPROFILE`、`CODEX_HOME` 和 `CLAUDE_CONFIG_DIR` 全部重定向到隔离临时目录；档案名、模型、密钥占位、服务地址和配置内容均为虚构的 README 沙箱数据（仅使用 `*.sandbox.example` / `example.com`）。没有读取、写入或截图真实用户的 Codex / Claude Code 配置、凭据、账号、会话、服务地址或文件。
+> **Screenshot data notice**: Screenshots are produced by the actual frontend launched from the current source together with the same Tauri local backend. The run redirects `APPDATA`, `LOCALAPPDATA`, `USERPROFILE`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` to isolated temporary directories; profile names, models, key placeholders, service addresses, and configuration contents are fictional README sandbox data (only `*.sandbox.example` / `example.com` are used). No real user Codex / Claude Code configuration, credentials, accounts, sessions, service addresses, or files were read, written, or captured.
 
-## 产品范围
+## Product scope
 
-- 仅管理 Codex 与 Claude Code。
-- 所有配置、备份、历史和诊断都保留在本机。
-- 第三方上游协议与客户端协议不一致时，应用只在 `127.0.0.1` 启动本地转换网关。
-- 不提供云同步、遥测、账户体系、公开代理、自动代理或隐式提供商切换。
+- Manages Codex and Claude Code only.
+- All configuration, backups, history, and diagnostics stay on this machine.
+- When a third-party upstream protocol does not match the client protocol, the app starts a local translation gateway on `127.0.0.1` only.
+- No cloud sync, telemetry, account system, public proxy, auto-proxying, or implicit provider switching.
 
-## 核心能力
+## Core capabilities
 
-### 供应商档案
+### Provider profiles
 
-- 建立、编辑、排序、导入和删除 Codex 与 Claude Code 供应商档案。
-- 将全部供应商的完整配置导出为 SQL 文件，在其他设备的应用内选择该文件即可导入，无需命令行。
-- 保存模型、认证、请求协议、请求模式、模型映射和运行参数。
-- 在写入前生成类型化预览；真实写入由可观察、可备份、可校验、可恢复的执行器完成。
-- 保留不属于当前档案的客户端配置键，避免覆盖用户已有设置。
+- Create, edit, reorder, import, and delete Codex and Claude Code provider profiles.
+- Export the complete configuration of every provider into a single SQL file, then pick that file in the app on another device to import — no command line involved.
+- Store models, authentication, request protocol, request mode, model mappings, and run parameters.
+- Generate a typed preview before anything is written; real writes go through an executor that is observable, backed up, validated, and recoverable.
+- Client configuration keys that do not belong to the current profile are preserved, so existing user settings are never overwritten.
 
-### 客户端配置
+### Client configuration
 
-- 管理两端的通用配置、Codex 子 agent 运行设置和当前客户端的全局指令文件。
-- 当前受控字段始终由界面状态归一化：显式值写入、自动值删除；已知历史字段会在同一可恢复事务中清理，未知字段保持原样。
-- 配置草稿可读取脱敏后的本机真实配置；界面未拥有的字段可在受控手动编辑器中修改，敏感标记由后端保留原值，所有写入均须预览、确认、备份和校验。
-- 配置格式错误时，应用只提供可证明安全的自动修复候选；无法确认语义的错误不会被静默覆盖。
-- 全局指令直接编辑对应的用户级文件，与同一客户端的通用配置并列管理。
+- Manage shared configuration for both clients, Codex sub-agent run settings, and each client's global instructions file.
+- Controlled fields are always normalized from UI state: explicit values are written, automatic values are removed; known historical fields are cleaned up within the same resumable transaction, unknown fields are left untouched.
+- Configuration drafts can read desensitized real local configuration; fields the UI does not own can be changed in the controlled manual editor, with sensitive markers preserving the original value in the backend — every write requires preview, confirmation, backup, and validation.
+- When a configuration file is malformed, the app only offers provably safe repair candidates; errors whose semantics cannot be established are never silently overwritten.
+- Global instructions are edited directly in the corresponding user-level file, managed alongside the same client's shared configuration.
 
-### 客户端工具
+### Client tools
 
-- 只保留 Codex 工作场景与 Claude 客户端集成两项没有其他页面归属的客户端专属功能。
-- Codex 工作场景只保存并恢复已有供应商、扩展与指令的组合状态；它不创建第二套配置，也不重复管理这些资源。
-- 不展示连接状态、跨页面快捷入口或供应商、通用配置、网关、用量、会话、诊断、MCP 与 Skills 的重复内容。
+- Keeps only the two client-specific features that have no other page of their own: Codex workspaces and Claude client integration.
+- A Codex workspace only saves and restores combinations of existing providers, extensions, and instructions; it never creates a second configuration set or re-manages those resources.
+- No connection status, cross-page shortcuts, or duplicated content from providers, shared configuration, gateway, usage, sessions, diagnostics, MCP, and Skills.
 
-### 扩展
+### Extensions
 
-- 管理 Skills 与 MCP 服务，支持客户端启停、搜索、更新、导入、导出和本机发现。
-- 列表主点击直接进入编辑；部署、诊断、项目安装、连接检测、能力审计和删除集中在独立高级管理面。
-- 扩展写入默认即时执行；只有敏感连接数据、删除仍有安装的定义和 Claude 项目共享 Skill 停用需要额外确认。
+- Manage Skills and MCP services with per-client enable/disable, search, update, import/export, and local discovery.
+- The primary click on a list row goes straight to editing; deploy, diagnostics, project install, connection checks, capability audits, and delete are concentrated in a separate advanced management panel.
+- Extension writes apply immediately by default; only sensitive connection data, deleting definitions that still have installs, and deactivating a Claude project-shared skill ask for extra confirmation.
 
-### 本机协议网关
+### Local protocol gateway
 
-- Codex（Responses）在 Chat Completions 或 Anthropic Messages 上游间转换，Responses 上游直通；Claude（Anthropic Messages）在 Chat Completions、Responses 或 Gemini 上游间转换，Anthropic 上游直通。
-- 无法无损表达的字段与工具在转发前报错，不做静默丢弃：例如 stop_sequences 到 Responses 上游、strict 工具与音频到 Anthropic 上游、web_search 等服务端工具到任意跨协议上游。仅影响计量或缓存的纯元数据（如 cache_control，以及 Gemini 上游的 metadata.user_id）在校验后丢弃。
-- Codex 跨协议请求必须 store=false；previous_response_id 与短续接由本机工具历史回填为完整上下文，原生 Responses 上游仍使用上游自身存储。
-- 推理轨迹以绑定路由的加密续接载荷往返；切换档案或密钥后旧续接会被拒绝。
-- Codex 的 WebSocket 传输由网关终结，上游统一走 HTTP/SSE；Claude 故障转移只按本机 `claude-failover.json` 显式策略执行并配合熔断冷却，不做隐式切换。
+- Codex (Responses) converts between Chat Completions and Anthropic Messages upstreams and passes Responses upstreams through; Claude (Anthropic Messages) converts between Chat Completions, Responses, or Gemini upstreams and passes Anthropic upstreams through.
+- Fields and tools that cannot be expressed losslessly fail the request before forwarding instead of being dropped silently: for example `stop_sequences` to a Responses upstream, strict tools and audio to an Anthropic upstream, and server-side tools such as `web_search` to any cross-protocol upstream. Pure metadata that only affects metering or caching (such as `cache_control`, and `metadata.user_id` on the Gemini upstream) is dropped after validation.
+- Cross-protocol Codex requests must use `store=false`; `previous_response_id` and short continuations are backfilled into full context from the local tool history, while native Responses upstreams keep using the upstream's own storage.
+- Reasoning traces round-trip as encrypted continuation payloads bound to their route; after switching profiles or keys, old continuations are rejected.
+- Codex WebSocket transport terminates at the gateway and upstreams uniformly use HTTP/SSE; Claude failover follows only the explicit policy in the local `claude-failover.json` with circuit-breaker cooldowns — no implicit switching.
 
-### 状态、恢复与诊断
+### Status, recovery, and diagnostics
 
-- 提供当前连接、用量、额度、会话、备份、日志、配置状态和网关诊断。
-- 用量页提供「降智雷达」：以内置或自定义题目在本机批量调用 Codex CLI 实测当前激活配置，展示每次通过结果、reasoning tokens 与真实消耗；检测会话计入用量统计，结论是参考信号而非模型判定。
-- 每次可恢复写入都会创建记录；可以从操作历史查看结果并执行恢复。
-- 外部编辑、配置缺失、语法错误、文件替换和恢复失败都会显示明确状态，不会静默覆盖或虚构结果。
+- Current connections, usage, quota, sessions, backups, logs, configuration status, and gateway diagnostics.
+- The usage page offers a “degradation radar”: it batch-tests the currently active configuration through the local Codex CLI with built-in or custom questions, showing per-run pass results, reasoning tokens, and actual consumption; probe sessions are honestly counted in usage statistics, and the verdict is a reference signal, not a model judgment.
+- Every resumable write creates a record; results can be inspected and restored from the operation history.
+- External edits, missing configuration, syntax errors, file replacements, and failed restores all surface explicit status — nothing is silently overwritten or fabricated.
 
-## 使用方式
+## Getting started
 
-1. 新建供应商档案，或从本机已有配置导入。
-2. 填写模型与连接信息；需要时调整客户端配置、子 agent 设置或全局指令。
-3. 打开类型化预览，检查脱敏差异、候选文件和备份位置后再确认应用。
-4. 如果结果不符合预期，从操作历史选择相应备份执行恢复。
+1. Create a provider profile, or import from existing local configuration.
+2. Fill in models and connection details; adjust client configuration, sub-agent settings, or global instructions as needed.
+3. Open the typed preview, check the desensitized diff, candidate files, and backup location, then confirm the apply.
+4. If the result is not what you expected, restore from the matching backup in the operation history.
 
-## 从源码运行
+## Running from source
 
-准备好 [Tauri 的平台依赖](https://v2.tauri.app/start/prerequisites/)、Node.js 和 Rust 后，在仓库根目录执行：
+With the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/), Node.js, and Rust ready, run from the repository root:
 
 ```bash
 npm ci
 npm run dev:desktop
 ```
 
-Windows 自绘安装器由 `installer/AgentSwitchboard.Installer.csproj` 构建；执行 `npm run tauri:build:windows`（NSIS 引擎，按当前帐户安装、目录可选）或 `npm run tauri:build:windows:msi`（MSI 引擎，按本机所有用户安装到 Program Files）还需要 MSBuild 和 .NET Framework 4.8.1 targeting pack（Visual Studio 或 Visual Studio Build Tools）。前端开发可使用：
+The custom Windows installer is built by `installer/AgentSwitchboard.Installer.csproj`; building it with `npm run tauri:build:windows` (NSIS engine, per-user install with a selectable directory) or `npm run tauri:build:windows:msi` (MSI engine, all-users install to Program Files) additionally requires MSBuild and the .NET Framework 4.8.1 targeting pack (Visual Studio or Visual Studio Build Tools). For frontend development:
 
 ```bash
 npm run dev:frontend
 ```
 
-构建、类型检查和测试脚本定义在 [`package.json`](package.json)。执行这些检查前请遵循 [`AGENTS.md`](AGENTS.md) 的范围与验证规则。
+Build, type-check, and test scripts are defined in [`package.json`](package.json). Follow the scope and verification rules in [`AGENTS.md`](AGENTS.md) before running them.
 
-## 项目文档
+## Project documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 | --- | --- |
-| [DESIGN.md](DESIGN.md) | 当前视觉、交互、布局与可访问性契约 |
-| [CHANGELOG.md](CHANGELOG.md) | 发布说明 |
-| [AGENTS.md](AGENTS.md) | 贡献规则、产品边界与验证约束 |
+| [DESIGN.md](DESIGN.md) | Current visual, interaction, layout, and accessibility contracts |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes |
+| [AGENTS.md](AGENTS.md) | Contribution rules, product boundaries, and verification constraints |
 
-## 许可证
+## License
 
-本仓库中由 Agent Switchboard 编写的源码与文档以 [MIT License](LICENSE) 发布。第三方依赖和数据继续遵守各自许可证；本许可证不授予第三方商标的使用权。
+Source code and documentation written for Agent Switchboard in this repository are released under the [MIT License](LICENSE). Third-party dependencies and data remain under their respective licenses; this license grants no rights to third-party trademarks.
 
-`Codex`、`Claude Code` 及相关商标归其各自权利人所有。Agent Switchboard 与 OpenAI、Anthropic 均无隶属、认可或合作关系。
+`Codex`, `Claude Code`, and related trademarks belong to their respective owners. Agent Switchboard is not affiliated with, endorsed by, or connected to OpenAI or Anthropic.
