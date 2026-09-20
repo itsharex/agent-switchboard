@@ -92,10 +92,12 @@ try {
         throw '7z is required to inspect the NSIS installer contents.'
       }
       # Reading manifest resources does not invoke the installer's entrypoint.
+      # The payload is the embedded silent engine: an NSIS setup exe or an MSI
+      # database, extracted below by 7z content sniffing.
       $assembly = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($resolvedArtifact))
-      $resource = $assembly.GetManifestResourceStream('AgentSwitchboard.Installer.Engine.exe')
+      $resource = $assembly.GetManifestResourceStream('AgentSwitchboard.Installer.Engine.payload')
       if ($null -eq $resource) { throw 'Custom installer contains no installation engine.' }
-      $enginePath = Join-Path $scanRoot 'Engine.exe'
+      $enginePath = Join-Path $scanRoot 'Engine.payload'
       $engineFile = [IO.File]::Create($enginePath)
       try { $resource.CopyTo($engineFile) }
       finally { $engineFile.Dispose(); $resource.Dispose() }
