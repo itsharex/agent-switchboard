@@ -38,6 +38,68 @@ Install and configure the Codex or Claude Code client you want to use, and have 
 
 Missing configuration, syntax errors, and external edits surface specific explanations. Errors whose meaning cannot be established are never silently overwritten.
 
+## Interface preview
+
+These screenshots show the **actual 0.2.8 frontend**, rendered with mock data in an isolated headless browser. Providers, models, balances, usage, and probe records are fictional demonstrations, not measurements or claims about real services. Capture does not contact model services or read personal configuration or credentials. The screenshots show the Chinese interface.
+
+**Provider overview** — See the active Codex and Claude Code connections, manage profiles, and check balances.
+
+![Provider overview with active connections, models, profiles, and simulated balances](docs/screenshots/providers.png)
+
+<details>
+<summary>Switch preview: review changes before applying</summary>
+
+Inspect changes to models, endpoints, and runtime parameters, together with the target configuration file and backup location.
+
+![Switch preview showing changed keys, configuration content, and backup location](docs/screenshots/switch-preview.png)
+
+</details>
+
+<details>
+<summary>Client configuration: sub-agents, sandbox, and approvals</summary>
+
+Set sub-agent availability and concurrency, and inspect the current sandbox and approval settings.
+
+![Client configuration with sub-agent runtime and sandbox approval settings](docs/screenshots/client-configuration.png)
+
+</details>
+
+<details>
+<summary>Usage: model shares and daily trends</summary>
+
+Review input, cached, and output tokens by time range, with a model breakdown, daily trends, and session counts.
+
+![Simulated token usage with model shares, seven-day trends, and detailed counts](docs/screenshots/usage.png)
+
+</details>
+
+<details>
+<summary>Degradation radar: batch results and individual runs</summary>
+
+Review pass counts, token consumption, reasoning tokens, final answers, and duration for each run. The pictured results are simulated.
+
+![Degradation radar with five simulated probe results and token counts](docs/screenshots/radar.png)
+
+</details>
+
+<details>
+<summary>Probe history: filter by time, profile, and status</summary>
+
+Browse the configuration, question, pass count, and consumption recorded for each batch, then open its details.
+
+![Simulated probe history with time, profile, and status filters](docs/screenshots/radar-history.png)
+
+</details>
+
+<details>
+<summary>Local gateway: protocol topology and request status</summary>
+
+Inspect the loopback address, protocol translation paths, request counts, failures, and latency distribution.
+
+![Local gateway with simulated protocol translation topology and request metrics](docs/screenshots/gateway.png)
+
+</details>
+
 ## Core features
 
 | Location | What you can do |
@@ -78,18 +140,6 @@ When protocol translation or sub-agent routing is needed, the app uses a gateway
 | Claude Code (Anthropic Messages) | Anthropic Messages | Chat Completions, Responses, Gemini |
 
 Translation has explicit limits: fields and tools that cannot be represented losslessly fail, while some metadata affecting only metering or caching is dropped after validation. Cross-protocol Codex requests require `store=false`, with continuation context filled from local history; switching profiles or keys invalidates old encrypted continuations. Codex WebSocket connections terminate at the gateway and use HTTP/SSE upstream. Sub-agent routes support `/responses/compact` and V2 Responses compaction according to the target's capabilities; other auxiliary operations reject cross-provider model references. Claude failover follows only the policy explicitly configured in the local `claude-failover.json`.
-
-<details>
-<summary>View interface examples</summary>
-
-Screenshots use fictional profiles, models, addresses, and key placeholders in an isolated demo environment, without real user configuration or credentials.
-
-![Provider profiles](docs/screenshots/providers.png)
-![Client configuration](docs/screenshots/client-configuration.png)
-![Configuration diff before switching](docs/screenshots/switch-preview.png)
-![Codex sub-agent model routing](docs/screenshots/subagent-route.png)
-
-</details>
 
 ## Data storage and scope
 

@@ -38,6 +38,68 @@ Windows 自绘安装器需要 .NET Framework 4.8.1；应用需要 Microsoft Edge
 
 配置缺失、语法错误或外部修改会显示具体原因；无法确认含义的错误不会被静默覆盖。
 
+## 界面预览
+
+以下截图来自 **0.2.8 的真实前端界面**，在独立无头浏览器中使用模拟数据渲染。供应商、模型、余额、用量和检测记录均为演示内容，不代表真实服务或实测结果；截图过程不连接模型服务，也不读取个人配置或凭据。
+
+**供应商总览** — 同时查看 Codex 与 Claude Code 的当前连接，管理档案并查看余额。
+
+![供应商总览：当前连接、模型、档案列表与模拟余额](docs/screenshots/providers.png)
+
+<details>
+<summary>切换预览：确认差异后再应用</summary>
+
+查看模型、服务地址和运行参数的变更，以及目标配置文件和备份位置。
+
+![切换预览：变更键、配置内容与备份位置](docs/screenshots/switch-preview.png)
+
+</details>
+
+<details>
+<summary>客户端配置：子 agent、安全与审批</summary>
+
+配置子 agent 开关与并发数，查看沙箱和审批选项的当前值。
+
+![客户端配置：子 agent 运行设置与安全审批选项](docs/screenshots/client-configuration.png)
+
+</details>
+
+<details>
+<summary>用量统计：模型占比与每日趋势</summary>
+
+按时间范围查看输入、缓存和输出 Token，结合模型构成、每日趋势与会话数了解消耗。
+
+![用量统计：模拟的模型消耗构成、七日趋势与明细](docs/screenshots/usage.png)
+
+</details>
+
+<details>
+<summary>降智雷达：批次结果与逐次明细</summary>
+
+查看通过数、Token 消耗、推理 Token 和每次运行的最终回答与耗时。图中结果为模拟数据。
+
+![降智雷达：模拟的五次检测结果及消耗明细](docs/screenshots/radar.png)
+
+</details>
+
+<details>
+<summary>检测历史：按时间、档案和状态筛选</summary>
+
+浏览历史批次的当时配置、题目、通过数和消耗，并进入详情。
+
+![检测历史：模拟记录及时间、档案、状态筛选入口](docs/screenshots/radar-history.png)
+
+</details>
+
+<details>
+<summary>本机网关：协议拓扑与请求状态</summary>
+
+查看回环地址、协议转换路径、请求数量、失败数和耗时分布。
+
+![本机网关：模拟的协议转换拓扑与请求仪表](docs/screenshots/gateway.png)
+
+</details>
+
 ## 核心功能
 
 | 入口 | 可以做什么 |
@@ -78,18 +140,6 @@ Codex 的默认子代理模型可选择其他已保存、未绑定账号的档�
 | Claude Code（Anthropic Messages） | Anthropic Messages | Chat Completions、Responses、Gemini |
 
 协议转换有明确边界：无法无损表达的字段与工具会报错，部分仅影响计量或缓存的元数据在校验后丢弃。Codex 跨协议请求要求 `store=false`，续接上下文由本机历史补全；切换档案或密钥后旧的加密续接会被拒绝。Codex WebSocket 在网关终结，上游使用 HTTP/SSE。子代理路由支持 `/responses/compact` 与 V2 Responses compaction，按目标能力处理，其他辅助操作不接受跨供应商模型引用。Claude 故障转移只执行本机 `claude-failover.json` 中明确配置的策略。
-
-<details>
-<summary>查看界面示例</summary>
-
-截图使用隔离演示环境中的虚构档案、模型、地址与密钥占位，不包含真实用户配置或凭据。
-
-![供应商档案列表](docs/screenshots/providers.png)
-![客户端配置](docs/screenshots/client-configuration.png)
-![切换前的配置差异预览](docs/screenshots/switch-preview.png)
-![Codex 子代理模型路由](docs/screenshots/subagent-route.png)
-
-</details>
 
 ## 数据保存与功能边界
 
