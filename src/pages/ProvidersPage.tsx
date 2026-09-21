@@ -29,8 +29,8 @@ interface ProvidersPageProps {
   /** The generic editor serves Claude only; Codex owns its specialized editor. */
   editorSession: Extract<ProviderEditorSession, { app: "claude" }> | null;
   busy: boolean;
-  /** Persisted profile ids whose usage panel is collapsed. */
-  collapsedUsageIds: string[];
+  /** Persisted profile ids whose usage details are expanded. */
+  expandedUsageIds: string[];
   /** The pending switch candidate; its row unfolds the write confirmation. */
   activationCandidate: ActivationCandidate | null;
   onSelectApp: (app: AppKind) => void;
@@ -115,7 +115,7 @@ function ProviderListView({
         userConfigModel={props.userConfigModel}
         userConfigWarnings={props.userConfigWarnings}
         busy={busy}
-        collapsedUsageIds={props.collapsedUsageIds}
+        expandedUsageIds={props.expandedUsageIds}
         activationCandidate={props.activationCandidate}
         onReorder={props.onReorder}
         onToggleUsage={props.onToggleUsage}

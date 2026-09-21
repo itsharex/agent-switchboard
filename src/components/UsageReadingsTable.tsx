@@ -1,7 +1,8 @@
 import type { UsageReading } from "../api/client";
-import { formatUsageValue, usageProgress } from "../lib/usage-format";
+import { formatUsageValue, usageProgress, usageWindowName } from "../lib/usage-format";
 import { UsageRatioMeter } from "./charts/UsageRatioMeter";
 import { Table, type TableColumn } from "./Table";
+import { Time } from "./Time";
 
 /** One reading as a table row: plan identity plus its three measures. */
 interface UsageRow {
@@ -31,7 +32,7 @@ const USAGE_COLUMNS: Array<TableColumn<UsageRow>> = [
     key: "ratio",
     header: "占比",
     render: (row) => {
-      const progress = usageProgress(row.reading);
+      const progress = row.reading.isValid === false ? null : usageProgress(row.reading);
       return (
         <UsageRatioMeter
           percent={progress}
@@ -40,6 +41,13 @@ const USAGE_COLUMNS: Array<TableColumn<UsageRow>> = [
       );
     },
   },
+  { key: "reset", header: "重置时间", render: ({ reading }) => reading.resetsAt ? <Time iso={reading.resetsAt} /> : "—" },
+  { key: "status", header: "状态 / 说明", render: ({ reading }) => <>
+    {reading.isValid === false && <span className="asb-usage-invalid">{reading.invalidMessage || "已失效"}</span>}
+    {reading.isValid === true && <span>有效</span>}
+    {reading.extra && <span className="asb-usage-note">{reading.extra}</span>}
+    {reading.isValid === undefined && !reading.extra && "—"}
+  </> },
 ];
 
 interface Props {
@@ -55,7 +63,7 @@ export function UsageReadingsTable({ readings, ariaLabel }: Props) {
       columns={USAGE_COLUMNS}
       rows={readings.map((reading, index) => ({
         key: `${reading.planName ?? "默认"}-${index}`,
-        name: reading.planName?.trim() || "默认额度",
+        name: reading.planName?.trim() ? usageWindowName(reading.planName.trim()) : "默认额度",
         reading,
       }))}
       rowKey={(row) => row.key}

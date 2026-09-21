@@ -20,12 +20,12 @@ import {
 } from "../dev/web-backend";
 import type { AppKind, CommandError } from "./shared";
 import type { AppSettings } from "./settings";
-import type { CodexOfficialQuota, UsageSummary } from "./usage";
+import type { CodexOfficialQuota, UsageSnapshot } from "./usage";
 
 type InvokeArgs = Record<string, unknown>;
 
 export type TrayUsage =
-  | { kind: "script"; reading: UsageSummary }
+  | { kind: "script"; reading: UsageSnapshot }
   | { kind: "official"; reading: CodexOfficialQuota };
 
 export interface TraySnapshot {

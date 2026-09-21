@@ -38,12 +38,21 @@ export interface UsageReading {
   used: number | null;
   total: number | null;
   unit: string | null;
+  resetsAt?: string;
+  isValid?: boolean;
+  invalidMessage?: string;
+  extra?: string;
 }
 
 /** Complete result of one usage-query response. */
 export interface UsageSummary {
   readings: UsageReading[];
   at: string;
+}
+
+export interface UsageSnapshot {
+  summary: UsageSummary | null;
+  error: string | null;
 }
 
 /** Local-calendar range for the read-only client session usage report. */
@@ -204,11 +213,10 @@ export function queryProfileUsage(target: AppKind, profileId: string): Promise<v
   return invoke<void>("query_profile_usage", { target, profileId });
 }
 
-/** Reads the retained last successful summary without contacting the
- * provider. `null` until a query succeeds for the profile's current usage
- * query. */
-export function readProfileUsage(target: AppKind, profileId: string): Promise<UsageSummary | null> {
-  return invoke<UsageSummary | null>("read_profile_usage", { target, profileId });
+/** Reads the last completed query and any retained readings.
+ * Null means no attempt has completed; this never contacts upstream. */
+export function readProfileUsage(target: AppKind, profileId: string): Promise<UsageSnapshot | null> {
+  return invoke<UsageSnapshot | null>("read_profile_usage", { target, profileId });
 }
 
 /** Refreshes the official profile's account-bound cache without accepting

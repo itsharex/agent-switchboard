@@ -78,6 +78,15 @@ pub struct UsageReading {
     pub used: Option<f64>,
     pub total: Option<f64>,
     pub unit: Option<String>,
+    /// Provider-reported reset time, normalized to RFC 3339 by the extractor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resets_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_valid: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invalid_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<String>,
 }
 
 /// Complete result of one usage-query response.
@@ -87,6 +96,14 @@ pub struct UsageSummary {
     pub readings: Vec<UsageReading>,
     /// RFC 3339 UTC timestamp of the query.
     pub at: String,
+}
+
+/// Last completed query and its retained reading; shared by rows and tray.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UsageSnapshot {
+    pub summary: Option<UsageSummary>,
+    pub error: Option<String>,
 }
 
 /// The selectable time span for a read-only aggregation of local client

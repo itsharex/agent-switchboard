@@ -182,10 +182,19 @@ impl ScriptProgram {
         let readings = output.into_readings();
         if readings.is_empty()
             || readings.iter().any(|reading| {
-                reading.remaining.is_none() && reading.used.is_none() && reading.total.is_none()
+                reading.is_valid != Some(false)
+                    && reading.remaining.is_none() && reading.used.is_none() && reading.total.is_none()
             })
         {
             return Err("用量查询脚本 extract 的每组结果至少要返回一个数值".to_string());
+        }
+        for reading in &readings {
+            if reading.resets_at.as_ref().is_some_and(|at| chrono::DateTime::parse_from_rfc3339(at).is_err()) {
+                return Err("用量查询脚本 resetsAt 必须是含时区的 RFC 3339 时间".into());
+            }
+            if reading.invalid_message.is_some() && reading.is_valid != Some(false) {
+                return Err("用量查询脚本 invalidMessage 只能用于 isValid 为 false 的读数".into());
+            }
         }
         Ok(UsageSummary { readings, at })
     }
@@ -297,3 +306,6 @@ pub(super) fn run_script_query(
     let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     program.extract(&response, status, at)
 }
+
+#[cfg(test)]
+mod tests;

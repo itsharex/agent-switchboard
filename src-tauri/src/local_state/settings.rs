@@ -64,8 +64,8 @@ pub struct AppSettings {
     pub global_shortcut: String,
     pub startup_page: StartupPage,
     pub runtime_log_level: RuntimeLogLevel,
-    /// Provider ids whose usage panel stays collapsed.
-    pub collapsed_usage_ids: Vec<String>,
+    /// Provider ids whose usage details are explicitly expanded.
+    pub expanded_usage_ids: Vec<String>,
 }
 
 impl AppSettings {
@@ -106,7 +106,7 @@ impl Default for AppSettings {
             global_shortcut: String::new(),
             startup_page: StartupPage::Providers,
             runtime_log_level: RuntimeLogLevel::Info,
-            collapsed_usage_ids: Vec::new(),
+            expanded_usage_ids: Vec::new(),
         }
     }
 }
@@ -123,7 +123,7 @@ mod tests {
         assert_eq!(settings.global_shortcut, "");
         assert_eq!(settings.startup_page, StartupPage::Providers);
         let current = serde_json::to_value(&settings).unwrap();
-        for field in ["interfaceScale", "globalShortcut", "startupPage"] {
+        for field in ["interfaceScale", "globalShortcut", "startupPage", "expandedUsageIds"] {
             let mut missing = current.clone();
             missing.as_object_mut().unwrap().remove(field);
             assert!(serde_json::from_value::<AppSettings>(missing).is_err(), "{field} must be present");

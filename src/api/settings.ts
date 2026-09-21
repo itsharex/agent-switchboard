@@ -311,9 +311,8 @@ export interface AppSettings {
   startupPage: StartupPage;
   /** Threshold used for future application runtime-event recording. */
   runtimeLogLevel: RuntimeLogLevel;
-  /** Provider ids whose usage panel is collapsed; any other provider's
-   * panel is expanded. */
-  collapsedUsageIds: string[];
+  /** Provider ids whose usage details are explicitly expanded. */
+  expandedUsageIds: string[];
 }
 
 /** Public connection coordinates for a user-owned Supabase project. The

@@ -47,8 +47,8 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onSwitchAccessMode={providers.switchCodexAccessMode}
         onSwitchClient={providers.newEditorFor}
         onSaveOfficialQuotaInterval={providers.saveOfficialQuotaInterval}
-        collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
-        onToggleUsage={(profileId) => appSettingsState.toggleUsageCollapsed(profileId)}
+        expandedUsageIds={appSettingsState.appSettings?.expandedUsageIds ?? []}
+        onToggleUsage={(profileId) => appSettingsState.toggleUsageExpanded(profileId)}
         onSaveUsageQuery={providers.saveCodexProfileUsageQuery}
         loginBlocker={snapshot.loginBlocker}
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks}
@@ -58,7 +58,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
       activeProfileId={activeProfileId("claude")} statuses={snapshot.statuses} locks={snapshot.locks}
       userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []}
       editorSession={claudeEditorSession}
-      busy={busy} collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
+      busy={busy} expandedUsageIds={appSettingsState.appSettings?.expandedUsageIds ?? []}
       activationCandidate={providerSwitch.activationCandidate}
       onSelectApp={providers.selectApp} onNew={providers.newEditor}
       onImport={() => { providerSwitch.clearCandidates(); model.setProviderView({ kind: "import" }); }}
@@ -73,7 +73,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         return saved;
       }}
       onReorder={providers.dragReorderClaudeProfiles}
-      onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
+      onToggleUsage={(profile) => appSettingsState.toggleUsageExpanded(profile.id)}
       onActivate={providerSwitch.requestActivation}
       onConfirmSwitch={() => void operations.runSwitch()}
       onCancelActivation={providerSwitch.clearCandidates}

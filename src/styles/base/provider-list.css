@@ -19,7 +19,7 @@
 .asb-row-line {
   /* The action rail stays fixed while the primary data tracks share the
      remaining width, preserving their one-line scan rail. */
-  --asb-provider-grid: var(--asb-touch-target) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) var(--asb-provider-row-action-width);
+  --asb-provider-grid: var(--asb-touch-target) minmax(0, 1.1fr) minmax(0, 1.5fr) minmax(0, 0.7fr) var(--asb-provider-row-action-width);
   display: grid;
   grid-template-columns: var(--asb-provider-grid);
   align-items: center;
@@ -197,10 +197,6 @@
   font: var(--asb-text-label);
   overflow-wrap: anywhere;
   white-space: normal;
-}
-
-.asb-row-usage-summary {
-  display: block;
 }
 
 .asb-row-controls {

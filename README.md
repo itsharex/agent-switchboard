@@ -119,6 +119,12 @@ Provider switches and configuration draft writes require preview and confirmatio
 
 ### Quota cache and degradation radar
 
+Provider rows keep the model on a fixed primary line and show every returned usage window below it. Balances, reset countdowns, validity, last-update time, and refresh are visible without opening the detailed table. The tray reads the same cache, shows up to two readings that fit, and marks additional readings with `+N`. Failed refreshes retain the last reading with an explicit stale label; opening either view does not trigger a network query.
+
+Usage scripts return one reading or an array. Numeric fields are `remaining`, `used`, `total`, with `unit` (`%` for percentage readings); optional metadata is `planName`, `resetsAt` (RFC 3339 with timezone), `isValid`, `invalidMessage` (only when invalid), and `extra` (plain text). Missing numbers remain unknown. Native CC Switch import templates preserve declared reset times and percentage units; stored custom scripts are never silently rewritten.
+
+Usage details default to collapsed. The current strict preferences contract stores explicit expansions in `expandedUsageIds`; the former collapsed-id field is rejected, without compatibility reads or automatic preference rewriting. An existing preferences file in the old shape requires the application's explicit preference repair action. Disposable usage caches in an invalid shape are rebuilt by the next configured or manual query.
+
 Provider balances and Codex official quotas refresh in the background at the interval set for each profile, including while on another page or hidden in the tray. Lists and the tray share the cache; opening a page does not trigger another query. Set the interval to `0` for manual queries only.
 
 In **Usage → Degradation radar**, batch-test the active Codex configuration with built-in or custom questions:

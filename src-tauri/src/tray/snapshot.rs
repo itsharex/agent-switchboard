@@ -3,13 +3,13 @@
 use crate::commands::{config_status_report, ConfigFileStatus};
 use crate::gateway::GatewayController;
 use crate::local_state::{AppSettings, LocalState};
-use asb_core::contracts::{AppKind, CodexOfficialQuota, ProviderProfile, RouteMode, UsageSummary};
+use asb_core::contracts::{AppKind, CodexOfficialQuota, ProviderProfile, RouteMode, UsageSnapshot};
 use serde::Serialize;
 
 #[derive(Serialize)]
 #[serde(tag = "kind", content = "reading", rename_all = "camelCase")]
 enum TrayUsage {
-    Script(UsageSummary),
+    Script(UsageSnapshot),
     Official(CodexOfficialQuota),
 }
 
@@ -108,7 +108,8 @@ fn cached_usage(
     errors: &mut Vec<String>,
 ) -> Option<TrayUsage> {
     if profile.route_mode != RouteMode::Official {
-        return crate::usage_cache::get(state, profile).map(TrayUsage::Script);
+        return crate::usage_cache::get(state, profile)
+            .map_err(|error| errors.push(error)).ok().flatten().map(TrayUsage::Script);
     }
     if profile.app != AppKind::Codex {
         return None;
@@ -128,7 +129,9 @@ mod tests {
 
     #[test]
     fn usage_serialization_has_one_explicit_source() {
-        let script = UsageSummary { readings: vec![], at: "2026-09-21T00:00:00Z".into() };
+        let script = UsageSnapshot { summary: Some(asb_core::contracts::UsageSummary {
+            readings: vec![], at: "2026-09-21T00:00:00Z".into(),
+        }), error: None };
         let official = CodexOfficialQuota {
             status: asb_core::contracts::CodexOfficialQuotaStatus::Available,
             windows: vec![asb_core::contracts::CodexOfficialQuotaWindow {
@@ -141,7 +144,7 @@ mod tests {
         let script = serde_json::to_value(TrayUsage::Script(script)).unwrap();
         let official = serde_json::to_value(TrayUsage::Official(official)).unwrap();
         assert_eq!(script["kind"], "script");
-        assert!(script["reading"].get("readings").is_some());
+        assert!(script["reading"]["summary"].get("readings").is_some());
         assert!(script["reading"].get("windows").is_none());
         assert_eq!(official["kind"], "official");
         assert_eq!(official["reading"]["windows"][0]["usedPercent"], 25.0);

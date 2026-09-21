@@ -209,20 +209,20 @@ pub async fn query_profile_usage(
     result
 }
 
-/// Reads the last successful summary of one profile from the tray cache
-/// without contacting the provider. `null` means no successful query exists
-/// for the profile's current usage query.
+/// Reads the last completed query, including failure and retained readings.
+/// `null` means this query has never completed. No network access.
 #[tauri::command]
 pub async fn read_profile_usage(
     app: tauri::AppHandle,
     target: asb_core::contracts::AppKind,
     profile_id: String,
-) -> Result<Option<UsageSummary>, CommandError> {
+) -> Result<Option<asb_core::contracts::UsageSnapshot>, CommandError> {
     let state = state(&app)?;
     blocking(move || {
         let profile = crate::usage_query::scheduler::usage_profile(&state, target, &profile_id)
             .map_err(|error| operation_error("profile-not-found", error))?;
-        Ok(crate::usage_cache::get(&state, &profile))
+        crate::usage_cache::get(&state, &profile)
+            .map_err(|error| CommandError::new("usage-cache-read-failed", error))
     })
     .await
 }

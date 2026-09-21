@@ -12,6 +12,12 @@
     }
     return null;
   };
+  const resetTime = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return undefined;
+    const value = typeof raw === "number" ? (raw < 1e12 ? raw * 1000 : raw) : raw;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) && date.getTime() > 0 ? date.toISOString() : undefined;
+  };
   return {
     request(input) {
       const base = String(input.baseUrl || "").toLowerCase();
@@ -46,12 +52,14 @@
         if (type !== "TOKENS_LIMIT" && type !== "CREDIT_LIMIT") continue;
         // The upstream reports utilization as a percentage; projected onto
         // the native reading fields as parts of a hundred.
-        const percentage = number(item.percentage) || 0;
+        const percentage = number(item.percentage);
+        if (percentage === null) continue;
         const tier = {
           used: percentage,
           total: 100,
           remaining: Math.max(0, 100 - percentage),
-          unit: null,
+          unit: "%",
+          resetsAt: resetTime(item.nextResetTime),
         };
         if (item.unit === 3) tier.planName = "5 小时窗口";
         else if (item.unit === 6) tier.planName = "每周窗口";

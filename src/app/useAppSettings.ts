@@ -107,15 +107,15 @@ export function useAppSettings(deps: AppSettingsDeps) {
     active: appSettings.alwaysOnTop,
     onToggle: () => saveSettingsPatch({ alwaysOnTop: !appSettings.alwaysOnTop }),
   } : null;
-  const toggleUsageCollapsed = useCallback((profileId: string) => {
+  const toggleUsageExpanded = useCallback((profileId: string) => {
     if (!appSettings) return;
-    const collapsedUsageIds = appSettings.collapsedUsageIds.includes(profileId)
-      ? appSettings.collapsedUsageIds.filter((id) => id !== profileId)
-      : [...appSettings.collapsedUsageIds, profileId];
-    void saveSettingsPatch({ collapsedUsageIds });
+    const expandedUsageIds = appSettings.expandedUsageIds.includes(profileId)
+      ? appSettings.expandedUsageIds.filter((id) => id !== profileId)
+      : [...appSettings.expandedUsageIds, profileId];
+    void saveSettingsPatch({ expandedUsageIds });
   }, [appSettings, saveSettingsPatch]);
   return {
     appSettings, loadError: loaded.loadError, desktopError: loaded.desktopError, retryLoad: loaded.retryLoad,
-    ...recovery, saveAppSettings, saveSettingsPatch, pin, toggleUsageCollapsed,
+    ...recovery, saveAppSettings, saveSettingsPatch, pin, toggleUsageExpanded,
   };
 }

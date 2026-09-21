@@ -22,6 +22,7 @@ pub(crate) fn record_provider(
     let points = summary
         .readings
         .iter()
+        .filter(|reading| reading.is_valid != Some(false))
         .map(|reading| {
             validate_optional_number(reading.remaining)?;
             validate_optional_number(reading.used)?;

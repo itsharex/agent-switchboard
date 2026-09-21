@@ -288,6 +288,10 @@ export function UsageQueryWorkspace({
                 <p className="asb-scope-note">
                   以一次 GET 请求读取 JSON；地址可使用 {"{{baseUrl}}"} 与 {"{{apiKey}}"}。
                 </p>
+                <p className="asb-scope-note">
+                  每组可包含 planName、remaining、used、total、unit，以及 resetsAt（含时区的 RFC 3339 时间）、
+                  isValid、invalidMessage（仅失效时）、extra（说明）。缺失数值保留 null，不用零代替未知。
+                </p>
               </div>
             </>
           )}
@@ -323,7 +327,7 @@ export function UsageQueryWorkspace({
                   <code>{"extract({ body, status })"}</code>
                 </div>
                 <p className="asb-scope-note">
-                  脚本只能生成一次 GET / POST 请求并提取 JSON 数值；网络请求由应用执行。
+                  脚本生成一次 GET / POST 请求。extract 返回一组读数或读数数组；百分比请使用 % 单位。
                 </p>
               </div>
             </>

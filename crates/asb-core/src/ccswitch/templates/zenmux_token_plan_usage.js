@@ -10,6 +10,12 @@
     }
     return null;
   };
+  const resetTime = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return undefined;
+    const value = typeof raw === "number" ? (raw < 1e12 ? raw * 1000 : raw) : raw;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) && date.getTime() > 0 ? date.toISOString() : undefined;
+  };
   return {
     request(input) {
       return {
@@ -46,6 +52,7 @@
             used,
             total,
             unit: "USD",
+            resetsAt: resetTime(entry.resets_at),
           });
           return;
         }
@@ -56,7 +63,8 @@
             remaining: Math.max(0, 100 - usedPercent),
             used: usedPercent,
             total: 100,
-            unit: null,
+            unit: "%",
+            resetsAt: resetTime(entry.resets_at),
           });
         }
       };

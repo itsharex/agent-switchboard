@@ -56,6 +56,10 @@ pub(super) fn extract_declarative_summary(
             used,
             total,
             unit,
+            resets_at: None,
+            is_valid: None,
+            invalid_message: None,
+            extra: None,
         }],
         at,
     })

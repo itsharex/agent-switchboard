@@ -19,7 +19,7 @@ impl Bounds {
 
 pub(super) fn place(work: Bounds, anchor: Bounds, scale: f64, desired_height: f64) -> Bounds {
     let margin = 8.0 * scale;
-    let width = (360.0 * scale).min((work.width - margin * 2.0).max(1.0));
+    let width = (480.0 * scale).min((work.width - margin * 2.0).max(1.0));
     let height = (desired_height * scale).min((work.height - margin * 2.0).max(1.0));
     let cx = anchor.x + anchor.width / 2.0;
     let cy = anchor.y + anchor.height / 2.0;
@@ -72,7 +72,7 @@ mod tests {
             500.0,
         );
         assert_eq!(popup.y, 532.0);
-        assert_eq!(popup.x, -368.0);
+        assert_eq!(popup.x, -488.0);
     }
 
     #[test]
@@ -88,7 +88,7 @@ mod tests {
         );
         assert_eq!(
             place(work, bounds(1896.0, 500.0, 24.0, 24.0), 1.0, 500.0).x,
-            1528.0
+            1408.0
         );
     }
 
@@ -100,7 +100,7 @@ mod tests {
             2.0,
             700.0,
         );
-        assert_eq!(popup.width, 720.0);
+        assert_eq!(popup.width, 768.0);
         assert_eq!(popup.height, 568.0);
         assert!(popup.x >= 2576.0 && popup.x + popup.width <= 3344.0);
         assert_eq!(popup.y, -884.0);

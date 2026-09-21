@@ -11,6 +11,12 @@
     }
     return null;
   };
+  const resetTime = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return undefined;
+    const value = typeof raw === "number" ? (raw < 1e12 ? raw * 1000 : raw) : raw;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) && date.getTime() > 0 ? date.toISOString() : undefined;
+  };
   return {
     request(input) {
       const domain = String(input.baseUrl || "").toLowerCase().includes("api.minimax.io")
@@ -46,21 +52,22 @@
         throw new TypeError("invalid imported usage result");
       }
       const tiers = [];
-      const window = (remainPercent, name) => ({
+      const window = (remainPercent, name, reset) => ({
         planName: name,
         remaining: remainPercent,
         used: 100 - remainPercent,
         total: 100,
-        unit: null,
+        unit: "%",
+        resetsAt: resetTime(reset),
       });
       const interval = number(item.current_interval_remaining_percent);
       if (interval !== null) {
-        tiers.push(window(interval, "5 小时窗口"));
+        tiers.push(window(interval, "5 小时窗口", item.end_time));
       }
       if (item.current_weekly_status === 1) {
         const weekly = number(item.current_weekly_remaining_percent);
         if (weekly !== null) {
-          tiers.push(window(weekly, "每周窗口"));
+          tiers.push(window(weekly, "每周窗口", item.weekly_end_time));
         }
       }
       if (tiers.length === 0) {

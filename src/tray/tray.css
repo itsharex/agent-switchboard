@@ -119,12 +119,24 @@ html, body, #root { background: transparent; overflow: hidden; }
 /* Content-sized, right-anchored against the switch rail; rendered only when
    a cached reading exists. */
 .tray-provider-balance {
-  flex: none;
-  overflow: hidden;
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--asb-space-2);
+  min-width: 0;
+  max-width: 60%;
+  position: relative;
   white-space: nowrap;
-  text-align: right;
   color: var(--asb-text-muted);
+  font-variant-numeric: tabular-nums;
 }
+.tray-usage-reading { display: inline-flex; align-items: baseline; gap: var(--asb-space-1); min-width: 0; }
+.tray-usage-name { max-width: 5em; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tray-usage-value { flex: none; color: var(--asb-text); font-weight: 600; }
+.tray-usage-reading[data-tone="danger"] .tray-usage-value { color: var(--asb-danger); }
+.tray-usage-state { flex: none; color: var(--asb-warning); font: var(--asb-text-caption); }
+.tray-usage-more { flex: none; }
+
 
 /* Fixed right rail: the widest state text (切换中) reserves the width so
    every row and state keeps an identical name column. 切换 is a hover-only
@@ -138,6 +150,7 @@ html, body, #root { background: transparent; overflow: hidden; }
   visibility: hidden;
 }
 .tray-provider:not(:disabled):hover .tray-provider-switch,
+.tray-provider:focus-visible .tray-provider-switch,
 .tray-provider.is-switching .tray-provider-switch {
   visibility: visible;
 }
@@ -175,3 +188,10 @@ html, body, #root { background: transparent; overflow: hidden; }
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
 }
+
+@media (hover: none) {
+  .tray-provider:not(:disabled) .tray-provider-switch { visibility: visible; }
+}
+
+.tray-usage-measure { position: fixed; visibility: hidden; pointer-events: none; display: flex; width: max-content; inset: 0 auto auto 0; }
+.tray-usage-measure > [data-measure="status"] { display: inline-flex; gap: var(--asb-space-2); }

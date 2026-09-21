@@ -19,13 +19,14 @@ export function timeLabel(iso: string): string {
  * A coarse human countdown to an RFC 3339 timestamp, computed against the
  * current time at render. There is no timer: a refresh re-renders the label.
  */
-export function countdownLabel(iso: string): string {
-  const remaining = new Date(iso).getTime() - Date.now();
+export function countdownLabel(iso: string, now = Date.now()): string {
+  const remaining = new Date(iso).getTime() - now;
   if (remaining <= 0) return "已到重置时间";
   const totalMinutes = Math.floor(remaining / 60_000);
   const days = Math.floor(totalMinutes / (60 * 24));
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
   const minutes = totalMinutes % 60;
+  if (totalMinutes < 1) return "不到 1 分钟后";
   if (days >= 1) return `约 ${days} 天 ${hours} 小时后`;
   if (hours >= 1) return `约 ${hours} 小时 ${minutes} 分钟后`;
   return `约 ${minutes} 分钟后`;
@@ -36,8 +37,9 @@ export function countdownLabel(iso: string): string {
  * ("8 天前" / "约 45 小时后"), computed against the current time at render.
  * Like the countdown label there is no timer: a refresh re-renders it.
  */
-export function relativeLabel(iso: string): string {
-  const delta = new Date(iso).getTime() - Date.now();
+export function relativeLabel(iso: string, now = Date.now()): string {
+  const delta = new Date(iso).getTime() - now;
+  if (Math.abs(delta) < 60_000) return "刚刚";
   const suffix = delta >= 0 ? "后" : "前";
   const totalMinutes = Math.floor(Math.abs(delta) / 60_000);
   const days = Math.floor(totalMinutes / (60 * 24));

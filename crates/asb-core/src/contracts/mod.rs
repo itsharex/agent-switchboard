@@ -63,5 +63,5 @@ pub use usage::{
     CodexOfficialQuotaStatus, CodexOfficialQuotaWindow, ModelUsageDay, ModelUsageFreshness,
     ModelUsageGroup, ModelUsageIssue, ModelUsageRange, ModelUsageRead, ModelUsageReport,
     ModelUsageRequest, ModelUsageTokens, UsageHistoryMetric, UsageHistoryPoint,
-    UsageHistoryRequest, UsageHistorySeries, UsageQuery, UsageReading, UsageSummary,
+    UsageHistoryRequest, UsageHistorySeries, UsageQuery, UsageReading, UsageSummary, UsageSnapshot,
 };

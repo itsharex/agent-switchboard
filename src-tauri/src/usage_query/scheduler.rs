@@ -144,7 +144,7 @@ pub(crate) fn execute_once(state: &LocalState, profile: &ProviderProfile, force:
             Ok(true)
         }
         Err(error) => {
-            if let Err(cache_error) = usage_cache::record_failure(state, profile, attempted_at) {
+            if let Err(cache_error) = usage_cache::record_failure(state, profile, attempted_at, &error) {
                 log::warn!("用量查询失败，且无法记录尝试时间: {cache_error}");
             }
             Err(error)

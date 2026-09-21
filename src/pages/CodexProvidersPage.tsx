@@ -46,9 +46,9 @@ interface Props {
   onSwitchClient: (app: AppKind) => void;
   /** Persists the official record's subscription-quota refresh interval. */
   onSaveOfficialQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
-  /** Persisted profile ids whose usage panel is collapsed; every other
-   * configured panel stays expanded. */
-  collapsedUsageIds: string[];
+  /** Persisted profile ids whose usage details are expanded; all other
+   * configured panels stay collapsed. */
+  expandedUsageIds: string[];
   /** Persists the flipped usage-panel state for a Codex profile. */
   onToggleUsage: (profileId: string) => void;
   /** Saves one Codex profile's usage query through the strict store. */
@@ -156,7 +156,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
           const Row = row.record.usageQuery ? ConfiguredCodexProviderRow : CodexProviderRow;
           return (
             <Row key={row.record.profile.id} record={row.record} {...rowProps(row.record.profile)}
-              usageOpen={!props.collapsedUsageIds.includes(row.record.profile.id)}
+              usageOpen={props.expandedUsageIds.includes(row.record.profile.id)}
               onToggleUsage={() => props.onToggleUsage(row.record.profile.id)}
               onConfigureUsage={() => state.setUsageRecord(row.record)}
               onEdit={() => { state.clearCandidates(); props.onEdit(row.record); }}

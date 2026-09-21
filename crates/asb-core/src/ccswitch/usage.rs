@@ -67,83 +67,10 @@ fn javascript_string(value: &str) -> String {
 /// native script contract. This is an import-time compilation step: durable
 /// profiles never retain a source-specific query kind or a runtime compatibility
 /// branch.
-fn compile_usage_script(source: &str) -> String {
-    [
-        r#"(() => {
-  const cc = ("#,
-        source,
-        r#");
-  const object = (value) =>
-    value !== null && typeof value === "object" && !Array.isArray(value);
-  const substitute = (value, input) =>
-    String(value)
-      .replaceAll("{{baseUrl}}", String(input.baseUrl || "").replace(/\/+$/, ""))
-      .replaceAll("{{apiKey}}", String(input.apiKey || ""));
-  const number = (value) => {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim() !== "") {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-    return null;
-  };
-  const reading = (value) => {
-    if (!object(value) || value.isValid === false) {
-      throw new TypeError("invalid imported usage result");
-    }
-    const result = {
-      remaining: number(value.remaining),
-      used: number(value.used),
-      total: number(value.total),
-      unit: typeof value.unit === "string" ? value.unit : null,
-    };
-    if (typeof value.planName === "string" && value.planName.trim() !== "") {
-      result.planName = value.planName;
-    }
-    return result;
-  };
-  return {
-    request(input) {
-      if (!object(cc) || !object(cc.request) || typeof cc.extractor !== "function") {
-        throw new TypeError("invalid imported usage script");
-      }
-      const sourceRequest = cc.request;
-      const headers = {};
-      if (sourceRequest.headers !== undefined) {
-        if (!object(sourceRequest.headers)) {
-          throw new TypeError("invalid imported usage request");
-        }
-        for (const name in sourceRequest.headers) {
-          if (Object.prototype.hasOwnProperty.call(sourceRequest.headers, name)) {
-            headers[name] = substitute(sourceRequest.headers[name], input);
-          }
-        }
-      }
-      const request = {
-        url: substitute(sourceRequest.url, input),
-        method: String(sourceRequest.method || "GET").toUpperCase(),
-        headers,
-      };
-      if (sourceRequest.body !== undefined && sourceRequest.body !== null) {
-        const body =
-          typeof sourceRequest.body === "string"
-            ? sourceRequest.body
-            : JSON.stringify(sourceRequest.body);
-        request.body = substitute(body, input);
-      }
-      return request;
-    },
-    extract(input) {
-      if (input.status < 200 || input.status >= 300) {
-        throw new TypeError("imported usage request was not successful");
-      }
-      const extracted = cc.extractor(input.body);
-      return Array.isArray(extracted) ? extracted.map(reading) : reading(extracted);
-    },
-  };
-})()"#,
-    ]
-    .concat()
+fn compile_usage_script(source: &str, token_plan: bool) -> String {
+    include_str!("templates/script_adapter.js")
+        .replace("__ASB_TOKEN_PLAN__", if token_plan { "true" } else { "false" })
+        .replace("__ASB_CC_SOURCE__", source)
 }
 
 fn contains_value(value: &Value) -> bool {
@@ -224,7 +151,8 @@ pub(super) fn map_usage_query(
                     .push("未导入: meta.usage_script.code（包含无对应输入的占位符）".to_string());
                 return None;
             }
-            Some(compile_usage_script(source))
+            Some(compile_usage_script(source,
+                script.get("templateType").and_then(Value::as_str) == Some("token_plan")))
         }
         None => match script.get("templateType").and_then(Value::as_str) {
             // Built-in templates carry no code: the pinned reference

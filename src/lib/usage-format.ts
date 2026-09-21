@@ -1,4 +1,4 @@
-import type { CodexOfficialQuota, UsageReading, UsageSummary } from "../api/client";
+import type { CodexOfficialQuota, UsageReading } from "../api/client";
 
 const exactValueFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 const compactValueFormatter = new Intl.NumberFormat("zh-CN", {
@@ -6,18 +6,16 @@ const compactValueFormatter = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 1,
 });
 
-/** Official quotas report used percentages for independent time windows. */
-export function formatOfficialQuotaBalance(quota: CodexOfficialQuota, surface: "row" | "tray"): string | null {
-  if (quota.windows.length === 0) return null;
-  const compact = surface === "tray";
-  const balance = quota.windows.map((window) => {
-    const remaining = 100 - window.usedPercent;
-    const label = compact
-      ? window.label.replace(/ 小时$/, "h").replace(/ 天$/, "d").replace(/ 分钟$/, "m")
-      : window.label;
-    return `${label}${compact ? " " : "剩余 "}${exactValueFormatter.format(remaining)}%`;
-  }).join(" · ");
-  return `${compact ? "剩余 " : ""}${balance}${quota.stale ? " · 上次读数" : ""}`;
+/** Official windows are percentages; generic balances keep their source unit. */
+export function officialQuotaReadings(quota: CodexOfficialQuota): UsageReading[] {
+  return quota.windows.map((window) => ({
+    planName: window.label,
+    remaining: 100 - window.usedPercent,
+    used: window.usedPercent,
+    total: 100,
+    unit: "%",
+    ...(window.resetsAt ? { resetsAt: window.resetsAt } : {}),
+  }));
 }
 
 /** Formats a generic usage value with the unit carried by its source contract.
@@ -38,7 +36,7 @@ export function formatCompactUsageValue(value: number): string {
 
 function appendUnit(value: string, unit: string | null | undefined): string {
   const normalized = unit?.trim();
-  return normalized ? `${value} ${normalized}` : value;
+  return normalized === "%" ? `${value}%` : normalized ? `${value} ${normalized}` : value;
 }
 
 export function usageProgress(reading: UsageReading): number | null {
@@ -48,54 +46,37 @@ export function usageProgress(reading: UsageReading): number | null {
   return (used / reading.total) * 100;
 }
 
-function compactUsageValue(value: number, unit: string | null): string {
-  return appendUnit(compactValueFormatter.format(value), unit);
+/** Source-reported remaining wins; missing fields are never fabricated. */
+export function usagePrimary(reading: UsageReading): { label: string; value: number } | null {
+  if (reading.remaining !== null) return { label: reading.unit === "%" ? "剩余" : "余额", value: reading.remaining };
+  if (reading.used !== null) return { label: "已用", value: reading.used };
+  if (reading.total !== null) return { label: "总量", value: reading.total };
+  return null;
 }
 
-function usageReadingValues(
-  reading: UsageReading,
-  formatValue: (value: number, unit: string | null) => string,
-): string[] {
-  const values: string[] = [];
-  if (reading.remaining !== null) values.push(`余额 ${formatValue(reading.remaining, reading.unit)}`);
-  if (reading.used !== null) values.push(`已用 ${formatValue(reading.used, reading.unit)}`);
-  if (reading.total !== null) values.push(`总量 ${formatValue(reading.total, reading.unit)}`);
-  return values;
+export function usageTone(reading: UsageReading): "danger" | undefined {
+  return reading.isValid === false || (reading.remaining !== null && reading.remaining <= 0)
+    ? "danger" : undefined;
 }
 
-/** The primary row reflects non-null fields returned by the first script
- * reading. It does not derive a percentage or invent a missing value. */
-export function formatUsageHighlight(summary: UsageSummary): string {
-  const reading = summary.readings[0];
-  if (!reading) return "暂无额度读数";
+const windowNames: Record<string, string> = {
+  five_hour: "5 小时", weekly_limit: "7 天", seven_day: "7 天", monthly: "每月",
+  "5 小时窗口": "5 小时", "每周窗口": "7 天", "每月窗口": "每月",
+};
 
-  const name = reading.planName?.trim();
-  const values = usageReadingValues(reading, compactUsageValue);
-  return [...(name ? [name] : []), ...values].join(" · ") || "暂无额度读数";
+export function usageWindowName(name: string): string {
+  return windowNames[name] ?? name;
 }
 
-/** Tray balance line: only the first reading's balance is displayed, falling
- * back to the next reported value; it never derives or invents a number and
- * adds no heading copy. */
-export function formatUsageBalance(summary: UsageSummary): string {
-  const reading = summary.readings[0];
-  if (!reading) return "暂无额度读数";
-  const labeled = (label: string, value: number) =>
-    `${label} ${compactUsageValue(value, reading.unit)}`;
-  if (reading.remaining !== null) return labeled("余额", reading.remaining);
-  if (reading.used !== null) return labeled("已用", reading.used);
-  if (reading.total !== null) return labeled("总量", reading.total);
-  return "暂无额度读数";
+export function compactUsageName(name: string): string {
+  return usageWindowName(name).replace(/ 小时$/, "h").replace(/ 天$/, "d")
+    .replace(/ 分钟$/, "m").replace(/^每月$/, "月");
 }
 
-/** Full row/tray text preserves every non-null field returned by the
- * query. It never derives a display value that the script did not return. */
-export function formatUsageSummary(summary: UsageSummary): string {
-  if (summary.readings.length === 0) return "暂无额度读数";
-  return summary.readings.map((reading) => {
-    const name = reading.planName?.trim();
-    const values = usageReadingValues(reading, (value, unit) => formatUsageValue(value, unit));
-    const text = values.join(" · ") || "暂无额度读数";
-    return name ? `${name}：${text}` : text;
-  }).join("；");
+export function formatTrayReading(reading: UsageReading): string {
+  if (reading.isValid === false) return "已失效";
+  const primary = usagePrimary(reading);
+  if (!primary) return "暂无读数";
+  const value = `${primary.label} ${appendUnit(compactValueFormatter.format(primary.value), reading.unit)}`;
+  return reading.remaining !== null && reading.remaining <= 0 ? `${value} · 已耗尽` : value;
 }
