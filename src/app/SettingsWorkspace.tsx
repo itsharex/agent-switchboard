@@ -21,7 +21,7 @@ export function SettingsWorkspace({ model, active }: { model: SwitchboardModel; 
         onRefresh={() => void snapshot.refresh()} onRecoverLock={operations.setRecoverLockPending}
         logLevel={settings.appSettings?.runtimeLogLevel ?? null}
         onLogLevelChange={(runtimeLogLevel) => settings.saveSettingsPatch({ runtimeLogLevel })} />}
-      settings={settings.appSettings} loadError={settings.loadError} onRetryLoad={settings.retryLoad}
+      settings={settings.appSettings} loadError={settings.loadError} desktopError={settings.desktopError} onRetryLoad={settings.retryLoad}
       onRepair={() => void settings.repairSettings()} busy={busy} onPatch={settings.saveSettingsPatch}
       onRestart={() => void settings.restart()} updateCheck={update.updateCheck} updateChannel={update.updateChannel}
       appVersion={update.appVersion} updateChecking={update.checking} updateInstalling={update.installing}

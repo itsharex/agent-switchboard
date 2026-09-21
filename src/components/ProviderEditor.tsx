@@ -111,7 +111,8 @@ function ProviderEditorSession(props: Props) {
   return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel}
     busy={props.busy} onBack={goBack} onCancel={props.onCancel} formId={formId} canSave={editor.canSave}>
     <div hidden={parametersOpen}><ProviderForm {...props} editor={editor} formId={formId} /></div>
-    {parametersOpen && <ProviderParametersPage editor={editor} busy={props.busy}
+    {parametersOpen && <ProviderParametersPage value={editor.draft.parameters} parameters={editor.parameters}
+      onChange={(parameters) => editor.setDraft((current) => ({ ...current, parameters }))} busy={props.busy}
       baselineValues={props.profile?.parameters.settings} />}
   </ProviderEditorFrame>;
 }

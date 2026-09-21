@@ -101,6 +101,8 @@ pub struct ConfigStore {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PendingProfileSave {
     pub profile_id: String,
+    /// The active owner can differ when its subagent target is being edited.
+    pub projection_profile_id: String,
     pub app: AppKind,
     pub previous_file_hash: String,
 }
@@ -360,6 +362,7 @@ mod tests {
         let store = ConfigStore::new(directory.path().join("state"));
         let pending = PendingProfileSave {
             profile_id: "profile-id".to_string(),
+            projection_profile_id: "active-profile-id".to_string(),
             app: AppKind::Codex,
             previous_file_hash: "previous-hash".to_string(),
         };
@@ -367,6 +370,9 @@ mod tests {
         assert_eq!(store.pending_profile_save().unwrap(), None);
         store.begin_profile_save(&pending).expect("write marker");
         assert_eq!(store.pending_profile_save().unwrap(), Some(pending.clone()));
+        assert!(serde_json::from_value::<PendingProfileSave>(serde_json::json!({
+            "profileId": "target", "app": "codex", "previousFileHash": "before"
+        })).is_err());
         assert!(store.begin_profile_save(&pending).is_err());
 
         store.clear_profile_save().expect("clear marker");

@@ -6,8 +6,9 @@ mod application;
 mod settings;
 
 use application::{complete, rollback_application, restore_application_snapshot};
-pub(super) use intent::{begin, begin_with_codex_backfill_and_auth};
+pub(super) use intent::{begin, begin_with_codex_backfill_and_auth, begin_restore};
 pub(in crate::commands) use intent::begin_client_configuration;
+pub(in crate::commands) use settings::commit_client_settings;
 
 use super::codex_backfill::{AppliedCodexBackfill, PreparedCodexBackfill};
 use crate::commands::error::CommandError;
@@ -129,10 +130,31 @@ pub(in crate::commands) fn finish<T>(
             {
                 return Err(CommandError::from(failure));
             }
-            recover(state, gateway).map_err(error)?;
+            if let Some(intent) = load(state).map_err(error)? {
+                if intent.client_settings.is_none() {
+                    recover(state, gateway).map_err(error)?;
+                    return Err(CommandError::from(failure));
+                }
+                compensate_client_failure(state, gateway, &intent).map_err(error)?;
+            }
             Err(CommandError::from(failure))
         }
     }
+}
+
+fn compensate_client_failure(state: &LocalState, gateway: &GatewayController, intent: &SwitchIntent) -> Result<(), String> {
+    let pending = asb_switch::pending_config_write(&FsIo, &state.backup_dir(), intent.app)
+        .map_err(|error| error.to_string())?.ok_or("执行器事务已消失，保留应用恢复记录")?;
+    validate_pending(intent, &pending)?;
+    if intent.auth.is_some() {
+        if !auth_matches(intent, false)? && !auth_matches(intent, true)? {
+            return Err("认证文件已发生额外变化，保留事务和备份".into());
+        }
+        rollback_pending_transaction(state, gateway, intent, &pending)?;
+    } else {
+        rollback_application(state, gateway, intent, Some(&pending))?;
+    }
+    clear(state)
 }
 
 pub(super) fn recover(state: &LocalState, gateway: &GatewayController) -> Result<(), String> {
@@ -203,7 +225,8 @@ fn rollback_pending_transaction(
     intent: &SwitchIntent,
     pending: &PendingConfigWrite,
 ) -> Result<(), String> {
-    asb_switch::rollback_pending_config(&FsIo, &state.backup_dir(), pending, || {
+    asb_switch::rollback_pending_config(&FsIo, &state.backup_dir(), pending,
+    |backup| settings::capture_current_backup(state, backup), || {
         restore_application_snapshot(state, gateway, intent, Some(pending))
     })
     .map_err(|error| error.to_string())?;
@@ -236,18 +259,20 @@ fn resume_active_save(
     else {
         return Ok(false);
     };
-    if Some(&save.profile_id) != intent.profile_id.as_ref() {
+    if save.app != intent.app || Some(&save.projection_profile_id) != intent.profile_id.as_ref() {
         return Err("供应商保存与配置事务不匹配".into());
     }
     let revision = profile_revision(state, save.app, &save.profile_id)?;
     if revision == save.previous_file_hash {
         return Ok(false);
     }
-    if Some(&revision) != intent.profile_hash.as_ref() {
+    super::profile_rollback::validate_saved_revision(state, &save.profile_id, &revision)?;
+    let projection_revision = profile_revision(state, save.app, &save.projection_profile_id)?;
+    if Some(&projection_revision) != intent.profile_hash.as_ref() {
         return Err("待恢复供应商版本已发生额外变化".into());
     }
     let projected =
-        super::plan::build_plan(state, gateway, &save.profile_id).map_err(|e| e.message)?;
+        super::plan::build_plan(state, gateway, &save.projection_profile_id).map_err(|e| e.message)?;
     let preview = super::plan::preview_projection(state, &projected).map_err(|e| e.message)?;
     if preview.rendered_hash != intent.after_hash {
         return Err("保存后的目标配置已变化，不能重新解释已确认事务".into());
@@ -380,26 +405,28 @@ pub(super) fn restore_pending_backup(
     if Path::new(&intent.target) != state.target(intent.app).map_err(error)? {
         return Err(error("事务目标不属于当前客户端"));
     }
-    if state
+    if let Some(save) = state
         .configuration()
         .pending_profile_save()
         .map_err(|e| error(e.to_string()))?
-        .is_some()
     {
+        if save.app != intent.app || intent.profile_id.as_deref() != Some(save.projection_profile_id.as_str()) {
+            return Err(error("供应商保存与配置事务不匹配"));
+        }
+        let revision = profile_revision(state, save.app, &save.profile_id).map_err(error)?;
+        if revision != save.previous_file_hash {
+            super::profile_rollback::validate_saved_revision(state, &save.profile_id, &revision)
+                .map_err(error)?;
+        }
         super::profile_rollback::restore(
             state,
-            intent
-                .profile_id
-                .as_deref()
-                .ok_or_else(|| error("缺少供应商事务标识"))?,
-            intent
-                .profile_hash
-                .as_deref()
-                .ok_or_else(|| error("缺少供应商事务版本"))?,
+            &save.profile_id,
+            &revision,
         )
         .map_err(error)?;
     }
-    let outcome = asb_switch::rollback_pending_config(&FsIo, &state.backup_dir(), &pending, || {
+    let outcome = asb_switch::rollback_pending_config(&FsIo, &state.backup_dir(), &pending,
+    |backup| settings::capture_current_backup(state, backup), || {
         restore_application_snapshot(state, gateway, &intent, Some(&pending))?;
         state.configuration().clear_profile_save()
     })

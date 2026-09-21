@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import type { AppKind, ConfigFileStatus, LockStatus, ProviderProfile, RouteState } from "../api/client";
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
@@ -42,17 +43,38 @@ function accessLabel(route: RouteState | null): string {
   return route.routeMode === "official" ? "官方登录" : "自定义服务";
 }
 
+/** Swapping client tabs or views remounts these cards, which would restart
+ * the stylesheet's color flow at its canned phase and visibly jump the
+ * gradient. Re-anchoring the animation delay to the page clock puts each
+ * mount back where the flow would have been; duration and the per-app phase
+ * offset stay owned by route-cards.css and are read from computed style. */
+function useContinuousFlowPhase() {
+  const cardRef = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const styles = getComputedStyle(card);
+    // Reduced motion disables the animation, which reads as a 0s duration.
+    const durationMs = parseFloat(styles.animationDuration) * 1000;
+    if (durationMs <= 0) return;
+    const baseDelayMs = parseFloat(styles.animationDelay) * 1000;
+    card.style.animationDelay = `${baseDelayMs - (performance.now() % durationMs)}ms`;
+  }, []);
+  return cardRef;
+}
+
 /** Summarizes observed configuration facts without treating valid syntax as health. */
 function RouteCard({
   app, status, profiles, lock,
 }: RouteCardProps) {
+  const cardRef = useContinuousFlowPhase();
   const readable = status && !status.readError && status.exists && status.syntaxOk;
   const route = readable ? status.route : null;
   const notes = configurationNotes(status);
   const lockWarning = lockNote(lock);
   if (lockWarning) notes.push(lockWarning);
   return (
-    <section className={`asb-route-card${route ? " is-on" : ""}`} data-app={app} aria-label={`${clientName(app)} 当前连接`}>
+    <section ref={cardRef} className={`asb-route-card${route ? " is-on" : ""}`} data-app={app} aria-label={`${clientName(app)} 当前连接`}>
       <div className="asb-route-card-body">
         <div>
           <div className="asb-route-ident">

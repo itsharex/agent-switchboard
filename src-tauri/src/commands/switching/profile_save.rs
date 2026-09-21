@@ -227,6 +227,7 @@ fn apply_prepared_profile_save(
         .configuration()
         .begin_profile_save(&PendingProfileSave {
             profile_id: profile_id.clone(),
+            projection_profile_id: profile_id.clone(),
             app: original_app,
             previous_file_hash: stored.file_hash.clone(),
         })

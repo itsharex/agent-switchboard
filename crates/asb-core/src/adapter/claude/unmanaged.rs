@@ -5,7 +5,7 @@
 //! module claims so the deep client reset can converge the real file onto the
 //! configuration the interface models. Preserved content: directory scalars
 //! (provider and client), native cloud namespaces, and the manifest-claimed
-//! extra-configuration paths.
+//! extra-configuration paths, and preserve-only families in the official directory.
 
 use std::collections::BTreeSet;
 
@@ -24,10 +24,10 @@ pub(crate) fn remove_unmanaged(text: &str) -> Result<String, AdapterError> {
     }
     let mut root = super::document::parse(text)?;
     let native = super::native::owned_paths(&root)?;
-    let common = crate::claude_common::owned_dotted_paths(&root)
+    let common = crate::claude_common::owned_key_paths(&root)
         .map_err(|message| AdapterError { message, line: None })?;
     let mut removed = false;
-    prune_object(&mut root, String::new(), &native, &common, &mut removed);
+    prune_object(&mut root, &[], &native, &common, &mut removed);
     if !removed {
         return Ok(text.to_string());
     }
@@ -37,22 +37,21 @@ pub(crate) fn remove_unmanaged(text: &str) -> Result<String, AdapterError> {
     })
 }
 
-fn preserved(path: &str, native: &BTreeSet<String>, common: &BTreeSet<String>) -> bool {
-    is_owned(AppKind::Claude, path)
-        || crate::ownership::is_claude_extension_path(path)
-        || crate::ownership::is_claude_credential_path(path)
-        || native.contains(path)
-        || common.contains(path)
-        || common
-            .iter()
-            .any(|claimed| path.strip_prefix(claimed).is_some_and(|rest| rest.starts_with('.')))
+fn preserved(path: &[String], is_table: bool, native: &BTreeSet<String>, common: &BTreeSet<Vec<String>>) -> bool {
+    let key = crate::config_path::from_keys(path);
+    is_owned(AppKind::Claude, &key)
+        || crate::ownership::is_claude_extension_path(&key)
+        || crate::ownership::is_claude_credential_path(&key)
+        || crate::ownership::preserve_only_path(AppKind::Claude, path, is_table)
+        || native.contains(&key)
+        || common.iter().any(|claimed| path.starts_with(claimed))
 }
 
 fn prune_object(
     value: &mut Json,
-    prefix: String,
+    prefix: &[String],
     native: &BTreeSet<String>,
-    common: &BTreeSet<String>,
+    common: &BTreeSet<Vec<String>>,
     removed: &mut bool,
 ) {
     let Some(map) = value.as_object_mut() else {
@@ -60,23 +59,20 @@ fn prune_object(
     };
     let keys: Vec<String> = map.keys().cloned().collect();
     for key in keys {
-        let path = if prefix.is_empty() {
-            key.clone()
-        } else {
-            format!("{prefix}.{key}")
-        };
-        let keep = preserved(&path, native, common);
-        let mut emptied = false;
-        if map.get(&key).is_some_and(Json::is_object) {
+        let mut path = prefix.to_vec();
+        path.push(key.clone());
+        let is_table = map.get(&key).is_some_and(Json::is_object);
+        if preserved(&path, is_table, native, common) { continue; }
+        let emptied = if is_table {
             let child = map.get_mut(&key).expect("key snapshotted above");
-            prune_object(child, path, native, common, removed);
-            emptied = child.as_object().is_some_and(Map::is_empty);
-        } else if !keep {
+            prune_object(child, &path, native, common, removed);
+            child.as_object().is_some_and(Map::is_empty)
+        } else {
             map.remove(&key);
             *removed = true;
             continue;
-        }
-        if emptied && !keep {
+        };
+        if emptied {
             map.remove(&key);
             *removed = true;
         }
@@ -104,8 +100,8 @@ mod tests {
         assert!(rendered.contains("spinnerTipsEnabled"));
         assert!(rendered.contains("custom"));
         assert!(rendered.contains("ASB_CLAUDE_COMMON_KEYS"));
-        assert!(!rendered.contains("MY_TOOL_TOKEN"));
-        assert!(!rendered.contains("UNLISTED_VAR"));
+        assert!(rendered.contains("MY_TOOL_TOKEN"));
+        assert!(rendered.contains("UNLISTED_VAR"));
         assert!(!rendered.contains("statusLine"));
     }
 

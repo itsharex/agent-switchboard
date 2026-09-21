@@ -52,11 +52,7 @@ fn collect_scalars(
         return;
     };
     for (key, child) in map {
-        let path = if prefix.is_empty() {
-            key.clone()
-        } else {
-            format!("{prefix}.{key}")
-        };
+        let path = crate::config_path::append_key(prefix, key);
         if let Some(repr) = scalar_repr(child) {
             if keep(&path) {
                 out.insert(path.clone(), repr);
@@ -100,10 +96,52 @@ pub(crate) fn owned_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>
 /// all-leaf walk already covers manifest-claimed paths, so no separate
 /// claude-common pass is needed.
 pub(crate) fn full_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>, AdapterError> {
+    let mut after = std::collections::BTreeMap::new();
+    let mut before = std::collections::BTreeMap::new();
+    collect_full(&parse(current)?, "", &mut after);
+    collect_full(&parse(previous)?, "", &mut before);
     Ok(crate::adapter::diff_owned_maps(
-        &collect_with(&parse(current)?, &|_| true),
-        &collect_with(&parse(previous)?, &|_| true),
+        &after,
+        &before,
     ))
+}
+
+fn collect_full(value: &Json, path: &str, out: &mut std::collections::BTreeMap<String, String>) {
+    match value {
+        Json::Object(map) if !map.is_empty() => {
+            for (key, child) in map {
+                let child_path = crate::config_path::append_key(path, key);
+                collect_full(child, &child_path, out);
+            }
+        }
+        Json::Array(items) if !items.is_empty() => {
+            for (index, child) in items.iter().enumerate() {
+                collect_full(child, &format!("{path}[{index}]"), out);
+            }
+        }
+        _ if !path.is_empty() => {
+            out.insert(path.to_string(), value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string()));
+        }
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod full_diff_tests {
+    use super::*;
+
+    #[test]
+    fn includes_empty_null_and_nested_array_values_without_exposing_secrets() {
+        let before = r#"{"empty":{},"unset":null,"rules":[{"command":"old","api_key":"private"}]}"#;
+        let after = r#"{"rules":[{"command":"new","api_key":"changed"}]}"#;
+        let changes = full_diff(after, before).unwrap();
+        assert!(changes.iter().any(|change| change.key == "empty"));
+        assert!(changes.iter().any(|change| change.key == "unset"));
+        assert!(changes.iter().any(|change| change.key == "rules[0].command" && change.after.as_deref() == Some("new")));
+        let secret = changes.iter().find(|change| change.key == "rules[0].api_key").unwrap();
+        assert_eq!(secret.before.as_deref(), Some(crate::redact::REDACTED));
+        assert_eq!(secret.after.as_deref(), Some(crate::redact::REDACTED));
+    }
 }
 
 /// Reads the active routing facts from Claude settings text.

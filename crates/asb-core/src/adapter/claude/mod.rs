@@ -21,7 +21,7 @@ pub(crate) use document::{check_syntax, parse};
 pub use common::extract_client_settings;
 pub(crate) use preview::preview;
 pub(crate) use render::render_gateway_base_url;
-pub(crate) use render::{render, render_client_settings_into_file};
+pub(crate) use render::{render, render_client_settings_into_file, reset_client_settings};
 pub use state::route_state;
 pub(crate) use state::{full_diff, matches_provider_credentials, owned_diff};
 pub(crate) use unmanaged::remove_unmanaged;

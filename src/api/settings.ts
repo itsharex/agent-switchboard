@@ -288,6 +288,9 @@ export function saveGlobalPromptDocument(
 export type CloseBehavior = "hideToTray" | "exit";
 export type ThemePreference = "system" | "light" | "dark";
 export type MotionPreference = "system" | "reduce";
+export type InterfaceScale = 90 | 100 | 110 | 125;
+export type StartupPage = "providers" | "lastVisited";
+export type WorkspacePage = "providers" | "clientConfiguration" | "extensions" | "sessions" | "usage" | "settings";
 
 /** Application-runtime desktop preferences; separate from client config. */
 export interface AppSettings {
@@ -296,10 +299,16 @@ export interface AppSettings {
   motion: MotionPreference;
   alwaysOnTop: boolean;
   launchAtLogin: boolean;
+  /** Keeps the main window hidden at startup; the app starts in the tray. */
+  startMinimized: boolean;
   hardwareAcceleration: boolean;
   /** Font family for display and interface text; the value is quoted
    * verbatim as a CSS font-family, so it must be a plain family name. */
   interfaceFont: string;
+  interfaceScale: InterfaceScale;
+  /** Empty disables the shortcut; otherwise stores one canonical physical-key chord. */
+  globalShortcut: string;
+  startupPage: StartupPage;
   /** Threshold used for future application runtime-event recording. */
   runtimeLogLevel: RuntimeLogLevel;
   /** Provider ids whose usage panel is collapsed; any other provider's
@@ -321,8 +330,25 @@ export interface CloudBackupResult {
   profileCount: number;
 }
 
-export function getAppSettings(): Promise<AppSettings> {
-  return invoke<AppSettings>("get_app_settings");
+export interface AppSettingsSnapshot {
+  settings: AppSettings;
+  desktopError: string | null;
+}
+
+export function getAppSettings(): Promise<AppSettingsSnapshot> {
+  return invoke<AppSettingsSnapshot>("get_app_settings");
+}
+
+export function getStartupPage(): Promise<WorkspacePage> {
+  return invoke<WorkspacePage>("get_startup_page");
+}
+
+export function rememberWorkspacePage(page: WorkspacePage): Promise<void> {
+  return invoke("remember_workspace_page", { page });
+}
+
+export function setShortcutRecording(recording: boolean): Promise<void> {
+  return invoke("set_shortcut_recording", { recording });
 }
 
 export function setAppSettings(settings: AppSettings): Promise<AppSettings> {
@@ -330,8 +356,8 @@ export function setAppSettings(settings: AppSettings): Promise<AppSettings> {
 }
 
 /** Replaces an invalid settings file with defaults; a readable file refuses. */
-export function repairAppSettings(): Promise<AppSettings> {
-  return invoke<AppSettings>("repair_app_settings");
+export function repairAppSettings(): Promise<AppSettingsSnapshot> {
+  return invoke<AppSettingsSnapshot>("repair_app_settings");
 }
 
 export function getCloudBackupSettings(): Promise<CloudBackupSettings | null> {

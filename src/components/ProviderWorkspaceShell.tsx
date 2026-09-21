@@ -221,8 +221,8 @@ export function ProviderRowShell({
           </span>
         </div>
         <span className="asb-row-model">
-          {active && <span className="asb-pill-status">已应用</span>}
           <span className="asb-row-model-value">{model ?? "默认模型"}</span>
+          {active && <span className="asb-row-applied">已应用</span>}
         </span>
         <span className="asb-row-endpoint">{endpoint}</span>
         <span className="asb-row-controls">

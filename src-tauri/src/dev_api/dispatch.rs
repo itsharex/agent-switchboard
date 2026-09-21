@@ -1,6 +1,6 @@
 use super::http::{argument, as_json, optional_argument, InvokeRequest};
 use crate::commands::{self, error::CommandError};
-use crate::local_state::{AppSettings, CloudBackupSettings};
+use crate::local_state::CloudBackupSettings;
 use asb_core::contracts::{
     AppKind, ModelUsageRequest, ProviderDraft, SettingsValues, UsageHistoryRequest,
 };
@@ -9,6 +9,9 @@ use tauri::AppHandle;
 
 pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value, CommandError> {
     tauri::async_runtime::block_on(async {
+        if let Some(result) = super::settings_dispatch::dispatch(app, &request).await? {
+            return Ok(result);
+        }
         if let Some(result) = super::codex_dispatch::dispatch(app, &request).await? {
             return Ok(result);
         }
@@ -38,6 +41,11 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             )),
             "config_status" => command!(commands::status::config_status(app.clone())),
             "runtime_overview" => command!(commands::status::runtime_overview(app.clone())),
+            "open_config_file_location" => command!(commands::status::open_config_file_location(
+                app.clone(),
+                argument::<AppKind>(&request.args, "target")?,
+            )),
+            "open_app_data_dir" => command!(commands::status::open_app_data_dir(app.clone())),
             "preview_claude_gateway_stop" => command!(
                 commands::switching::claude_gateway::preview_claude_gateway_stop(app.clone())
             ),
@@ -255,11 +263,6 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                     argument(&request.args, "confirmWrite")?,
                 ))
             }
-            "get_app_settings" => command!(commands::get_app_settings(app.clone())),
-            "set_app_settings" => command!(commands::set_app_settings(
-                app.clone(),
-                argument::<AppSettings>(&request.args, "settings")?,
-            )),
             "get_cloud_backup_settings" => {
                 command!(commands::cloud_backup::get_cloud_backup_settings(
                     app.clone()
@@ -292,7 +295,6 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument(&request.args, "backupPassword")?,
                 argument(&request.args, "confirmWrite")?,
             )),
-            "list_system_fonts" => command!(commands::list_system_fonts()),
             "preview_switch" => command!(commands::switching::preview_switch(
                 app.clone(),
                 argument(&request.args, "profileId")?,
@@ -367,10 +369,12 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
             )?)),
             "query_profile_usage" => command!(commands::query_profile_usage(
                 app.clone(),
+                argument(&request.args, "target")?,
                 argument(&request.args, "profileId")?,
             )),
             "read_profile_usage" => command!(commands::read_profile_usage(
                 app.clone(),
+                argument(&request.args, "target")?,
                 argument(&request.args, "profileId")?,
             )),
             "official_login_start" => {

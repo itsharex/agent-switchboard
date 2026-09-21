@@ -114,7 +114,7 @@ export function ProviderRequestPanel({ target, name }: { target: ProviderRequest
             <div className="asb-model-control">
               <Input code aria-label="测试模型" value={model} placeholder="填写模型 ID" disabled={modelsLocked || !preparation}
                 onChange={(event) => request.setModel(event.target.value)} />
-              {request.models && <ModelPicker models={request.models} current={model} ariaLabel="选择测试模型"
+              {request.models && <ModelPicker models={request.models.map(({ id, ownedBy }) => ({ value: id, label: id, group: ownedBy }))} current={model} ariaLabel="选择测试模型"
                 disabled={modelsLocked || !preparation} onSelect={request.setModel} />}
               <div className="asb-model-actions">
                 <Button variant="secondary" disabled={modelsLocked || !preparation} onClick={() => void request.fetchModels()}>

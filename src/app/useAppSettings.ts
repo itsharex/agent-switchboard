@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getAppSettings,
-  repairAppSettings,
-  restartApplication,
-  setAppSettings,
-  type AppSettings,
-  type CommandError,
+  getAppSettings, onDesktopSettingsError, repairAppSettings, restartApplication, setAppSettings,
+  type AppSettings, type AppSettingsSnapshot, type CommandError,
 } from "../api/client";
 import { applyAppAppearance } from "../lib/app-appearance";
+import { isBrowserDevelopment } from "../lib/runtime";
 
 interface AppSettingsDeps {
   busy: boolean;
@@ -16,117 +13,109 @@ interface AppSettingsDeps {
   setBusy: (busy: boolean) => void;
 }
 
-/**
- * Application-runtime settings (window behavior, appearance) and their
- * live-appearance application. Deliberately separate from the Codex / Claude
- * client configuration contract.
- */
-export function useAppSettings({ busy, onError, clearError, setBusy }: AppSettingsDeps) {
+function useLoadedAppSettings(onError: AppSettingsDeps["onError"]) {
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
-  /** Why the initial load failed; null while loading or after success. */
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [desktopError, setDesktopError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
-
+  const acceptSnapshot = useCallback((snapshot: AppSettingsSnapshot) => {
+    setAppSettingsState(snapshot.settings);
+    setDesktopError(snapshot.desktopError);
+    setLoadError(null);
+    if (snapshot.desktopError) onError({ code: "desktop-settings-apply-failed", message: snapshot.desktopError });
+  }, [onError]);
   useEffect(() => {
-    void getAppSettings()
-      .then((settings) => {
-        setAppSettingsState(settings);
-        setLoadError(null);
-      })
-      .catch((caught) => {
-        onError(caught as CommandError);
-        setLoadError((caught as CommandError).message);
-      });
-  }, [onError, reload]);
-
+    let disposed = false;
+    void getAppSettings().then((snapshot) => {
+      if (!disposed) acceptSnapshot(snapshot);
+    }).catch((caught: CommandError) => {
+      if (!disposed) { onError(caught); setLoadError(caught.message); }
+    });
+    return () => { disposed = true; };
+  }, [onError, reload, acceptSnapshot]);
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void onDesktopSettingsError((message) => {
+      setDesktopError(message);
+      onError({ code: "desktop-settings-apply-failed", message });
+    }).then((unlisten) => {
+      if (disposed) unlisten(); else stop = unlisten;
+    }).catch((error: unknown) => {
+      if (!disposed) setDesktopError(`无法接收桌面偏好状态：${String(error)}`);
+    });
+    return () => { disposed = true; stop?.(); };
+  }, [onError]);
+  useEffect(() => {
+    applyAppAppearance(appSettings);
+    // Mirror native main-window zoom in the development browser only.
+    if (isBrowserDevelopment) document.documentElement.style.zoom = String((appSettings?.interfaceScale ?? 100) / 100);
+  }, [appSettings]);
   const retryLoad = useCallback(() => setReload((count) => count + 1), []);
+  return { appSettings, loadError, desktopError, setAppSettingsState, setDesktopError, acceptSnapshot, retryLoad };
+}
 
-  /** One-click repair: an invalid settings file is replaced with defaults
-   * and the repaired settings become the loaded state. */
+function useSettingsRecovery({ busy, onError, clearError, setBusy }: AppSettingsDeps, onRepaired: (snapshot: AppSettingsSnapshot) => void) {
   const repairSettings = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     clearError();
-    try {
-      setAppSettingsState(await repairAppSettings());
-      setLoadError(null);
-    } catch (caught) {
-      onError(caught as CommandError);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, clearError, onError, setBusy]);
-
-  useEffect(() => {
-    applyAppAppearance(appSettings);
-  }, [appSettings]);
-
-  const saveAppSettings = useCallback(
-    async (next: AppSettings) => {
-      if (busy) return;
-      setBusy(true);
-      clearError();
-      try {
-        setAppSettingsState(await setAppSettings(next));
-      } catch (caught) {
-        onError(caught as CommandError);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [busy, clearError, onError, setBusy],
-  );
-
-  const saveSettingsPatch = useCallback(
-    (patch: Partial<AppSettings>) => {
-      if (appSettings) void saveAppSettings({ ...appSettings, ...patch });
-    },
-    [appSettings, saveAppSettings],
-  );
-
+    try { onRepaired(await repairAppSettings()); }
+    catch (caught) { onError(caught as CommandError); }
+    finally { setBusy(false); }
+  }, [busy, clearError, onError, setBusy, onRepaired]);
   const restart = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     clearError();
+    try { await restartApplication(); }
+    catch (caught) { onError(caught as CommandError); }
+    finally { setBusy(false); }
+  }, [busy, clearError, onError, setBusy]);
+  return { repairSettings, restart };
+}
+
+/** Owns the complete app preference snapshot and its one native save path. */
+export function useAppSettings(deps: AppSettingsDeps) {
+  const { busy, onError, clearError, setBusy } = deps;
+  const loaded = useLoadedAppSettings(onError);
+  const { appSettings, setAppSettingsState, setDesktopError } = loaded;
+  const recovery = useSettingsRecovery(deps, loaded.acceptSnapshot);
+  const saving = useRef(false);
+  const saveAppSettings = useCallback(async (next: AppSettings) => {
+    if (busy || saving.current) return false;
+    saving.current = true;
+    setBusy(true);
+    clearError();
     try {
-      await restartApplication();
+      setAppSettingsState(await setAppSettings(next));
+      setDesktopError(null);
+      return true;
     } catch (caught) {
+      setDesktopError((caught as CommandError).message);
       onError(caught as CommandError);
+      return false;
     } finally {
+      saving.current = false;
       setBusy(false);
     }
-  }, [busy, clearError, onError, setBusy]);
-
-  /** The title-bar always-on-top toggle; null until settings load. */
-  const pin = appSettings
-    ? {
-        active: appSettings.alwaysOnTop,
-        onToggle: () => saveSettingsPatch({ alwaysOnTop: !appSettings.alwaysOnTop }),
-      }
-    : null;
-
-  /** Persists one provider's usage-panel collapse flip. No-op until the
-   * settings load, matching the other save paths. */
-  const toggleUsageCollapsed = useCallback(
-    (profileId: string) => {
-      if (!appSettings) return;
-      const collapsedUsageIds = appSettings.collapsedUsageIds.includes(profileId)
-        ? appSettings.collapsedUsageIds.filter((id) => id !== profileId)
-        : [...appSettings.collapsedUsageIds, profileId];
-      void saveSettingsPatch({ collapsedUsageIds });
-    },
-    [appSettings, saveSettingsPatch],
-  );
-
+  }, [busy, clearError, onError, setBusy, setAppSettingsState, setDesktopError]);
+  const saveSettingsPatch = useCallback((patch: Partial<AppSettings>) =>
+    appSettings ? saveAppSettings({ ...appSettings, ...patch }) : Promise.resolve(false),
+  [appSettings, saveAppSettings]);
+  const pin = appSettings ? {
+    active: appSettings.alwaysOnTop,
+    onToggle: () => saveSettingsPatch({ alwaysOnTop: !appSettings.alwaysOnTop }),
+  } : null;
+  const toggleUsageCollapsed = useCallback((profileId: string) => {
+    if (!appSettings) return;
+    const collapsedUsageIds = appSettings.collapsedUsageIds.includes(profileId)
+      ? appSettings.collapsedUsageIds.filter((id) => id !== profileId)
+      : [...appSettings.collapsedUsageIds, profileId];
+    void saveSettingsPatch({ collapsedUsageIds });
+  }, [appSettings, saveSettingsPatch]);
   return {
-    appSettings,
-    loadError,
-    retryLoad,
-    repairSettings,
-    saveAppSettings,
-    saveSettingsPatch,
-    restart,
-    pin,
-    toggleUsageCollapsed,
+    appSettings, loadError: loaded.loadError, desktopError: loaded.desktopError, retryLoad: loaded.retryLoad,
+    ...recovery, saveAppSettings, saveSettingsPatch, pin, toggleUsageCollapsed,
   };
 }

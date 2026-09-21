@@ -47,7 +47,7 @@ struct CachedUsage {
 }
 
 fn rfc3339(at: DateTime<Utc>) -> String {
-    at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    at.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
 }
 
 /// The stable digest for every persisted representation of a usage query.
@@ -73,13 +73,14 @@ pub(crate) fn get(state: &LocalState, profile: &ProviderProfile) -> Option<Usage
 }
 
 /// Replaces the snapshot for one profile, stamping the supplied attempt
-/// initiation time after a successful real query.
+/// initiation time after a successful real query. Returns false when a newer
+/// attempt already owns the cache; callers must not append obsolete history.
 pub(crate) fn record_success(
     state: &LocalState,
     profile: &ProviderProfile,
     summary: UsageSummary,
     attempted_at: DateTime<Utc>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let query = profile
         .usage_query
         .as_ref()
@@ -87,6 +88,9 @@ pub(crate) fn record_success(
     let digest = query_digest(query)?;
     let _guard = WRITE_LOCK.lock().map_err(|_| "用量缓存写入锁不可用")?;
     let mut cache = state.load_usage_cache()?.unwrap_or_default();
+    if superseded(&cache, &profile.id, attempted_at) {
+        return Ok(false);
+    }
     cache.entries.insert(
         profile.id.clone(),
         CachedUsage {
@@ -95,7 +99,8 @@ pub(crate) fn record_success(
             summary: Some(summary),
         },
     );
-    state.save_usage_cache(&cache)
+    state.save_usage_cache(&cache)?;
+    Ok(true)
 }
 
 /// Stamps the supplied attempt initiation time after a failed query, keeping
@@ -112,6 +117,9 @@ pub(crate) fn record_failure(
     let digest = query_digest(query)?;
     let _guard = WRITE_LOCK.lock().map_err(|_| "用量缓存写入锁不可用")?;
     let mut cache = state.load_usage_cache()?.unwrap_or_default();
+    if superseded(&cache, &profile.id, attempted_at) {
+        return Ok(());
+    }
     let retained = cache
         .entries
         .get(&profile.id)
@@ -126,6 +134,12 @@ pub(crate) fn record_failure(
         },
     );
     state.save_usage_cache(&cache)
+}
+
+fn superseded(cache: &UsageCache, profile_id: &str, attempted_at: DateTime<Utc>) -> bool {
+    cache.entries.get(profile_id)
+        .and_then(|entry| DateTime::parse_from_rfc3339(&entry.attempted_at).ok())
+        .is_some_and(|previous| previous > attempted_at)
 }
 
 /// Whether the scheduler should query this profile now: an absent or
@@ -259,7 +273,7 @@ mod tests {
         .expect("record success");
 
         let persisted = fs::read_to_string(root.join("usage-cache.json")).expect("cache text");
-        assert!(persisted.contains("2026-09-02T02:34:00.000Z"));
+        assert!(persisted.contains("2026-09-02T02:34:00.000000000Z"));
         assert!(!persisted.contains("test-api-key"));
         assert!(!persisted.contains("relay.example"));
         assert!(!persisted.contains("{{baseUrl}}/usage"));
@@ -332,6 +346,36 @@ mod tests {
         record_failure(&state, &profile, Utc::now()).expect("record failure");
 
         assert_eq!(get(&state, &profile), None);
+    }
+
+    #[test]
+    fn late_success_or_failure_cannot_replace_a_newer_attempt() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = LocalState::from_root(directory.path().join("state"));
+        let profile = profile();
+        let old = attempt_time();
+        let recent = old + chrono::Duration::nanoseconds(1);
+        let mut latest = summary();
+        latest.readings[0].remaining = Some(50.0);
+        assert!(record_success(&state, &profile, latest.clone(), recent).unwrap());
+        assert!(!record_success(&state, &profile, summary(), old).unwrap());
+        record_failure(&state, &profile, old).unwrap();
+        assert_eq!(get(&state, &profile), Some(latest));
+        let cache = state.load_usage_cache().unwrap().unwrap();
+        assert_eq!(cache.entries[&profile.id].attempted_at, rfc3339(recent));
+    }
+
+    #[test]
+    fn late_success_cannot_undo_a_more_recent_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = LocalState::from_root(directory.path().join("state"));
+        let profile = profile();
+        let old = attempt_time();
+        let recent = old + chrono::Duration::seconds(1);
+        record_failure(&state, &profile, recent).unwrap();
+        assert!(!record_success(&state, &profile, summary(), old).unwrap());
+        assert_eq!(get(&state, &profile), None);
+        assert!(!due(&state, &profile, 1, recent));
     }
 
     #[test]

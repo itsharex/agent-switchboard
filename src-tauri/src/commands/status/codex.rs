@@ -71,6 +71,7 @@ pub(super) fn matching_profile(
                 .with_codex_model_catalog(crate::gateway::codex_catalog_file_name(
                     &file.profile.id,
                     &revision,
+                    &file.profile.catalog,
                 )),
         )?;
         if super::report::projection_matches(text, &plan) {
@@ -108,7 +109,7 @@ pub(super) fn matching_official(
 pub(super) fn account_matches(state: &LocalState, id: &str) -> Result<bool, CommandError> {
     crate::codex_auth::projection::matches_binding(state, id).map_err(error)
 }
-pub(super) fn active_direct(
+pub(crate) fn active_direct(
     state: &LocalState,
     text: &str,
 ) -> Result<Option<String>, CommandError> {

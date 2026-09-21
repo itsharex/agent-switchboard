@@ -3,8 +3,15 @@
 use crate::commands::{config_status_report, ConfigFileStatus};
 use crate::gateway::GatewayController;
 use crate::local_state::{AppSettings, LocalState};
-use asb_core::contracts::{AppKind, ProviderProfile, UsageSummary};
+use asb_core::contracts::{AppKind, CodexOfficialQuota, ProviderProfile, RouteMode, UsageSummary};
 use serde::Serialize;
+
+#[derive(Serialize)]
+#[serde(tag = "kind", content = "reading", rename_all = "camelCase")]
+enum TrayUsage {
+    Script(UsageSummary),
+    Official(CodexOfficialQuota),
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,7 +20,7 @@ pub struct TrayProvider {
     app: AppKind,
     name: String,
     active: bool,
-    usage: Option<UsageSummary>,
+    usage: Option<TrayUsage>,
 }
 
 #[derive(Serialize)]
@@ -28,7 +35,7 @@ pub struct TraySnapshot {
 fn project(
     profile: &ProviderProfile,
     statuses: &[ConfigFileStatus],
-    usage: Option<UsageSummary>,
+    usage: Option<TrayUsage>,
 ) -> TrayProvider {
     let status = statuses.iter().find(|status| status.app == profile.app);
     let active =
@@ -56,21 +63,16 @@ pub fn read(state: &LocalState, gateway: &GatewayController, switching: bool) ->
             .iter()
             .filter_map(|status| status.read_error.clone()),
     );
-    let records = state
-        .configuration()
-        .list_providers()
-        .map_err(|error| errors.push(error.to_string()))
-        .unwrap_or_default();
-    let mut providers = records
-        .iter()
-        .map(|record| {
-            project(
-                &record.profile,
-                &statuses,
-                crate::usage_cache::get(state, &record.profile),
-            )
-        })
-        .collect::<Vec<_>>();
+    let mut providers = Vec::new();
+    for app in [AppKind::Claude, AppKind::Codex] {
+        let files = crate::config_store::providers::load_provider_files(&state.configuration(), app)
+            .map_err(|error| errors.push(format!("{app:?}: {error}")))
+            .unwrap_or_default();
+        for file in files {
+            let profile = file.into_profile(app);
+            providers.push(project(&profile, &statuses, cached_usage(state, &profile, &mut errors)));
+        }
+    }
     let codex_records = state
         .configuration()
         .list_codex_providers()
@@ -86,7 +88,7 @@ pub fn read(state: &LocalState, gateway: &GatewayController, switching: bool) ->
                 providers.push(project(
                     &profile,
                     &statuses,
-                    crate::usage_cache::get(state, &profile),
+                    cached_usage(state, &profile, &mut errors),
                 ));
             }
             Err(error) => errors.push(error.to_string()),
@@ -100,10 +102,53 @@ pub fn read(state: &LocalState, gateway: &GatewayController, switching: bool) ->
     }
 }
 
+fn cached_usage(
+    state: &LocalState,
+    profile: &ProviderProfile,
+    errors: &mut Vec<String>,
+) -> Option<TrayUsage> {
+    if profile.route_mode != RouteMode::Official {
+        return crate::usage_cache::get(state, profile).map(TrayUsage::Script);
+    }
+    if profile.app != AppKind::Codex {
+        return None;
+    }
+    LocalState::codex_auth_path()
+        .and_then(|path| crate::codex_auth::cached_profile_quota(state.root(), &profile.id, &path))
+        .map_err(|error| errors.push(error))
+        .ok()
+        .flatten()
+        .map(TrayUsage::Official)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use asb_core::contracts::{ProviderDraft, RouteMode, UpstreamProtocol};
+
+    #[test]
+    fn usage_serialization_has_one_explicit_source() {
+        let script = UsageSummary { readings: vec![], at: "2026-09-21T00:00:00Z".into() };
+        let official = CodexOfficialQuota {
+            status: asb_core::contracts::CodexOfficialQuotaStatus::Available,
+            windows: vec![asb_core::contracts::CodexOfficialQuotaWindow {
+                label: "5 小时".into(), used_percent: 25.0, resets_at: None,
+            }],
+            at: Some("2026-09-21T00:00:00Z".into()),
+            stale: false,
+            last_reset: None,
+        };
+        let script = serde_json::to_value(TrayUsage::Script(script)).unwrap();
+        let official = serde_json::to_value(TrayUsage::Official(official)).unwrap();
+        assert_eq!(script["kind"], "script");
+        assert!(script["reading"].get("readings").is_some());
+        assert!(script["reading"].get("windows").is_none());
+        assert_eq!(official["kind"], "official");
+        assert_eq!(official["reading"]["windows"][0]["usedPercent"], 25.0);
+        assert!(official["reading"].get("readings").is_none());
+        assert_eq!(script.as_object().unwrap().len(), 2);
+        assert_eq!(official.as_object().unwrap().len(), 2);
+    }
 
     #[test]
     fn projection_contains_only_display_fields() {
@@ -133,6 +178,7 @@ mod tests {
         );
         let value = serde_json::to_value(project(&profile, &[], None)).unwrap();
         assert_eq!(value.as_object().unwrap().len(), 5);
+        assert!(value["usage"].is_null());
         assert_eq!(value["active"], false);
         assert!(!value.to_string().contains("private-test-key"));
         assert!(!value.to_string().contains("example.invalid"));

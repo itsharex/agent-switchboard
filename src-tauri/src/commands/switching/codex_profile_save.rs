@@ -1,7 +1,8 @@
 //! Active-save transaction for the current Codex-only provider contract.
+use super::plan::preview_projection;
 #[cfg(test)]
-use super::plan::execute_projection;
-use super::plan::{build_codex_plan, preview_projection};
+use super::plan::{build_codex_plan, execute_projection};
+mod dependencies;
 use crate::commands::error::{
     operation_error, require_write_confirmation, store_error, CommandError,
 };
@@ -35,6 +36,7 @@ pub(super) struct PreparedCodexProfileSave {
     pub(super) draft: CodexProviderDraft,
     pub(super) kind: ProfileSaveKind,
     pub(super) preview: Option<asb_switch::FilePreview>,
+    pub(super) projection_profile: Option<CodexProviderFile>,
 }
 
 impl CodexProfileSavePreparations {
@@ -86,17 +88,27 @@ pub(super) fn prepare_data(
     profile_id: &str,
     draft: &CodexProviderDraft,
     expected_file_hash: &str,
-) -> Result<(ProfileSaveKind, Option<asb_switch::FilePreview>), CommandError> {
-    let (_, candidate, kind) = classify(state, gateway, profile_id, draft, expected_file_hash)?;
-    let preview = if kind == ProfileSaveKind::SaveAndApply {
-        Some(preview_projection(
+) -> Result<
+    (ProfileSaveKind, Option<asb_switch::FilePreview>, Option<CodexProviderFile>),
+    CommandError,
+> {
+    let (_, candidate, kind, owner) = classify(state, gateway, profile_id, draft, expected_file_hash)?;
+    let preview = if let Some(owner) = &owner {
+        let mut preview = preview_projection(
             state,
-            &build_codex_plan(state, gateway, candidate)?,
-        )?)
+            &dependencies::projection(state, gateway, owner, &candidate)?,
+        )?;
+        if owner.profile.id != candidate.profile.id {
+            preview.preview.warnings.push(format!(
+                "当前主供应商「{}」引用了「{}」的子代理模型；本次保存同步更新其模型目录，主供应商保持不变。",
+                owner.profile.name, candidate.profile.name
+            ));
+        }
+        Some(preview)
     } else {
         None
     };
-    Ok((kind, preview))
+    Ok((kind, preview, owner))
 }
 
 pub(super) fn commit(
@@ -105,14 +117,14 @@ pub(super) fn commit(
     prepared: &PreparedCodexProfileSave,
     confirm_write: bool,
 ) -> Result<CodexProviderRecord, CommandError> {
-    let (stored, candidate, actual_kind) = classify(
+    let (stored, candidate, actual_kind, owner) = classify(
         state,
         gateway,
         &prepared.profile_id,
         &prepared.draft,
         &prepared.expected_file_hash,
     )?;
-    if actual_kind != prepared.kind {
+    if actual_kind != prepared.kind || owner != prepared.projection_profile {
         return Err(stale());
     }
     match actual_kind {
@@ -128,7 +140,10 @@ pub(super) fn commit(
         ProfileSaveKind::SaveAndApply => {
             require_write_confirmation(confirm_write, "保存并应用 Codex 供应商")?;
             let preview = prepared.preview.as_ref().ok_or_else(stale)?;
-            apply(state, gateway, stored, candidate, &prepared.draft, preview)
+            apply(
+                state, gateway, stored, candidate, owner.as_ref().ok_or_else(stale)?,
+                &prepared.draft, preview,
+            )
         }
         ProfileSaveKind::Create => Err(CommandError::new(
             "codex-profile-save-invalid",
@@ -143,7 +158,10 @@ fn classify(
     profile_id: &str,
     draft: &CodexProviderDraft,
     expected_file_hash: &str,
-) -> Result<(CodexProviderRecord, CodexProviderFile, ProfileSaveKind), CommandError> {
+) -> Result<
+    (CodexProviderRecord, CodexProviderFile, ProfileSaveKind, Option<CodexProviderFile>),
+    CommandError,
+> {
     let stored = state
         .configuration()
         .list_codex_providers()
@@ -167,11 +185,9 @@ fn classify(
     candidate
         .validate()
         .map_err(|error| CommandError::new("codex-profile-save-invalid", error))?;
-    if let Some(route) = &candidate.profile.subagent_route {
-        validate_subagent_route_reference(state, route)?;
-    }
+    dependencies::validate_references(state, &candidate)?;
     if candidate == current {
-        return Ok((stored, candidate, ProfileSaveKind::NoChange));
+        return Ok((stored, candidate, ProfileSaveKind::NoChange, None));
     }
     // The catalog and protocol capabilities are not all represented in the
     // client TOML, but they do define the active gateway snapshot. Any change
@@ -179,19 +195,17 @@ fn classify(
     // active Codex route; local notes and usage metadata do not.
     let live_change =
         current.profile != candidate.profile || current.parameters != candidate.parameters;
-    let active = live_change
-        && crate::commands::config_status_report(state, gateway)?
-            .into_iter()
-            .find(|status| status.app == asb_core::AppKind::Codex)
-            .and_then(|status| status.active_profile_id)
-            .as_deref()
-            == Some(profile_id);
-    let kind = if active {
+    let owner = if live_change {
+        dependencies::affected_active_profile(state, gateway, &candidate)?
+    } else {
+        None
+    };
+    let kind = if owner.is_some() {
         ProfileSaveKind::SaveAndApply
     } else {
         ProfileSaveKind::SaveOnly
     };
-    Ok((stored, candidate, kind))
+    Ok((stored, candidate, kind, owner))
 }
 
 /// A subagent route names another provider profile by UUID. The reference
@@ -214,30 +228,7 @@ pub(crate) fn validate_subagent_route_reference(
                 ),
             )
         })?;
-    if !target
-        .profile
-        .catalog
-        .iter()
-        .any(|entry| entry.id == route.model)
-    {
-        return Err(CommandError::new(
-            "codex-subagent-route-unresolved",
-            format!(
-                "子代理路由的模型不在目标供应商目录中：{}（模型 {}）",
-                target.profile.name, route.model
-            ),
-        ));
-    }
-    if target.profile.connection.auth_binding.is_some() {
-        return Err(CommandError::new(
-            "codex-subagent-route-invalid",
-            format!(
-                "子代理路由的目标供应商 {} 绑定了账号凭据，不能被其他路由转发",
-                target.profile.name
-            ),
-        ));
-    }
-    Ok(())
+    dependencies::validate_target(route, &target)
 }
 
 fn apply(
@@ -245,6 +236,7 @@ fn apply(
     gateway: &crate::gateway::GatewayController,
     stored: CodexProviderRecord,
     candidate: CodexProviderFile,
+    owner: &CodexProviderFile,
     draft: &CodexProviderDraft,
     preview: &asb_switch::FilePreview,
 ) -> Result<CodexProviderRecord, CommandError> {
@@ -252,7 +244,7 @@ fn apply(
         .configuration()
         .find_codex_provider_file(&stored.profile.id)
         .map_err(store_error)?;
-    let projection = build_codex_plan(state, gateway, candidate.clone())?;
+    let projection = dependencies::projection(state, gateway, owner, &candidate)?;
     super::profile_rollback::save_codex(
         state,
         &current,
@@ -265,6 +257,7 @@ fn apply(
         .configuration()
         .begin_profile_save(&PendingProfileSave {
             profile_id: stored.profile.id.clone(),
+            projection_profile_id: owner.profile.id.clone(),
             app: asb_core::AppKind::Codex,
             previous_file_hash: stored.file_hash.clone(),
         })
@@ -366,149 +359,6 @@ fn recovery_required(message: impl Into<String>) -> CommandError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use asb_core::contracts::{
-        CodexCapabilities, CodexCatalogEntry, CodexEndpoint, CodexModelRoute, CodexUpstream,
-    };
-
-    fn draft() -> CodexProviderDraft {
-        CodexProviderDraft {
-            name: "relay".to_string(),
-            endpoint: CodexEndpoint("https://relay.example/v1".to_string()),
-            api_key: "fixture-key".to_string(),
-            authentication: None,
-            connection: Default::default(),
-            upstream: CodexUpstream::Responses,
-            request_mode: asb_core::contracts::ResponsesRequestMode::Standard,
-            default_model: "codex".to_string(),
-            catalog: vec![CodexCatalogEntry {
-                id: "codex".to_string(),
-                context_window: 128_000,
-                max_output_tokens: 16_384,
-                function_tools: true,
-                custom_tools: true,
-                tool_search: true,
-                reasoning: true,
-                default_reasoning_level: asb_core::contracts::CodexReasoningLevel::High,
-                supported_reasoning_levels: vec![
-                    asb_core::contracts::CodexReasoningLevel::None,
-                    asb_core::contracts::CodexReasoningLevel::High,
-                ],
-                images: true,
-                compact: true,
-                display_name: None,
-                description: None,
-                base_instructions: None,
-                supports_parallel_tool_calls: None,
-            }],
-            model_routes: vec![CodexModelRoute {
-                client_model: "codex".to_string(),
-                upstream_model: "vendor-codex".to_string(),
-            }],
-            subagent_route: None,
-            capabilities: CodexCapabilities {
-                responses: true,
-                compact: true,
-                models: true,
-                chat_completions: true,
-                alpha_search: false,
-                image_generation: false,
-                image_edit: false,
-                function_tools: true,
-                custom_tools: true,
-                tool_search: true,
-                reasoning: true,
-                chat_reasoning: asb_core::contracts::CodexChatReasoning::Unsupported,
-            },
-            parameters: asb_core::ownership::default_provider_parameters(asb_core::AppKind::Codex),
-            notes: None,
-            website_url: None,
-            usage_query: None,
-        }
-    }
-
-    #[test]
-    fn active_catalog_change_requires_a_projection_preview() {
-        let _paths = crate::test_client_paths::redirect_client_paths();
-        let directory = tempfile::tempdir().unwrap();
-        let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
-        let gateway = crate::gateway::GatewayController::start(&state);
-        let record = state
-            .configuration()
-            .create_codex_provider(draft())
-            .unwrap();
-        let target = state.target(asb_core::AppKind::Codex).unwrap();
-        std::fs::write(&target, "model_provider = 'openai'\n").unwrap();
-        std::fs::write(
-            target.with_file_name("auth.json"),
-            r#"{"auth_mode":"chatgpt","tokens":{"access_token":"at","refresh_token":"rt","id_token":"id"}}"#,
-        )
-        .unwrap();
-        let projection = super::build_codex_plan(
-            &state,
-            &gateway,
-            state
-                .configuration()
-                .find_codex_provider_file(&record.profile.id)
-                .unwrap(),
-        )
-        .unwrap();
-        let preview = super::preview_projection(&state, &projection).unwrap();
-        super::execute_projection(
-            &state,
-            &gateway,
-            &projection,
-            &preview.content_hash,
-            &preview.rendered_hash,
-        )
-        .unwrap();
-
-        let mut changed = draft();
-        changed.catalog[0].context_window = 256_000;
-        let (kind, preview) = prepare_data(
-            &state,
-            &gateway,
-            &record.profile.id,
-            &changed,
-            &record.file_hash,
-        )
-        .unwrap();
-        assert_eq!(kind, ProfileSaveKind::SaveAndApply);
-        assert!(preview.is_some());
-        gateway.shutdown();
-    }
-
-    #[test]
-    fn a_subagent_route_reference_must_resolve_at_save_time() {
-        let _paths = crate::test_client_paths::redirect_client_paths();
-        let directory = tempfile::tempdir().unwrap();
-        let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
-        let record = state
-            .configuration()
-            .create_codex_provider(draft())
-            .unwrap();
-
-        let resolved = asb_core::contracts::CodexSubagentRoute {
-            profile_id: record.profile.id.clone(),
-            model: "codex".to_string(),
-        };
-        assert!(super::validate_subagent_route_reference(&state, &resolved).is_ok());
-
-        let missing = asb_core::contracts::CodexSubagentRoute {
-            profile_id: "01234567-89ab-cdef-0123-456789abcdef".to_string(),
-            model: "codex".to_string(),
-        };
-        let error = super::validate_subagent_route_reference(&state, &missing).unwrap_err();
-        assert_eq!(error.code, "codex-subagent-route-unresolved");
-        assert!(error.message.contains("不存在"), "{error:?}");
-
-        let unknown_model = asb_core::contracts::CodexSubagentRoute {
-            profile_id: record.profile.id.clone(),
-            model: "no-such-model".to_string(),
-        };
-        let error = super::validate_subagent_route_reference(&state, &unknown_model).unwrap_err();
-        assert_eq!(error.code, "codex-subagent-route-unresolved");
-        assert!(error.message.contains("目录"), "{error:?}");
-    }
-}
+mod tests;
+#[cfg(test)]
+mod dependency_tests;

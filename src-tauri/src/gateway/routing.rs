@@ -107,6 +107,9 @@ impl GatewayController {
                 );
             }
         }
+        if app == AppKind::Codex {
+            self.inner.codex_activation_generation.fetch_add(1, Ordering::SeqCst);
+        }
         Ok(())
     }
 
@@ -172,7 +175,7 @@ impl GatewayController {
                             .then_some(file)
                             .ok_or_else(|| "Codex 路由已改变".to_string())
                     })
-                    .and_then(|file| self.route_for_codex_file(&file)),
+                    .and_then(|file| self.route_for_codex_file(&file, None)),
                 AppKind::Claude => local
                     .configuration()
                     .find_provider(&saved.profile_id)
@@ -296,6 +299,7 @@ impl GatewayController {
     pub(super) fn route_for_codex_file(
         &self,
         file: &asb_core::contracts::CodexProviderFile,
+        replacement: Option<&asb_core::contracts::CodexProviderFile>,
     ) -> Result<ActiveRoute, String> {
         let identity = self
             .inner
@@ -304,7 +308,7 @@ impl GatewayController {
             .map_err(|_| "本机协议网关状态锁不可用".to_string())?
             .identity
             .clone();
-        codex_route_from_file(&self.inner.state_root, file, &identity)
+        super::codex_profile::codex_route_from_file(&self.inner.state_root, file, &identity, replacement)
     }
     pub(super) fn route_matches_config(
         &self,
@@ -343,7 +347,8 @@ impl GatewayController {
         let document = configuration
             .parse::<toml_edit::DocumentMut>()
             .map_err(|_| "无法验证 Codex 路由修订".to_string())?;
-        let expected = codex_catalog_file_name(&route.profile_id, &route.fingerprint);
+        let catalog = &route.codex.as_ref().ok_or("Codex 路由缺少模型目录")?.catalog;
+        let expected = codex_catalog_file_name(&route.profile_id, &route.fingerprint, catalog);
         Ok(document
             .get(asb_core::ownership::CODEX_MODEL_CATALOG_KEY)
             .and_then(|value| value.as_str())
@@ -423,91 +428,4 @@ pub(super) fn xai_pinned_upstream(
 ) -> Option<String> {
     (profile.connection.provider_type.as_deref() == Some("xai_oauth"))
         .then(|| asb_core::contracts::XAI_API_BASE_URL.to_string())
-}
-
-/// Builds one Codex [`ActiveRoute`] from a validated provider file. A
-/// subagent-routed profile also merges the referenced model into its
-/// admission catalog so the wire id resolves locally.
-pub(super) fn codex_route_from_file(
-    state_root: &std::path::Path,
-    file: &asb_core::contracts::CodexProviderFile,
-    identity: &str,
-) -> Result<ActiveRoute, String> {
-    let fingerprint = codex_route_fingerprint(file)?;
-    let mut snapshot = asb_core::contracts::CodexRouteSnapshot::from_profile(
-        &file.profile,
-        fingerprint.clone(),
-    )?;
-    if let Some(route) = &file.profile.subagent_route {
-        snapshot.catalog.push(subagent_catalog_entry(state_root, route)?);
-    }
-    let projection = file.client_projection().into_profile(AppKind::Codex);
-    Ok(ActiveRoute {
-        app: AppKind::Codex,
-        profile_id: file.profile.id.clone(),
-        client_token: route_token(identity, AppKind::Codex, &file.profile.id, &fingerprint),
-        continuation_key: codex_continuation_key(identity, &file.profile.id, &fingerprint),
-        fingerprint,
-        upstream_base_url: xai_pinned_upstream(&file.profile)
-            .unwrap_or_else(|| file.profile.endpoint.0.clone()),
-        connection: file.profile.connection.clone(),
-        upstream_protocol: file.profile.upstream.protocol(),
-        responses_options: projection.responses_options,
-        max_output_tokens: file
-            .profile
-            .catalog
-            .iter()
-            .find(|entry| entry.id == file.profile.default_model)
-            .map(|entry| entry.max_output_tokens),
-        api_key: file.profile.api_key.clone(),
-        authentication: file
-            .profile
-            .upstream
-            .protocol()
-            .resolve_authentication(file.profile.authentication),
-        claude_fragment: Default::default(),
-        claude_primary_model: None,
-        claude_model_options: None,
-        claude_account: None,
-        codex_account: None,
-        codex: Some(snapshot),
-    })
-}
-
-/// Resolves the wire-id catalog entry a subagent route contributes: the
-/// target profile's model, renamed to the route's wire id and labelled with
-/// the target's name. The store is read live, so a deleted or edited target
-/// fails loudly here instead of serving a stale entry.
-pub(super) fn subagent_catalog_entry(
-    state_root: &std::path::Path,
-    route: &asb_core::contracts::CodexSubagentRoute,
-) -> Result<asb_core::contracts::CodexCatalogEntry, String> {
-    let store = crate::config_store::ConfigStore::new(state_root.to_path_buf());
-    let file = store
-        .find_codex_provider_file(&route.profile_id)
-        .map_err(|_| {
-            format!(
-                "子代理路由引用的 Codex 供应商不存在：{}（模型 {}）",
-                route.profile_id, route.model
-            )
-        })?;
-    let entry = file
-        .profile
-        .catalog
-        .iter()
-        .find(|entry| entry.id == route.model)
-        .ok_or_else(|| {
-            format!(
-                "子代理路由的模型不在目标供应商目录中：{}（模型 {}）",
-                file.profile.name, route.model
-            )
-        })?;
-    let mut merged = entry.clone();
-    merged.id = route.wire_id();
-    merged.display_name = Some(format!(
-        "{} · {}",
-        file.profile.name,
-        entry.display_name.as_deref().unwrap_or(entry.id.as_str())
-    ));
-    Ok(merged)
 }

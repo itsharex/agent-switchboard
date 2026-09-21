@@ -196,6 +196,17 @@ export function getConfigStatus(): Promise<ConfigFileStatus[]> {
   return invoke<ConfigFileStatus[]>("config_status");
 }
 
+/** Reveals the client's real configuration file in its folder. The backend
+ * resolves the path; the UI never sends one. */
+export function openConfigFileLocation(app: AppKind): Promise<void> {
+  return invoke<void>("open_config_file_location", { target: app });
+}
+
+/** Opens the application data directory reported by the runtime overview. */
+export function openAppDataDir(): Promise<void> {
+  return invoke<void>("open_app_data_dir");
+}
+
 export function getRuntimeOverview(): Promise<RuntimeOverview> {
   return invoke<RuntimeOverview>("runtime_overview");
 }

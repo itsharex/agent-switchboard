@@ -104,9 +104,8 @@ pub(crate) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Ups
         respond_error(request, Some(protocol), 403, "本机协议网关凭据无效");
         return;
     };
-    // Official-takeover Codex routes resolve their bound managed account per
-    // request; every other route passes through unchanged.
-    let route = if app == AppKind::Codex {
+    // Body-bearing Codex requests resolve their target before credentials.
+    let route = if codex_operation == Some(CodexOperation::Models) {
         match codex_account::resolve(&route, &inner, Some(request.headers())) {
             Ok(route) => route,
             Err((status, message)) => {
@@ -118,21 +117,15 @@ pub(crate) fn handle(request: Request, inner: Arc<GatewayInner>, client: Arc<Ups
     } else {
         route
     };
-    span.bind_route(
-        &route.profile_id,
-        &route.fingerprint,
-        route.upstream_protocol,
-    );
-    if let Some(operation) = codex_operation {
+    span.bind_route(&route.profile_id, &route.fingerprint, route.upstream_protocol);
+    if let Some(operation @ CodexOperation::Models) = codex_operation {
         if let Err(error) = codex::ensure_operation(&route, operation) {
             span.finish(Some(501), 0);
             respond_error(request, Some(protocol), 501, &error);
             return;
         }
-        if operation == CodexOperation::Models {
-            codex::respond_models(request, span, &route, &inner);
-            return;
-        }
+        codex::respond_models(request, span, &route, &inner);
+        return;
     }
     forward_request(
         request,

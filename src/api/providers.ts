@@ -79,8 +79,8 @@ export interface ProviderProfile {
   display?: ProviderDisplay | null;
   /** Application-side usage-balance query; never written into client config. */
   usageQuery?: UsageQuery | null;
-  /** Whole minutes between official Codex quota panel re-queries; absent or
-   * null keeps the panel manual-only. Never written into client config. */
+  /** Whole minutes between backend official Codex quota queries; absent or
+   * null disables automatic queries. Never written into client config. */
   officialQuotaRefreshIntervalMinutes?: number | null;
 }
 

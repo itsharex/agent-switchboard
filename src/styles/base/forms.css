@@ -522,7 +522,6 @@
   z-index: 1;
   margin: 0;
   padding: 0 0 var(--asb-space-3);
-  border-bottom: 1px solid var(--asb-hairline);
 }
 
 .asb-editor-frame .asb-panel-title {

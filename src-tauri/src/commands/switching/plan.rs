@@ -31,7 +31,7 @@ pub(super) fn build_codex_plan(
     let client_settings = crate::codex_common::resolve(state, &file.profile.id)
         .map_err(|error| CommandError::new("codex-common-config-invalid", error))?;
     gateway
-        .project_codex(&file, client_settings)
+        .project_codex(&file, client_settings, None)
         .map_err(|error| CommandError::new("gateway-projection-invalid", error))
 }
 

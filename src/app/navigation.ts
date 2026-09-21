@@ -1,7 +1,15 @@
-import type { ProviderProfile } from "../api/client";
+import type { ProviderProfile, WorkspacePage } from "../api/client";
 
-export const PAGES = ["供应商切换", "客户端配置", "扩展", "会话记录", "用量监控", "设置"] as const;
-export type Page = (typeof PAGES)[number];
+export const WORKSPACE_PAGE_LABELS = {
+  providers: "供应商切换", clientConfiguration: "客户端配置", extensions: "扩展",
+  sessions: "会话记录", usage: "用量监控", settings: "设置",
+} as const satisfies Record<WorkspacePage, string>;
+export type Page = (typeof WORKSPACE_PAGE_LABELS)[WorkspacePage];
+export const PAGES = Object.values(WORKSPACE_PAGE_LABELS);
+export function workspacePageId(page: Page): WorkspacePage {
+  return (Object.keys(WORKSPACE_PAGE_LABELS) as WorkspacePage[])
+    .find((id) => WORKSPACE_PAGE_LABELS[id] === page)!;
+}
 export type ProviderView =
   | { kind: "list" }
   | { kind: "import" }

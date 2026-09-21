@@ -1,78 +1,110 @@
-/* 网关遥测分层：仪表带与「最近请求」披露区共用同一组中性内容面，
- * 不引入第二套背景、圆角或阴影语言。结构契约见 gateway.css 顶部注释。 */
+/* 网关遥测分层：图表带与「最近请求」明细共用同一组中性内容面，不引入
+ * 第二套背景、圆角或阴影语言。结构契约见 gateway.css 顶部注释与
+ * DESIGN.md 本机网关。柱高与条宽的过渡时长取自 motion token，两种减少
+ * 动态偏好下自动归零。 */
 
-/* —— 仪表带 —— */
+/* —— 图表带：无卡片、无内部分隔线，仅靠间距与字阶分列。 —— */
 
-.asb-gateway-instruments {
+.asb-gateway-strip {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.4fr);
-  gap: 1px;
-  overflow: hidden;
-  padding: 1px;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-hairline);
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 1.15fr) minmax(0, 1.2fr);
+  gap: var(--asb-space-5);
+  padding-block: var(--asb-space-4);
 }
 
-.asb-gateway-instrument {
+.asb-gateway-gauge {
   display: flex;
   flex-direction: column;
-  gap: var(--asb-space-hairline);
+  gap: var(--asb-space-1);
   min-width: 0;
-  padding: var(--asb-space-3);
-  background: var(--asb-content);
 }
 
-.asb-gateway-instrument.is-warning {
-  background: color-mix(in srgb, var(--asb-warning) 6%, var(--asb-content));
+.asb-gateway-gauge.is-warning .asb-gateway-gauge-value {
+  color: var(--asb-warning);
 }
 
-.asb-gateway-instrument-label {
+.asb-gateway-gauge-label {
   margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
   font-weight: 600;
 }
 
-.asb-gateway-instrument-value {
+.asb-gateway-gauge-value {
   margin: 0;
   color: var(--asb-text);
   font: var(--asb-text-instrument);
   font-variant-numeric: tabular-nums;
 }
 
-.asb-gateway-instrument-detail {
+.asb-gateway-gauge-detail {
   margin: 0;
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
   font-variant-numeric: tabular-nums;
 }
 
-.asb-gateway-sparkline {
+/* 趋势柱：60 根分钟柱，柱高以窗口内最大计数满高，随轮询平滑过渡。 */
+.asb-gateway-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 64px;
+  margin-top: var(--asb-space-2);
+  border-bottom: 1px solid var(--asb-hairline);
+}
+
+.asb-gateway-trend-bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 1px 1px 0 0;
+  background: color-mix(in srgb, var(--asb-action) 42%, transparent);
+  transition: height var(--asb-motion-node) var(--asb-easing);
+}
+
+/* 延迟条：p50/p95 的条宽线性对应 p95 满宽，数值始终以文字呈现。 */
+.asb-gateway-latency {
+  display: grid;
+  gap: var(--asb-space-2);
+  margin-top: var(--asb-space-2);
+}
+
+.asb-gateway-latency-row {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--asb-space-2);
+}
+
+.asb-gateway-latency-label {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  font-weight: 600;
+}
+
+.asb-gateway-latency-track {
   display: block;
-  width: 100%;
-  height: 36px;
-  margin-top: var(--asb-space-1);
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--asb-radius-pill);
+  background: color-mix(in srgb, var(--asb-hairline-strong) 45%, transparent);
 }
 
-.asb-gateway-sparkline-line {
-  fill: none;
-  stroke: var(--asb-action);
-  stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
+.asb-gateway-latency-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--asb-radius-pill);
+  background: color-mix(in srgb, var(--asb-action) 42%, transparent);
+  transition: width var(--asb-motion-node) var(--asb-easing);
 }
 
-.asb-gateway-sparkline-area {
-  fill: color-mix(in srgb, var(--asb-action) 12%, transparent);
+.asb-gateway-latency-value {
+  color: var(--asb-text);
+  font: var(--asb-text-label);
+  font-variant-numeric: tabular-nums;
 }
 
-.asb-gateway-sparkline-baseline {
-  stroke: var(--asb-hairline-strong);
-  stroke-width: 1;
-}
-
-.asb-gateway-instrument.is-protocol { gap: var(--asb-space-2); }
+.asb-gateway-gauge.is-protocol { gap: var(--asb-space-2); }
 
 .asb-gateway-protocol-bar {
   display: flex;
@@ -95,55 +127,33 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* —— 最近请求披露区 —— */
+/* —— 最近请求明细：常驻展示，不做折叠。 —— */
 
 .asb-gateway-recent {
+  display: grid;
+  gap: var(--asb-space-3);
   min-width: 0;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
+  padding-top: var(--asb-space-4);
+  border-top: 1px solid var(--asb-hairline);
 }
 
-.asb-gateway-recent-toggle {
+.asb-gateway-recent-heading {
   display: flex;
-  align-items: center;
-  gap: var(--asb-space-2);
-  width: 100%;
-  padding: var(--asb-space-3) var(--asb-space-4);
-  border: 0;
-  border-radius: var(--asb-radius);
-  background: transparent;
-  color: var(--asb-text);
-  cursor: pointer;
-  font: var(--asb-text-label);
-  font-weight: 600;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--asb-space-3);
 }
 
-.asb-gateway-recent-toggle:hover { background: color-mix(in srgb, var(--asb-text) 4%, transparent); }
-
-.asb-gateway-recent-chevron {
-  display: inline-flex;
-  color: var(--asb-text-muted);
-  transition: rotate var(--asb-motion-fast) var(--asb-easing);
-}
-
-.asb-gateway-recent-toggle[aria-expanded="true"] .asb-gateway-recent-chevron { rotate: 180deg; }
+.asb-gateway-recent-heading .asb-section-title { margin: 0; }
 
 .asb-gateway-recent-count {
-  margin-left: auto;
+  flex: none;
   color: var(--asb-text-muted);
   font: var(--asb-text-caption);
   font-variant-numeric: tabular-nums;
 }
 
-.asb-gateway-recent-body {
-  display: grid;
-  gap: var(--asb-space-2);
-  padding: 0 var(--asb-space-4) var(--asb-space-4);
-}
-
-/* The disclosure is the only box; the table drops the frame it carries in
-   standalone contexts and separates from the toggle by padding alone. */
+/* The table belongs to the page surface; only row separators remain. */
 .asb-gateway-recent-table {
   min-width: 0;
   overflow-x: auto;
@@ -167,6 +177,12 @@
 }
 
 /* —— 请求表内单元格 —— */
+
+.asb-gateway-empty {
+  margin: 0;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
 
 .asb-gateway-row-value { font-variant-numeric: tabular-nums; }
 
@@ -201,18 +217,4 @@
   border-color: color-mix(in srgb, var(--asb-action) 28%, var(--asb-hairline));
   background: color-mix(in srgb, var(--asb-action) 8%, var(--asb-content));
   color: var(--asb-action);
-}
-
-/* —— 响应式 —— */
-
-@media (max-width: 980px) {
-  .asb-gateway-instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-  .asb-gateway-instrument.is-protocol { grid-column: 1 / -1; }
-}
-
-@media (max-width: 480px) {
-  .asb-gateway-instruments { grid-template-columns: minmax(0, 1fr); }
-
-  .asb-gateway-instrument.is-protocol { grid-column: auto; }
 }

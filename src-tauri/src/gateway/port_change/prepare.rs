@@ -147,7 +147,7 @@ fn route_candidates(
                     .configuration()
                     .find_codex_provider_file(&record.profile.id)
                     .map_err(|error| error.to_string())
-                    .and_then(|file| controller.route_for_codex_file(&file))
+                    .and_then(|file| controller.route_for_codex_file(&file, None))
                     .map(|route| RouteCandidate {
                         route,
                         profile_name: name,

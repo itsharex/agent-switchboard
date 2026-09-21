@@ -23,7 +23,8 @@ pub use provider::{
     CLAUDE_GATEWAY_REVISION_KEY, CODEX_MODEL_CATALOG_KEY, CODEX_PROVIDER_BASE_URL_KEY,
     CODEX_PROVIDER_ID, CODEX_SUBAGENT_MODEL_KEY, CODEX_WEB_SEARCH_KEY,
 };
-pub use resources::{is_claude_extension_path, is_claude_credential_path};
+pub use resources::{is_claude_extension_path, is_claude_credential_path, is_codex_extension_path};
+pub(crate) use resources::preserve_only_path;
 pub use spec::{
     ChoiceControl, ChoiceOption, ChoiceSpec, OfficialSettingDisposition, OfficialSettingEntry,
     ProviderAbsentAction, SettingControl, SettingOwner, SettingSpec, SettingValueType, ToggleSpec,

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import type { AppKind, ConfigFileStatus, LockStatus, MatchStatus, ProviderProfile } from "../api/client";
+import { openConfigFileLocation, type AppKind, type ConfigFileStatus, type LockStatus, type MatchStatus, type ProviderProfile } from "../api/client";
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
 import { Button } from "./Button";
 import { ClientLogo } from "./ClientLogo";
+import { FactPath } from "./FactPath";
 import { Time } from "./Time";
 import { ModuleHeader } from "./WorkspaceHeader";
 
@@ -57,7 +58,7 @@ function statusPill(status: ConfigFileStatus): { ok: boolean; text: string } {
 }
 
 function StatusField({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
-  return <div className="asb-status-row"><dt>{label}</dt><dd className={className}>{children}</dd></div>;
+  return <div><dt>{label}</dt><dd className={className}>{children}</dd></div>;
 }
 
 function ConfigStatusDetails({ status, profiles, lock }: {
@@ -67,8 +68,10 @@ function ConfigStatusDetails({ status, profiles, lock }: {
 }) {
   const readable = !status.readError && status.exists && status.syntaxOk;
   return (
-    <dl className="asb-status-rows">
-      <StatusField label="配置文件" className="asb-code">{status.path}</StatusField>
+    <dl className="asb-fact-row">
+      <StatusField label="配置文件">
+        <FactPath path={status.path} open={() => openConfigFileLocation(status.app)} />
+      </StatusField>
       {status.recoveryIssue && (
         <StatusField label="恢复阻塞" className="asb-warn-text">
           <span role="status" className="asb-status-warn">{status.recoveryIssue}</span>
@@ -111,9 +114,9 @@ function ConfigStatusCard({ status, profiles, lock, busy, onRecoverLock }: {
 }) {
   const pill = statusPill(status);
   return (
-    <article className="asb-status-card" aria-label={`${clientName(status.app)} 配置状态`}>
-      <header className="asb-status-head">
-        <h3 className="asb-status-name"><ClientLogo app={status.app} className="asb-status-logo" />{clientName(status.app)}</h3>
+    <article className="asb-client-status" aria-label={`${clientName(status.app)} 配置状态`}>
+      <header className="asb-client-status-head">
+        <span className="asb-client-status-name"><ClientLogo app={status.app} className="asb-status-logo" />{clientName(status.app)}</span>
         <span className={`asb-status-pill${pill.ok ? " is-ok" : ""}`}>
           <span className="asb-status-pill-dot" aria-hidden="true" />{pill.text}
         </span>
@@ -130,21 +133,25 @@ function ConfigStatusCard({ status, profiles, lock, busy, onRecoverLock }: {
 
 export function ConfigStatusPanel({ statuses, profiles, locks, busy, onRecoverLock }: ConfigStatusPanelProps) {
   return (
-    <section className="asb-panel" aria-label="配置状态">
-      <ModuleHeader title="配置状态" />
+    <section className="asb-panel" aria-labelledby="configuration-status-heading">
+      <ModuleHeader id="configuration-status-heading" title="配置状态" />
       {statuses === null ? (
-        <div className="asb-status-grid" role="status" aria-label="正在读取配置状态">
-          {Array.from({ length: 4 }, (_, index) => (
-            <span key={index} className="asb-skeleton asb-status-card-skeleton" />
+        /* Two client sections at the real anatomy's footprint: a head line and
+           five fact lines each, so the panel does not reflow on arrival. */
+        <div role="status" aria-label="正在读取配置状态">
+          {Array.from({ length: 2 }, (_, section) => (
+            <div key={section} className="asb-client-status asb-client-status-skeleton" aria-hidden="true">
+              {Array.from({ length: 6 }, (_, line) => (
+                <span key={line} className="asb-skeleton" />
+              ))}
+            </div>
           ))}
         </div>
       ) : (
-        <div className="asb-status-grid">
-          {statuses.map((status) => (
-            <ConfigStatusCard key={status.app} status={status} profiles={profiles} lock={locks[status.app]}
-              busy={busy} onRecoverLock={onRecoverLock} />
-          ))}
-        </div>
+        statuses.map((status) => (
+          <ConfigStatusCard key={status.app} status={status} profiles={profiles} lock={locks[status.app]}
+            busy={busy} onRecoverLock={onRecoverLock} />
+        ))
       )}
     </section>
   );

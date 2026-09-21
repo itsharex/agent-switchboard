@@ -24,6 +24,21 @@ impl GatewayController {
         })
     }
 
+    /// Hash only the effective Codex routes under the activation lock. Client
+    /// files alone do not change when the stable loopback route switches.
+    pub(crate) fn probe_route_revision(&self, configuration: &str) -> Result<String, String> {
+        if !routing::config_points_at_gateway(AppKind::Codex, configuration) { return Ok(String::new()); }
+        let _activation = self.inner.activation_lock.lock().map_err(|_| "网关激活锁不可用")?;
+        let routes = self.inner.routes.read().map_err(|_| "网关路由锁不可用")?;
+        let candidates = self.inner.candidate_routes.read().map_err(|_| "网关候选路由锁不可用")?;
+        let active = routes.get(&AppKind::Codex).map(|route| (&route.profile_id, &route.fingerprint));
+        let mut revisions = candidates.get(&AppKind::Codex).into_iter().flatten()
+            .map(|route| (&route.profile_id, &route.fingerprint)).collect::<Vec<_>>();
+        revisions.sort();
+        let data = serde_json::to_string(&(active, revisions, self.inner.codex_activation_generation.load(Ordering::SeqCst))).map_err(|error| error.to_string())?;
+        Ok(asb_switch::sha256_hex(&data))
+    }
+
     pub(crate) fn restore_activation_snapshot(
         &self,
         local: &LocalState,
@@ -44,8 +59,8 @@ impl GatewayController {
                                 .to_string());
                         }
                         let (policy, _) = codex::policy::load(local.root())?;
-                        candidate_routes = self.codex_candidate_routes(&file, &policy)?;
-                        self.route_for_codex_file(&file)?
+                        candidate_routes = self.codex_candidate_routes(&file, &policy, None)?;
+                        self.route_for_codex_file(&file, None)?
                     }
                     AppKind::Claude => {
                         let profile = local

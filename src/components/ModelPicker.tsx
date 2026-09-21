@@ -8,7 +8,6 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import type { ProviderModel } from "../api/client";
 import { Input } from "./Input";
 import { Button } from "./Button";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
@@ -21,17 +20,23 @@ const OTHER_GROUP = "其他";
 const TRIGGER_GAP = 4;
 const VIEWPORT_MARGIN = 8;
 
+export interface ModelPickerOption {
+  value: string;
+  label: string;
+  group: string | null;
+}
+
 interface Group {
   vendor: string;
-  models: ProviderModel[];
+  models: ModelPickerOption[];
 }
 
 /** Vendor-grouped models sorted for browsing; `needle` matches either the
  * model id or its vendor, case-insensitively. */
-function groupModels(models: ProviderModel[], needle: string): Group[] {
-  const groups = new Map<string, ProviderModel[]>();
+function groupModels(models: ModelPickerOption[], needle: string): Group[] {
+  const groups = new Map<string, ModelPickerOption[]>();
   for (const model of models) {
-    const vendor = model.ownedBy ?? OTHER_GROUP;
+    const vendor = model.group ?? OTHER_GROUP;
     if (!groups.has(vendor)) groups.set(vendor, []);
     groups.get(vendor)!.push(model);
   }
@@ -41,10 +46,10 @@ function groupModels(models: ProviderModel[], needle: string): Group[] {
       models: vendorModels
         .filter(
           (model) =>
-            model.id.toLocaleLowerCase().includes(needle) ||
+            model.label.toLocaleLowerCase().includes(needle) ||
             vendor.toLocaleLowerCase().includes(needle),
         )
-        .sort((a, b) => a.id.localeCompare(b.id)),
+        .sort((a, b) => a.label.localeCompare(b.label)),
     }))
     .filter((group) => group.models.length > 0)
     // The unattributed fallback group stays last regardless of locale.
@@ -54,8 +59,8 @@ function groupModels(models: ProviderModel[], needle: string): Group[] {
 }
 
 interface Props {
-  models: ProviderModel[];
-  /** Current model id of the field this picker feeds, if any. */
+  models: ModelPickerOption[];
+  /** Stable option value, independent of the displayed model label. */
   current: string | null;
   /** Accessible name of the trigger and the search field. */
   ariaLabel: string;
@@ -152,14 +157,14 @@ function ModelOptionGroups({ groups, current, onSelect }: OptionGroupsProps) {
             <Button
               variant="unstyled"
               role="option"
-              aria-selected={model.id === current}
+              aria-selected={model.value === current}
               className="asb-model-option"
-              key={model.id}
-              onClick={() => onSelect(model.id)}
+              key={model.value}
+              onClick={() => onSelect(model.value)}
             >
-              <span className="asb-model-option-name">{model.id}</span>
+              <span className="asb-model-option-name">{model.label}</span>
               <span className="asb-model-check" aria-hidden="true">
-                {model.id === current && <CheckIcon />}
+                {model.value === current && <CheckIcon />}
               </span>
             </Button>
           ))}
@@ -170,7 +175,7 @@ function ModelOptionGroups({ groups, current, onSelect }: OptionGroupsProps) {
 }
 
 interface ModelMenuProps {
-  models: ProviderModel[];
+  models: ModelPickerOption[];
   current: string | null;
   ariaLabel: string;
   placement: MenuPlacement | null;

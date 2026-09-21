@@ -1,4 +1,4 @@
-use super::manager;
+use super::{contracts::AccountSelection, manager};
 use asb_core::contracts::{CodexOfficialQuota, CodexOfficialQuotaStatus};
 use serde::Serialize;
 use std::{
@@ -13,6 +13,32 @@ pub(crate) struct AccountQuota {
     pub account_id: String,
     pub quota: CodexOfficialQuota,
     pub warning: Option<String>,
+}
+
+static CACHE: OnceLock<Mutex<HashMap<(std::path::PathBuf, String), CodexOfficialQuota>>> =
+    OnceLock::new();
+
+/// Resolve the current binding without refreshing credentials or querying upstream.
+pub(crate) fn cached_profile_quota(
+    root: &Path,
+    profile_id: &str,
+    auth_path: &Path,
+) -> Result<Option<CodexOfficialQuota>, String> {
+    let _guard = super::store::lock()?;
+    let (file, _) = super::store::load(root)?;
+    let id = match file.bindings.get(profile_id).cloned().unwrap_or_default() {
+        AccountSelection::Native => {
+            return crate::codex_official_quota::cached(profile_id, auth_path);
+        }
+        AccountSelection::Default => file.default_id,
+        AccountSelection::Account { id } => Some(id),
+    };
+    let Some(id) = id else {
+        return Ok(None);
+    };
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let cache = cache.lock().map_err(|_| "Codex 账号额度缓存不可用")?;
+    Ok(cache.get(&(root.to_path_buf(), id)).cloned())
 }
 
 pub(crate) fn official_models_document(
@@ -40,8 +66,6 @@ pub(crate) fn quota(
     auth_path: &Path,
 ) -> Result<AccountQuota, String> {
     let account = manager::valid_account(root, id, auth_path)?;
-    static CACHE: OnceLock<Mutex<HashMap<(std::path::PathBuf, String), CodexOfficialQuota>>> =
-        OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let key = (root.to_path_buf(), account.id.clone());
     let response = get(&account, "https://chatgpt.com/backend-api/wham/usage");
@@ -68,16 +92,15 @@ pub(crate) fn quota(
         }
     }
     let mut cache = cache.lock().map_err(|_| "Codex 账号额度缓存不可用")?;
-    if quota.status == CodexOfficialQuotaStatus::Available {
-        cache.insert(key, quota.clone());
-    } else if quota.status == CodexOfficialQuotaStatus::Unavailable {
-        if let Some(previous) = cache.get(&key) {
-            quota = previous.clone();
+    if quota.status == CodexOfficialQuotaStatus::Unavailable {
+        if let Some(previous) = cache.get(&key).filter(|previous| !previous.windows.is_empty()) {
+            quota.windows = previous.windows.clone();
+            quota.at = previous.at.clone();
+            quota.last_reset = previous.last_reset.clone();
             quota.stale = true;
         }
-    } else {
-        cache.remove(&key);
     }
+    cache.insert(key, quota.clone());
     Ok(AccountQuota {
         account_id: account.id,
         quota,

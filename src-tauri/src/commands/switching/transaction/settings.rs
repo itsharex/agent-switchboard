@@ -52,6 +52,33 @@ pub(super) fn reconcile(state: &LocalState, intent: &SwitchIntent, after: bool) 
     }
 }
 
+pub(super) fn capture_backup(
+    state: &LocalState,
+    intent: &SwitchIntent,
+    backup: &asb_core::BackupRecord,
+) -> Result<(), String> {
+    let Some(settings) = &intent.client_settings else { return Ok(()); };
+    if backup.app != intent.app || backup.target_path != intent.target
+        || backup.content_hash != intent.before_hash || backup.target_existed != intent.before_existed {
+        return Err("客户端设置事务与配置备份不匹配".into());
+    }
+    super::super::client_settings_backup::save(state, backup, &settings.before)
+}
+
+pub(in crate::commands) fn commit_client_settings(
+    state: &LocalState,
+    backup: &asb_core::BackupRecord,
+) -> Result<(), String> {
+    let intent = load(state)?.ok_or("缺少客户端设置事务")?;
+    capture_backup(state, &intent, backup)?;
+    reconcile(state, &intent, true)
+}
+
+pub(super) fn capture_current_backup(state: &LocalState, backup: &asb_core::BackupRecord) -> Result<(), String> {
+    let saved = state.configuration().get_client_settings(backup.app).map_err(|error| error.to_string())?;
+    super::super::client_settings_backup::save(state, backup, &saved.settings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

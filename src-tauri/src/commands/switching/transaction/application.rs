@@ -8,6 +8,7 @@ pub(super) fn complete(
     pending: Option<&PendingConfigWrite>,
     text: &str,
 ) -> Result<(), String> {
+    validate_saved_profile(state, intent)?;
     verify_catalog_after(intent)?;
     validate_codex_backfill_after(state, intent)?;
     let profile = intent.profile_id.as_deref().map(|id| {
@@ -32,6 +33,17 @@ pub(super) fn complete(
     finish_pending(state, pending, &intent.after_hash, intent.after_existed, commit)
 }
 
+fn validate_saved_profile(state: &LocalState, intent: &SwitchIntent) -> Result<(), String> {
+    let Some(save) = state.configuration().pending_profile_save().map_err(|e| e.to_string())? else {
+        return Ok(());
+    };
+    if save.app != intent.app || Some(&save.projection_profile_id) != intent.profile_id.as_ref() {
+        return Err("供应商保存与配置事务不匹配".into());
+    }
+    let revision = profile_revision(state, save.app, &save.profile_id)?;
+    super::super::profile_rollback::validate_saved_revision(state, &save.profile_id, &revision)
+}
+
 fn commit_application(
     state: &LocalState,
     intent: &SwitchIntent,
@@ -41,6 +53,7 @@ fn commit_application(
     let config = state.configuration();
     let last = config.latest_config_write(intent.app).map_err(|error| error.to_string())?;
     if let Some(pending) = pending {
+        settings::capture_backup(state, intent, &pending.backup)?;
         let desired = ConfigWriteRecord {
             app: intent.app,
             profile_id: profile.map(|p| p.0.clone()),
@@ -95,6 +108,7 @@ pub(super) fn restore_application_snapshot(
 ) -> Result<(), String> {
     restore_catalog(intent)?;
     restore_codex_backfill(state, intent)?;
+    if let Some(pending) = pending { settings::capture_backup(state, intent, &pending.backup)?; }
     settings::reconcile(state, intent, false)?;
     if intent.operation != WriteOperation::Projection || intent.profile_id.is_some() {
         gateway.restore_activation_snapshot(state, &intent.previous_route)?;

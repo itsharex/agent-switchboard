@@ -29,6 +29,14 @@ fn parse_fragment(text: &str) -> Result<DocumentMut, AdapterError> {
     })
 }
 
+pub(super) fn declared_paths(text: &str) -> Result<std::collections::BTreeSet<Vec<String>>, AdapterError> {
+    validate_fragment(text)?;
+    let fragment = parse_fragment(text)?;
+    let mut paths = std::collections::BTreeSet::new();
+    for_each_leaf(fragment.as_table(), &[], &mut |path, _| { paths.insert(path.to_vec()); });
+    Ok(paths)
+}
+
 /// 校验片段文本：解析失败、与所有权目录冲突或触碰保留路径时返回具名错误。
 /// 空片段合法（表示清除）。
 pub fn validate_fragment(text: &str) -> Result<(), AdapterError> {
@@ -37,7 +45,8 @@ pub fn validate_fragment(text: &str) -> Result<(), AdapterError> {
     }
     let fragment = parse_fragment(text)?;
     let mut error: Option<AdapterError> = None;
-    for_each_leaf(fragment.as_table(), "", &mut |path, item| {
+    for_each_leaf(fragment.as_table(), &[], &mut |segments, item| {
+        let path = crate::config_path::from_keys(segments);
         if error.is_some() {
             return;
         }
@@ -294,13 +303,10 @@ fn value_equals(a: &TomlValue, b: &TomlValue) -> bool {
 }
 
 /// 遍历片段的叶子路径：非空表递归；值、数组、数组表与空表都是叶子。
-fn for_each_leaf(table: &dyn TableLike, prefix: &str, visit: &mut dyn FnMut(&str, &Item)) {
+fn for_each_leaf(table: &dyn TableLike, prefix: &[String], visit: &mut dyn FnMut(&[String], &Item)) {
     for (key, item) in table.iter() {
-        let path = if prefix.is_empty() {
-            key.to_string()
-        } else {
-            format!("{prefix}.{key}")
-        };
+        let mut path = prefix.to_vec();
+        path.push(key.to_string());
         match item.as_table_like() {
             Some(sub) if !sub.is_empty() => for_each_leaf(sub, &path, visit),
             _ => visit(&path, item),

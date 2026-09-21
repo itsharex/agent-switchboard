@@ -1,10 +1,10 @@
 /* Runtime log — a single app-owned operational ledger. The renderer sees
-   parsed, closed events only; diagnostics remain solid and easy to scan. */
+   parsed, closed events only; diagnostics remain solid and easy to scan.
+   The page scroll surface (.asb-main) carries the ledger vertically; the
+   wrap below owns only the table's horizontal overflow. */
 .asb-panel.asb-runtime-logs {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  min-height: 0;
 }
 
 .asb-runtime-log-level-control {
@@ -23,36 +23,32 @@
   min-width: var(--asb-select-min-width);
 }
 
+/* Read and folder-open failures are failures: the error-red line keeps the
+   notice on the panel surface with the label tier — no notice box layer. */
 .asb-runtime-log-notice {
   margin: 0 0 var(--asb-space-3);
-  padding: var(--asb-space-2);
-  color: var(--asb-text);
+  color: var(--asb-danger);
   font: var(--asb-text-label);
 }
 
-/* Frame modifier: the log panel's empty state fills the scrolling slot and
-   draws a recessed surface of its own. Internal layout — stacking, gap,
-   padding — belongs to .asb-empty-state, so this rule declares none of it. */
+/* Frame modifier: the log panel's empty state keeps the scrolling slot's
+   presence through its min-height alone — centered on the panel surface,
+   no recessed box of its own. Internal layout — stacking, gap, padding —
+   belongs to .asb-empty-state, so this rule declares none of it. */
 .asb-runtime-log-empty {
-  --asb-runtime-log-empty-min-height: 180px;
-
-  flex: 1;
   justify-content: center;
-  min-height: var(--asb-runtime-log-empty-min-height);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
+  min-height: 180px;
 }
 
+/* The table's own surface is its horizontal overflow: the 680px ledger
+   stays legible in narrow windows without widening the workspace. */
 .asb-runtime-log-table-wrap {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
   scrollbar-gutter: stable;
 }
 
 /* Loading placeholder shaped like the log table: one 40px row band per
-   skeleton row inside the same scrolling region the table will occupy. */
+   skeleton row at the ledger's row rhythm — header band plus rows. */
 .asb-runtime-log-skeleton {
   display: flex;
   flex-direction: column;
@@ -65,27 +61,22 @@
   height: var(--asb-control-height);
 }
 
-.asb-runtime-log-table-wrap .asb-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
 .asb-runtime-log-table {
-  --asb-runtime-log-table-min-width: 680px;
-  min-width: var(--asb-runtime-log-table-min-width);
+  min-width: 680px;
 }
 
 .asb-runtime-log-action {
   font-weight: 600;
 }
 
+/* Level marks are capsule statuses: the pill shape is their semantic form,
+   the text stays the state's carrier. */
 .asb-runtime-log-level {
   display: inline-flex;
   align-items: center;
   padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
+  border-radius: var(--asb-radius-pill);
   background: var(--asb-content);
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
@@ -152,15 +143,13 @@
   padding-left: calc(var(--asb-space-2) + var(--asb-space-2));
 }
 
-/* Frame modifier: the model-usage panel's empty state fills its slot. See
+/* Frame modifier: the model-usage panel's empty state keeps its slot through
+   centering alone — same de-boxed empty state as the runtime log. See
    .asb-runtime-log-empty — .asb-empty-state owns the inside. */
 .asb-model-usage-empty {
   flex: 1;
   justify-content: center;
   min-height: 0;
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-content-muted);
 }
 
 .asb-model-usage-table-wrap {
@@ -255,6 +244,17 @@
 
 .asb-codex-probe-table {
   min-width: max-content;
+}
+
+.asb-codex-probe-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.asb-codex-probe-detail {
+  max-width: 26rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .asb-codex-probe-meta,

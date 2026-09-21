@@ -49,6 +49,8 @@ mod claude_routing;
 mod controller;
 pub(crate) use claude_routing::claude_uses_gateway;
 mod codex_routing;
+mod codex_profile;
+pub(crate) use codex_profile::validate_subagent_target;
 mod runtime;
 pub(crate) use activation_snapshot::GatewayActivationSnapshot;
 mod compaction;
@@ -233,6 +235,7 @@ pub(crate) struct GatewayInner {
     pub(crate) claude_request_ledger: Arc<ClaudeRequestLedger>,
     pub(crate) claude_auth: Arc<crate::claude_auth::ClaudeAuth>,
     pub(crate) activation_lock: Mutex<()>,
+    pub(crate) codex_activation_generation: std::sync::atomic::AtomicU64,
     pub(crate) listener: RwLock<ListenerState>,
     /// While set, the serve loop answers new requests with 503 so a port
     /// change can drain in-flight work without cutting long requests.

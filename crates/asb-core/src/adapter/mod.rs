@@ -143,6 +143,19 @@ pub fn render_client_settings_into_file(
     }
 }
 
+/// Resets only the standard client scalars and Codex global subagent settings.
+/// Extra configuration is preserved from the live document, never reprojected.
+pub fn reset_client_settings(app: AppKind, current: &str) -> Result<String, AdapterError> {
+    match app {
+        AppKind::Claude => claude::reset_client_settings(current),
+        AppKind::Codex => {
+            let defaults = crate::ownership::default_client_settings(app);
+            let rendered = codex::render_client_settings_into_file(current, &defaults)?;
+            codex::render_subagent_settings(&rendered, &crate::contracts::CodexSubagentSettings::automatic())
+        }
+    }
+}
+
 /// Checks that `text` is syntactically valid for `app` without planning
 /// anything. The executor uses this to validate a temporary write before it
 /// replaces the live file.
@@ -202,8 +215,7 @@ pub enum PreviewDiff {
     Full,
 }
 
-/// Diff over every leaf, including host-owned keys; used only by the deep
-/// client reset preview.
+/// Diff over every leaf, including host-owned keys, for reset and backup previews.
 pub fn full_diff(
     app: AppKind,
     current: &str,
@@ -220,9 +232,9 @@ pub fn full_diff(
 /// configuration the interface models. Preserved: directory scalars, Claude
 /// native and manifest-claimed paths, Codex provider and extension table
 /// families, and the sub-agent keys the typed render removes itself.
-pub fn remove_unmanaged_entries(app: AppKind, text: &str) -> Result<String, AdapterError> {
+pub fn remove_unmanaged_entries(app: AppKind, text: &str, codex_fragment: &str) -> Result<String, AdapterError> {
     match app {
-        AppKind::Codex => codex::remove_unmanaged(text),
+        AppKind::Codex => codex::remove_unmanaged(text, codex_fragment),
         AppKind::Claude => claude::remove_unmanaged(text),
     }
 }

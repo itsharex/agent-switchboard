@@ -168,7 +168,7 @@ pub(super) fn prepare_live_sandbox(route: &LiveRoute, api_key: &str) -> LiveSand
         .expect("load temporary specialized Codex provider");
     let gateway = GatewayController::start(&state);
     let projection = gateway
-        .project_codex(&file, default_client_settings(AppKind::Codex))
+        .project_codex(&file, default_client_settings(AppKind::Codex), None)
         .expect("project temporary Codex route");
     assert!(
         projection.plan.profile.requires_gateway(),

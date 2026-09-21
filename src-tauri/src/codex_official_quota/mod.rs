@@ -15,4 +15,4 @@ mod service;
 
 
 pub(crate) use baseline::{apply_read, CodexQuotaBaseline};
-pub(crate) use service::{clear, invalidate, query, query_login, quota_from_http_response};
+pub(crate) use service::{cached, clear, invalidate, query, query_login, quota_from_http_response, store_result};

@@ -19,12 +19,7 @@ pub(super) fn intent(
         .collect::<Vec<_>>();
     let source = match records.as_slice() {
         [] => {
-            let current = match FsIo.read_file(&path) {
-                Ok(text) => Some(text),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(_) => return Err(error("Codex 当前认证文件不可读")),
-            };
-            validate_direct_auth(candidate_config, current.as_deref())?;
+            validate_current_auth(target, candidate_config)?;
             return Ok(None);
         }
         [source] => source,
@@ -59,6 +54,15 @@ pub(super) fn intent(
 }
 fn error(message: &str) -> CommandError {
     CommandError::new("codex-auth-restore-invalid", message)
+}
+
+pub(super) fn validate_current_auth(target: &Path, config: &str) -> Result<(), CommandError> {
+    let current = match FsIo.read_file(&target.with_file_name("auth.json")) {
+        Ok(text) => Some(text),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => return Err(error("Codex 当前认证文件不可读")),
+    };
+    validate_direct_auth(config, current.as_deref())
 }
 
 fn validate_direct_auth(config: &str, auth: Option<&str>) -> Result<(), CommandError> {

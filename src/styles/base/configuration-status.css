@@ -1,44 +1,40 @@
-/* Shared configuration diagnostics, runtime facts and quota signal surfaces. */
-.asb-status-grid {
+/* Shared configuration diagnostics, runtime facts and quota signal surfaces.
+   Per-client configuration facts render as hairline-separated sections inside
+   the module card and consume the shared .asb-fact-row contract from
+   panels.css: diagnostics, the provider-import scan result and the runtime
+   overview share this one anatomy — no nested boxes, no per-surface fact-row
+   re-inventions. */
+.asb-client-status {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--asb-space-3);
-  margin-top: var(--asb-space-3);
-}
-
-/* Loading placeholder shaped as the status grid: four cards at a real status
-   card's footprint. */
-.asb-status-card-skeleton {
-  display: block;
-  min-height: 96px;
-}
-
-.asb-status-card {
-  display: flex;
-  flex-direction: column;
   gap: var(--asb-space-2);
   min-width: 0;
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
 }
 
-.asb-status-head {
+.asb-client-status + .asb-client-status {
+  margin-top: var(--asb-space-4);
+  padding-top: var(--asb-space-4);
+  border-top: 1px solid var(--asb-hairline);
+}
+
+.asb-client-status-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--asb-space-2);
 }
 
-.asb-status-name {
+.asb-client-status-name {
   display: flex;
   align-items: center;
   gap: var(--asb-space-unit);
-  margin: 0;
   font: var(--asb-text-label);
   font-weight: 700;
   color: var(--asb-text);
+}
+
+/* The section grid already spaces the recovery action from the facts. */
+.asb-client-status > .asb-kv-actions {
+  margin-top: 0;
 }
 
 .asb-status-pill {
@@ -47,7 +43,7 @@
   gap: var(--asb-space-unit);
   padding: var(--asb-space-hairline) var(--asb-space-2);
   border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
+  border-radius: var(--asb-radius-pill);
   background: var(--asb-content);
   font: var(--asb-text-label);
   font-weight: 700;
@@ -70,64 +66,29 @@
   background: var(--asb-text-muted);
 }
 
-.asb-status-rows {
-  margin: 0;
-}
-
-.asb-status-row {
-  display: grid;
-  grid-template-columns: 4.5em minmax(0, 1fr);
-  gap: var(--asb-space-2);
-  padding: var(--asb-space-1) 0;
-  border-top: 1px solid var(--asb-hairline);
-}
-
-.asb-status-row dt {
-  font: var(--asb-text-label);
-  color: var(--asb-text-muted);
-}
-
-.asb-status-row dd {
-  margin: 0;
-  font: var(--asb-text-body);
-  overflow-wrap: anywhere;
-}
-
 .asb-status-warn {
   display: block;
 }
 
-/* Runtime overview — application facts remain visually quieter than the
-   configuration and quota surfaces above, while each value stays copyable.
-   No tiles: the panel provides the one surface, the grid gap separates. */
-.asb-runtime-overview-grid {
+/* Loading parity: every skeleton line sits at the fact tier's line box and
+   the identity line reserves the head row, so the panel keeps its footprint
+   until the real facts arrive — never a one-line note in place of a list. */
+.asb-runtime-overview-skeleton,
+.asb-client-status-skeleton {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--asb-space-3);
-  margin: 0;
+  gap: var(--asb-space-1);
 }
 
-.asb-runtime-overview-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-unit);
-  min-width: 0;
-}
-
-.asb-runtime-overview-item dt {
-  color: var(--asb-text-muted);
+.asb-runtime-overview-skeleton .asb-skeleton,
+.asb-client-status-skeleton .asb-skeleton {
+  height: 1lh;
   font: var(--asb-text-label);
+  border-radius: calc(var(--asb-radius) / 2);
 }
 
-.asb-runtime-overview-item dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  font: var(--asb-text-body);
-}
-
-.asb-runtime-overview-path {
-  grid-column: span 3;
+.asb-client-status-skeleton .asb-skeleton:first-child {
+  width: 12rem;
+  font-weight: 700;
 }
 
 /* Public reset signals are a two-part reading surface: one current-day answer

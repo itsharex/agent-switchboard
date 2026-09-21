@@ -482,8 +482,7 @@ pub(crate) struct SessionTokenSummary {
 }
 
 /// Reads one rollout file and returns its final cumulative usage snapshot.
-/// Filename identity checks are skipped: the probe owns the observation that
-/// this exact file appeared during its run.
+/// The caller verifies the rollout's session identity before reading totals.
 pub(crate) fn summarize_token_usage<R: std::io::Read>(
     reader: BufReader<R>,
 ) -> Result<SessionTokenSummary, String> {

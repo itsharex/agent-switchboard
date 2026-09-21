@@ -21,18 +21,7 @@ impl GatewayInner {
                     wire.profile_id, wire.model
                 )
             })?;
-        if !file.profile.catalog.iter().any(|entry| entry.id == wire.model) {
-            return Err(format!(
-                "子代理路由的模型不在目标供应商目录中：{}（模型 {}）",
-                file.profile.name, wire.model
-            ));
-        }
-        if file.profile.connection.auth_binding.is_some() {
-            return Err(format!(
-                "子代理路由的目标供应商 {} 绑定了账号凭据，不能被其他路由转发",
-                file.profile.name
-            ));
-        }
+        crate::gateway::validate_subagent_target(wire, &file)?;
         let identity = self
             .state
             .lock()
@@ -40,7 +29,7 @@ impl GatewayInner {
             .identity
             .clone();
         let route =
-            crate::gateway::routing::codex_route_from_file(&self.state_root, &file, &identity)?;
+            crate::gateway::codex_profile::codex_route_from_file(&self.state_root, &file, &identity, None)?;
         let variants = route
             .connection
             .endpoint_candidates(&route.upstream_base_url)
@@ -80,6 +69,7 @@ impl GatewayController {
         &self,
         file: &CodexProviderFile,
         policy: &CodexGatewayPolicy,
+        replacement: Option<&CodexProviderFile>,
     ) -> Result<Vec<ActiveRoute>, String> {
         policy.validate()?;
         let store = crate::config_store::ConfigStore::new(self.inner.state_root.clone());
@@ -87,6 +77,8 @@ impl GatewayController {
         for id in policy.candidate_ids(&file.profile.id) {
             let candidate = if id == file.profile.id {
                 file.clone()
+            } else if let Some(candidate) = replacement.filter(|file| file.profile.id == id) {
+                candidate.clone()
             } else {
                 store
                     .find_codex_provider_file(&id)
@@ -95,7 +87,7 @@ impl GatewayController {
             if policy.enabled && candidate.profile.connection.auth_binding.is_some() {
                 return Err("托管账号不能参与 Codex 自动故障转移".into());
             }
-            let route = self.route_for_codex_file(&candidate)?;
+            let route = self.route_for_codex_file(&candidate, replacement)?;
             for endpoint in route
                 .connection
                 .endpoint_candidates(&route.upstream_base_url)
@@ -117,7 +109,7 @@ impl GatewayController {
             .find_codex_provider_file(profile_id)
             .map_err(|error| error.to_string())?;
         let (policy, _) = super::policy::load(&self.inner.state_root)?;
-        self.codex_candidate_routes(&file, &policy)
+        self.codex_candidate_routes(&file, &policy, None)
     }
 
     pub(crate) fn reset_codex_provider_health(&self, profile_id: &str) -> Result<(), String> {
@@ -125,7 +117,7 @@ impl GatewayController {
         let file = store
             .find_codex_provider_file(profile_id)
             .map_err(|error| error.to_string())?;
-        let route = self.route_for_codex_file(&file)?;
+        let route = self.route_for_codex_file(&file, None)?;
         for endpoint in route
             .connection
             .endpoint_candidates(&route.upstream_base_url)
@@ -201,7 +193,7 @@ impl GatewayController {
         file: &CodexProviderFile,
         policy: &CodexGatewayPolicy,
     ) -> Result<Vec<CodexEndpointHealth>, String> {
-        let route = self.route_for_codex_file(file)?;
+        let route = self.route_for_codex_file(file, None)?;
         Ok(route
             .connection
             .endpoint_candidates(&route.upstream_base_url)

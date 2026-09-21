@@ -75,7 +75,7 @@ pub async fn commit_client_configuration_repair(
     blocking(move || {
         let _guard = gate.lock().map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;
         crate::commands::switching::ensure_profile_save_recovered(&app)?;
-        let (_current, existed, rendered) = candidate(&state, target, &expected_source_hash)?;
+        let (current, existed, rendered) = candidate(&state, target, &expected_source_hash)?;
         if sha256_hex(&rendered) != expected_rendered_hash || existed != expected_target_existed {
             return Err(CommandError::new("client-configuration-preview-stale", "真实配置或修复候选已变化，请重新预览"));
         }
@@ -84,7 +84,7 @@ pub async fn commit_client_configuration_repair(
         let config = state.configuration();
         let gateway = app.state::<crate::gateway::GatewayController>();
         super::switching::transaction::begin_client_configuration(
-            &state, gateway.inner(), target, &expected_rendered_hash, None,
+            &state, gateway.inner(), target, &expected_rendered_hash, existed || current != rendered, None,
         )?;
         let execution = execute_rendered(&FsIo, &RenderedWriteRequest {
             target: &file_target,

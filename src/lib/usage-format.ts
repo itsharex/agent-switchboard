@@ -1,10 +1,24 @@
-import type { UsageReading, UsageSummary } from "../api/client";
+import type { CodexOfficialQuota, UsageReading, UsageSummary } from "../api/client";
 
 const exactValueFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 const compactValueFormatter = new Intl.NumberFormat("zh-CN", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
+
+/** Official quotas report used percentages for independent time windows. */
+export function formatOfficialQuotaBalance(quota: CodexOfficialQuota, surface: "row" | "tray"): string | null {
+  if (quota.windows.length === 0) return null;
+  const compact = surface === "tray";
+  const balance = quota.windows.map((window) => {
+    const remaining = 100 - window.usedPercent;
+    const label = compact
+      ? window.label.replace(/ 小时$/, "h").replace(/ 天$/, "d").replace(/ 分钟$/, "m")
+      : window.label;
+    return `${label}${compact ? " " : "剩余 "}${exactValueFormatter.format(remaining)}%`;
+  }).join(" · ");
+  return `${compact ? "剩余 " : ""}${balance}${quota.stale ? " · 上次读数" : ""}`;
+}
 
 /** Formats a generic usage value with the unit carried by its source contract.
  * This keeps table values audit-friendly and leaves token-specific compaction

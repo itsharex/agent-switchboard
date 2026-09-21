@@ -231,21 +231,6 @@
   font: var(--asb-text-body);
 }
 
-.asb-session-fact-dir {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--asb-text-muted);
-  font: var(--asb-text-code);
-  text-align: left;
-  cursor: pointer;
-}
-
-.asb-session-fact-dir:hover {
-  color: var(--asb-text);
-  text-decoration: underline;
-}
-
 .asb-session-command {
   display: flex;
   align-items: center;

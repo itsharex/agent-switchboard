@@ -2,6 +2,8 @@
 //! executor transaction and records an audit entry so it can be undone.
 
 mod backups;
+mod client_settings_backup;
+pub(in crate::commands) use backups::validate_client_configuration_backup;
 pub(crate) mod claude_gateway;
 mod codex_backfill;
 pub(crate) mod codex_policy;
@@ -195,7 +197,7 @@ pub async fn prepare_codex_profile_save(
         .inner()
         .clone();
     blocking(move || {
-        let (kind, preview) = prepare_codex_profile_save_data(
+        let (kind, preview, projection_profile) = prepare_codex_profile_save_data(
             &state,
             &gateway,
             &profile_id,
@@ -209,6 +211,7 @@ pub async fn prepare_codex_profile_save(
             draft,
             kind,
             preview: preview.clone(),
+            projection_profile,
         })?;
         Ok(ProfileSavePreparation {
             preparation_id,
@@ -429,7 +432,7 @@ pub async fn undo_last_switch(
     .await
 }
 
-/// Owned-key difference between the live file and one backup. `before` is
+/// Complete file and saved preference difference from one backup. `before` is
 /// the backup value, `after` the current one.
 #[tauri::command]
 pub async fn backup_diff(
@@ -442,9 +445,12 @@ pub async fn backup_diff(
         let target = state
             .target(record.app)
             .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let current = FsIo
-            .read_file(&target)
-            .map_err(|_| CommandError::new("read-current", "无法读取当前配置文件，无法生成差异"))?;
+        let current = match FsIo.read_file(&target) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound =>
+                if record.app == AppKind::Claude { "{}".into() } else { String::new() },
+            Err(_) => return Err(CommandError::new("read-current", "无法读取当前配置文件，无法生成差异")),
+        };
         let backup_text = FsIo
             .read_file(PathBuf::from(&record.backup_path).as_path())
             .map_err(|_| CommandError::new("backup-unreadable", "备份文件不可读，无法生成差异"))?;
@@ -454,8 +460,11 @@ pub async fn backup_diff(
                 "备份内容与记录哈希不符，拒绝生成差异",
             ));
         }
-        adapter::owned_diff(record.app, &current, &backup_text)
-            .map_err(|error| CommandError::new("diff-failed", error.to_string()))
+        let mut changes = adapter::full_diff(record.app, &current, &backup_text)
+            .map_err(|error| CommandError::new("diff-failed", error.to_string()))?;
+        changes.extend(client_settings_backup::diff(&state, &record)
+            .map_err(|error| CommandError::new("backup-settings-invalid", error))?);
+        Ok(changes)
     })
     .await
 }

@@ -12,29 +12,32 @@ impl LocalState {
         match fs::read_to_string(self.settings_path()) {
             Ok(text) => {
                 let settings = serde_json::from_str::<AppSettings>(&text)
-                    .map_err(|_| "应用设置格式无效".to_string())?;
+                    .map_err(|error| format!("应用设置格式无效：{error}"))?;
                 settings
                     .validate()
-                    .map_err(|_| "应用设置格式无效".to_string())?;
+                    .map_err(|error| format!("应用设置无效：{error}"))?;
                 Ok(settings)
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Ok(AppSettings::default())
             }
-            Err(_) => Err("应用设置不可读".to_string()),
+            Err(error) => Err(format!("应用设置不可读：{error}")),
         }
     }
 
     pub fn set_app_settings(&self, settings: &AppSettings) -> Result<(), String> {
         settings.validate()?;
         let content =
-            serde_json::to_string_pretty(settings).map_err(|_| "应用设置序列化失败".to_string())?;
-        fs::create_dir_all(&self.root).map_err(|_| "无法创建应用数据目录".to_string())?;
+            serde_json::to_string_pretty(settings).map_err(|error| format!("应用设置序列化失败：{error}"))?;
+        fs::create_dir_all(&self.root).map_err(|error| format!("无法创建应用数据目录：{error}"))?;
         let temporary = self.root.join(format!("settings.{}.tmp", Uuid::new_v4()));
-        fs::write(&temporary, content).map_err(|_| "无法写入应用设置临时文件".to_string())?;
-        if fs::rename(&temporary, self.settings_path()).is_err() {
+        if let Err(error) = fs::write(&temporary, content) {
             let _ = fs::remove_file(&temporary);
-            return Err("无法原子保存应用设置".to_string());
+            return Err(format!("无法写入应用设置临时文件：{error}"));
+        }
+        if let Err(error) = fs::rename(&temporary, self.settings_path()) {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!("无法原子保存应用设置：{error}"));
         }
         Ok(())
     }

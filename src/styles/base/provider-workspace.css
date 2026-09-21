@@ -47,10 +47,6 @@
   margin-bottom: 0;
 }
 
-.asb-provider-import .asb-status-card {
-  width: 100%;
-}
-
 @media (max-width: 680px) {
 .asb-provider-import .asb-discovery-import {
     align-items: flex-start;

@@ -236,6 +236,29 @@
   overflow-wrap: anywhere;
 }
 
+/* A path value that is itself the control (copy, open location): the
+   monospace text stays the affordance, hover underlines it in place. */
+.asb-fact-path {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-code);
+  text-align: left;
+  cursor: pointer;
+}
+
+.asb-fact-path:hover {
+  color: var(--asb-text);
+  text-decoration: underline;
+}
+
+/* Open failures speak in the same fact row as error-red text. */
+.asb-fact-path-error {
+  display: block;
+  color: var(--asb-danger);
+}
+
 /* Any number a reader may compare down a column. Applied by class, never by
    re-declaring the property at each value. */
 .asb-num {

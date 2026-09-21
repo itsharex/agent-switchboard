@@ -2,11 +2,12 @@ import {
   type RuntimeLogAction,
   type RuntimeLogEntry,
 } from "../api/client";
+import { Pagination } from "../components/Pagination";
 import { Table, type TableColumn } from "../components/Table";
 import { Time } from "../components/Time";
 import { ModuleHeader } from "../components/WorkspaceHeader";
-import { SearchIcon } from "../components/icons";
-import { levelLabel, useRuntimeLogs } from "./use-runtime-logs";
+import { ScrollTextIcon } from "../components/icons";
+import { RUNTIME_LOG_PAGE_SIZE, levelLabel, useRuntimeLogs } from "./use-runtime-logs";
 
 const ACTION_LABEL: Record<RuntimeLogAction, string> = {
   appStarted: "应用已启动",
@@ -63,12 +64,12 @@ const LOG_COLUMNS: Array<TableColumn<RuntimeLogEntry>> = [
 
 /** Read-only view of the application's own bounded diagnostic event files.
  * The record-level setting, level filter and refresh actions live in the
- * diagnostics page header; the card renders the entries it receives. */
+ * diagnostics page header; the card renders the current page of entries. */
 export function LogsPage({ logs }: { logs: ReturnType<typeof useRuntimeLogs> }) {
-  const { entries, visibleEntries, filter, loading, error, folderError } = logs;
+  const { entries, visibleEntries, pageEntries, page, setPage, filter, loading, error, folderError } = logs;
   return (
-    <section className="asb-panel asb-runtime-logs" aria-label="日志">
-      <ModuleHeader title="日志" />
+    <section className="asb-panel asb-runtime-logs" aria-labelledby="runtime-logs-heading">
+      <ModuleHeader id="runtime-logs-heading" title="日志" />
       {error && (
         <p className="asb-runtime-log-notice" role="alert">
           无法读取应用日志：{error.message}
@@ -82,7 +83,7 @@ export function LogsPage({ logs }: { logs: ReturnType<typeof useRuntimeLogs> }) 
       {loading && entries.length === 0 ? (
         <div className="asb-runtime-log-table-wrap">
           <div className="asb-runtime-log-skeleton" role="status" aria-label="正在读取应用日志…">
-            {Array.from({ length: 8 }, (_, index) => (
+            {Array.from({ length: RUNTIME_LOG_PAGE_SIZE }, (_, index) => (
               <span key={index} className="asb-skeleton asb-runtime-log-skeleton-row" />
             ))}
           </div>
@@ -90,22 +91,31 @@ export function LogsPage({ logs }: { logs: ReturnType<typeof useRuntimeLogs> }) 
       ) : visibleEntries.length === 0 ? (
         <div className="asb-empty-state asb-runtime-log-empty">
           <span className="asb-empty-state-icon" aria-hidden="true">
-            <SearchIcon />
+            <ScrollTextIcon />
           </span>
           <h3 className="asb-section-title">
             {filter === "all" ? "暂无应用运行日志" : `暂无${levelLabel(filter)}级别的应用日志`}
           </h3>
         </div>
       ) : (
-        <div className="asb-runtime-log-table-wrap">
-          <Table
-            columns={LOG_COLUMNS}
-            rows={visibleEntries}
-            rowKey={(entry, index) => `${entry.at}-${entry.action}-${entry.errorCode ?? ""}-${index}`}
-            ariaLabel="应用运行日志"
-            className="asb-runtime-log-table"
+        <>
+          <div className="asb-runtime-log-table-wrap">
+            <Table
+              columns={LOG_COLUMNS}
+              rows={pageEntries}
+              rowKey={(entry, index) => `${entry.at}-${entry.action}-${entry.errorCode ?? ""}-${index}`}
+              ariaLabel="应用运行日志"
+              className="asb-runtime-log-table"
+            />
+          </div>
+          <Pagination
+            total={visibleEntries.length}
+            page={page}
+            pageSize={RUNTIME_LOG_PAGE_SIZE}
+            onPageChange={setPage}
+            label="应用运行日志分页"
           />
-        </div>
+        </>
       )}
     </section>
   );

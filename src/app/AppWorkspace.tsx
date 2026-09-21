@@ -15,6 +15,13 @@ export function AppWorkspace({ model }: { model: SwitchboardModel }) {
     setOpened((current) => current.has(page) ? current : new Set([...current, page]));
   }, [page]);
   const visited = (target: Page) => page === target || opened.has(target);
+  if (!model.navigationReady) return (
+    <main className="asb-main" aria-label="正在恢复工作区">
+      <div className="asb-settings-skeleton" role="status" aria-label="正在读取启动页面">
+        <div className="asb-skeleton" /><div className="asb-skeleton" /><div className="asb-skeleton" />
+      </div>
+    </main>
+  );
   return (
     <main className="asb-main" aria-label={page}>
       <div hidden={page !== "供应商切换"} className="asb-page-stack">

@@ -12,6 +12,7 @@ pub mod claude_gemini;
 mod claude_model;
 pub mod claude_native;
 pub mod contracts;
+mod config_path;
 pub mod discovery;
 pub mod endpoint;
 pub mod extensions;

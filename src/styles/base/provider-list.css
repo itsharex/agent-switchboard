@@ -33,7 +33,7 @@
   gap: var(--asb-space-2);
   width: 100%;
   padding: var(--asb-space-2) var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
+  border: 1px solid color-mix(in srgb, var(--asb-hairline) 60%, transparent);
   border-radius: var(--asb-radius);
   background: var(--asb-content);
   color: var(--asb-text);
@@ -51,17 +51,63 @@
 }
 
 .asb-row-item:hover,
+.asb-row-item:focus-within {
+  background: var(--asb-content-muted);
+}
+
 .asb-row-item.is-live {
-  border-color: var(--asb-action);
   background: var(--asb-provider-row-highlight);
 }
 
-/* A pending switch confirmation turns the card into a reading surface: hover
-   stops tinting it. :where keeps this exception at the base rule's
-   specificity so the is-live card below still wins. */
+/* Confirmation keeps its neutral reading surface through hover and focus. */
 .asb-row-item.is-confirming {
   background: var(--asb-content);
   border-color: var(--asb-hairline-strong);
+}
+
+/* Inline row-panel disclosure (供应商测试 / 用量读数): height, offset, and
+   opacity transition as one set, matching the editor's collapsible modules.
+   The row is a flex column with gap and the disclosure exists only while
+   open or animating, so the collapsed state cancels the gap lane it would
+   otherwise claim — closing returns the row to the fixed primary rail. The
+   collapse unmount listens for transitionend, so reduced motion must zero
+   the motion tokens (the global contract) instead of transition: none. */
+.asb-row-panel-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  margin-top: calc(-1 * var(--asb-space-2));
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--asb-space-unit)));
+  transition:
+    grid-template-rows var(--asb-motion-node) var(--asb-easing),
+    margin-top var(--asb-motion-node) var(--asb-easing),
+    visibility 0s linear var(--asb-motion-node),
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-row-panel-disclosure.is-open {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    grid-template-rows var(--asb-motion-node) var(--asb-easing),
+    margin-top var(--asb-motion-node) var(--asb-easing),
+    visibility 0s linear 0s,
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+/* The grid track collapses only when the item can shrink below its content. */
+.asb-row-panel-disclosure > * {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .asb-row-grip-spacer {
@@ -70,9 +116,7 @@
   height: var(--asb-touch-target);
 }
 
-/* The single data rail keeps name, model, and endpoint comparable at a
-   glance; the applied badge leads the model zone so every model value
-   shares one left edge. */
+/* Identity, model and endpoint keep the same left edges across every row. */
 .asb-row {
   display: flex;
   align-items: center;
@@ -107,7 +151,7 @@
   display: flex;
   flex-flow: row nowrap;
   align-items: center;
-  gap: var(--asb-space-1);
+  gap: var(--asb-space-3);
   align-self: stretch;
   height: var(--asb-row-line-height);
   min-height: var(--asb-row-line-height);
@@ -121,6 +165,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: inherit;
+}
+
+/* Only the model value shrinks; its status stays on the cell's trailing edge. */
+.asb-row-applied {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--asb-space-1);
+  margin-inline-start: auto;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-caption);
+  white-space: nowrap;
+}
+
+.asb-row-applied::before {
+  content: "";
+  flex: none;
+  width: calc(var(--asb-space-unit) + var(--asb-space-hairline));
+  height: calc(var(--asb-space-unit) + var(--asb-space-hairline));
+  border-radius: var(--asb-radius-pill);
+  background: var(--asb-action);
 }
 
 /* The optional summary is a sibling of the fixed primary rail, so complete
@@ -193,16 +258,6 @@
   transition:
     background-color var(--asb-motion-press) var(--asb-easing),
     color var(--asb-motion-press) var(--asb-easing);
-}
-
-/* The applied chip only ever renders on the highlighted live row, where the
-   plain selected tint equals the row background and the chip dissolves into
-   stray text; deepen it and ring it with the action color so the status
-   reads as a badge at the head of the model zone. */
-.asb-row-item.is-live .asb-pill-status {
-  background: color-mix(in srgb, var(--asb-action) 14%, var(--asb-row-selected));
-  border: 1px solid color-mix(in srgb, var(--asb-action) 32%, transparent);
-  color: var(--asb-text);
 }
 
 .asb-pill-status {

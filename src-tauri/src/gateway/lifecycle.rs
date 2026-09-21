@@ -64,6 +64,7 @@ impl GatewayController {
                 claude_request_ledger,
                 claude_auth: crate::claude_auth::ClaudeAuth::shared(local.root()),
                 activation_lock: Mutex::new(()),
+                codex_activation_generation: std::sync::atomic::AtomicU64::new(0),
                 listener: RwLock::new(ListenerState::Failed(Box::new(GatewayFailureReport {
                     port: 0,
                     kind: GatewayFailureKind::StateUnusable,

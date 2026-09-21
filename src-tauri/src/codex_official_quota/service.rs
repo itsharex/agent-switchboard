@@ -61,18 +61,37 @@ pub(super) struct AuthCredentials {
 pub(crate) fn query(profile_id: &str, auth_path: &Path) -> (CodexOfficialQuota, Option<String>) {
     let (fresh, marker) = fetch(auth_path);
     if fresh.status == CodexOfficialQuotaStatus::Available {
-        store_last_success(profile_id, marker.as_deref(), &fresh);
+        store_result(profile_id, marker.as_deref(), &fresh);
         return (fresh, marker);
     }
 
     let previous = cache()
         .lock()
         .ok()
-        .and_then(|entries| matching_last_success(&entries, profile_id, marker.as_deref()));
-    (retain_last_success(fresh, previous.as_ref()), marker)
+        .and_then(|entries| matching_quota(&entries, profile_id, marker.as_deref()));
+    let retained = retain_last_success(fresh, previous.as_ref());
+    store_result(profile_id, marker.as_deref(), &retained);
+    (retained, marker)
 }
 
-fn store_last_success(profile_id: &str, marker: Option<&str>, quota: &CodexOfficialQuota) {
+/// Cache-only projection, checked against the current native account identity.
+pub(crate) fn cached(profile_id: &str, auth_path: &Path) -> Result<Option<CodexOfficialQuota>, String> {
+    let text = match std::fs::read_to_string(auth_path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Some(empty(CodexOfficialQuotaStatus::SignInRequired)));
+        }
+        Err(_) => return Err("无法确认 Codex 原生账号，未展示缓存额度".into()),
+    };
+    let Some(credentials) = parse_credentials(&text) else {
+        return Ok(Some(empty(CodexOfficialQuotaStatus::SignInRequired)));
+    };
+    let marker = account_marker(credentials.account_id.as_deref());
+    let entries = cache().lock().map_err(|_| "Codex 官方额度缓存不可用")?;
+    Ok(matching_quota(&entries, profile_id, marker.as_deref()))
+}
+
+pub(crate) fn store_result(profile_id: &str, marker: Option<&str>, quota: &CodexOfficialQuota) {
     let Some(marker) = marker else {
         return;
     };
@@ -87,7 +106,7 @@ fn store_last_success(profile_id: &str, marker: Option<&str>, quota: &CodexOffic
     }
 }
 
-pub(super) fn matching_last_success(
+pub(super) fn matching_quota(
     entries: &HashMap<String, CachedQuota>,
     profile_id: &str,
     marker: Option<&str>,
@@ -275,13 +294,44 @@ pub(super) fn retain_last_success(
     previous: Option<&CodexOfficialQuota>,
 ) -> CodexOfficialQuota {
     previous
-        .filter(|quota| quota.status == CodexOfficialQuotaStatus::Available)
+        .filter(|quota| !quota.windows.is_empty())
         .map(|quota| CodexOfficialQuota {
             status: failure.status,
             windows: quota.windows.clone(),
             at: quota.at.clone(),
             stale: true,
-            last_reset: None,
+            last_reset: quota.last_reset.clone(),
         })
         .unwrap_or(failure)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repeated_failures_keep_the_same_successful_windows() {
+        let mut success = empty(CodexOfficialQuotaStatus::Available);
+        success.at = Some("2026-09-21T00:00:00Z".into());
+        success.windows.push(CodexOfficialQuotaWindow {
+            label: "5 小时".into(), used_percent: 25.0, resets_at: None,
+        });
+        let first = retain_last_success(empty(CodexOfficialQuotaStatus::Unavailable), Some(&success));
+        let second = retain_last_success(empty(CodexOfficialQuotaStatus::Unavailable), Some(&first));
+        assert_eq!(second.windows, success.windows);
+        assert_eq!(second.at, success.at);
+        assert_eq!(second.status, CodexOfficialQuotaStatus::Unavailable);
+        assert!(second.stale);
+    }
+
+    #[test]
+    fn cached_quota_never_crosses_accounts() {
+        let entries = HashMap::from([("profile".into(), CachedQuota {
+            account_marker: "account-a".into(),
+            quota: empty(CodexOfficialQuotaStatus::Unavailable),
+        })]);
+        assert!(matching_quota(&entries, "profile", Some("account-a")).is_some());
+        assert!(matching_quota(&entries, "profile", Some("account-b")).is_none());
+        assert!(matching_quota(&entries, "profile", None).is_none());
+    }
 }

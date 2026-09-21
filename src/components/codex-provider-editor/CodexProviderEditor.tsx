@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import type { AppKind, CodexProviderDraft, ProviderDraft, ProviderRecord } from "../../api/client";
 import type { CodexEditorSource } from "../../app/useProviders";
 import { Button } from "../Button";
@@ -6,7 +6,7 @@ import { ProviderConnectionTest } from "../provider-editor/ProviderConnectionTes
 import { ProviderEditorFrame } from "../provider-editor/ProviderEditorFrame";
 import { ProviderAdvancedSettings } from "../provider-editor/ProviderAdvancedSettings";
 import { ProviderNotesField } from "../provider-editor/ProviderIdentityFields";
-import { ParametersLoadStatus } from "../provider-editor/ProviderParametersPage";
+import { ParametersLoadStatus, ProviderParametersPage } from "../provider-editor/ProviderParametersPage";
 import { ResponsesOptionsFields } from "../provider-editor/ResponsesOptionsFields";
 import { CodexCapabilitiesSection } from "./CodexCapabilitiesSection";
 import { CodexConnectionFields } from "./CodexConnectionFields";
@@ -15,6 +15,7 @@ import { CodexModelSection } from "./CodexModelSection";
 import { CodexOfficialProviderForm } from "./CodexOfficialProviderForm";
 import { CodexParametersPage } from "./CodexParametersPage";
 import { useCodexProviderEditor, type CodexEditorState } from "./useCodexProviderEditor";
+import { useCodexOfficialEditor } from "./useCodexOfficialEditor";
 import "../../styles/base/provider-editor.css";
 
 interface Props {
@@ -99,39 +100,23 @@ function CodexProviderEditorSession(props: Props) {
 }
 
 function CodexOfficialSession(props: OfficialProps) {
-  const editor = useCodexProviderEditor(null, props.busy);
-  const formId = useId();
   const record = props.source.record;
-  const [name, setName] = useState(record?.profile.name ?? "Codex 官方登录");
-  const [websiteUrl, setWebsiteUrl] = useState(record?.profile.websiteUrl ?? "");
-  const [notes, setNotes] = useState(record?.profile.notes ?? "");
-  const [quotaMinutes, setQuotaMinutes] = useState(record?.profile.officialQuotaRefreshIntervalMinutes ?? 0);
-  const parameters = editor.draft.parameters;
-  const title = record ? "编辑 Codex 官方登录" : "新建 Codex 官方登录";
-  if (!editor.parameters.ready || parameters === null) {
-    return <ProviderEditorFrame title={title} backLabel="返回供应商" busy={props.busy}
-      onBack={props.onCancel} onCancel={props.onCancel} canSave={false}>
-      <ParametersLoadStatus busy={props.busy} ready={false} error={editor.parameters.error}
-        retry={editor.parameters.retry} />
-    </ProviderEditorFrame>;
-  }
-  const canSave = Boolean(name.trim());
-  const save = () => {
-    if (props.busy || !canSave) return;
-    props.onSaveOfficial({
-      app: "codex", routeMode: "official", name: name.trim(), baseUrl: null, apiKey: "", upstreamProtocol: null,
-      responsesOptions: null, maxOutputTokens: null, model: null, modelOptions: null, parameters,
-      notes: notes.trim() || null, websiteUrl: websiteUrl.trim() || null,
-      officialQuotaRefreshIntervalMinutes: quotaMinutes > 0 ? quotaMinutes : null,
-    });
-  };
-  return <ProviderEditorFrame title={title} backLabel="返回供应商" busy={props.busy}
-    onBack={props.onCancel} onCancel={props.onCancel} formId={formId} canSave={canSave}>
-    <CodexOfficialProviderForm formId={formId} busy={props.busy} editing={Boolean(record)}
-      name={name} websiteUrl={websiteUrl} notes={notes} quotaMinutes={quotaMinutes}
-      onNameChange={setName} onWebsiteChange={setWebsiteUrl} onNotesChange={setNotes}
-      onQuotaMinutesChange={setQuotaMinutes} onSubmit={save}
-      onSwitchAccessMode={() => props.onSwitchAccessMode(false, record)} />
+  const editor = useCodexOfficialEditor(record?.profile ?? null, props.busy);
+  const formId = useId();
+  const { parametersOpen } = editor;
+  const title = parametersOpen ? "运行参数" : record ? "编辑 Codex 官方登录" : "新建 Codex 官方登录";
+  const backLabel = parametersOpen ? "返回编辑" : "返回供应商";
+  const goBack = () => parametersOpen ? editor.setParametersOpen(false) : props.onCancel();
+  return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel} busy={props.busy}
+    onBack={goBack} onCancel={props.onCancel} formId={formId} canSave={editor.canSave}>
+    <div hidden={parametersOpen}>
+      <CodexOfficialProviderForm formId={formId} busy={props.busy} editing={Boolean(record)} editor={editor}
+        onSubmit={() => editor.save(props.onSaveOfficial)}
+        onSwitchAccessMode={() => props.onSwitchAccessMode(false, record)} />
+    </div>
+    {parametersOpen && <ProviderParametersPage value={editor.draft.parameters} parameters={editor.parameters}
+      onChange={(parameters) => editor.setDraft((current) => ({ ...current, parameters }))} busy={props.busy}
+      baselineValues={record?.profile.parameters.settings} />}
   </ProviderEditorFrame>;
 }
 

@@ -43,11 +43,11 @@ function NativeResetScope({ app, advanced }: { app: AppKind; advanced: boolean }
       <ul>
         <li>ASB 管理的标准客户端通用设置</li>
         {app === "codex" && <li>Codex 的 3 项子 agent 全局运行设置</li>}
-        {advanced && <li>真实配置中界面未拥有的字段</li>}
+        {advanced && <li>真实配置中未管理、且未标记为“仅保留”的字段</li>}
       </ul>
       <p className="asb-field-help">
         {advanced
-          ? "不会影响供应商参数、全局指令、登录与凭据、扩展配置或额外通用配置；移除项会先创建备份，可从历史备份恢复。"
+          ? "保留官方设置目录中的“仅保留”字段，以及供应商参数、全局指令、登录与凭据、扩展和额外通用配置。通过备份恢复校验后才允许重置。"
           : "不会影响供应商参数、全局指令、登录与凭据、扩展配置、未管理字段或额外通用配置。"}
       </p>
     </div>
@@ -143,7 +143,7 @@ export function ClientConfigurationResetPreview({
         <p key={warning} className="asb-field-error" role="alert">{warning}</p>
       ))}
       <p className="asb-field-help">
-        真实文件需要变更时会先创建备份，并在同一可恢复事务中更新已保存的配置。
+        文件或已保存配置需要变更时，都会备份当前文件及 ASB 设置；恢复备份会同时还原两者。
       </p>
       <div className="asb-client-settings-reset-actions">
         {onBack && (
@@ -246,7 +246,7 @@ function useClientConfigurationResets({
   };
   const commit = (resetKind: ClientConfigurationResetKind, successMessage: string) => {
     const current = pending[resetKind];
-    if (!current || busy) return;
+    if (!current || busy || !canReset) return;
     setErrorFor(resetKind, null); onStart();
     void commitClientConfigurationReset(app, resetKind, current.preview).then(() => {
       setPending(emptyResetState(null));
@@ -415,7 +415,7 @@ export function ClientConfigurationResetPanel({
           app={app}
           resetKind="clearExtraConfiguration"
           extraConfigurationCount={configuration.extraConfigurationCount}
-          busy={working}
+          busy={working || !configuration.canClearExtra}
           onConfirm={configuration.commitExtraClear}
           onBack={configuration.showNativeReset}
         />
@@ -433,7 +433,7 @@ export function ClientConfigurationResetPanel({
         app={app}
         resetKind={nativeView}
         extraConfigurationCount={configuration.extraConfigurationCount}
-        busy={working}
+        busy={working || !configuration.canNativeReset}
         onConfirm={configuration.commitNativeReset}
         onScopeChange={configuration.prepareNativeReset}
       />

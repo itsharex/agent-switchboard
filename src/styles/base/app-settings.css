@@ -3,13 +3,22 @@
 .asb-app-settings {
   display: flex;
   flex-direction: column;
-  gap: var(--asb-space-4);
+  gap: var(--asb-space-5);
 }
 
 .asb-app-settings-group {
   display: flex;
   flex-direction: column;
-  gap: var(--asb-space-2);
+  gap: 0;
+}
+
+.asb-app-settings-group > .asb-section-title {
+  padding-bottom: var(--asb-space-2);
+  letter-spacing: -0.015em;
+}
+
+.asb-app-settings-group > .asb-app-setting-row + .asb-app-setting-row {
+  border-top: 1px solid var(--asb-hairline);
 }
 
 .asb-app-setting-row {
@@ -17,11 +26,8 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--asb-space-3);
-  min-height: var(--asb-touch-target);
-  padding: var(--asb-space-3);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
+  min-height: calc(var(--asb-control-height) + var(--asb-space-4));
+  padding: var(--asb-space-3) 0;
 }
 
 .asb-app-setting-copy {
@@ -34,6 +40,19 @@
 .asb-app-setting-detail {
   font: var(--asb-text-label);
   color: var(--asb-text-muted);
+}
+
+.asb-shortcut-setting { display: grid; gap: var(--asb-space-1); min-width: 0; }
+.asb-shortcut-controls { display: flex; flex-wrap: wrap; gap: var(--asb-space-1); }
+.asb-shortcut-controls > .asb-btn[aria-pressed="true"] {
+  border-color: var(--asb-action);
+  background: var(--asb-row-selected);
+}
+
+@container settings-content (max-width: 640px) {
+  .asb-app-setting-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .asb-app-setting-row:has(.asb-segments, .asb-font-picker, .asb-shortcut-setting) { grid-template-columns: minmax(0, 1fr); }
+  .asb-app-setting-row .asb-segments { max-width: 100%; flex-wrap: wrap; }
 }
 
 /* Destructive action row: the .asb-app-settings gap owns the separation; the
@@ -92,16 +111,8 @@
 }
 
 @media (max-width: 680px) {
-  .asb-app-setting-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .asb-setting-actual {
     white-space: normal;
-  }
-
-  .asb-app-setting-row .asb-switch {
-    justify-self: start;
   }
 }
 
@@ -207,11 +218,19 @@
   font: var(--asb-text-label);
   font-weight: 600;
 }
+/* The on-demand code evidence under a client-preference switch: a native
+   details whose body animates the same height/offset/opacity grammar as the
+   editor fold modules, with the summary chevron rotating in sync. The row's
+   own spacing separates it from the choice controls — no divider hairline. */
 .asb-client-setting-code {
+  display: grid;
+  grid-template-rows: auto 0fr;
   grid-column: 1 / -1;
   min-width: 0;
-  border-top: 1px solid var(--asb-hairline);
+  transition: grid-template-rows var(--asb-motion-node) var(--asb-easing);
 }
+
+.asb-client-setting-code[open] { grid-template-rows: auto 1fr; }
 .asb-client-setting-code > summary {
   display: flex;
   align-items: center;
@@ -231,7 +250,35 @@
   transition: transform var(--asb-motion-press) var(--asb-easing);
 }
 .asb-client-setting-code[open] > summary::before { transform: rotate(90deg); }
-.asb-client-setting-code > code {
+
+/* The grid track collapses only when the body can shrink below its content. */
+.asb-client-setting-code-body {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--asb-space-unit)));
+  transition:
+    visibility 0s linear var(--asb-motion-node),
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-client-setting-code[open] > .asb-client-setting-code-body {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    visibility 0s linear 0s,
+    opacity var(--asb-motion-node) var(--asb-easing),
+    transform var(--asb-motion-node) var(--asb-easing);
+}
+
+.asb-client-setting-code-body > code {
   display: block;
   max-height: 12rem;
   margin-bottom: var(--asb-space-2);

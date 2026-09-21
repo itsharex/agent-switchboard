@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import { queryCodexOfficialQuota, type CodexOfficialQuota } from "../api/client";
+import type { CodexOfficialQuota } from "../api/client";
 import { Input } from "./Input";
 import { Button } from "./Button";
 import { Time } from "./Time";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
-import { useAutoQuery } from "./use-auto-query";
+import type { CachedQuery } from "./use-cached-query";
 
 interface Props {
   id: string;
-  profileId: string;
+  quota: CachedQuery<CodexOfficialQuota>;
   profileName: string;
-  /** Persisted auto-refresh cadence in minutes; 0 keeps the panel manual-only. */
+  /** Backend auto-refresh cadence in minutes; 0 disables automatic queries. */
   refreshIntervalMinutes: number;
   /** Persists a committed interval on the owning profile; false restores the
    * previous value. */
@@ -32,23 +32,10 @@ function statusCopy(quota: CodexOfficialQuota): string | null {
   }
 }
 
-/** The official Codex quota has one native read-only path. It intentionally
- * does not consume provider usage-query settings, API keys, or endpoints; its
- * auto-refresh cadence is the profile's own quota interval. */
-export function CodexOfficialQuotaPanel({
-  id,
-  profileId,
-  profileName,
+function QuotaRefreshInterval({
   refreshIntervalMinutes,
   onSaveInterval,
-}: Props) {
-  const { data: reading, querying, error: requestError, run } = useAutoQuery(
-    profileId,
-    refreshIntervalMinutes,
-    queryCodexOfficialQuota,
-    "订阅额度读取失败",
-  );
-
+}: Pick<Props, "refreshIntervalMinutes" | "onSaveInterval">) {
   const [intervalText, setIntervalText] = useState(() => String(refreshIntervalMinutes));
   const [savingInterval, setSavingInterval] = useState(false);
   useEffect(() => {
@@ -76,9 +63,38 @@ export function CodexOfficialQuotaPanel({
     }
   };
 
+  return (
+    <label className="asb-field asb-usage-interval">
+      <span>自动刷新间隔（分钟，0 为关闭）</span>
+      <Input
+        type="number"
+        min={0}
+        max={1440}
+        step={1}
+        aria-label="自动刷新间隔（分钟，0 为关闭）"
+        value={intervalText}
+        disabled={savingInterval}
+        onChange={(event) => setIntervalText(event.target.value)}
+        onBlur={() => void commitInterval()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") void commitInterval();
+        }}
+      />
+    </label>
+  );
+}
+
+/** Row summary and details consume the same read; only the row owns polling. */
+export function CodexOfficialQuotaPanel({
+  id,
+  quota,
+  profileName,
+  refreshIntervalMinutes,
+  onSaveInterval,
+}: Props) {
+  const { data: reading, querying, error: requestError, run } = quota;
   const status = reading ? statusCopy(reading) : null;
   const showsWindows = (reading?.windows.length ?? 0) > 0;
-
   return (
     <section id={id} className="asb-official-quota" aria-label={`${profileName} 官方订阅额度`}>
       <header className="asb-provider-usage-head">
@@ -87,35 +103,13 @@ export function CodexOfficialQuotaPanel({
         </div>
         <div className="asb-provider-usage-actions">
           {reading?.at && <Time iso={reading.at} />}
-          <Button
-            variant="unstyled"
-            className="asb-provider-usage-refresh"
-            disabled={querying}
-            onClick={() => void run()}
-          >
+          <Button variant="unstyled" className="asb-provider-usage-refresh" disabled={querying}
+            onClick={() => void run()}>
             {querying ? "读取中…" : "刷新"}
           </Button>
         </div>
       </header>
-
-      <label className="asb-field asb-usage-interval">
-        <span>自动刷新间隔（分钟，0 为关闭）</span>
-        <Input
-          type="number"
-          min={0}
-          max={1440}
-          step={1}
-          aria-label="自动刷新间隔（分钟，0 为关闭）"
-          value={intervalText}
-          disabled={savingInterval}
-          onChange={(event) => setIntervalText(event.target.value)}
-          onBlur={() => void commitInterval()}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void commitInterval();
-          }}
-        />
-      </label>
-
+      <QuotaRefreshInterval refreshIntervalMinutes={refreshIntervalMinutes} onSaveInterval={onSaveInterval} />
       {showsWindows && (
         <QuotaWindowsTable
           windows={reading!.windows}

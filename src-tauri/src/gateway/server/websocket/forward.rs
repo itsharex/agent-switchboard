@@ -8,52 +8,21 @@ pub(super) fn execute<S: Read + Write>(
     client: &UpstreamClient,
     inner: &GatewayInner,
     primary: &ActiveRoute,
+    candidates: Vec<ActiveRoute>,
     context: &mut ConversationContext,
-    mut request: PendingRequest,
+    request: PendingRequest,
     request_url: &str,
     headers: &[Header],
     span: &mut RequestSpan,
 ) -> ExchangeOutcome {
-    // The WebSocket path shares the HTTP subagent decision: a wire model
-    // swaps in the referenced profile's candidates and strips the prefix
-    // before admission.
-    let requested_model = serde_json::from_slice::<serde_json::Value>(&request.body)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("model")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        });
-    let (primary, candidates, body) = match codex_forward::resolve_subagent_routing(
-        inner,
-        requested_model.as_deref(),
-        std::mem::take(&mut request.body),
-    ) {
-        Ok(codex_forward::SubagentOutcome::NotRouted(body)) => (
-            primary.clone(),
-            inner.candidates_for(AppKind::Codex, primary),
-            body,
-        ),
-        Ok(codex_forward::SubagentOutcome::Routed {
-            route,
-            variants,
-            body,
-        }) => (route, variants, body),
+    let policy = match codex_forward::admit(inner, primary, &request.body) {
+        Ok(policy) => policy,
         Err((_, message)) => {
             let diagnostic = request_diagnostic(inner, primary, request_url, &message);
             return reject_diagnostic(socket, &diagnostic);
         }
     };
-    request.body = body;
-    let policy = match codex_forward::admit(inner, &primary, &request.body) {
-        Ok(policy) => policy,
-        Err((_, message)) => {
-            let diagnostic = request_diagnostic(inner, &primary, request_url, &message);
-            return reject_diagnostic(socket, &diagnostic);
-        }
-    };
-    let limit = codex_forward::attempt_limit(&policy, &primary);
+    let limit = codex_forward::attempt_limit(&policy, primary);
     Forward {
         socket,
         client,

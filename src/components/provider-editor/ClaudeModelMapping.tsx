@@ -35,7 +35,7 @@ function ModelTierField({ label, field, contextFlag, busy, models, claudeSetting
       <div className="asb-input-with-picker">
         <Input code aria-label={label} value={currentModel ?? ""} disabled={busy}
           onChange={(event) => setModel(optional(event.target.value))} />
-        {models && <ModelPicker models={models} current={currentModel} ariaLabel={`选择 ${label}模型`}
+        {models && <ModelPicker models={models.map(({ id, ownedBy }) => ({ value: id, label: id, group: ownedBy }))} current={currentModel} ariaLabel={`选择 ${label}模型`}
           disabled={busy} onSelect={setModel} />}
         {contextFlag && (
           <Checkbox label="1M" ariaLabel={`${label}启用 1M 上下文`}

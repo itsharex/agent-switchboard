@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import type { TraySnapshot } from "../api/client";
-import { formatUsageBalance } from "../lib/usage-format";
+import { formatOfficialQuotaBalance, formatUsageBalance } from "../lib/usage-format";
 import { cx } from "../utils/cx";
 
 type TrayProvider = TraySnapshot["providers"][number];
@@ -17,7 +17,9 @@ interface Props {
  * geometry contract targets global action controls, not list rows. */
 export function TrayProviderItem({ provider, busy, switchingId, onSwitch }: Props) {
   const usage = provider.usage;
-  const balance = usage ? formatUsageBalance(usage) : null;
+  const balance = usage === null ? null : usage.kind === "official"
+    ? formatOfficialQuotaBalance(usage.reading, "tray")
+    : formatUsageBalance(usage.reading);
   const action = provider.active
     ? `${provider.name}，当前供应商`
     : `切换到 ${provider.name}`;

@@ -188,11 +188,13 @@ pub fn finish_config_recovery<Io: SwitchIo>(
     }
 }
 
-/// Explicit compensation for the exact pending backup, using the executor's existing verified rollback.
+/// Explicit compensation for the exact pending backup. Prepare pairs application
+/// state with the pre-restore backup before any live file is restored.
 pub fn rollback_pending_config<Io: SwitchIo>(
     io: &Io,
     directory: &Path,
     pending: &PendingConfigWrite,
+    prepare: impl FnOnce(&BackupRecord) -> Result<(), String>,
     commit: impl FnOnce() -> Result<(), String>,
 ) -> Result<crate::RestoreOutcome, SwitchError> {
     let target = Path::new(&pending.backup.target_path);
@@ -211,6 +213,7 @@ pub fn rollback_pending_config<Io: SwitchIo>(
             &current,
             existed,
         )?;
+        prepare(&pre_restore_backup).map_err(|message| recovery_error(&message, &journal_path))?;
         let restored = crate::restore::restore_backup_content(io, target, &pending.backup);
         if !matches!(restored, RecoveryOutcome::Restored { .. }) {
             return Err(SwitchError::CommitFailed {

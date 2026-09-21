@@ -130,7 +130,14 @@ pub(super) fn codex_continuation_key(
     Sha256::digest(domain.to_string().as_bytes()).into()
 }
 
-pub(crate) fn codex_catalog_file_name(profile_id: &str, revision: &str) -> String {
+pub(crate) fn codex_catalog_file_name(
+    profile_id: &str,
+    revision: &str,
+    catalog: &[asb_core::contracts::CodexCatalogEntry],
+) -> String {
+    // Dependency models are absent from the owner's route revision but must
+    // still give each confirmed catalog an immutable file name.
+    let revision = hex_digest(serde_json::json!([revision, catalog]).to_string().as_bytes());
     format!(
         "agent-switchboard-codex-{profile_id}-{}.json",
         &revision[..16]
@@ -142,11 +149,12 @@ impl CodexCatalogProjection {
         state_root: &std::path::Path,
         file: &asb_core::contracts::CodexProviderFile,
         revision: &str,
+        replacement: Option<&asb_core::contracts::CodexProviderFile>,
     ) -> Result<Self, String> {
         file.validate()?;
         let mut catalog = file.profile.catalog.clone();
-        if let Some(route) = &file.profile.subagent_route {
-            catalog.push(super::routing::subagent_catalog_entry(state_root, route)?);
+        if let Some(entry) = super::codex_profile::subagent_catalog_entry(state_root, file, replacement)? {
+            catalog.push(entry);
         }
         let content =
             serde_json::to_string_pretty(&asb_core::contracts::codex_model_catalog_document(
@@ -154,7 +162,7 @@ impl CodexCatalogProjection {
             ))
             .map_err(|_| "Codex 模型目录序列化失败".to_string())?;
         Ok(Self {
-            file_name: codex_catalog_file_name(&file.profile.id, revision),
+            file_name: codex_catalog_file_name(&file.profile.id, revision, &catalog),
             content,
         })
     }

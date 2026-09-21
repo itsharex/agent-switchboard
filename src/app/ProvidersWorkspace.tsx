@@ -54,8 +54,8 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks}
         userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []} />
     <ProvidersPage active={active && !importing && appFilter === "claude"} view={model.providerView} onViewChange={model.setProviderView}
-      profiles={snapshot.profiles} appFilter={appFilter}
-      activeProfileId={activeProfileId(appFilter)} statuses={snapshot.statuses} locks={snapshot.locks}
+      profiles={snapshot.profiles}
+      activeProfileId={activeProfileId("claude")} statuses={snapshot.statuses} locks={snapshot.locks}
       userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []}
       editorSession={claudeEditorSession}
       busy={busy} collapsedUsageIds={appSettingsState.appSettings?.collapsedUsageIds ?? []}
@@ -71,7 +71,7 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
           providerSwitch.setTargetProfile(profile.id);
         }
         return saved;
-      }} onSaveQuotaInterval={providers.saveOfficialQuotaInterval}
+      }}
       onReorder={providers.dragReorderClaudeProfiles}
       onToggleUsage={(profile) => appSettingsState.toggleUsageCollapsed(profile.id)}
       onActivate={providerSwitch.requestActivation}

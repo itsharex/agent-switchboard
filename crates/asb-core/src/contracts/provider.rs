@@ -78,9 +78,9 @@ pub struct ProviderProfile {
     /// written into any client configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage_query: Option<UsageQuery>,
-    /// Whole minutes between automatic re-queries of the official Codex
-    /// subscription-quota panel; application-side metadata that is never
-    /// written into any client configuration. Absent keeps the panel
+    /// Whole minutes between backend queries of the official Codex
+    /// subscription quota; application-side metadata that is never
+    /// written into any client configuration. Absent keeps the profile
     /// manual-only, so there is no separate zero representation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub official_quota_refresh_interval_minutes: Option<u32>,

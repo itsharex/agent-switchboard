@@ -14,9 +14,12 @@
      position slides it exactly one layer width per cycle, so each tile
      meets its own tail and the loop is seamless by geometry, not easing.
      The keyframe distance must stay equal to one layer width; the gradient
-     anchors that make the tile seamless live in tokens.css. */
+     anchors that make the tile seamless live in tokens.css. DualRelay
+     re-anchors the phase on remount by reading this duration and the
+     claude half-cycle delay from computed style, so client-tab switches
+     never restart the flow — keep both values here. */
   background-size: 200% 100%;
-  animation: asb-route-color-flow 12s linear infinite;
+  animation: asb-route-color-flow 90s linear infinite;
 }
 
 .asb-route-card.is-on {
@@ -36,7 +39,7 @@
 
 .asb-route-card[data-app="claude"] {
   /* Half a cycle, so the twin cards flow in opposite phase. */
-  animation-delay: -6s;
+  animation-delay: -45s;
 }
 
 @keyframes asb-route-color-flow {

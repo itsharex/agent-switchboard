@@ -24,6 +24,24 @@ pub enum MotionPreference {
     Reduce,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StartupPage {
+    Providers,
+    LastVisited,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkspacePage {
+    Providers,
+    ClientConfiguration,
+    Extensions,
+    Sessions,
+    Usage,
+    Settings,
+}
+
 /// Bundled web font shipped with the app; also the interface-font default.
 pub(crate) const DEFAULT_INTERFACE_FONT: &str = "Noto Sans SC";
 
@@ -37,8 +55,14 @@ pub struct AppSettings {
     pub motion: MotionPreference,
     pub always_on_top: bool,
     pub launch_at_login: bool,
+    /// Keeps the main window hidden at startup; the app starts in the tray.
+    pub start_minimized: bool,
     pub hardware_acceleration: bool,
     pub interface_font: String,
+    pub interface_scale: u16,
+    /// Empty disables the shortcut; nonempty values use the canonical chord format.
+    pub global_shortcut: String,
+    pub startup_page: StartupPage,
     pub runtime_log_level: RuntimeLogLevel,
     /// Provider ids whose usage panel stays collapsed.
     pub collapsed_usage_ids: Vec<String>,
@@ -48,6 +72,10 @@ impl AppSettings {
     /// A font name is used verbatim as a CSS font-family value, so it must be
     /// a plain non-empty name without quotes or control characters.
     pub(crate) fn validate(&self) -> Result<(), String> {
+        if ![90, 100, 110, 125].contains(&self.interface_scale) {
+            return Err("界面缩放须为 90%、100%、110% 或 125%".to_string());
+        }
+        crate::desktop_shortcut::parse_shortcut(&self.global_shortcut)?;
         let valid = self.interface_font.trim().len() == self.interface_font.len()
             && !self.interface_font.is_empty()
             && self.interface_font.len() <= 64
@@ -71,10 +99,49 @@ impl Default for AppSettings {
             motion: MotionPreference::System,
             always_on_top: false,
             launch_at_login: false,
+            start_minimized: false,
             hardware_acceleration: true,
             interface_font: DEFAULT_INTERFACE_FONT.to_string(),
+            interface_scale: 100,
+            global_shortcut: String::new(),
+            startup_page: StartupPage::Providers,
             runtime_log_level: RuntimeLogLevel::Info,
             collapsed_usage_ids: Vec::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn desktop_preferences_have_one_complete_current_contract() {
+        let settings = AppSettings::default();
+        assert!(settings.validate().is_ok());
+        assert_eq!(settings.interface_scale, 100);
+        assert_eq!(settings.global_shortcut, "");
+        assert_eq!(settings.startup_page, StartupPage::Providers);
+        let current = serde_json::to_value(&settings).unwrap();
+        for field in ["interfaceScale", "globalShortcut", "startupPage"] {
+            let mut missing = current.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<AppSettings>(missing).is_err(), "{field} must be present");
+        }
+        let mut unknown = current;
+        unknown["zoom"] = serde_json::json!(100);
+        assert!(serde_json::from_value::<AppSettings>(unknown).is_err());
+    }
+
+    #[test]
+    fn only_displayed_scale_choices_are_valid() {
+        for scale in [90, 100, 110, 125] {
+            let settings = AppSettings { interface_scale: scale, ..AppSettings::default() };
+            assert!(settings.validate().is_ok());
+        }
+        for scale in [0, 95, 126, u16::MAX] {
+            let settings = AppSettings { interface_scale: scale, ..AppSettings::default() };
+            assert!(settings.validate().is_err());
         }
     }
 }

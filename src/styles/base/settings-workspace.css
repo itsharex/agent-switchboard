@@ -1,33 +1,36 @@
 .asb-settings-workspace {
   display: grid;
-  grid-template-columns: 11rem minmax(0, 1fr);
+  grid-template-columns: 12rem minmax(0, 1fr);
   align-items: start;
-  gap: var(--asb-space-4);
+  gap: var(--asb-space-5);
   min-width: 0;
 }
 
 .asb-settings-sidebar {
   position: sticky;
-  top: 0;
+  top: var(--asb-space-1);
   display: flex;
   flex-direction: column;
-  gap: var(--asb-space-3);
+  gap: var(--asb-space-4);
   min-width: 0;
 }
 
 .asb-settings-sidebar-heading {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
   gap: var(--asb-space-2);
-  padding-inline: var(--asb-space-2);
+  padding: var(--asb-space-2);
 }
+
+.asb-settings-sidebar-heading > .asb-btn { grid-column: 1 / -1; }
 
 /* The sidebar's page title: the workspace-title type step on the sidebar's
  * own surface, an owned class rather than the header component's internals. */
 .asb-settings-sidebar-title {
   margin: 0;
   font: var(--asb-text-title);
+  letter-spacing: -0.025em;
 }
 
 .asb-settings-navigation {
@@ -36,6 +39,9 @@
 }
 
 .asb-settings-category {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-2);
   border: 1px solid transparent;
@@ -44,7 +50,12 @@
   color: var(--asb-text-muted);
   font: var(--asb-text-body);
   text-align: left;
+  transition: background var(--asb-motion-press) var(--asb-easing), color var(--asb-motion-press) var(--asb-easing);
 }
+
+.asb-settings-category-icon { display: flex; flex: none; }
+
+.asb-settings-category:nth-child(4) { margin-top: var(--asb-space-3); }
 
 .asb-settings-category:hover {
   background: var(--asb-content-muted);
@@ -52,9 +63,8 @@
 }
 
 .asb-settings-category[aria-current="page"] {
-  background: var(--asb-content);
-  border-color: var(--asb-hairline);
-  color: var(--asb-text);
+  background: var(--asb-row-selected);
+  color: var(--asb-link);
   font-weight: 600;
 }
 
@@ -64,6 +74,7 @@
 
 .asb-settings-content {
   min-width: 0;
+  container: settings-content / inline-size;
 }
 
 .asb-client-provider-help,
@@ -439,15 +450,17 @@
   }
 
   .asb-settings-sidebar-heading {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    grid-template-columns: minmax(0, 1fr) auto;
     padding: 0;
   }
+
+  .asb-settings-sidebar-heading > .asb-btn { grid-column: auto; }
 
   .asb-settings-navigation {
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   }
+
+  .asb-settings-category:nth-child(4) { margin-top: 0; }
 }
 
 @media (max-width: 680px) {
@@ -466,9 +479,5 @@
   .asb-settings-content .asb-settings-actions-main {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .asb-diagnostics .asb-status-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }

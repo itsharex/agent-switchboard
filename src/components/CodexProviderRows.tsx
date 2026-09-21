@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { CodexProviderRecord, ProviderProfile, ProviderRecord, ProviderRequestTarget } from "../api/client";
+import { queryCodexOfficialQuota, readCodexOfficialQuota } from "../api/client";
 import { Button } from "./Button";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { ConnectivityIcon, EditIcon, TrashIcon, UsageIcon } from "./icons";
@@ -8,9 +9,12 @@ import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderRowShell } from "./ProviderWorkspaceShell";
 import { ProviderTestPanel } from "./ProviderTestPanel";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
+import { RowPanelDisclosure } from "./RowPanelDisclosure";
 import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
 import { formatUsageHighlight, formatUsageSummary } from "../lib/usage-format";
 import { Tooltip } from "./Tooltip";
+import { OfficialQuotaSummary } from "./OfficialQuotaSummary";
+import { useCachedQuery } from "./use-cached-query";
 
 interface RowActionsProps {
   name: string;
@@ -73,7 +77,7 @@ interface ThirdPartyRowProps extends RowProps {
   usageOpen: boolean;
   onToggleUsage: () => void;
   onConfigureUsage: () => void;
-  /** Present only on configured rows, which own their usage polling. */
+  /** Present only on configured rows, which subscribe to cached usage. */
   usage?: ProviderUsage;
 }
 
@@ -97,7 +101,7 @@ export function CodexProviderRow({ record, usageOpen, onToggleUsage, onConfigure
       aria-label={`${name} 用量摘要`}
       title={usage.data ? formatUsageSummary(usage.data) : usage.error ?? undefined}
     >
-      {usage.data ? formatUsageHighlight(usage.data) : usage.error ? "用量查询失败" : "正在读取用量"}
+      {usage.data ? formatUsageHighlight(usage.data) : usage.error ? "用量查询失败" : usage.querying ? "正在读取用量" : "暂无用量读数"}
       {usage.data && usage.error && " · 更新失败"}
       {usage.data && usage.querying && " · 更新中"}
     </span>
@@ -142,26 +146,28 @@ export function CodexProviderRow({ record, usageOpen, onToggleUsage, onConfigure
           </Tooltip>
         </RowActions>
       }>
-      {testOpen && (
+      <RowPanelDisclosure open={testOpen}>
         <ProviderTestPanel id={testId} name={name} url={record.profile.endpoint} target={target}
           onClose={() => { setTestOpen(false); testTriggerRef.current?.focus(); }} />
-      )}
-      {hasUsageQuery && usageOpen && usage && (
-        <ProviderUsagePanel
-          id={`provider-usage-${id}`}
-          name={name}
-          usage={usage}
-          onConfigure={onConfigureUsage}
-        />
+      </RowPanelDisclosure>
+      {usage && (
+        <RowPanelDisclosure open={usageOpen}>
+          <ProviderUsagePanel
+            id={`provider-usage-${id}`}
+            name={name}
+            usage={usage}
+            onConfigure={onConfigureUsage}
+          />
+        </RowPanelDisclosure>
       )}
       {props.children}
     </ProviderRowShell>
   );
 }
 
-/** Configured rows own their usage polling so collapsing the panel does not stop it. */
+/** Both clients subscribe to the same backend-owned usage cache. */
 export function ConfiguredCodexProviderRow(props: ThirdPartyRowProps) {
-  const usage = useProviderUsage({ id: props.record.profile.id, usageQuery: props.record.usageQuery });
+  const usage = useProviderUsage({ app: "codex", id: props.record.profile.id, usageQuery: props.record.usageQuery });
   return <CodexProviderRow {...props} usage={usage} />;
 }
 
@@ -189,11 +195,13 @@ function QuotaToggle({ name, id, open, onToggle }: { name: string; id: string; o
 export function CodexOfficialRow(props: OfficialRowProps) {
   const { profile } = props.record;
   const [reloginOpen, setReloginOpen] = useState(false);
-  const [quotaNonce, setQuotaNonce] = useState(0);
+  const quota = useCachedQuery(profile.id, String(profile.officialQuotaRefreshIntervalMinutes ?? 0),
+    readCodexOfficialQuota, queryCodexOfficialQuota);
   const loginLabel = reloginOpen ? `收起 ${profile.name} 登录` : `重新登录 ${profile.name}`;
   return (
     <ProviderRowShell id={profile.id} name={profile.name} active={props.active}
-      confirmationOpen={props.confirmationOpen} sortable model={profile.model ?? "默认模型"} summary="官方登录"
+      confirmationOpen={props.confirmationOpen} sortable model={profile.model ?? "默认模型"}
+      summary={<><span>官方登录</span><OfficialQuotaSummary name={profile.name} quota={quota} /></>}
       primaryAction={!props.active ? <ActivateButton name={profile.name} onActivate={props.onActivate} /> : undefined}
       secondaryAction={
         <Tooltip label={loginLabel}>
@@ -214,14 +222,14 @@ export function CodexOfficialRow(props: OfficialRowProps) {
       {reloginOpen && (
         <OfficialLoginPanel app="codex" onFinished={(completed) => {
           if (completed) {
-            setQuotaNonce((nonce) => nonce + 1);
+            quota.run();
             props.onReloginFinished();
           }
         }} />
       )}
       {props.quotaOpen && (
-        <CodexOfficialQuotaPanel key={`codex-official-quota-${profile.id}-${quotaNonce}`}
-          id={`codex-official-quota-${profile.id}`} profileId={profile.id} profileName={profile.name}
+        <CodexOfficialQuotaPanel
+          id={`codex-official-quota-${profile.id}`} quota={quota} profileName={profile.name}
           refreshIntervalMinutes={profile.officialQuotaRefreshIntervalMinutes ?? 0}
           onSaveInterval={(minutes) => props.onSaveQuotaInterval(profile, minutes)} />
       )}

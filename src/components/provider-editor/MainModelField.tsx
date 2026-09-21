@@ -61,7 +61,7 @@ export function MainModelField({
         <PrimaryModelInput draft={draft} busy={busy} setDraft={setDraft} />
         {models && (
           <ModelPicker
-            models={models}
+            models={models.map(({ id, ownedBy }) => ({ value: id, label: id, group: ownedBy }))}
             current={draft.model}
             ariaLabel="选择模型"
             disabled={busy}

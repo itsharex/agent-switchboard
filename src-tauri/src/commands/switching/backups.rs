@@ -4,6 +4,32 @@ use asb_switch::io::{FsIo, SwitchIo};
 use asb_switch::{list_backups as scan_backups, restore_projected, RestoreOutcome};
 use std::path::PathBuf;
 
+/// Newly created reset backups must satisfy the same route, catalog and auth
+/// requirements as a restore, both before preview and under the commit gate.
+pub(in crate::commands) fn validate_client_configuration_backup(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+    app: AppKind,
+    current: &str,
+    existed: bool,
+) -> Result<(), CommandError> {
+    if !existed { return Ok(()); }
+    let validate = || -> Result<(), String> {
+        let candidate = gateway.prepare_restored(state, app, current)?;
+        if app == AppKind::Codex {
+            let projected = gateway.restored_codex_catalog(state, &candidate)?;
+            let target = state.target(app)?;
+            super::plan::catalog_artifact(&target, projected.as_ref()).map_err(|error| error.message)?;
+            super::codex_restore_auth::validate_current_auth(&target, &candidate).map_err(|error| error.message)?;
+        }
+        Ok(())
+    };
+    validate().map_err(|message| CommandError::new(
+        "client-configuration-not-restorable",
+        format!("当前配置无法通过备份恢复校验，尚未重置：{message}"),
+    ))
+}
+
 pub(super) fn local_backups(
     state: &crate::local_state::LocalState,
 ) -> Result<Vec<BackupRecord>, CommandError> {
@@ -62,17 +88,11 @@ pub(super) fn run_restore(
             "备份不属于当前本机配置路径，已拒绝恢复",
         ));
     }
-    let write_record = ConfigWriteRecord {
-        app: record.app,
-        profile_id: None,
-        profile_name: None,
-        content_hash: String::new(),
-        backup_id: String::new(),
-        at: String::new(),
-        operation: WriteOperation::Restore,
-    };
     let app = record.app;
     let candidate = validate_restore_source(state, gateway, record)?;
+    let settings = super::client_settings_backup::load(state, record)
+        .map_err(|error| CommandError::new("backup-settings-invalid", error))?;
+    let before = state.configuration().get_client_settings(app).map_err(super::store_error)?;
     let catalog = if app == AppKind::Codex {
         let projected = gateway
             .restored_codex_catalog(state, &candidate)
@@ -82,27 +102,31 @@ pub(super) fn run_restore(
         None
     };
     let auth = super::codex_restore_auth::intent(state, record, &target, &candidate)?;
-    super::transaction::begin_with_codex_backfill_and_auth(
+    super::transaction::begin_restore(
         state,
         gateway,
         app,
-        None,
         &asb_switch::sha256_hex(&candidate),
         record.target_existed,
         catalog.clone(),
-        None,
         auth,
+        &before,
+        settings.as_ref().unwrap_or(&before.settings),
     )?;
     super::transaction::stage_catalog(state, gateway, catalog.as_ref())?;
     let execution = restore_projected(&FsIo, record, &target, Some(&candidate), |outcome| {
         gateway.reconcile_restored(state, app, || {
+            super::transaction::commit_client_settings(state, &outcome.pre_restore_backup)?;
             state
                 .configuration()
                 .record_config_write(ConfigWriteRecord {
+                    app,
+                    profile_id: None,
+                    profile_name: None,
                     content_hash: outcome.restored_hash.clone(),
                     backup_id: outcome.pre_restore_backup.id.clone(),
                     at: outcome.pre_restore_backup.created_at.clone(),
-                    ..write_record
+                    operation: WriteOperation::Restore,
                 })
                 .map_err(|error| error.to_string())
         })
@@ -146,4 +170,29 @@ fn validate_restore_source(
         candidate
     };
     Ok(candidate)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reset_preflight_rejects_nonrestorable_sources_without_creating_backups() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = crate::local_state::LocalState::from_root(directory.path().join("state"));
+        let gateway_path = state.gateway_state_path();
+        std::fs::create_dir_all(gateway_path.parent().unwrap()).unwrap();
+        // Invalid isolated state keeps startup from binding or rehydrating client files.
+        std::fs::write(&gateway_path, "invalid gateway state").unwrap();
+        let gateway = crate::gateway::GatewayController::start(&state);
+        for source in ["model_provider = 'personal'", "[model_providers.openai]\nbase_url = 'https://relay.example'"] {
+            let error = validate_client_configuration_backup(&state, &gateway, AppKind::Codex, source, true).unwrap_err();
+            assert_eq!(error.code, "client-configuration-not-restorable");
+        }
+        assert!(validate_client_configuration_backup(&state, &gateway, AppKind::Claude, "{}", true).is_ok());
+        assert!(validate_client_configuration_backup(&state, &gateway, AppKind::Claude, "{", true).is_err());
+        assert!(validate_client_configuration_backup(&state, &gateway, AppKind::Codex, "", false).is_ok());
+        assert!(!state.backup_dir().exists());
+        gateway.shutdown();
+    }
 }

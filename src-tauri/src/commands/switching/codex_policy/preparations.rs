@@ -74,7 +74,7 @@ pub(super) fn prepare(
         .map_err(crate::commands::error::store_error)?;
     let settings = crate::codex_common::resolve(state, &profile_id).map_err(invalid)?;
     let projection = gateway
-        .project_codex_with_policy(&file, settings, &policy)
+        .project_codex_with_policy(&file, settings, &policy, None)
         .map_err(invalid)?;
     let preview = super::super::plan::preview_projection(state, &projection)?;
     Ok(Prepared {

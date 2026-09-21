@@ -137,12 +137,11 @@ pub fn owned_paths(root: &Value) -> Result<BTreeSet<String>, String> {
     Ok(paths)
 }
 
-/// Same claim set as [`owned_paths`], rendered as dotted document paths so
-/// the adapter layer can match leaves without knowing pointer encoding.
-pub fn owned_dotted_paths(root: &Value) -> Result<BTreeSet<String>, String> {
+/// Decoded segments retain literal dots and slashes in manifest-owned keys.
+pub fn owned_key_paths(root: &Value) -> Result<BTreeSet<Vec<String>>, String> {
     owned_paths(root)?
         .into_iter()
-        .map(|path| pointer::decode(&path).map(|segments| segments.join(".")))
+        .map(|path| pointer::decode(&path))
         .collect()
 }
 fn changes_with(before: &str, extra: &Extra, manifest: &str) -> Result<Vec<KeyChange>, String> {
@@ -183,12 +182,7 @@ pub fn display(path: &str, value: &Value) -> String {
     redacted(path, value).to_string()
 }
 fn redacted(path: &str, value: &Value) -> Value {
-    let credential_url = value
-        .as_str()
-        .and_then(|value| url::Url::parse(value).ok())
-        .is_some_and(|url| !url.username().is_empty() || url.password().is_some());
-    if credential_url
-        || crate::redact::is_secret_key(path)
+    if crate::redact::is_secret_key(path)
         || value.as_str().is_some_and(crate::redact::is_secret_value)
     {
         return Value::String(crate::redact::REDACTED.into());

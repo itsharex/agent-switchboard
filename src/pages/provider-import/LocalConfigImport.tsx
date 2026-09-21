@@ -1,5 +1,6 @@
-import type { AppKind, ClaudeImportProposal, CodexImportProposal, DiscoveredFile, DiscoveryReport } from "../../api/client";
+import { openConfigFileLocation, type AppKind, type ClaudeImportProposal, type CodexImportProposal, type DiscoveredFile, type DiscoveryReport } from "../../api/client";
 import { Button } from "../../components/Button";
+import { FactPath } from "../../components/FactPath";
 import { ModuleHeader } from "../../components/WorkspaceHeader";
 import { SearchIcon } from "../../components/icons";
 import { clientName } from "../../lib/client-name";
@@ -26,15 +27,15 @@ function LocalRouteFacts({ file }: { file: DiscoveredFile }) {
   const { route, managed, warnings, importable } = file.state;
   return (
     <>
-      <div className="asb-status-row"><dt>当前服务</dt><dd>
+      <div><dt>当前服务</dt><dd>
         {route.routeMode === "official" ? "官方登录" : "自定义服务"} · {route.model ?? "默认模型"}
       </dd></div>
-      {route.providerName && <div className="asb-status-row"><dt>供应商</dt><dd>{route.providerName}</dd></div>}
-      {route.baseUrl && <div className="asb-status-row"><dt>服务地址</dt><dd className="asb-code">{route.baseUrl}</dd></div>}
-      {route.apiKey && <div className="asb-status-row"><dt>凭据变量</dt><dd className="asb-code">{route.apiKey}</dd></div>}
-      <div className="asb-status-row"><dt>管理状态</dt><dd>{managed ? "已由本应用管理" : "未由本应用管理"}</dd></div>
+      {route.providerName && <div><dt>供应商</dt><dd>{route.providerName}</dd></div>}
+      {route.baseUrl && <div><dt>服务地址</dt><dd className="asb-code">{route.baseUrl}</dd></div>}
+      {route.apiKey && <div><dt>凭据变量</dt><dd className="asb-code">{route.apiKey}</dd></div>}
+      <div><dt>管理状态</dt><dd>{managed ? "已由本应用管理" : "未由本应用管理"}</dd></div>
       {(warnings.length > 0 || (!importable && !managed)) && (
-        <div className="asb-status-row"><dt>警告</dt><dd>
+        <div><dt>警告</dt><dd>
           {warnings.map((warning) => <span key={warning} className="asb-warn-text asb-status-warn">{warning}</span>)}
           {!importable && !managed && <span className="asb-warn-text asb-status-warn">当前配置包含无法安全导入的设置。</span>}
         </dd></div>
@@ -50,18 +51,20 @@ function LocalConfigCard({ file, proposal, busy, onImport }: {
   onImport: () => void;
 }) {
   return (
-    <article className="asb-status-card" aria-label={`${clientName(file.app)} 扫描结果`}>
-      <header className="asb-status-head">
-        <h3 className="asb-status-name">{clientName(file.app)}</h3>
-        <span className="asb-status-pill">{stateLabel(file)}</span>
+    <article className="asb-client-status" aria-label={`${clientName(file.app)} 扫描结果`}>
+      <header className="asb-client-status-head">
+        <span className="asb-client-status-name">{clientName(file.app)}</span>
+        <span className={`asb-status-pill${file.state.kind === "ok" ? " is-ok" : ""}`}>
+          <span className="asb-status-pill-dot" aria-hidden="true" />{stateLabel(file)}
+        </span>
       </header>
-      <dl className="asb-status-rows">
-        <div className="asb-status-row"><dt>配置文件</dt><dd className="asb-code">{file.path}</dd></div>
+      <dl className="asb-fact-row">
+        <div><dt>配置文件</dt><dd><FactPath path={file.path} open={() => openConfigFileLocation(file.app)} /></dd></div>
         {file.state.kind === "readError" && (
-          <div className="asb-status-row"><dt>读取错误</dt><dd className="asb-warn-text">{file.state.message}</dd></div>
+          <div><dt>读取错误</dt><dd className="asb-warn-text">{file.state.message}</dd></div>
         )}
         {file.state.kind === "parseError" && (
-          <div className="asb-status-row"><dt>语法错误</dt><dd className="asb-warn-text">
+          <div><dt>语法错误</dt><dd className="asb-warn-text">
             {file.state.line !== null ? `第 ${file.state.line} 行 · ` : ""}{file.state.message}
           </dd></div>
         )}

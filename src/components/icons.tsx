@@ -20,6 +20,7 @@ import {
   Pin,
   Play,
   Plus,
+  ScrollText,
   Search,
   Send,
   Square,
@@ -61,6 +62,7 @@ export const GatewayIcon = icon(Network, 20);
 export const ChevronDownIcon = icon(ChevronDown, 16, 2.4);
 export const ChevronUpIcon = icon(ChevronUp, 16, 2.4);
 export const SearchIcon = icon(Search, 16, 2.4);
+export const ScrollTextIcon = icon(ScrollText, 16, 2.4);
 export const FolderOpenIcon = icon(FolderOpen, 16);
 export const CheckIcon = icon(Check, 14, 3.6);
 export const DashIcon = icon(Minus, 14, 3.6);

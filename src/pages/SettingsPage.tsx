@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ArchiveRestore, Info, SlidersHorizontal, Stethoscope, Wrench } from "lucide-react";
 import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
 import appIcon from "../assets/app-icon.svg";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
@@ -7,6 +8,16 @@ import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { UpdateSection } from "../components/UpdateSection";
+import { GatewayIcon } from "../components/icons";
+
+const SECTION_ICONS = {
+  application: SlidersHorizontal,
+  "client-management": Wrench,
+  gateway: GatewayIcon,
+  backups: ArchiveRestore,
+  diagnostics: Stethoscope,
+  about: Info,
+};
 
 interface SettingsPageProps {
   section: SettingsSection;
@@ -19,13 +30,14 @@ interface SettingsPageProps {
   settings: AppSettings | null;
   /** Why settings could not load; null while loading or after success. */
   loadError: string | null;
+  desktopError: string | null;
   /** Re-runs the settings load after a failure. */
   onRetryLoad: () => void;
   /** Replaces an invalid settings file with defaults. */
   onRepair: () => void;
   busy: boolean;
   /** Saves one field of the currently loaded settings. */
-  onPatch: (patch: Partial<AppSettings>) => void;
+  onPatch: (patch: Partial<AppSettings>) => Promise<boolean>;
   /** Restarts the desktop process on the user's explicit request. */
   onRestart: () => void;
   /** Latest manual update check; null until the first check runs. */
@@ -49,15 +61,8 @@ function ApplicationSettings(props: SettingsPageProps) {
   return (
     <div className="asb-app-settings">
       {settings ? (
-        <AppSettingsForm settings={settings} busy={busy}
-          onCloseBehaviorChange={(closeBehavior) => onPatch({ closeBehavior })}
-          onThemeChange={(theme) => onPatch({ theme })}
-          onMotionChange={(motion) => onPatch({ motion })}
-          onInterfaceFontChange={(interfaceFont) => onPatch({ interfaceFont })}
-          onAlwaysOnTopChange={(alwaysOnTop) => onPatch({ alwaysOnTop })}
-          onLaunchAtLoginChange={(launchAtLogin) => onPatch({ launchAtLogin })}
-          onHardwareAccelerationChange={(hardwareAcceleration) => onPatch({ hardwareAcceleration })}
-          onRestart={props.onRestart} />
+        <AppSettingsForm settings={settings} busy={busy} onPatch={onPatch}
+          desktopError={props.desktopError} onRestart={props.onRestart} />
       ) : props.loadError ? (
         <>
           <div className="asb-app-setting-row" role="alert">
@@ -124,10 +129,16 @@ export function SettingsPage(props: SettingsPageProps) {
           {props.onReturnToProviders && <Button variant="secondary" onClick={props.onReturnToProviders}>返回供应商</Button>}
         </div>
         <nav className="asb-settings-navigation" aria-label="设置分类">
-          {SETTINGS_SECTIONS.map(({ value, label }) => (
-            <Button key={value} variant="unstyled" aria-current={section === value ? "page" : undefined}
-              className="asb-settings-category" onClick={() => onSectionChange(value)}>{label}</Button>
-          ))}
+          {SETTINGS_SECTIONS.map(({ value, label }) => {
+            const Icon = SECTION_ICONS[value];
+            return (
+              <Button key={value} variant="unstyled" aria-current={section === value ? "page" : undefined}
+                className="asb-settings-category" onClick={() => onSectionChange(value)}>
+                <span className="asb-settings-category-icon" aria-hidden="true"><Icon size={18} /></span>
+                <span>{label}</span>
+              </Button>
+            );
+          })}
         </nav>
       </aside>
       <div className="asb-settings-content">

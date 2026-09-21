@@ -9,7 +9,7 @@
 //! - [`window`]: title-bar window controls and the inspector toggle
 //! - [`status`]: read-only configuration status and lock observation
 //! - [`client_settings`]: general-configuration overlay commands
-//! - [`codex_probe`]: degradation-probe catalog plus start/poll/cancel commands
+//! - [`codex_probe`]: degradation-probe catalog, batch start/cancel/save-retry, and history commands
 //! - [`official_login`]: official client login start/poll/cancel commands
 //! - [`prompt_management`]: global AGENTS.md / CLAUDE.md document commands
 //! - [`subagent_settings`]: Codex `[agents]` default-setting commands
@@ -29,6 +29,7 @@ mod discovery;
 mod profiles;
 mod query;
 mod quota;
+pub(crate) mod quota_refresh;
 
 
 pub(crate) mod client_settings;
@@ -51,6 +52,7 @@ pub(crate) mod subagent_settings;
 pub(crate) mod switching;
 pub(crate) mod usage_history;
 pub(crate) mod window;
+pub(crate) mod workspace;
 
 pub(crate) use status::config_status_report;
 pub(crate) use status::ConfigFileStatus;

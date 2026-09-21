@@ -1,14 +1,10 @@
-import { useState } from "react";
 import type { GatewayMetricsStatus, GatewaySample, UpstreamProtocol } from "../api/client";
 import { PROTOCOL_LABELS, isProtocolTranslation } from "../lib/protocol";
-import { ChevronDownIcon } from "./icons";
 import { Table, type TableColumn } from "./Table";
 
 const RECENT_ROW_COUNT = 20;
 const TREND_MINUTES = 60;
 const MINUTE_MS = 60_000;
-const SPARKLINE_WIDTH = 240;
-const SPARKLINE_HEIGHT = 36;
 const APP_LABELS = { codex: "Codex", claude: "Claude Code" } as const;
 const PROTOCOL_TONES: Record<UpstreamProtocol, string> = {
   responses: "var(--asb-action)",
@@ -24,60 +20,65 @@ function formatClock(timestamp: number): string {
 
 interface TelemetryProps {
   metrics: GatewayMetricsStatus;
-  routeCount: number;
   profileNames: Map<string, string>;
 }
 
-/** 仪表带是网关页的遥测主面：等宽大数字呈现累计请求（附近 60 分钟迷你
- * 趋势）、失败请求、p50/p95 耗时与上游协议分布；「最近请求」明细收进
- * 按需展开的披露区，展开时才挂载。全部读数只来自内存遥测样本。 */
-export function GatewayTelemetry({ metrics, routeCount, profileNames }: TelemetryProps) {
+/** 图表带是网关页的遥测面：累计请求带 60 分钟柱状趋势、失败请求、
+ * p50/p95 耗时条与上游协议分布；「最近请求」明细常驻展示，不做折叠。
+ * 全部读数只来自内存遥测样本。 */
+export function GatewayTelemetry({ metrics, profileNames }: TelemetryProps) {
   return (
     <>
-      <GatewayInstruments metrics={metrics} routeCount={routeCount} />
+      <GatewayStrip metrics={metrics} />
       <GatewayRecentRequests samples={metrics.samples} profileNames={profileNames} />
     </>
   );
 }
 
-function GatewayInstruments({ metrics, routeCount }: {
-  metrics: GatewayMetricsStatus;
-  routeCount: number;
-}) {
+function GatewayStrip({ metrics }: { metrics: GatewayMetricsStatus }) {
   const { totalRequests, failedRequests, samples } = metrics;
   const completed = samples
     .filter((sample) => sample.status !== null)
     .map((sample) => sample.durationMs)
     .sort((a, b) => a - b);
   const hasLatency = completed.length > 0;
-  const p50 = hasLatency ? formatDuration(percentile(completed, 50)) : "—";
-  const p95 = hasLatency ? formatDuration(percentile(completed, 95)) : "—";
+  const p50 = hasLatency ? percentile(completed, 50) : null;
+  const p95 = hasLatency ? percentile(completed, 95) : null;
+  const buckets = buildMinuteBuckets(samples);
+  const windowTotal = buckets.reduce((sum, count) => sum + count, 0);
+  const max = Math.max(...buckets, 1);
   const usage = buildProtocolUsage(samples);
   return (
-    <section className="asb-gateway-instruments" aria-label="网关仪表">
-      <div className="asb-gateway-instrument is-trend">
-        <p className="asb-gateway-instrument-label">累计请求</p>
-        <p className="asb-gateway-instrument-value">{totalRequests}</p>
-        <p className="asb-gateway-instrument-detail">本次启动 · 近 60 分钟</p>
-        <GatewaySparkline samples={samples} />
+    <section className="asb-gateway-strip" aria-label="网关仪表">
+      <div className="asb-gateway-gauge is-trend">
+        <p className="asb-gateway-gauge-label">累计请求</p>
+        <p className="asb-gateway-gauge-value">{totalRequests}</p>
+        <p className="asb-gateway-gauge-detail">本次启动 · 近 60 分钟 {windowTotal} 次</p>
+        <div className="asb-gateway-trend" aria-hidden="true">
+          {buckets.map((count, index) => (
+            <span
+              key={index}
+              className="asb-gateway-trend-bar"
+              style={{ height: barHeightPercent(count, max) }}
+            />
+          ))}
+        </div>
       </div>
-      <div className={`asb-gateway-instrument${failedRequests > 0 ? " is-warning" : ""}`}>
-        <p className="asb-gateway-instrument-label">失败请求</p>
-        <p className="asb-gateway-instrument-value">{failedRequests}</p>
-        <p className="asb-gateway-instrument-detail">已完成请求</p>
+      <div className={`asb-gateway-gauge${failedRequests > 0 ? " is-warning" : ""}`}>
+        <p className="asb-gateway-gauge-label">失败请求</p>
+        <p className="asb-gateway-gauge-value">{failedRequests}</p>
+        <p className="asb-gateway-gauge-detail">已完成请求</p>
       </div>
-      <div className="asb-gateway-instrument">
-        <p className="asb-gateway-instrument-label">请求耗时</p>
-        <p className="asb-gateway-instrument-value">{p50}</p>
-        <p className="asb-gateway-instrument-detail">{hasLatency ? `p95 ${p95} · 已完成请求` : "暂无已完成请求"}</p>
+      <div className="asb-gateway-gauge">
+        <p className="asb-gateway-gauge-label">请求耗时</p>
+        <div className="asb-gateway-latency">
+          <LatencyRow label="p50" ms={p50} scaleMax={p95} />
+          <LatencyRow label="p95" ms={p95} scaleMax={p95} />
+        </div>
+        <p className="asb-gateway-gauge-detail">{hasLatency ? "只统计已完成请求" : "暂无已完成请求"}</p>
       </div>
-      <div className="asb-gateway-instrument">
-        <p className="asb-gateway-instrument-label">活动路由</p>
-        <p className="asb-gateway-instrument-value">{routeCount}</p>
-        <p className="asb-gateway-instrument-detail">正在转发</p>
-      </div>
-      <div className="asb-gateway-instrument is-protocol">
-        <p className="asb-gateway-instrument-label">上游协议分布</p>
+      <div className="asb-gateway-gauge is-protocol">
+        <p className="asb-gateway-gauge-label">上游协议分布</p>
         {usage.length === 0 ? (
           <p className="asb-gateway-empty" role="status">暂无网关请求记录。</p>
         ) : (
@@ -105,44 +106,22 @@ function GatewayInstruments({ metrics, routeCount }: {
   );
 }
 
-function GatewaySparkline({ samples }: { samples: GatewaySample[] }) {
-  const buckets = buildMinuteBuckets(samples);
-  const total = buckets.reduce((sum, count) => sum + count, 0);
-  const max = Math.max(...buckets, 1);
-  const step = SPARKLINE_WIDTH / (TREND_MINUTES - 1);
-  const points = buckets
-    .map((count, index) => {
-      const x = index * step;
-      const y = SPARKLINE_HEIGHT - 2 - (count / max) * (SPARKLINE_HEIGHT - 6);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
+/** 柱高以窗口内最大分钟计数满高，非零柱保底可见。 */
+function barHeightPercent(count: number, max: number): string {
+  if (count === 0 || max === 0) return "0%";
+  return `${Math.max(3, Math.round((count / max) * 100))}%`;
+}
+
+function LatencyRow({ label, ms, scaleMax }: { label: string; ms: number | null; scaleMax: number | null }) {
+  const width = ms === null || scaleMax === null || scaleMax <= 0 ? 0 : Math.min(100, (ms / scaleMax) * 100);
   return (
-    <svg
-      className="asb-gateway-sparkline"
-      viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {total === 0 ? (
-        <line
-          x1="0"
-          y1={SPARKLINE_HEIGHT - 1}
-          x2={SPARKLINE_WIDTH}
-          y2={SPARKLINE_HEIGHT - 1}
-          className="asb-gateway-sparkline-baseline"
-        />
-      ) : (
-        <>
-          <polygon
-            points={`0,${SPARKLINE_HEIGHT} ${points} ${SPARKLINE_WIDTH},${SPARKLINE_HEIGHT}`}
-            className="asb-gateway-sparkline-area"
-          />
-          <polyline points={points} className="asb-gateway-sparkline-line" />
-        </>
-      )}
-    </svg>
+    <div className="asb-gateway-latency-row">
+      <span className="asb-gateway-latency-label">{label}</span>
+      <span className="asb-gateway-latency-track" aria-hidden="true">
+        <span className="asb-gateway-latency-fill" style={{ width: `${width}%` }} />
+      </span>
+      <span className="asb-gateway-latency-value asb-num">{ms === null ? "—" : formatDuration(ms)}</span>
+    </div>
   );
 }
 
@@ -181,44 +160,32 @@ function GatewayRecentRequests({ samples, profileNames }: {
   samples: GatewaySample[];
   profileNames: Map<string, string>;
 }) {
-  const [open, setOpen] = useState(false);
   const recent = [...samples].slice(-RECENT_ROW_COUNT).reverse();
   return (
     <section className="asb-gateway-recent" aria-label="最近请求">
-      <button
-        type="button"
-        className="asb-gateway-recent-toggle"
-        aria-expanded={open}
-        aria-controls="asb-gateway-recent-body"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span aria-hidden="true" className="asb-gateway-recent-chevron"><ChevronDownIcon /></span>
-        最近请求
+      <header className="asb-gateway-recent-heading">
+        <h3 className="asb-section-title">最近请求</h3>
         <span className="asb-gateway-recent-count">
           {samples.length > 0 ? `最近 ${recent.length} 条` : "暂无记录"}
         </span>
-      </button>
-      {open && (
-        <div id="asb-gateway-recent-body" className="asb-gateway-recent-body">
-          {recent.length === 0 ? (
-            <p className="asb-gateway-empty" role="status">暂无网关请求记录。</p>
-          ) : (
-            <div className="asb-gateway-recent-table">
-              <Table
-                ariaLabel="最近经本机网关处理的请求"
-                columns={recentColumns(profileNames)}
-                rows={recent}
-                rowKey={(sample) =>
-                  `${sample.atMs}:${sample.app}:${sample.profileId ?? "-"}:${sample.routeRevision ?? "-"}`
-                }
-              />
-            </div>
-          )}
-          <p className="asb-gateway-note">
-            遥测仅保存在内存中，重启应用后清空；缓冲区满时只保留最近 512 条请求。
-          </p>
+      </header>
+      {recent.length === 0 ? (
+        <p className="asb-gateway-empty" role="status">暂无网关请求记录。</p>
+      ) : (
+        <div className="asb-gateway-recent-table">
+          <Table
+            ariaLabel="最近经本机网关处理的请求"
+            columns={recentColumns(profileNames)}
+            rows={recent}
+            rowKey={(sample) =>
+              `${sample.atMs}:${sample.app}:${sample.profileId ?? "-"}:${sample.routeRevision ?? "-"}`
+            }
+          />
         </div>
       )}
+      <p className="asb-gateway-note">
+        遥测仅保存在内存中，重启应用后清空；缓冲区满时只保留最近 512 条请求。
+      </p>
     </section>
   );
 }

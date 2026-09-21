@@ -4,7 +4,7 @@ use crate::commands::error::CommandError;
 use tauri::{AppHandle, Manager};
 
 /// Finishes the only kind of interrupted provider save that can leave a
-/// durable marker: an already-written active profile awaiting its client
+/// durable marker: an already-written profile awaiting its active owner's
 /// projection. The marker contains no secret; the current provider file is
 /// revalidated and rendered again before any live client file is touched.
 pub(crate) fn recover_pending_profile_save(app: &AppHandle) -> Result<(), String> {
@@ -13,35 +13,46 @@ pub(crate) fn recover_pending_profile_save(app: &AppHandle) -> Result<(), String
         .state::<crate::gateway::GatewayController>()
         .inner()
         .clone();
-    super::transaction::recover(&state, &gateway)?;
+    if let Some(id) = recover_saved_profile(&state, &gateway)? {
+        invalidate_provider_readings(app, &id);
+    }
+    Ok(())
+}
+
+pub(super) fn recover_saved_profile(
+    state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
+) -> Result<Option<String>, String> {
+    super::transaction::recover(state, gateway)?;
     let Some(pending) = state
         .configuration()
         .pending_profile_save()
         .map_err(|error| error.to_string())?
     else {
-        return Ok(());
+        return Ok(None);
     };
-    let revision = saved_profile_revision(&state, pending.app, &pending.profile_id)?;
+    let revision = saved_profile_revision(state, pending.app, &pending.profile_id)?;
     // A process can stop after writing the marker but before replacing the
     // provider file. In that case the old revision is still authoritative and
     // recovery must discard the marker without touching client configuration.
     if revision == pending.previous_file_hash {
         state.configuration().clear_profile_save()?;
-        super::profile_rollback::clear(&state)?;
-        return Ok(());
+        super::profile_rollback::clear(state)?;
+        return Ok(None);
     }
-    super::profile_rollback::validate_saved_revision(&state, &pending.profile_id, &revision)?;
+    super::profile_rollback::validate_saved_revision(state, &pending.profile_id, &revision)?;
     let projection =
-        build_plan(&state, &gateway, &pending.profile_id).map_err(|error| error.message)?;
-    let preview = preview_projection(&state, &projection).map_err(|error| error.message)?;
-    if already_committed(&state, &pending.profile_id, pending.app, &preview)? {
+        build_plan(state, gateway, &pending.projection_profile_id).map_err(|error| error.message)?;
+    let preview = preview_projection(state, &projection).map_err(|error| error.message)?;
+    if already_committed(state, &pending.projection_profile_id, pending.app, &preview)? {
         state.configuration().clear_profile_save()?;
-        return super::profile_rollback::clear(&state);
+        super::profile_rollback::clear(state)?;
+        return Ok(Some(pending.profile_id));
     }
-    super::profile_rollback::validate_projection(&state, pending.app, &preview)?;
+    super::profile_rollback::validate_projection(state, pending.app, &preview)?;
     execute_projection_with_auth(
-        &state,
-        &gateway,
+        state,
+        gateway,
         &projection,
         &preview.content_hash,
         &preview.rendered_hash,
@@ -51,9 +62,8 @@ pub(crate) fn recover_pending_profile_save(app: &AppHandle) -> Result<(), String
     )
     .map_err(|error| error.message)?;
     state.configuration().clear_profile_save()?;
-    super::profile_rollback::clear(&state)?;
-    invalidate_provider_readings(app, &pending.profile_id);
-    Ok(())
+    super::profile_rollback::clear(state)?;
+    Ok(Some(pending.profile_id))
 }
 
 fn saved_profile_revision(

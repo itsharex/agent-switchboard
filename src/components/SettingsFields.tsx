@@ -172,15 +172,17 @@ function SettingCodeDisclosure({
   return (
     <details className="asb-client-setting-code">
       <summary>{showDiff ? "查看待应用代码差异" : "查看当前配置代码"}</summary>
-      {showDiff ? (
-        <code aria-label={`${spec.label} 待应用代码差异`}>
-          <span className="asb-client-setting-code-old">{prefixedCode("-", actualCode)}</span>
-          {"\n"}
-          <span className="asb-client-setting-code-new">{prefixedCode("+", draftCode)}</span>
-        </code>
-      ) : (
-        <code>{actualCode}</code>
-      )}
+      <div className="asb-client-setting-code-body">
+        {showDiff ? (
+          <code aria-label={`${spec.label} 待应用代码差异`}>
+            <span className="asb-client-setting-code-old">{prefixedCode("-", actualCode)}</span>
+            {"\n"}
+            <span className="asb-client-setting-code-new">{prefixedCode("+", draftCode)}</span>
+          </code>
+        ) : (
+          <code>{actualCode}</code>
+        )}
+      </div>
     </details>
   );
 }

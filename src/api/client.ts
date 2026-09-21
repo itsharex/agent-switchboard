@@ -20,12 +20,22 @@ import {
 } from "../dev/web-backend";
 import type { AppKind, CommandError } from "./shared";
 import type { AppSettings } from "./settings";
-import type { UsageSummary } from "./usage";
+import type { CodexOfficialQuota, UsageSummary } from "./usage";
 
 type InvokeArgs = Record<string, unknown>;
 
+export type TrayUsage =
+  | { kind: "script"; reading: UsageSummary }
+  | { kind: "official"; reading: CodexOfficialQuota };
+
 export interface TraySnapshot {
-  providers: Array<{ id: string; app: AppKind; name: string; active: boolean; usage: UsageSummary | null }>;
+  providers: Array<{
+    id: string;
+    app: AppKind;
+    name: string;
+    active: boolean;
+    usage: TrayUsage | null;
+  }>;
   settings: AppSettings | null;
   error: string | null;
   switching: boolean;
@@ -39,7 +49,12 @@ export const switchTrayProvider = (profileId: string): Promise<void> => invoke("
 export const quitTray = (): Promise<void> => invoke("tray_quit");
 export const resizeTray = (height: number): Promise<void> => invoke("tray_resize", { height });
 export function onTrayChanged(handler: () => void): Promise<() => void> {
-  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  if (isBrowserDevelopment) {
+    // The browser development bridge has no Tauri event transport. Poll
+    // cache consumers only; upstream refresh remains owned by the backend.
+    const timer = window.setInterval(handler, 5_000);
+    return Promise.resolve(() => window.clearInterval(timer));
+  }
   return listen("tray-changed", handler);
 }
 /** Emits whenever either real client configuration file changes on disk. */
@@ -50,6 +65,10 @@ export function onClientConfigChanged(handler: () => void): Promise<() => void> 
 export function onTrayError(handler: (message: string) => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen<string>("tray-error", (event) => handler(event.payload));
+}
+export function onDesktopSettingsError(handler: (message: string) => void): Promise<() => void> {
+  if (isBrowserDevelopment) return Promise.resolve(() => {});
+  return listen<string>("desktop-settings-error", (event) => handler(event.payload));
 }
 
 interface WebCommandResponse<T> {

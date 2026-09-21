@@ -229,7 +229,7 @@ impl GatewayController {
                         .map_err(|_| {
                             "恢复后无法读取 Codex 供应商档案，已拒绝更新本机协议网关".to_string()
                         })
-                        .and_then(|file| self.route_for_codex_file(&file))
+                        .and_then(|file| self.route_for_codex_file(&file, None))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
             AppKind::Claude => local

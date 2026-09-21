@@ -26,6 +26,7 @@
 @import "./base/sessions.css";
 @import "./base/gateway.css";
 @import "./base/gateway-telemetry.css";
+@import "./base/gateway-responsive.css";
 @import "./base/overlays.css";
 @import "./base/behavior-responsive.css";
 @import "./base/discovery-extensions.css";

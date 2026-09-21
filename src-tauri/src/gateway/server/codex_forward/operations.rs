@@ -10,6 +10,31 @@ pub(in crate::gateway::server) fn forward(
     client: Arc<UpstreamClient>,
     operation: CodexOperation,
 ) {
+    let (route, candidates, body) = match read_request(
+        &mut request, &mut span, &inner, route, candidates, operation,
+    ) {
+        Ok(resolved) => resolved,
+        Err((status, message)) => {
+            span.finish(Some(status), 0);
+            respond_error(request, Some(UpstreamProtocol::Responses), status, &message);
+            return;
+        }
+    };
+    if operation == CodexOperation::Responses
+        && !crate::gateway::compaction::is_v2(&body).unwrap_or(false)
+    {
+        span.note_request_bytes(body.len() as u64);
+        super::respond(request, span, route, candidates, inner, client, body);
+        return;
+    }
+    let route = match super::super::codex_account::resolve(&route, &inner, Some(request.headers())) {
+        Ok(route) => route,
+        Err((status, message)) => {
+            span.finish(Some(status), 0);
+            respond_error(request, Some(UpstreamProtocol::Responses), status, &message);
+            return;
+        }
+    };
     let url = match operation_url(
         &route,
         &inner.configured_base_url(),
@@ -28,21 +53,6 @@ pub(in crate::gateway::server) fn forward(
             return;
         }
     };
-    let body = match super::super::admission::read_body(&mut request) {
-        Ok(body) => body,
-        Err((status, message)) => {
-            span.finish(Some(status), 0);
-            respond_error(request, Some(UpstreamProtocol::Responses), status, &message);
-            return;
-        }
-    };
-    if operation == CodexOperation::Responses
-        && !crate::gateway::compaction::is_v2(&body).unwrap_or(false)
-    {
-        span.note_request_bytes(body.len() as u64);
-        super::respond(request, span, route, candidates, inner, client, body);
-        return;
-    }
     Operation {
         request,
         span,
@@ -51,6 +61,24 @@ pub(in crate::gateway::server) fn forward(
         client,
     }
     .dispatch(operation, body, inner);
+}
+
+fn read_request(
+    request: &mut Request,
+    span: &mut RequestSpan,
+    inner: &GatewayInner,
+    route: ActiveRoute,
+    candidates: Vec<ActiveRoute>,
+    operation: CodexOperation,
+) -> Result<(ActiveRoute, Vec<ActiveRoute>, Vec<u8>), (u16, String)> {
+    let body = super::super::admission::read_body(request)?;
+    span.note_request_bytes(body.len() as u64);
+    span.note_request_model(crate::gateway::usage_metadata::model_from_bytes(
+        UpstreamProtocol::Responses, &body,
+    ));
+    let resolved = super::resolve_request_route(inner, route, candidates, operation, body)?;
+    span.bind_route(&resolved.0.profile_id, &resolved.0.fingerprint, resolved.0.upstream_protocol);
+    Ok(resolved)
 }
 
 fn operation_url(
@@ -77,26 +105,6 @@ struct Operation {
 }
 impl Operation {
     fn dispatch(mut self, operation: CodexOperation, body: Vec<u8>, inner: Arc<GatewayInner>) {
-        self.span
-            .note_request_model(crate::gateway::usage_metadata::model_from_bytes(
-                UpstreamProtocol::Responses,
-                &body,
-            ));
-        // A subagent wire model only ever rides the main Responses path with
-        // its own candidate list; auxiliary operations reject it explicitly
-        // instead of forwarding a namespaced id to the active upstream.
-        if crate::gateway::usage_metadata::model_from_bytes(UpstreamProtocol::Responses, &body)
-            .as_deref()
-            .is_some_and(|model| {
-                model.starts_with(asb_core::contracts::CodexSubagentRoute::WIRE_PREFIX)
-            })
-        {
-            self.reject(
-                422,
-                "跨供应商子代理模型仅支持 /v1/responses 请求；此操作不支持子代理路由",
-            );
-            return;
-        }
         let body =
             match super::super::codex::resolve_model_and_validate(&self.route, operation, body) {
                 Ok(body) => body,

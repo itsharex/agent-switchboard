@@ -88,10 +88,14 @@ where
         profile_id: None,
         backup: outcome.backup.clone(),
         after_hash: outcome.final_hash.clone(),
-        after_existed: true,
+        after_existed: existed || current != req.rendered,
         auth: None,
     }, || {
-        commit_rendered(io, req.target, req.app, req.rendered, &outcome.backup, &current)?;
+        if current != req.rendered {
+            commit_rendered(io, req.target, req.app, req.rendered, &outcome.backup, &current)?;
+        } else {
+            super::switch::verify_live_snapshot(io, req.target, req.app, &current, existed)?;
+        }
         if let Err(message) = commit(&outcome) {
             let recovery = restore_backup_content(io, req.target, &outcome.backup);
             return Err(SwitchError::CommitFailed {
@@ -109,6 +113,42 @@ mod tests {
     use super::*;
     use crate::io::FsIo;
     use asb_core::{adapter, AppKind};
+
+    #[test]
+    fn unchanged_documents_still_back_up_and_commit_without_creating_missing_files() {
+        for existed in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let target = directory.path().join("settings.json");
+            let backup_dir = directory.path().join("backups");
+            if existed { std::fs::write(&target, "{}").unwrap(); }
+            let request = RenderedWriteRequest {
+                target: &target, app: AppKind::Claude, backup_dir: &backup_dir,
+                expected_hash: &sha256_hex("{}"), expected_target_existed: existed,
+                rendered: "{}", reason: "client-configuration-native-defaults",
+            };
+            let outcome = execute_rendered(&FsIo, &request, |outcome| {
+                let pending = crate::pending_config_write(&FsIo, &backup_dir, AppKind::Claude).unwrap().unwrap();
+                assert_eq!(pending.after_existed, existed);
+                assert_eq!(pending.backup.id, outcome.backup.id);
+                Ok(())
+            }).unwrap();
+            assert_eq!(target.exists(), existed);
+            assert_eq!(outcome.backup.target_existed, existed);
+            assert_eq!(std::fs::read_to_string(&outcome.backup.backup_path).unwrap(), "{}");
+            assert!(crate::pending_config_write(&FsIo, &backup_dir, AppKind::Claude).unwrap().is_none());
+
+            assert!(execute_rendered(&FsIo, &request, |_| Err("settings unavailable".into())).is_err());
+            assert_eq!(target.exists(), existed);
+            let pending = crate::pending_config_write(&FsIo, &backup_dir, AppKind::Claude).unwrap().unwrap();
+            crate::rollback_pending_config(&FsIo, &backup_dir, &pending, |backup| {
+                assert_eq!(backup.target_existed, existed);
+                assert_eq!(backup.reason, "restore-precheck");
+                assert!(std::path::Path::new(&backup.backup_path).exists());
+                Ok(())
+            }, || Ok(())).unwrap();
+            assert!(crate::pending_config_write(&FsIo, &backup_dir, AppKind::Claude).unwrap().is_none());
+        }
+    }
 
     #[test]
     fn rendered_write_journals_before_application_commit_and_recovers_failure() {

@@ -39,12 +39,16 @@ export function levelLabel(level: RuntimeLogSeverity): string {
   }
 }
 
+/** The log table's page size, matching the codebase's page-size convention. */
+export const RUNTIME_LOG_PAGE_SIZE = 20;
+
 /** Reads the application's own bounded diagnostic event files. The first read
  * waits until the logs view is first opened; afterwards the entries stay
  * mounted with the page while only their visibility toggles. */
 export function useRuntimeLogs(enabled: boolean) {
   const [entries, setEntries] = useState<RuntimeLogEntry[]>([]);
   const [filter, setFilter] = useState<RuntimeLogFilter>("all");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<CommandError | null>(null);
   const [openingFolder, setOpeningFolder] = useState(false);
@@ -80,13 +84,30 @@ export function useRuntimeLogs(enabled: boolean) {
     }
   }, []);
 
+  /** A new filter is a new result set: the view returns to the first page. */
+  const applyFilter = useCallback((next: RuntimeLogFilter) => {
+    setFilter(next);
+    setPage(1);
+  }, []);
+
   const visibleEntries = filter === "all" ? entries : entries.filter((entry) => entry.level === filter);
+  // A refresh can shrink the result set below the stored page; the rendered
+  // page converges instead of showing an empty slice.
+  const pageCount = Math.max(1, Math.ceil(visibleEntries.length / RUNTIME_LOG_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageEntries = visibleEntries.slice(
+    (currentPage - 1) * RUNTIME_LOG_PAGE_SIZE,
+    currentPage * RUNTIME_LOG_PAGE_SIZE,
+  );
 
   return {
     entries,
     visibleEntries,
+    pageEntries,
+    page: currentPage,
+    setPage,
     filter,
-    setFilter,
+    setFilter: applyFilter,
     loading,
     error,
     refresh,

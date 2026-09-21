@@ -38,9 +38,12 @@ pub fn is_secret_key(key: &str) -> bool {
 /// following word bytes would false-positive release credential scans.
 const SECRET_VALUE_PREFIXES: &str = "sk- ghp_ gho_ github_pat_ xox AKIA AIza ";
 
-/// True when a raw value is secret-shaped: a known token prefix, or a long
-/// pure-alphanumeric run that no model name or URL would produce.
+/// True for credential-bearing URLs, known token prefixes, or long
+/// pure-alphanumeric runs that no model name or ordinary URL would produce.
 pub fn is_secret_value(value: &str) -> bool {
+    if url::Url::parse(value).ok().is_some_and(|url| !url.username().is_empty() || url.password().is_some()) {
+        return true;
+    }
     if SECRET_VALUE_PREFIXES
         .split_ascii_whitespace()
         .any(|prefix| value.starts_with(prefix))
@@ -64,6 +67,14 @@ pub fn redact(key: &str, value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn credential_urls_are_secret_regardless_of_the_field_name() {
+        for value in ["http://user:password@proxy.example:8080", "https://user@proxy.example", "socks5://:password@proxy.example"] {
+            assert_eq!(redact("proxy", value), REDACTED);
+        }
+        assert_eq!(redact("proxy", "http://proxy.example:8080"), "http://proxy.example:8080");
+    }
 
     #[test]
     fn secret_keys_render_a_stable_token() {

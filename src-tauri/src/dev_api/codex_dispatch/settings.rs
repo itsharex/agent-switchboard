@@ -24,6 +24,10 @@ pub(super) async fn dispatch(
             app.clone(),
             argument(&request.args, "profileId")?,
         )),
+        "read_codex_official_quota" => command!(commands::read_codex_official_quota(
+            app.clone(),
+            argument(&request.args, "profileId")?,
+        )),
         "get_cached_codex_official_reset" => {
             command!(commands::get_cached_codex_official_reset(app.clone()))
         }

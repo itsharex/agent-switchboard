@@ -5,7 +5,7 @@ use crate::contracts::{CodexModelSettings, KeyChange, RouteMode, RouteState, Swi
 use crate::ownership::{is_owned, CODEX_PROVIDER_ID};
 use crate::AppKind;
 
-use crate::adapter::codex::document::{item_at, item_repr, parse, scalar_repr};
+use crate::adapter::codex::document::{item_at, item_repr, parse};
 
 /// Codex's built-in provider id.
 pub const OFFICIAL_PROVIDER: &str = CODEX_PROVIDER_ID;
@@ -35,18 +35,30 @@ fn collect_scalars(
     repr: &dyn Fn(&Item) -> Option<String>,
 ) {
     for (key, item) in table.iter() {
-        let path = if prefix.is_empty() {
-            key.to_string()
-        } else {
-            format!("{prefix}.{key}")
-        };
-        if let Some(value) = repr(item) {
-            if keep(&path) {
-                out.insert(path.clone(), value);
-            }
+        let path = crate::config_path::append_key(prefix, key);
+        collect_item(item, &path, out, keep, repr);
+    }
+}
+
+fn collect_item(
+    item: &Item,
+    path: &str,
+    out: &mut std::collections::BTreeMap<String, String>,
+    keep: &dyn Fn(&str) -> bool,
+    repr: &dyn Fn(&Item) -> Option<String>,
+) {
+    if let Some(value) = repr(item) {
+        if keep(path) { out.insert(path.to_string(), value); }
+    }
+    if let Some(table) = item.as_table_like() {
+        collect_scalars(table, path, out, keep, repr);
+    } else if let Some(tables) = item.as_array_of_tables() {
+        for (index, table) in tables.iter().enumerate() {
+            collect_scalars(table, &format!("{path}[{index}]"), out, keep, repr);
         }
-        if let Some(sub) = item.as_table_like() {
-            collect_scalars(sub, &path, out, keep, repr);
+    } else if let Some(array) = item.as_value().and_then(toml_edit::Value::as_array) {
+        for (index, value) in array.iter().enumerate() {
+            collect_item(&Item::Value(value.clone()), &format!("{path}[{index}]"), out, keep, repr);
         }
     }
 }
@@ -63,9 +75,11 @@ fn collect_with(
 
 /// Textual repr for diff purposes. Inline tables are containers (the walk
 /// recurses into them, so their children get individual leaf paths); arrays
-/// and arrays-of-tables are leaves and get a summary form so a deep-reset
-/// preview never hides a removal.
+/// and arrays-of-tables get a size summary plus separately collected children.
 fn leaf_repr(item: &Item) -> Option<String> {
+    if item.as_table_like().is_some_and(|table| table.is_empty()) {
+        return Some("{}".into());
+    }
     if let Some(value) = item_repr(item) {
         return Some(value);
     }
@@ -73,23 +87,18 @@ fn leaf_repr(item: &Item) -> Option<String> {
         return Some(format!("[{} 个表]", tables.len()));
     }
     item.as_value().and_then(|value| match value {
-        toml_edit::Value::Array(array) => Some(format!(
-            "[{}]",
-            array
-                .iter()
-                .filter_map(scalar_repr)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
+        toml_edit::Value::Array(array) => Some(format!("[{} 项]", array.len())),
+        toml_edit::Value::Datetime(value) => Some(value.value().to_string()),
         _ => None,
     })
 }
 
-/// `agents.max_threads` is not a current setting and never enters the editor
-/// contract. It remains diff-owned solely so its one-way cleanup is explicit
-/// in every candidate that removes it.
+/// Runtime agent keys have their own typed owner. Include them and retired
+/// max_threads so every managed removal remains visible in the shared preview.
 fn diff_keep(path: &str) -> bool {
-    is_owned(AppKind::Codex, path) || path == "agents.max_threads"
+    is_owned(AppKind::Codex, path)
+        || crate::contracts::CodexSubagentKey::ALL.iter().any(|key| key.path() == path)
+        || path == "agents.max_threads"
 }
 
 /// Owned-key diff between the live text and a previous copy.
@@ -211,8 +220,21 @@ mod tests {
     #[test]
     fn full_diff_reports_array_of_tables_removals_with_a_summary() {
         let changes = full_diff("", "[[host_rules]]\nname = \"a\"\n").expect("full diff");
-        assert_eq!(changes.len(), 1);
+        assert_eq!(changes.len(), 2);
         assert_eq!(changes[0].key, "host_rules");
         assert_eq!(changes[0].before.as_deref(), Some("[1 个表]"));
+        assert_eq!(changes[1].key, "host_rules[0].name");
+    }
+
+    #[test]
+    fn full_diff_includes_empty_tables_and_changes_inside_equal_length_arrays() {
+        let before = "values = [{ api_key = 'private', name = 'old' }]\n[empty]\n";
+        let after = "values = [{ api_key = 'changed', name = 'new' }]\n";
+        let changes = full_diff(after, before).unwrap();
+        assert!(changes.iter().any(|change| change.key == "empty"));
+        assert!(changes.iter().any(|change| change.key == "values[0].name" && change.after.as_deref() == Some("new")));
+        let secret = changes.iter().find(|change| change.key == "values[0].api_key").unwrap();
+        assert_eq!(secret.before.as_deref(), Some(crate::redact::REDACTED));
+        assert_eq!(secret.after.as_deref(), Some(crate::redact::REDACTED));
     }
 }

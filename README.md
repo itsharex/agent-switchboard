@@ -6,126 +6,176 @@
 
 <p align="center">
   A local configuration console for <strong>Codex</strong> and <strong>Claude Code</strong>.<br>
-  Provider profiles, typed previews, and resumable switches — instead of hand-editing client config files.
+  Manage providers, preview configuration changes, recover from switches, and track usage and probe history.
 </p>
 
 <p align="center"><sup>English · <a href="README.zh-CN.md">简体中文</a></sup></p>
 
-Agent Switchboard brings provider profiles, client configuration, extension management, and local status together in a single desktop app. Real configuration is written only by the one switch executor after an explicit confirmation; every resumable write is observable, backed up, validated, and recoverable.
+Save models, connection details, and runtime parameters as provider profiles, then inspect the files and changes before switching. Client settings, Skills, MCP, session records, and usage monitoring share one desktop app.
 
-## Current UI (isolated demo data)
+## Download and install
 
-<p align="center">
-  <img src="docs/screenshots/providers.png" width="100%" alt="Agent Switchboard providers workspace: current Codex and Claude Code connection cards, three README sandbox provider profiles, and the apply action">
-</p>
+Download an installer for your system and processor from [GitHub Releases](https://github.com/y4Nkk/agent-switchboard/releases). The table lists the project's packaging platforms; check the selected release's Assets for available files. This README describes the current source; consult the corresponding release notes for features in a published version.
 
-<p align="center"><sub>Providers workspace: rendered by the current source, showing the applied “README Sandbox · Primary Route” profile and two fictional profiles ready to switch to.</sub></p>
+| Platform | File to choose | Installation |
+| --- | --- | --- |
+| Windows x64 | `*windows-x86_64-nsis.exe` | Run the wizard; the default NSIS version installs for the current user with a selectable directory |
+| macOS Apple Silicon | `*aarch64*.dmg` | Open the disk image and drag the app into Applications |
+| macOS Intel | `*x86_64*.dmg` | Open the disk image and drag the app into Applications |
+| Linux x64 | `*x86_64*.deb` or `*x86_64*.AppImage` | Use a package installer on Debian/Ubuntu; grant an AppImage execute permission before running it |
 
-<p align="center">
-  <img src="docs/screenshots/client-configuration.png" width="100%" alt="Agent Switchboard client configuration workspace: Codex shared settings and controlled configuration actions">
-</p>
+The custom Windows installer requires .NET Framework 4.8.1. The app requires Microsoft Edge WebView2 Runtime; the installer attempts to download and install it when missing. The Linux `.deb` depends on WebKitGTK 4.1. `Source code` archives are for development; `.sig`, `latest.json`, and updater archives belong to the update process.
 
-<p align="center"><sub>Client configuration: reads and edits controlled settings inside an isolated client root, keeping the grouping, status, and action structure of the real UI.</sub></p>
+## First use
 
-<p align="center">
-  <img src="docs/screenshots/switch-preview.png" width="100%" alt="Agent Switchboard provider switch confirmation: desensitized configuration diff, candidate files, and confirm actions for the README sandbox backup profile">
-</p>
+Install and configure the Codex or Claude Code client you want to use, and have your provider URL, authentication details, and model names ready. Degradation radar also requires an executable local Codex CLI.
 
-<p align="center"><sub>Switch preview: a real typed preview generated for “README Sandbox · Backup”; nothing is written to the isolated sandbox until you confirm.</sub></p>
+1. Create a profile in **Providers**, or import existing local configuration.
+2. Set its protocol, authentication, and model. Use **Client configuration** to adjust shared settings, sub-agent runtime settings, and global instructions as needed.
+3. Preview the switch, review the redacted diff, target files, and backup location, then confirm. Switching preserves configuration keys outside the profile's ownership.
+4. After using the client, check consumption and quotas in **Usage**, and local conversations in **Sessions**.
+5. To undo a configuration change, open **Settings → Backups → Local backups** and restore the corresponding record.
 
-<p align="center">
-  <img src="docs/screenshots/subagent-route.png" width="100%" alt="Agent Switchboard Codex run parameters: the default sub-agent model configured as a cross-provider route to the backup profile's model behind the advanced toggle">
-</p>
+Missing configuration, syntax errors, and external edits surface specific explanations. Errors whose meaning cannot be established are never silently overwritten.
 
-<p align="center"><sub>Sub-agent model route: the primary profile designates the backup profile's model as its default sub-agent model; the request is forwarded by the local gateway and never falls back to the main model.</sub></p>
+## Core features
 
-> **Screenshot data notice**: Screenshots are produced by the actual frontend launched from the current source together with the same Tauri local backend. The run redirects `APPDATA`, `LOCALAPPDATA`, `USERPROFILE`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` to isolated temporary directories; profile names, models, key placeholders, service addresses, and configuration contents are fictional README sandbox data (only `*.sandbox.example` / `example.com` are used). No real user Codex / Claude Code configuration, credentials, accounts, sessions, service addresses, or files were read, written, or captured.
+| Location | What you can do |
+| --- | --- |
+| Providers | Create, edit, reorder, import, and delete profiles; manage models, authentication, protocols, model mappings, and runtime parameters; export provider SQL files |
+| Client configuration | Manage shared settings, Codex sub-agent runtime settings, and global instructions; preview and apply drafts, including controlled edits to fields outside the regular form |
+| Extensions | Manage Skills and MCP with per-client enable/disable, search, updates, import/export, local discovery, and advanced management |
+| Sessions | View local Codex and Claude Code sessions |
+| Usage | Inspect consumption, quotas, and reset times; run degradation radar and browse probe history |
+| Settings → Client tools | Save and restore Codex work scenarios; manage Claude client integration |
+| Settings → Preferences | Select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, and choose the startup page |
+| Settings → Local gateway / Diagnostics | Inspect gateway status, configuration and environment issues, and runtime logs |
 
-## Product scope
+Codex work scenarios save combinations of existing providers, extensions, and instructions, with a change preview before restoration. The global shortcut shows and focuses the main window, or hides it to the tray when already focused. Startup can open the provider list or the last visited top-level page, without restoring editing drafts. Unreadable preferences require explicit repair, which resets only application preferences.
 
-- Manages Codex and Claude Code only.
-- All configuration, backups, history, and diagnostics stay on this machine.
-- When a third-party upstream protocol does not match the client protocol, the app starts a local translation gateway on `127.0.0.1` only.
-- No cloud sync, telemetry, account system, public proxy, auto-proxying, or implicit provider switching.
+Provider switches and configuration draft writes require preview and confirmation, with backup and recovery. Extension operations apply immediately by default; sensitive connection data, deleting definitions with existing installs, and disabling a Claude project-shared Skill require extra confirmation.
 
-## Core capabilities
+### Quota cache and degradation radar
 
-### Provider profiles
+Provider balances and Codex official quotas refresh in the background at the interval set for each profile, including while on another page or hidden in the tray. Lists and the tray share the cache; opening a page does not trigger another query. Set the interval to `0` for manual queries only.
 
-- Create, edit, reorder, import, and delete Codex and Claude Code provider profiles.
-- Export the complete configuration of every provider into a single SQL file, then pick that file in the app on another device to import — no command line involved.
-- Store models, authentication, request protocol, request mode, model mappings, and run parameters.
-- A Codex profile's default sub-agent model is a cross-profile route reference: any saved profile's catalog model may be designated, the request is forwarded by the local gateway to that profile, and a profile carrying such a route always activates through the gateway. An unresolvable reference fails loudly at save, switch, and request time — it never falls back to the main model, and a referenced profile cannot be deleted while the route exists.
-- Generate a typed preview before anything is written; real writes go through an executor that is observable, backed up, validated, and recoverable.
-- Client configuration keys that do not belong to the current profile are preserved, so existing user settings are never overwritten.
+In **Usage → Degradation radar**, batch-test the active Codex configuration with built-in or custom questions:
 
-### Client configuration
+- **Results:** Only successfully completed answers are graded against the final nonnegative integer answer. Failed, cancelled, and interrupted runs remain unjudged. Changes to configuration or the effective route during a probe terminate the current call.
+- **Consumption:** Probes make real provider calls and consume quota; their usage is included in statistics. Reasoning tokens and consumption come from that CLI session. Missing data stays unknown, and partial totals disclose their coverage. Results are reference signals and cannot establish the actual model's identity.
+- **History:** Questions, expected answers, results, CLI versions, and configuration snapshots are stored locally without credentials. They remain available after refresh or restart. Profile renames and deletions do not rewrite history. An abrupt exit retains completed results and marks the batch interrupted; restarting does not resume it automatically.
+- **History actions:** Filter by time, profile, or status, browse pages and details, and rerun a stored question with its answer and repetition count. Reruns make new calls; deletion affects radar records only. Failed result saves show the cause and block new probes and normal exit until saving succeeds.
 
-- Manage shared configuration for both clients, Codex sub-agent run settings, and each client's global instructions file.
-- Controlled fields are always normalized from UI state: explicit values are written, automatic values are removed; known historical fields are cleaned up within the same resumable transaction, unknown fields are left untouched.
-- Configuration drafts can read desensitized real local configuration; fields the UI does not own can be changed in the controlled manual editor, with sensitive markers preserving the original value in the backend — every write requires preview, confirmation, backup, and validation.
-- When a configuration file is malformed, the app only offers provably safe repair candidates; errors whose semantics cannot be established are never silently overwritten.
-- Global instructions are edited directly in the corresponding user-level file, managed alongside the same client's shared configuration.
+### Sub-agent models and protocol gateway
 
-### Client tools
+A Codex default sub-agent model can target a model in another saved profile that is not account-bound. Requests use that target's authentication, protocol, model mapping, and runtime parameters, and usage belongs to the target. Invalid references fail explicitly, with no fallback to the main model. Referenced profiles and models cannot be deleted. Editing a target also previews and updates any affected active model catalog.
 
-- Keeps only the two client-specific features that have no other page of their own: Codex workspaces and Claude client integration.
-- A Codex workspace only saves and restores combinations of existing providers, extensions, and instructions; it never creates a second configuration set or re-manages those resources.
-- No connection status, cross-page shortcuts, or duplicated content from providers, shared configuration, gateway, usage, sessions, diagnostics, MCP, and Skills.
+When protocol translation or sub-agent routing is needed, the app uses a gateway listening only on `127.0.0.1`. Keep the app running while using those routes.
 
-### Extensions
+| Client | Native upstream | Translated upstreams |
+| --- | --- | --- |
+| Codex (Responses) | Responses | Chat Completions, Anthropic Messages |
+| Claude Code (Anthropic Messages) | Anthropic Messages | Chat Completions, Responses, Gemini |
 
-- Manage Skills and MCP services with per-client enable/disable, search, update, import/export, and local discovery.
-- The primary click on a list row goes straight to editing; deploy, diagnostics, project install, connection checks, capability audits, and delete are concentrated in a separate advanced management panel.
-- Extension writes apply immediately by default; only sensitive connection data, deleting definitions that still have installs, and deactivating a Claude project-shared skill ask for extra confirmation.
+Translation has explicit limits: fields and tools that cannot be represented losslessly fail, while some metadata affecting only metering or caching is dropped after validation. Cross-protocol Codex requests require `store=false`, with continuation context filled from local history; switching profiles or keys invalidates old encrypted continuations. Codex WebSocket connections terminate at the gateway and use HTTP/SSE upstream. Sub-agent routes support `/responses/compact` and V2 Responses compaction according to the target's capabilities; other auxiliary operations reject cross-provider model references. Claude failover follows only the policy explicitly configured in the local `claude-failover.json`.
 
-### Local protocol gateway
+<details>
+<summary>View interface examples</summary>
 
-- Codex (Responses) converts between Chat Completions and Anthropic Messages upstreams and passes Responses upstreams through; Claude (Anthropic Messages) converts between Chat Completions, Responses, or Gemini upstreams and passes Anthropic upstreams through.
-- Fields and tools that cannot be expressed losslessly fail the request before forwarding instead of being dropped silently: for example `stop_sequences` to a Responses upstream, strict tools and audio to an Anthropic upstream, and server-side tools such as `web_search` to any cross-protocol upstream. Pure metadata that only affects metering or caching (such as `cache_control`, and `metadata.user_id` on the Gemini upstream) is dropped after validation.
-- Cross-protocol Codex requests must use `store=false`; `previous_response_id` and short continuations are backfilled into full context from the local tool history, while native Responses upstreams keep using the upstream's own storage.
-- Reasoning traces round-trip as encrypted continuation payloads bound to their route; after switching profiles or keys, old continuations are rejected.
-- A Codex sub-agent model route is resolved per request: a model id carrying the `asb:` prefix is matched against the referenced profile, its endpoint variants replace the whole candidate list (no cross-provider failover — failure fails), the wire prefix is stripped before admission against the target's own catalog, and usage is attributed to the target profile. Auxiliary operations reject such ids explicitly. The referenced model is also merged into the client's model-catalog file and `/v1/models` under its wire id.
-- Codex WebSocket transport terminates at the gateway and upstreams uniformly use HTTP/SSE; Claude failover follows only the explicit policy in the local `claude-failover.json` with circuit-breaker cooldowns — no implicit switching.
+Screenshots use fictional profiles, models, addresses, and key placeholders in an isolated demo environment, without real user configuration or credentials.
 
-### Status, recovery, and diagnostics
+![Provider profiles](docs/screenshots/providers.png)
+![Client configuration](docs/screenshots/client-configuration.png)
+![Configuration diff before switching](docs/screenshots/switch-preview.png)
+![Codex sub-agent model routing](docs/screenshots/subagent-route.png)
 
-- Current connections, usage, quota, sessions, backups, logs, configuration status, and gateway diagnostics.
-- The usage page offers a “degradation radar”: it batch-tests the currently active configuration through the local Codex CLI with built-in or custom questions, showing per-run pass results, reasoning tokens, and actual consumption; probe sessions are honestly counted in usage statistics, and the verdict is a reference signal, not a model judgment.
-- Every resumable write creates a record; results can be inspected and restored from the operation history.
-- External edits, missing configuration, syntax errors, file replacements, and failed restores all surface explicit status — nothing is silently overwritten or fabricated.
+</details>
 
-## Getting started
+## Data storage and scope
 
-1. Create a provider profile, or import from existing local configuration.
-2. Fill in models and connection details; adjust client configuration, sub-agent settings, or global instructions as needed.
-3. Open the typed preview, check the desensitized diff, candidate files, and backup location, then confirm the apply.
-4. If the result is not what you expected, restore from the matching backup in the operation history.
+Configuration, caches, sessions, probe history, and diagnostics are stored locally by default. The app manages Codex and Claude Code only, with no telemetry, application account system, automatic cloud sync, public proxy, or implicit provider switching. Network features such as model requests, quota queries, and extension downloads contact their respective services. Optional cloud backups require user setup and upload confirmation.
 
-## Running from source
+| Method | What it saves and restores |
+| --- | --- |
+| Local file backups | File backups created by configuration writes, for restoring the corresponding changes from backup records |
+| Provider SQL export | Complete configuration of all provider profiles, for import within the app on another device; files may contain authentication details and should be handled as credentials |
+| Encrypted cloud backup | Provider profiles, client settings, and switch records from the application's configuration store; excludes local sessions, radar history, and local file backups |
 
-With the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/), Node.js, and Rust ready, run from the repository root:
+Open **Settings → Backups → Encrypted cloud backup** and follow the in-app guide to configure your own Supabase project, Publishable key, and project Auth user. A separate backup password encrypts the backup on this device before upload. Each upload replaces that account's existing cloud backup. Login and backup passwords are not persisted; restoration requires the original backup password.
+
+Cloud restoration replaces the application's provider profiles, client settings, and switch records. It does not directly change the active Codex / Claude Code configuration or delete local file backups. Activating a restored profile still requires a preview and confirmed switch.
+
+## Development and builds
+
+### Prerequisites
+
+Use Node.js **22.12+ (22.x)**, npm, and Rust. See the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/) for system dependencies, with the following project-specific toolchain and installer requirements.
+
+| Platform | Project requirements |
+| --- | --- |
+| Windows x64 | `stable-x86_64-pc-windows-gnu`; MinGW-w64 GCC and binutils, with `gcc` and `windres` on `PATH`; WebView2 Runtime |
+| macOS | Rust `stable`, Xcode Command Line Tools; 7-Zip for the packaging environment (CI uses `p7zip`) |
+| Linux | Rust `stable`; WebKitGTK 4.1, build tools, and development libraries; see the Ubuntu command below |
+
+On Windows, install `mingw-w64-x86_64-gcc` and `mingw-w64-x86_64-binutils` through MSYS2 and add its `mingw64/bin` to `PATH`. Building the custom installer also requires PowerShell 7 (`pwsh`), MSBuild, and the .NET Framework 4.8.1 targeting pack with WPF reference assemblies.
+
+The repository's `rust-toolchain.toml` pins Windows GNU. **On macOS/Linux, override it with the host toolchain in each development or packaging shell**, as CI does:
+
+```bash
+rustup toolchain install stable
+export RUSTUP_TOOLCHAIN=stable
+```
+
+Ubuntu system dependencies used by CI:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev librsvg2-dev
+```
+
+### Run locally
+
+Install dependencies and start desktop development from the repository root:
 
 ```bash
 npm ci
 npm run dev:desktop
 ```
 
-The custom Windows installer is built by `installer/AgentSwitchboard.Installer.csproj`; building it with `npm run tauri:build:windows` (NSIS engine, per-user install with a selectable directory) or `npm run tauri:build:windows:msi` (MSI engine, all-users install to Program Files) additionally requires MSBuild and the .NET Framework 4.8.1 targeting pack (Visual Studio or Visual Studio Build Tools). For frontend development:
+| Command | Purpose |
+| --- | --- |
+| `npm run dev:desktop` | Desktop app and local backend; Rust development output goes to `target-dev/` |
+| `npm run dev` | Browser development with the same local backend; frontend at `http://127.0.0.1:1420` |
+| `npm run dev:frontend` | Vite only; running it alone does not provide the full local business functionality |
+| `npm run build` | TypeScript checking and a production frontend build in `dist/` |
+| `npm run typecheck` | TypeScript checking only |
 
-```bash
-npm run dev:frontend
-```
+Development uses the real local backend. Use isolated directories when verifying configuration writes, and follow [AGENTS.md](AGENTS.md) before running checks. There is currently no `test` script in `package.json`.
 
-Build, type-check, and test scripts are defined in [`package.json`](package.json). Follow the scope and verification rules in [`AGENTS.md`](AGENTS.md) before running them.
+### Build installers
+
+Run on the corresponding target operating system:
+
+| Platform / installation scope | Command |
+| --- | --- |
+| Windows, current user, selectable directory | `npm run tauri:build:windows` |
+| Windows, all users, Program Files | `npm run tauri:build:windows:msi` |
+| macOS | `npm run tauri:build:macos` |
+| Linux | `npm run tauri:build:linux` |
+
+The two Windows commands wrap NSIS or MSI engines in a custom `.exe` installer under `target/release/bundle/installer/`. macOS and Linux packages are in format-specific directories under `target/release/bundle/`. Setting `CARGO_TARGET_DIR` changes the output root accordingly.
+
+The workspace version in [Cargo.toml](Cargo.toml) owns the application version. See [package.json](package.json) for all scripts and the [packaging workflow](.github/workflows/package.yml) for the platform matrix and release steps. Local builds do not automatically publish a release.
 
 ## Project documentation
 
 | Document | Contents |
 | --- | --- |
-| [DESIGN.md](DESIGN.md) | Current visual, interaction, layout, and accessibility contracts |
-| [CHANGELOG.md](CHANGELOG.md) | Release notes |
-| [AGENTS.md](AGENTS.md) | Contribution rules, product boundaries, and verification constraints |
+| [README.md](README.md) / [简体中文](README.zh-CN.md) | Current product capabilities, usage, and development entry points |
+| [DESIGN.md](DESIGN.md) | Visual, interaction, layout, and accessibility contracts |
+| [CHANGELOG.md](CHANGELOG.md) | Version change history |
+| [AGENTS.md](AGENTS.md) | Contribution rules, change scope, and verification constraints |
 
 ## License
 

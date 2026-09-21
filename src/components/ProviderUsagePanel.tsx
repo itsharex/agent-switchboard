@@ -46,7 +46,7 @@ export function ProviderUsagePanel({ id, name, usage, onConfigure }: Props) {
       {summary ? (
         <UsageReadingsTable readings={summary.readings} ariaLabel={`${name} 用量读数`} />
       ) : (
-        !error && <p className="asb-provider-usage-state" role="status">正在读取已配置的用量…</p>
+        !error && <p className="asb-provider-usage-state" role="status">{querying ? "正在读取用量…" : "暂无用量读数，可点击刷新查询。"}</p>
       )}
       {error && <p className="asb-warn-text" role="alert">{error}</p>}
     </section>

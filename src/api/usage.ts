@@ -196,33 +196,30 @@ export function testUsageQuery(
   });
 }
 
-/** Ensures the provider's summary is fresh without exposing its credential
- * to the UI: the desktop runtime returns its retained entry while it is not
- * due, or pulls one query forward into now. Mount-time reads go through
- * here; the backend owns all query timing. */
-export function ensureProfileUsage(profileId: string): Promise<UsageSummary> {
-  return invoke<UsageSummary>("ensure_profile_usage", { profileId });
-}
-
 /** Runs one persisted provider query right now without exposing its
  * credential to the UI. Successful summaries are retained by the desktop
  * runtime for tray display. This is the forced manual path (the refresh
  * button); the backend scheduler owns automatic re-queries. */
-export function queryProfileUsage(profileId: string): Promise<UsageSummary> {
-  return invoke<UsageSummary>("query_profile_usage", { profileId });
+export function queryProfileUsage(target: AppKind, profileId: string): Promise<void> {
+  return invoke<void>("query_profile_usage", { target, profileId });
 }
 
 /** Reads the retained last successful summary without contacting the
  * provider. `null` until a query succeeds for the profile's current usage
  * query. */
-export function readProfileUsage(profileId: string): Promise<UsageSummary | null> {
-  return invoke<UsageSummary | null>("read_profile_usage", { profileId });
+export function readProfileUsage(target: AppKind, profileId: string): Promise<UsageSummary | null> {
+  return invoke<UsageSummary | null>("read_profile_usage", { target, profileId });
 }
 
-/** Reads the current native Codex official-login quota without accepting any
- * renderer credential, endpoint, or raw OAuth account data. */
-export function queryCodexOfficialQuota(profileId: string): Promise<CodexOfficialQuota> {
-  return invoke<CodexOfficialQuota>("query_codex_official_quota", { profileId });
+/** Refreshes the official profile's account-bound cache without accepting
+ * renderer credentials, endpoints, or raw OAuth account data. */
+export function queryCodexOfficialQuota(profileId: string): Promise<void> {
+  return invoke<void>("query_codex_official_quota", { profileId });
+}
+
+/** Shares the account-checked cache projection used by the tray. */
+export function readCodexOfficialQuota(profileId: string): Promise<CodexOfficialQuota | null> {
+  return invoke<CodexOfficialQuota | null>("read_codex_official_quota", { profileId });
 }
 
 /** Reads the persisted last successful official read without contacting the
@@ -325,29 +322,64 @@ export interface CodexProbeQuestion {
   label: string;
 }
 
-export type CodexProbePhase = "running" | "completed" | "cancelled" | "failed";
+export type CodexProbeBatchStatus =
+  | "running" | "completed" | "cancelled" | "failed" | "interrupted" | "config-changed";
 
-/** One finished probe run: the pass result plus the real token usage read
- * back from the session record Codex wrote for that run. */
+/** Grading outcome of one run; execution failures never grade. */
+export type CodexProbeRunStatus = "running" | "passed" | "failed" | "undetermined";
+
+/** One run row as persisted: the session id is saved the moment the CLI
+ * reports it; unknown usage stays `null`, a recorded real zero stays zero. */
 export interface CodexProbeRun {
-  passed: boolean;
+  seq: number;
+  status: CodexProbeRunStatus;
+  sessionId: string | null;
+  finalAnswer: string | null;
+  reportedModel: string | null;
+  durationMs: number | null;
   reasoningTokens: number | null;
   totalTokens: number | null;
-  model: string | null;
-  durationMs: number;
-  error: string | null;
+  executionError: string | null;
+  usageError: string | null;
 }
 
-/** Live or final state of one probe batch; readable repeatedly while the
- * batch runs. */
-export interface CodexProbeStatus {
-  phase: CodexProbePhase;
-  questionLabel: string;
-  runCount: number;
-  completedRuns: number;
+/** The configuration snapshot taken when the batch started. Profile fields
+ * are snapshots — renames and deletions never rewrite history, and an
+ * unidentified configuration shows as 未关联档案. */
+export interface CodexProbeConfigSnapshot {
+  profileId: string | null;
+  profileName: string | null;
+  profileModel: string | null;
+  reasoningEffort: string | null;
+  connectionIdentity: string | null;
+  fingerprint: string;
+}
+
+export interface CodexProbeQuestionSnapshot {
+  id: string;
+  label: string;
+  text: string;
+  expectedAnswer: string;
+}
+
+/** One batch (live or historical) with its runs, read from the local probe
+ * history — the only durable source of probe state. */
+export interface CodexProbeBatch {
+  batchId: string;
+  status: CodexProbeBatchStatus;
   startedAt: string;
+  finishedAt: string | null;
+  plannedRuns: number;
+  completedRuns: number;
+  question: CodexProbeQuestionSnapshot;
+  gradingVersion: string;
+  cliVersion: string | null;
+  config: CodexProbeConfigSnapshot;
+  statusError: string | null;
   runs: CodexProbeRun[];
-  error: string | null;
+  /** True when a persistence failure left results only in memory. */
+  persistPending: boolean;
+  persistError: string | null;
 }
 
 export interface CodexProbeRequest {
@@ -364,17 +396,93 @@ export function listCodexProbeQuestions(): Promise<CodexProbeQuestion[]> {
 }
 
 /** Starts one probe batch against the active Codex configuration. Every run
- * is a real Codex call and spends quota. */
-export function startCodexProbe(request: CodexProbeRequest): Promise<{ probeId: string }> {
-  return invoke<{ probeId: string }>("start_codex_probe", { request });
+ * is a real Codex call and spends quota; the batch is recorded in the local
+ * history before the first call. */
+export function startCodexProbe(request: CodexProbeRequest): Promise<void> {
+  return invoke<void>("start_codex_probe", { request });
 }
 
-/** Repeatable progress read; `null` once the probe id is no longer current. */
-export function getCodexProbe(probeId: string): Promise<CodexProbeStatus | null> {
-  return invoke<CodexProbeStatus | null>("get_codex_probe", { probeId });
+/** The live-or-latest batch. The panel reconnects here after a refresh or
+ * restart — the frontend remembers no batch id. */
+export function getCurrentCodexProbe(): Promise<CodexProbeBatch | null> {
+  return invoke<CodexProbeBatch | null>("get_current_codex_probe");
 }
 
-/** Requests cancellation; the in-flight run is terminated. */
-export function cancelCodexProbe(probeId: string): Promise<boolean> {
-  return invoke<boolean>("cancel_codex_probe", { probeId });
+/** Requests cancellation of the running batch; the in-flight run is
+ * terminated. */
+export function cancelCodexProbe(): Promise<boolean> {
+  return invoke<boolean>("cancel_codex_probe");
+}
+
+/** Flushes results whose persistence failed mid-batch. */
+export function retryCodexProbeSave(): Promise<void> {
+  return invoke<void>("retry_codex_probe_save");
+}
+
+export type CodexProbeHistoryRange = "all" | "last7Days" | "last30Days";
+
+export type CodexProbeProfileFilter =
+  | { kind: "all" } | { kind: "unlinked" } | { kind: "profile"; id: string };
+
+export interface CodexProbeHistoryQuery {
+  offset: number;
+  limit: number;
+  range: CodexProbeHistoryRange;
+  profile: CodexProbeProfileFilter;
+  /** `all` or omitted means every status. */
+  status: CodexProbeBatchStatus | "all";
+}
+
+/** One row of the history list. */
+export interface CodexProbeHistoryItem {
+  batchId: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: CodexProbeBatchStatus;
+  questionLabel: string;
+  profileId: string | null;
+  profileName: string | null;
+  runCount: number;
+  passedCount: number;
+  judgedCount: number;
+  recordedRuns: number;
+  totalTokens: number | null;
+}
+
+export interface CodexProbeHistoryPage {
+  items: CodexProbeHistoryItem[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+/** History reads are paged and ordered newest-first. */
+export function listCodexProbeHistory(query: CodexProbeHistoryQuery): Promise<CodexProbeHistoryPage> {
+  return invoke<CodexProbeHistoryPage>("list_codex_probe_history", {
+    request: {
+      offset: query.offset,
+      limit: query.limit,
+      days: query.range === "all" ? null : query.range === "last7Days" ? 7 : 30,
+      profile: query.profile,
+      status: query.status === "all" ? null : query.status,
+    },
+  });
+}
+
+/** Distinct profile snapshots seen in the history, for the filter. */
+export function listCodexProbeHistoryProfiles(): Promise<Array<{ profileId: string; profileName: string }>> {
+  return invoke<Array<{ profileId: string; profileName: string }>>("list_codex_probe_history_profiles");
+}
+
+/** One historical batch with its runs. */
+export function getCodexProbeBatch(batchId: string): Promise<CodexProbeBatch | null> {
+  return invoke<CodexProbeBatch | null>("get_codex_probe_batch", { batchId });
+}
+
+/** Deletes finished batches and their runs — only the radar's own records;
+ * Codex sessions and the real usage ledger stay untouched. */
+export function deleteCodexProbeBatches(batchIds: string[]): Promise<{ deleted: number }> {
+  return invoke<{ deleted: number }>("delete_codex_probe_batches", {
+    request: { batchIds },
+  });
 }

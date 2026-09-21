@@ -37,19 +37,20 @@ impl GatewayController {
                 .map_err(|error| error.to_string())?;
             let revision = codex_route_fingerprint(&file)?;
             if is_gateway {
-                let route = self.route_for_codex_file(&file)?;
+                let route = self.route_for_codex_file(&file, None)?;
                 if self.route_matches_config(&route, configuration)? {
                     return CodexCatalogProjection::from_file(
                         &self.inner.state_root,
                         &file,
                         &revision,
+                        None,
                     )
                     .map(Some);
                 }
             } else if catalog_pointer.as_deref()
-                == Some(codex_catalog_file_name(&file.profile.id, &revision).as_str())
+                == Some(codex_catalog_file_name(&file.profile.id, &revision, &file.profile.catalog).as_str())
             {
-                return CodexCatalogProjection::from_file(&self.inner.state_root, &file, &revision)
+                return CodexCatalogProjection::from_file(&self.inner.state_root, &file, &revision, None)
                     .map(Some);
             }
         }
@@ -105,7 +106,7 @@ impl GatewayController {
                         .configuration()
                         .find_codex_provider_file(&record.profile.id)
                         .map_err(|error| error.to_string())
-                        .and_then(|file| self.route_for_codex_file(&file))
+                        .and_then(|file| self.route_for_codex_file(&file, None))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
             AppKind::Claude => local

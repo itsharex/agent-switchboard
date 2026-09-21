@@ -49,6 +49,10 @@ pub(crate) fn render_client_settings_into_file(
     })
 }
 
+pub(crate) fn reset_client_settings(current: &str) -> Result<String, AdapterError> {
+    let defaults = crate::ownership::default_client_settings(crate::AppKind::Claude);
+    render_entries(current, client_settings_overlay(&defaults))
+}
 
 pub(crate) fn render_entries(
     current: &str,

@@ -21,9 +21,10 @@ impl GatewayController {
         &self,
         file: &asb_core::contracts::CodexProviderFile,
         client_settings: asb_core::contracts::SettingsValues,
+        replacement: Option<&asb_core::contracts::CodexProviderFile>,
     ) -> Result<GatewayProjection, String> {
         let (policy, _) = codex::policy::load(&self.inner.state_root)?;
-        self.project_codex_with_policy(file, client_settings, &policy)
+        self.project_codex_with_policy(file, client_settings, &policy, replacement)
     }
 
     pub(crate) fn project_codex_with_policy(
@@ -31,6 +32,7 @@ impl GatewayController {
         file: &asb_core::contracts::CodexProviderFile,
         client_settings: asb_core::contracts::SettingsValues,
         policy: &codex::policy::CodexGatewayPolicy,
+        replacement: Option<&asb_core::contracts::CodexProviderFile>,
     ) -> Result<GatewayProjection, String> {
         policy.validate()?;
         let fragment = self.resolve_common_fragment(&file.profile.id)?;
@@ -43,6 +45,7 @@ impl GatewayController {
             &self.inner.state_root,
             file,
             &codex_route_fingerprint(file)?,
+            replacement,
         )?;
         if file.profile.route_mode == asb_core::contracts::CodexRouteMode::Direct
             && !policy.takeover
@@ -72,9 +75,7 @@ impl GatewayController {
         let base_url = self
             .listening_base_url()
             .ok_or_else(|| "本机协议网关当前未在监听，无法写入 Codex 第三方配置".to_string())?;
-        let route = self.route_for_codex_file(file)?;
-        let catalog =
-            CodexCatalogProjection::from_file(&self.inner.state_root, file, &route.fingerprint)?;
+        let route = self.route_for_codex_file(file, replacement)?;
         let plan = attach_fragment(
             SwitchPlan::through_gateway(
                 profile,
@@ -96,7 +97,7 @@ impl GatewayController {
         };
         Ok(GatewayProjection {
             plan,
-            candidate_routes: self.codex_candidate_routes(file, policy)?,
+            candidate_routes: self.codex_candidate_routes(file, policy, replacement)?,
             activation: GatewayActivation::Routed(route),
             warning: Some(warning),
             codex_catalog: Some(catalog),
@@ -134,7 +135,9 @@ impl GatewayController {
                 route.client_endpoint(&self.configured_base_url()),
                 route.client_token,
             )
-            .with_codex_model_catalog(codex_catalog_file_name(&file.profile.id, &revision)),
+            .with_codex_model_catalog(CodexCatalogProjection::from_file(
+                &self.inner.state_root, file, &revision, None,
+            )?.file_name),
             self.resolve_common_fragment(&file.profile.id)?,
         )))
     }
@@ -286,7 +289,7 @@ mod subagent_catalog_tests {
             .configuration()
             .find_codex_provider_file(&routed.profile.id)
             .unwrap();
-        let route = gateway.route_for_codex_file(&file).unwrap();
+        let route = gateway.route_for_codex_file(&file, None).unwrap();
         let wire_id = format!("asb:{}/relay-model", target.profile.id);
         let snapshot = route.codex.as_ref().unwrap();
         assert!(snapshot.catalog.iter().any(|entry| entry.id == wire_id));
@@ -299,7 +302,7 @@ mod subagent_catalog_tests {
 
         let revision = crate::gateway::codex_route_fingerprint(&file).unwrap();
         let catalog =
-            CodexCatalogProjection::from_file(&state.root(), &file, &revision).unwrap();
+            CodexCatalogProjection::from_file(&state.root(), &file, &revision, None).unwrap();
         assert!(catalog.content.contains(&wire_id));
         gateway.shutdown();
     }

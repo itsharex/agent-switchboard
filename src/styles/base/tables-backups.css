@@ -63,6 +63,21 @@
   min-width: var(--asb-table-action-min-width);
 }
 
+/* Page-turn row under a data table: previous/next as standard secondary
+   buttons flanking the page indicator, in the table's own rhythm. */
+.asb-pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--asb-space-2);
+  margin-top: var(--asb-space-3);
+}
+
+.asb-pagination-status {
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+  white-space: nowrap;
+}
+
 /* The cloud-backup settings load placeholder reserves the form's row
    footprint so the panel does not reflow when the connection fields arrive. */
 .asb-cloud-backup-loading {

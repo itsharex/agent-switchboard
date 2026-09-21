@@ -1,52 +1,28 @@
-use super::error::{blocking, operation_error, state, CommandError};
+use super::error::{blocking, state, CommandError};
 use crate::codex_reset::CodexResetRead;
 use crate::local_state::LocalState;
-use asb_core::contracts::{AppKind, RouteMode};
 
-/// Reads the native Codex ChatGPT-login quota for one official Codex profile.
-/// This is intentionally a separate contract from provider usage scripts:
-/// the renderer supplies only a stable profile id and receives no OAuth
-/// credential, account identifier, endpoint, or raw upstream response.
+/// Refreshes the account-bound quota cache for one official Codex profile.
+/// The renderer supplies only a stable id and re-reads the shared cache;
+/// OAuth credentials and raw upstream responses stay behind this boundary.
 #[tauri::command]
 pub async fn query_codex_official_quota(
     app: tauri::AppHandle,
     profile_id: String,
-) -> Result<asb_core::contracts::CodexOfficialQuota, CommandError> {
+) -> Result<(), CommandError> {
     let state = state(&app)?;
-    blocking(move || {
-        let profile = state
-            .configuration()
-            .find_provider(&profile_id)
-            .map_err(|error| operation_error("profile-not-found", error))?;
-        if profile.app != AppKind::Codex || profile.route_mode != RouteMode::Official {
-            return Err(CommandError::new(
-                "official-codex-quota-unavailable",
-                "此档案不是 Codex 官方登录",
-            ));
-        }
-        let auth_path = LocalState::codex_auth_path()
-            .map_err(|error| CommandError::new("codex-auth-path-unavailable", error))?;
-        let selection = crate::codex_auth::binding(state.root(), &profile.id)
-            .map_err(|error| CommandError::new("codex-account-binding-invalid", error))?;
-        if selection != crate::codex_auth::contracts::AccountSelection::Native {
-            let id = match &selection {
-                crate::codex_auth::contracts::AccountSelection::Account { id } => Some(id.as_str()),
-                _ => None,
-            };
-            let managed = crate::codex_auth::quota(state.root(), id, &auth_path)
-                .map_err(|error| CommandError::new("codex-account-quota-unavailable", error))?;
-            if let Some(warning) = managed.warning {
-                log::warn!("{warning}");
-            }
-            return Ok(managed.quota);
-        }
-        let (mut quota, marker) = crate::codex_official_quota::query(&profile.id, &auth_path);
-        if quota.status == asb_core::contracts::CodexOfficialQuotaStatus::Available {
-            quota.last_reset = record_official_reset_read(&state, marker, &quota);
-        }
-        Ok(quota)
-    })
-    .await
+    let result = blocking(move || super::quota_refresh::refresh(&state, &profile_id, true).map(|_| ())).await;
+    crate::tray::refresh(&app);
+    result
+}
+
+#[tauri::command]
+pub async fn read_codex_official_quota(
+    app: tauri::AppHandle,
+    profile_id: String,
+) -> Result<Option<asb_core::contracts::CodexOfficialQuota>, CommandError> {
+    let state = state(&app)?;
+    blocking(move || super::quota_refresh::read(&state, &profile_id)).await
 }
 
 /// Records one successful official read in the persisted detection baseline

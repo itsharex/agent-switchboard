@@ -19,7 +19,6 @@ interface ProvidersPageProps {
   onViewChange: (view: ProviderView) => void;
   active: boolean;
   profiles: ProviderProfile[];
-  appFilter: AppKind;
   activeProfileId: string | null;
   statuses: ConfigFileStatus[] | null;
   locks: Partial<Record<AppKind, LockStatus>>;
@@ -44,12 +43,6 @@ interface ProvidersPageProps {
   onSaveUsageQuery: (
     profile: ProviderProfile,
     usageQuery: UsageQuery | null,
-  ) => Promise<boolean>;
-  /** Persists the official Codex quota panel's auto-refresh interval for the
-   * profile; 0 turns the scheduled query off. */
-  onSaveQuotaInterval: (
-    profile: ProviderProfile,
-    minutes: number,
   ) => Promise<boolean>;
   onReorder: (orderedIds: string[]) => void;
   /** Persists the flipped usage-panel state for the profile. */
@@ -103,11 +96,11 @@ function ProviderListView({
 }: ProvidersPageProps & {
   onConfigureUsage: (profile: ProviderProfile) => void;
 }) {
-  const { appFilter, busy } = props;
+  const { busy } = props;
   return (
     <ProviderWorkspaceShell
       ariaLabel="供应商工作区"
-      app={appFilter}
+      app="claude"
       onSelectApp={props.onSelectApp}
       busy={busy}
       statuses={props.statuses}
@@ -117,7 +110,7 @@ function ProviderListView({
       onNew={props.onNew}
     >
       <ProviderList
-        profiles={props.profiles.filter((profile) => profile.app === appFilter)}
+        profiles={props.profiles.filter((profile) => profile.app === "claude")}
         activeProfileId={props.activeProfileId}
         userConfigModel={props.userConfigModel}
         userConfigWarnings={props.userConfigWarnings}
@@ -126,7 +119,6 @@ function ProviderListView({
         activationCandidate={props.activationCandidate}
         onReorder={props.onReorder}
         onToggleUsage={props.onToggleUsage}
-        onSaveQuotaInterval={props.onSaveQuotaInterval}
         onActivate={props.onActivate}
         onConfirmSwitch={props.onConfirmSwitch}
         onCancelActivation={props.onCancelActivation}

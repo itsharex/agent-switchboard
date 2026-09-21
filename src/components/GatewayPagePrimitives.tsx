@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
 import { Button } from "./Button";
 import { ModuleHeader } from "./WorkspaceHeader";
 
@@ -15,7 +16,7 @@ export function ConfirmGatewayRecoveryDiscard({ onConfirm }: { onConfirm: () => 
   }
   return (
     <div className="asb-gateway-row">
-      <span className="asb-gateway-alert-copy">
+      <span className="asb-gateway-guidance-copy">
         不会覆盖当前客户端配置（包括外部修改）；会清除本次恢复记录与可清理的备份。
       </span>
       <Button variant="danger" onClick={onConfirm}>确认保留并清除</Button>
@@ -32,7 +33,9 @@ export function CopyGatewayAddressButton({ value }: { value: string }) {
   }, []);
   return (
     <Button
-      variant="secondary"
+      variant="icon"
+      aria-label={copied ? "已复制网关地址" : "复制网关地址"}
+      title={copied ? "已复制" : "复制地址"}
       onClick={() => {
         void navigator.clipboard?.writeText(value).then(() => {
           setCopied(true);
@@ -41,16 +44,16 @@ export function CopyGatewayAddressButton({ value }: { value: string }) {
         });
       }}
     >
-      {copied ? "已复制" : "复制"}
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
     </Button>
   );
 }
 
-/** 网关页骨架的唯一拥有者：模块标题加「主机面—接线排—仪表带」内容栈。 */
+/** 网关页骨架的唯一拥有者：模块标题加「拓扑主图—图表带—最近请求」内容栈。 */
 export function GatewayPanel({ children }: { children: ReactNode }) {
   return (
-    <section className="asb-panel" aria-label="协议网关">
-      <ModuleHeader title="本机协议网关" />
+    <section className="asb-panel asb-gateway-panel" aria-label="协议网关">
+      <ModuleHeader title="本机协议网关" primary={<p className="asb-gateway-intro">查看客户端的本机转发路径与请求状态。</p>} />
       <div className="asb-gateway-stack">{children}</div>
     </section>
   );

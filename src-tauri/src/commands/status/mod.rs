@@ -1,7 +1,7 @@
 //! Read-only configuration status: per-client file health, route facts,
 //! match classification against the profile store, and lock observation.
 
-mod codex;
+pub(crate) mod codex;
 mod overview;
 mod report;
 
@@ -15,7 +15,9 @@ use asb_switch::lockfile::{self, RecoveryEntry};
 use overview::{runtime_overview_for, runtime_transport, RuntimeOverview};
 pub(crate) use report::config_status_report;
 use serde::Serialize;
+use std::path::Path;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_opener::OpenerExt;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +58,57 @@ pub async fn runtime_overview(app: AppHandle) -> Result<RuntimeOverview, Command
         &app_data_dir,
         runtime_transport(),
     ))
+}
+
+/// Opens a backend-resolved path in the system file manager: directories open
+/// themselves, files are revealed and selected in their folder, and a missing
+/// file falls back to its folder. Mirrors `open_runtime_log_dir`: the renderer
+/// names what to open, never the path itself.
+fn open_in_file_manager(app: &AppHandle, path: &Path) -> Result<(), CommandError> {
+    if path.is_dir() {
+        return app
+            .opener()
+            .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+            .map_err(|_| CommandError::new("path-open-failed", "无法打开所在文件夹"));
+    }
+    if path.is_file() {
+        return app
+            .opener()
+            .reveal_item_in_dir(path)
+            .map_err(|_| CommandError::new("path-open-failed", "无法在文件管理器中定位该文件"));
+    }
+    let folder = path
+        .parent()
+        .filter(|folder| folder.is_dir())
+        .ok_or_else(|| CommandError::new("path-open-failed", "文件与所在文件夹均不存在"))?;
+    app.opener()
+        .open_path(folder.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|_| CommandError::new("path-open-failed", "无法打开所在文件夹"))
+}
+
+/// Reveals the client's real configuration file in its folder, reusing the
+/// `config_status` path resolution. No path crosses the IPC boundary.
+#[tauri::command]
+pub async fn open_config_file_location(
+    app: AppHandle,
+    target: AppKind,
+) -> Result<(), CommandError> {
+    let state = state(&app)?;
+    blocking(move || {
+        let path = state
+            .target(target)
+            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
+        open_in_file_manager(&app, &path)
+    })
+    .await
+}
+
+/// Opens the application data directory reported by `runtime_overview`.
+#[tauri::command]
+pub async fn open_app_data_dir(app: AppHandle) -> Result<(), CommandError> {
+    let path = crate::app_paths::data_directory(&app.config().identifier)
+        .map_err(|_| CommandError::new("runtime-path-unavailable", "无法定位应用数据目录"))?;
+    open_in_file_manager(&app, &path)
 }
 
 #[tauri::command]

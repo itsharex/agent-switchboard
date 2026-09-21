@@ -85,10 +85,8 @@
      heading, never a label. */
   --asb-text-signal: 700 72px/0.95 var(--asb-font-display);
 
-  /* Gateway device-face metrics (user-directed 2026-09-18): the address
-     plate and instrument numerals are mono so machine facts read as
-     machine facts. Not text steps — never used for prose copy. */
-  --asb-text-plate: 600 22px/1.3 var(--asb-font-code);
+  /* Gateway instrument numerals use mono; addresses use the shared code
+     step so the complete loopback URL fits beside its copy action. */
   --asb-text-instrument: 600 20px/1.3 var(--asb-font-code);
 
   /* Every number that can be compared down a column carries tabular figures

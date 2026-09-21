@@ -38,13 +38,30 @@ pub(in crate::commands) fn begin_client_configuration(
     gateway: &GatewayController,
     app: AppKind,
     after_hash: &str,
+    after_existed: bool,
     settings: Option<(&ClientSettingsSnapshot, &SettingsValues)>,
 ) -> Result<(), CommandError> {
-    let mut intent = prepare(state, gateway, app, None, after_hash, true, None, None, None)?;
+    let mut intent = prepare(state, gateway, app, None, after_hash, after_existed, None, None, None)?;
     intent.operation = WriteOperation::Projection;
     intent.client_settings = settings
         .map(|(before, after)| settings::ClientSettingsIntent::new(app, before, after))
         .transpose().map_err(error)?;
+    journal::save(state, &intent)
+}
+
+pub(in crate::commands::switching) fn begin_restore(
+    state: &LocalState,
+    gateway: &GatewayController,
+    app: AppKind,
+    after_hash: &str,
+    after_existed: bool,
+    catalog: Option<CatalogArtifact>,
+    auth: Option<AuthIntent>,
+    before: &ClientSettingsSnapshot,
+    after: &SettingsValues,
+) -> Result<(), CommandError> {
+    let mut intent = prepare(state, gateway, app, None, after_hash, after_existed, catalog, None, auth)?;
+    intent.client_settings = Some(settings::ClientSettingsIntent::new(app, before, after).map_err(error)?);
     journal::save(state, &intent)
 }
 

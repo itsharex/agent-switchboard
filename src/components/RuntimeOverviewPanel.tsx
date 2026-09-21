@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getRuntimeOverview, type RuntimeOverview } from "../api/client";
+import { getRuntimeOverview, openAppDataDir, type RuntimeOverview } from "../api/client";
+import { FactPath } from "./FactPath";
 import { ModuleHeader } from "./WorkspaceHeader";
 
 function errorMessage(reason: unknown): string {
@@ -66,12 +67,15 @@ export function RuntimeOverviewPanel() {
   }, []);
 
   return (
-    <section className="asb-panel asb-runtime-overview" aria-labelledby="runtime-overview-heading">
+    <section className="asb-panel" aria-labelledby="runtime-overview-heading">
       <ModuleHeader id="runtime-overview-heading" title="运行环境" />
       {runtime === null && error === null && (
-        <p className="asb-empty" role="status">
-          正在读取运行环境…
-        </p>
+        /* Six fact lines at the fact list's footprint, never a one-line note. */
+        <div className="asb-runtime-overview-skeleton" role="status" aria-label="正在读取运行环境">
+          {Array.from({ length: 6 }, (_, line) => (
+            <span key={line} className="asb-skeleton" aria-hidden="true" />
+          ))}
+        </div>
       )}
       {error && (
         <p className="asb-warn-text" role="alert">
@@ -79,32 +83,34 @@ export function RuntimeOverviewPanel() {
         </p>
       )}
       {runtime !== null && (
-        <dl className="asb-runtime-overview-grid">
-          <div className="asb-runtime-overview-item">
+        <dl className="asb-fact-row">
+          <div>
             <dt>应用版本</dt>
             <dd>v{runtime.appVersion}</dd>
           </div>
-          <div className="asb-runtime-overview-item">
+          <div>
             <dt>构建模式</dt>
             <dd>{buildModeLabel(runtime.buildMode)}</dd>
           </div>
-          <div className="asb-runtime-overview-item">
+          <div>
             <dt>运行平台</dt>
             <dd>
               {platformLabel(runtime.platform)} · {architectureLabel(runtime.architecture)}
             </dd>
           </div>
-          <div className="asb-runtime-overview-item">
+          <div>
             <dt>监听端口</dt>
             <dd className="asb-code">{listenerLabel(runtime.transport)}</dd>
           </div>
-          <div className="asb-runtime-overview-item">
+          <div>
             <dt>响应情况</dt>
             <dd>{responseLabel(runtime.transport)}</dd>
           </div>
-          <div className="asb-runtime-overview-item asb-runtime-overview-path">
+          <div>
             <dt>应用数据</dt>
-            <dd className="asb-code">{runtime.appDataPath}</dd>
+            <dd>
+              <FactPath path={runtime.appDataPath} open={openAppDataDir} />
+            </dd>
           </div>
         </dl>
       )}

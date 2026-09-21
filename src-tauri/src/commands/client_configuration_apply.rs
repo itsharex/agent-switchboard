@@ -1,6 +1,6 @@
 //! Hash-bound client configuration application and scoped reset transactions.
 use super::{
-    error::{blocking, operation_error, require_write_confirmation, state, store_error, CommandError},
+    error::{blocking, require_write_confirmation, state, store_error, CommandError},
     ConfigWriteGate,
 };
 use asb_core::{
@@ -36,17 +36,14 @@ impl ClientConfigurationResetKind {
         self,
         target: AppKind,
         saved: SettingsValues,
-    ) -> Result<(SettingsValues, Option<CodexSubagentSettings>), CommandError> {
+    ) -> Result<SettingsValues, CommandError> {
         match self {
             Self::NativeDefaults | Self::NativeDefaultsWithUnmanaged => {
                 let mut settings = ownership::default_client_settings(target);
                 if target == AppKind::Claude {
                     settings.claude_extra = saved.claude_extra;
                 }
-                Ok((
-                    settings,
-                    (target == AppKind::Codex).then(CodexSubagentSettings::automatic),
-                ))
+                Ok(settings)
             }
             Self::ClearExtraConfiguration => {
                 if target != AppKind::Claude {
@@ -57,7 +54,7 @@ impl ClientConfigurationResetKind {
                 }
                 let mut settings = saved;
                 settings.claude_extra.clear();
-                Ok((settings, None))
+                Ok(settings)
             }
         }
     }
@@ -132,10 +129,6 @@ fn candidate(
     Ok((current, path.exists(), settings, rendered))
 }
 
-fn rendered_matches_current(target: AppKind, current: &str, rendered: &str) -> bool {
-    current == rendered || (target == AppKind::Claude && current.is_empty() && rendered == "{}")
-}
-
 pub(super) fn commit_rendered_client_configuration(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
@@ -160,16 +153,13 @@ pub(super) fn commit_rendered_client_configuration(
     if before.settings_hash != expected_settings_hash {
         return Err(CommandError::new("client-configuration-preview-stale", "通用配置意图已变化，请重新预览"));
     }
-    if rendered_matches_current(target, current, rendered) {
-        config
-            .save_client_settings(target, settings, &before.settings_hash)
-            .map_err(|error| operation_error("client-settings-save-failed", error))?;
+    if current == rendered && before.settings == settings {
         return Ok(());
     }
     let file_target = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
     let backup_dir = state.backup_dir();
     super::switching::transaction::begin_client_configuration(
-        state, gateway, target, expected_rendered_hash, Some((&before, &settings)),
+        state, gateway, target, expected_rendered_hash, existed || current != rendered, Some((&before, &settings)),
     )?;
     let execution = execute_rendered(&FsIo, &RenderedWriteRequest {
         target: &file_target,
@@ -180,9 +170,8 @@ pub(super) fn commit_rendered_client_configuration(
         rendered,
         reason,
     }, |outcome| {
-        let saved = config.save_client_settings(target, settings.clone(), &before.settings_hash)
-            .map_err(|error| error.to_string())?;
-        if let Err(error) = config.record_config_write(ConfigWriteRecord {
+        super::switching::transaction::commit_client_settings(state, &outcome.backup)?;
+        config.record_config_write(ConfigWriteRecord {
             app: target,
             profile_id: None,
             profile_name: None,
@@ -190,12 +179,7 @@ pub(super) fn commit_rendered_client_configuration(
             backup_id: outcome.backup.id.clone(),
             at: outcome.backup.created_at.clone(),
             operation: WriteOperation::Projection,
-        }) {
-            config.save_client_settings(target, before.settings.clone(), &saved.settings_hash)
-                .map_err(|rollback| format!("{error}；恢复客户端配置意图失败：{rollback}"))?;
-            return Err(error.to_string());
-        }
-        Ok(())
+        }).map_err(|error| error.to_string())
     });
     super::switching::transaction::finish(state, gateway, execution)?;
     Ok(())
@@ -206,18 +190,20 @@ fn render_reset_configuration(
     current: &str,
     kind: ClientConfigurationResetKind,
     settings: &SettingsValues,
-    subagent_settings: Option<&CodexSubagentSettings>,
+    codex_fragment: &str,
 ) -> Result<String, CommandError> {
     match kind {
         ClientConfigurationResetKind::NativeDefaults => {
-            render_client_configuration(target, current, settings, subagent_settings)
+            asb_core::adapter::reset_client_settings(target, current)
+                .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))
         }
         ClientConfigurationResetKind::NativeDefaultsWithUnmanaged => {
-            let pruned = asb_core::adapter::remove_unmanaged_entries(target, current)
+            let pruned = asb_core::adapter::remove_unmanaged_entries(target, current, codex_fragment)
                 .map_err(|error| {
                     CommandError::new("client-configuration-preview-failed", error.to_string())
                 })?;
-            render_client_configuration(target, &pruned, settings, subagent_settings)
+            asb_core::adapter::reset_client_settings(target, &pruned)
+                .map_err(|error| CommandError::new("client-configuration-preview-failed", error.to_string()))
         }
         ClientConfigurationResetKind::ClearExtraConfiguration => {
             settings.validate_client_settings(target)
@@ -232,6 +218,7 @@ fn render_reset_configuration(
 
 fn reset_candidate(
     state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
     target: AppKind,
     kind: ClientConfigurationResetKind,
     saved: SettingsValues,
@@ -245,24 +232,25 @@ fn reset_candidate(
         },
         Err(_) => return Err(CommandError::new("client-configuration-unreadable", "无法读取真实客户端配置文件")),
     };
-    let (settings, subagent_settings) = kind.settings(target, saved)?;
-    let rendered = render_reset_configuration(
-        target,
-        &current,
-        kind,
-        &settings,
-        subagent_settings.as_ref(),
-    )?;
-    Ok((current, path.exists(), settings, rendered))
+    let existed = path.exists();
+    super::switching::validate_client_configuration_backup(state, gateway, target, &current, existed)?;
+    let settings = kind.settings(target, saved)?;
+    let fragment = if target == AppKind::Codex && matches!(kind, ClientConfigurationResetKind::NativeDefaultsWithUnmanaged) {
+        crate::codex_common::view_fragment(state.root())
+            .map_err(|error| CommandError::new("client-configuration-preview-failed", error))?.text
+    } else { String::new() };
+    let rendered = render_reset_configuration(target, &current, kind, &settings, &fragment)?;
+    Ok((current, existed, settings, rendered))
 }
 
 fn preview_reset(
     state: &crate::local_state::LocalState,
+    gateway: &crate::gateway::GatewayController,
     target: AppKind,
     kind: ClientConfigurationResetKind,
 ) -> Result<ClientConfigurationApplyPreview, CommandError> {
     let stored = state.configuration().get_client_settings(target).map_err(store_error)?;
-    let (current, existed, _, rendered) = reset_candidate(state, target, kind, stored.settings.clone())?;
+    let (current, existed, _, rendered) = reset_candidate(state, gateway, target, kind, stored.settings.clone())?;
     let path = state.target(target).map_err(|error| CommandError::new("config-path-unavailable", error))?;
     let file = preview_rendered(
         target,
@@ -308,7 +296,8 @@ pub async fn preview_client_configuration_reset(
     reset_kind: ClientConfigurationResetKind,
 ) -> Result<ClientConfigurationApplyPreview, CommandError> {
     let state = state(&app)?;
-    blocking(move || preview_reset(&state, target, reset_kind)).await
+    let gateway = app.state::<crate::gateway::GatewayController>().inner().clone();
+    blocking(move || preview_reset(&state, &gateway, target, reset_kind)).await
 }
 
 #[tauri::command]
@@ -371,6 +360,7 @@ pub async fn commit_client_configuration_reset(
         let stored = state.configuration().get_client_settings(target).map_err(store_error)?;
         let (current, existed, settings, rendered) = reset_candidate(
             &state,
+            app.state::<crate::gateway::GatewayController>().inner(),
             target,
             reset_kind,
             stored.settings,

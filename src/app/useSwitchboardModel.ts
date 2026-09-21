@@ -30,13 +30,17 @@ function useTrayEvents(reportError: (error: CommandError) => void) {
 
 /** Composes domain hooks; each domain owns its state and typed operations. */
 export function useSwitchboardModel() {
-  const navigation = useWorkspaceNavigation();
-  const { page, setPage } = navigation;
   const [appFilter, setAppFilter] = useState<AppKind>("codex");
   const frame = useOperationFrame();
   const { busy, reportError, clearError, setBusy } = frame;
   useTrayEvents(reportError);
   const operationContext = { busy, onError: reportError, clearError, setBusy };
+  const appSettingsState = useAppSettings(operationContext);
+  const navigation = useWorkspaceNavigation(
+    appSettingsState.appSettings !== null || appSettingsState.loadError !== null,
+    appSettingsState.loadError, reportError,
+  );
+  const { page, setPage } = navigation;
   const snapshot = useConfigSnapshot({ onError: reportError });
   const { targetProfileId, setTargetProfileId, refresh: refreshSnapshot, activeProfileId, records } = snapshot;
   const refresh = useCallback(async () => { await refreshSnapshot(); }, [refreshSnapshot]);
@@ -60,7 +64,6 @@ export function useSwitchboardModel() {
   const promptDocuments = usePromptDocuments({
     ...operationContext, active: page === "客户端配置",
   });
-  const appSettingsState = useAppSettings(operationContext);
   const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });
   const updateCheck = useUpdateCheck({ onError: reportError });
   const discoveryState = useDiscovery({

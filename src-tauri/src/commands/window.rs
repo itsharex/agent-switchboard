@@ -22,6 +22,7 @@ pub(crate) fn apply_desktop_settings(
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| CommandError::new("main-window-unavailable", "主窗口不可用"))?;
+    apply_interface_scale(app, &window, settings.interface_scale)?;
     window
         .set_always_on_top(settings.always_on_top)
         .map_err(|error| CommandError::new("always-on-top-failed", error.to_string()))?;
@@ -30,18 +31,46 @@ pub(crate) fn apply_desktop_settings(
     let registered = autostart
         .is_enabled()
         .map_err(|error| CommandError::new("launch-at-login-status-failed", error.to_string()))?;
-    if registered == settings.launch_at_login {
-        return Ok(());
-    }
-    if settings.launch_at_login {
+    if !registered && settings.launch_at_login {
         autostart
             .enable()
-            .map_err(|error| CommandError::new("launch-at-login-enable-failed", error.to_string()))
-    } else {
+            .map_err(|error| CommandError::new("launch-at-login-enable-failed", error.to_string()))?;
+    } else if registered && !settings.launch_at_login {
         autostart
             .disable()
-            .map_err(|error| CommandError::new("launch-at-login-disable-failed", error.to_string()))
+            .map_err(|error| CommandError::new("launch-at-login-disable-failed", error.to_string()))?;
     }
+    crate::desktop_shortcut::apply(app, &settings.global_shortcut)
+}
+
+fn apply_interface_scale(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+    percent: u16,
+) -> Result<(), CommandError> {
+    let scale = f64::from(percent) / 100.0;
+    let config = app.config().app.windows.iter().find(|window| window.label == "main")
+        .ok_or_else(|| CommandError::new("main-window-config", "缺少主窗口配置"))?;
+    let minimum = tauri::LogicalSize::new(
+        config.min_width.ok_or_else(|| CommandError::new("main-window-config", "缺少主窗口最小宽度"))? * scale,
+        config.min_height.ok_or_else(|| CommandError::new("main-window-config", "缺少主窗口最小高度"))? * scale,
+    );
+    let error = |cause: tauri::Error| CommandError::new("interface-scale-failed", cause.to_string());
+    let monitor = window.current_monitor().map_err(error)?;
+    if let Some(monitor) = monitor {
+        let available = monitor.work_area().size.to_logical::<f64>(monitor.scale_factor());
+        if minimum.width > available.width || minimum.height > available.height {
+            return Err(CommandError::new("interface-scale-unavailable",
+                format!("当前屏幕可用区域不足以使用 {percent}% 缩放，请选择较小比例")));
+        }
+    }
+    let size = window.inner_size().map_err(error)?.to_logical::<f64>(window.scale_factor().map_err(error)?);
+    window.set_min_size(Some(minimum)).map_err(error)?;
+    if size.width < minimum.width || size.height < minimum.height {
+        window.set_size(tauri::LogicalSize::new(size.width.max(minimum.width), size.height.max(minimum.height)))
+            .map_err(error)?;
+    }
+    window.set_zoom(scale).map_err(error)
 }
 
 #[tauri::command]

@@ -8,10 +8,11 @@ mod caches;
 pub(crate) mod codex_paths;
 mod paths;
 mod settings;
+mod workspace;
 
 
 pub(crate) use paths::user_home_dir;
-pub use settings::{AppSettings, CloseBehavior, CloudBackupSettings};
+pub use settings::{AppSettings, CloseBehavior, CloudBackupSettings, StartupPage, WorkspacePage};
 
 use crate::config_store::ConfigStore;
 use asb_core::contracts::AppKind;
@@ -21,6 +22,7 @@ use paths::{
 };
 use std::path::{Path, PathBuf};
 
+#[derive(Clone)]
 pub struct LocalState {
     root: PathBuf,
 }

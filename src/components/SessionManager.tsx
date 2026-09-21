@@ -506,7 +506,7 @@ export function SessionManager({ active }: { active: boolean }) {
                     <dd>
                       <Button
                         variant="unstyled"
-                        className="asb-session-fact-dir"
+                        className="asb-fact-path"
                         title={`${selected.projectDir}（点击复制）`}
                         onClick={() => selected.projectDir && void copy(selected.projectDir, "工作目录")}
                       >

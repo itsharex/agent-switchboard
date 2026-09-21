@@ -19,6 +19,7 @@
         "center": true,
         "minWidth": 1080,
         "minHeight": 640,
+        "visible": false,
         "decorations": false
       },
       {

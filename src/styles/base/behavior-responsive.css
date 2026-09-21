@@ -53,14 +53,6 @@
     scrollbar-gutter: stable;
   }
 
-  .asb-runtime-overview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .asb-runtime-overview-path {
-    grid-column: span 2;
-  }
-
   .asb-session-transcript {
     flex: none;
     overflow: visible;
@@ -86,14 +78,6 @@
 
   .asb-runtime-log-level-control .asb-select-trigger {
     flex: 1;
-  }
-
-  .asb-runtime-overview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .asb-runtime-overview-path {
-    grid-column: auto;
   }
 
   .asb-codex-reset .asb-header-primary,

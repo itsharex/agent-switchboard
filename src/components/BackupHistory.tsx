@@ -3,6 +3,7 @@ import { backupDiff, type BackupRecord, type KeyChange } from "../api/client";
 import { DiffView } from "./DiffView";
 import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { Pagination } from "./Pagination";
 import { type TableColumn } from "./Table";
 import { Time } from "./Time";
 import { RestoreIcon } from "./icons";
@@ -13,6 +14,9 @@ interface Props {
   busy: boolean;
   onRestore: (backupId: string) => void;
 }
+
+/** The backup table's page size, matching the codebase's page-size convention. */
+const BACKUP_PAGE_SIZE = 20;
 
 function reasonLabel(reason: string): string {
   if (reason === "switch") return "切换前备份";
@@ -36,7 +40,7 @@ function clientLabel(app: string): string {
   return app === "codex" ? "Codex" : "Claude";
 }
 
-/** One backup's owned-key difference, fetched while its region stays open. */
+/** File and saved client preference differences, fetched while the region is open. */
 function BackupDiff({ record }: { record: BackupRecord }) {
   const [changes, setChanges] = useState<KeyChange[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,8 +64,8 @@ function BackupDiff({ record }: { record: BackupRecord }) {
   if (changes === null) {
     return <div className="asb-skeleton asb-backup-diff-loading" aria-hidden="true" />;
   }
-  if (changes.length === 0) return <p className="asb-empty">与当前文件一致</p>;
-  return <DiffView changes={changes} label="当前文件与备份的差异" />;
+  if (changes.length === 0) return <p className="asb-empty">备份覆盖的配置与当前一致</p>;
+  return <DiffView changes={changes} label="当前配置与备份的差异" />;
 }
 
 /** Recent validation and restore history (DESIGN.md §7 bottom band). The
@@ -71,6 +75,7 @@ function BackupDiff({ record }: { record: BackupRecord }) {
 export function BackupHistory({ records, busy, onRestore }: Props) {
   const [pending, setPending] = useState<BackupRecord | null>(null);
   const [openDiffs, setOpenDiffs] = useState<ReadonlySet<string>>(() => new Set());
+  const [page, setPage] = useState(1);
 
   const toggleDiff = (recordId: string) => {
     setOpenDiffs((current) => {
@@ -83,6 +88,21 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
       return next;
     });
   };
+
+  /** A page turn is a new view context: diffs opened on another page collapse. */
+  const turnPage = (next: number) => {
+    setPage(next);
+    setOpenDiffs(new Set());
+  };
+
+  // A restore adds a pre-restore backup, shifting the list; the rendered page
+  // converges instead of showing an empty slice.
+  const pageCount = Math.max(1, Math.ceil(records.length / BACKUP_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRecords = records.slice(
+    (currentPage - 1) * BACKUP_PAGE_SIZE,
+    currentPage * BACKUP_PAGE_SIZE,
+  );
 
   const columns: Array<TableColumn<BackupRecord>> = [
     {
@@ -155,7 +175,7 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
           </tr>
         </thead>
         <tbody>
-          {records.map((record) => (
+          {pageRecords.map((record) => (
             <Fragment key={record.id}>
               <tr>
                 {columns.map((column) => (
@@ -175,6 +195,13 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
           ))}
         </tbody>
       </table>
+      <Pagination
+        total={records.length}
+        page={currentPage}
+        pageSize={BACKUP_PAGE_SIZE}
+        onPageChange={turnPage}
+        label="备份历史分页"
+      />
       {pending && (
         <ConfirmSheet
           title="恢复备份"
@@ -190,6 +217,7 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
             <li>客户端 {clientLabel(pending.app)}</li>
             <li>内容哈希 {pending.contentHash.slice(0, 12)}</li>
             <li>当前内容会先另行备份，恢复本身可撤销。</li>
+            <li>客户端配置操作的备份会同时还原当时保存的 ASB 设置。</li>
           </ul>
         </ConfirmSheet>
       )}

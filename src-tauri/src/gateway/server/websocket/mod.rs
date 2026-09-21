@@ -5,6 +5,7 @@
 mod connections;
 mod context;
 mod forward;
+mod request;
 
 use self::context::{ConversationContext, PendingRequest, PreparedResponse};
 use super::super::metrics::RequestSpan;
@@ -60,14 +61,6 @@ pub(crate) fn handle(
             "本机协议网关凭据无效",
         );
         return;
-    };
-    let route = match super::codex_account::resolve(&route, &inner, Some(request.headers())) {
-        Ok(route) => route,
-        Err((status, message)) => {
-            span.finish(Some(status), 0);
-            respond_error(request, Some(UpstreamProtocol::Responses), status, &message);
-            return;
-        }
     };
     span.bind_route(
         &route.profile_id,
@@ -272,41 +265,35 @@ where
         UpstreamProtocol::Responses,
         text.as_bytes(),
     ));
-    let mode = route
-        .responses_options
-        .map_or(ResponsesRequestMode::Standard, |options| {
-            options.request_mode
-        });
-    let prepared = if route.upstream_protocol == UpstreamProtocol::Responses
-        || crate::gateway::compaction::is_v2(text.as_bytes()).unwrap_or(false)
-    {
-        context.prepare_native(&route.fingerprint, text)
-    } else {
-        context.prepare(&route.fingerprint, mode, text)
+    let resolved = match request::prepare(inner, route.clone(), context, text) {
+        Ok(resolved) => resolved,
+        Err((code, message)) => {
+            let diagnostic = request_diagnostic(inner, &route, request_url, &message);
+            return reject_context(socket, &diagnostic, &code);
+        }
     };
-    match prepared {
-        Ok(PreparedResponse::Prewarm(response)) => {
+    let route = resolved.route;
+    span.bind_route(&route.profile_id, &route.fingerprint, route.upstream_protocol);
+    match resolved.prepared {
+        PreparedResponse::Prewarm(response) => {
             if send_created_and_completed(socket, &response.value) {
                 ExchangeOutcome::Served
             } else {
                 ExchangeOutcome::Disconnect
             }
         }
-        Ok(PreparedResponse::Upstream(request)) => forward::execute(
+        PreparedResponse::Upstream(request) => forward::execute(
             socket,
             client,
             inner,
             &route,
+            resolved.candidates,
             context,
             request,
             request_url,
             request_headers,
             span,
         ),
-        Err(error) => {
-            let diagnostic = request_diagnostic(inner, &route, request_url, &error.message);
-            reject_context(socket, &diagnostic, error.code)
-        }
     }
 }
 

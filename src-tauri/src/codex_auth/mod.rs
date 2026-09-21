@@ -14,7 +14,7 @@ pub(crate) const OFFICIAL_CODEX_BASE: &str = "https://chatgpt.com/backend-api/co
 
 pub(crate) use bindings::{binding, clear_bindings, require_unbound};
 pub(crate) use manager::valid_account;
-pub(crate) use query::{official_models_document, quota};
+pub(crate) use query::{cached_profile_quota, official_models_document, quota};
 pub(crate) use store::lock;
 pub(crate) mod projection;
 mod native_sync;

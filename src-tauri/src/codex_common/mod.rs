@@ -9,6 +9,7 @@ use std::{collections::BTreeSet, path::Path, sync::Mutex};
 
 mod fragment;
 pub(crate) use fragment::resolve as resolve_fragment;
+pub(crate) use fragment::view as view_fragment;
 #[allow(unused_imports)] // reserved: fragment write path (test-covered)
 pub(crate) use fragment::save as save_fragment;
 #[derive(Debug, Clone, Serialize, Deserialize)]

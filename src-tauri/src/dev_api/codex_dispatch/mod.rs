@@ -1,6 +1,7 @@
 //! Codex debug IPC uses the same commands as the desktop app.
 mod gateway;
 mod providers;
+mod probe;
 mod settings;
 use super::http::InvokeRequest;
 use crate::commands::error::CommandError;
@@ -18,6 +19,9 @@ pub(super) async fn dispatch(
         return Ok(Some(value));
     }
     if let Some(value) = gateway::dispatch(app, request).await? {
+        return Ok(Some(value));
+    }
+    if let Some(value) = probe::dispatch(app, request).await? {
         return Ok(Some(value));
     }
     settings::dispatch(app, request).await

@@ -8,11 +8,11 @@ import {
   TrashIcon,
   UsageIcon,
 } from "./icons";
-import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderRowShell, SortableProviderRows } from "./ProviderWorkspaceShell";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
+import { RowPanelDisclosure } from "./RowPanelDisclosure";
 import { useProviderUsage, type ProviderUsage } from "./use-provider-usage";
 import { formatUsageHighlight, formatUsageSummary } from "../lib/usage-format";
 import { SwitchConfirmationSection } from "./SwitchConfirmationSection";
@@ -37,8 +37,6 @@ interface Props {
   onReorder?: (orderedIds: string[]) => void;
   /** Persists the flipped usage-panel state for the profile. */
   onToggleUsage?: (profile: ProviderProfile) => void;
-  /** Persists the official Codex quota panel's auto-refresh interval. */
-  onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   /** Requests a fresh candidate and the explicit write confirmation. */
   onActivate?: (profile: ProviderProfile) => void;
   /** Confirms the pending candidate through the switch executor. */
@@ -64,15 +62,10 @@ interface RowProps {
   active: boolean;
   userConfigModel: string | null;
   usageOpen: boolean;
-  /** Official Codex rows: whether the subscription-quota ledger is unfolded,
-   * persisted through the same collapsed-usage owner as `usageOpen`. */
-  quotaOpen: boolean;
   sortable: boolean;
   /** The pending switch confirmation, already matched to this row. */
   confirmation?: ReactNode;
   onToggleUsage: (profile: ProviderProfile) => void;
-  /** Persists the official Codex quota panel's auto-refresh interval. */
-  onSaveQuotaInterval: (profile: ProviderProfile, minutes: number) => Promise<boolean>;
   onActivate?: (profile: ProviderProfile) => void;
   onEdit?: (profile: ProviderProfile) => void;
   onConfigureUsage?: (profile: ProviderProfile) => void;
@@ -92,11 +85,9 @@ function ProviderRow({
   active,
   userConfigModel,
   usageOpen,
-  quotaOpen,
   sortable,
   confirmation,
   onToggleUsage,
-  onSaveQuotaInterval,
   onActivate,
   onEdit,
   onConfigureUsage,
@@ -106,14 +97,11 @@ function ProviderRow({
   const baseUrl = profile.baseUrl;
   const websiteUrl = profile.websiteUrl;
   const [reloginOpen, setReloginOpen] = useState(false);
-  /** Bumped on each completed re-login so the quota panel re-queries. */
-  const [quotaNonce, setQuotaNonce] = useState(0);
   const [testOpen, setTestOpen] = useState(false);
   const testTriggerRef = useRef<HTMLButtonElement>(null);
   const target = useMemo<ProviderRequestTarget>(() => ({ kind: "saved", profileId: profile.id }),
     [profile.id, profile.baseUrl, profile.apiKey, profile.upstreamProtocol, profile.model, profile.responsesOptions?.requestMode]);
   const official = profile.routeMode === "official";
-  const officialQuota = official && profile.app === "codex";
   const displayedModel = active ? userConfigModel : profile.model;
   const modelText = displayedModel ?? "默认模型";
   const modelTitle = active
@@ -125,15 +113,11 @@ function ProviderRow({
       ? `收起 ${profile.name} 用量`
       : `查看 ${profile.name} 用量`
     : `配置 ${profile.name} 用量`;
-  const quotaLabel = quotaOpen
-    ? `收起 ${profile.name} 订阅额度`
-    : `查看 ${profile.name} 订阅额度`;
   const testId = `provider-test-${profile.id}`;
   const testLabel = testOpen ? `收起 ${profile.name} 供应商测试` : `测试 ${profile.name} 供应商`;
   const hasClusterActions = Boolean(
     baseUrl ||
       hasUsageQuery ||
-      officialQuota ||
       (!official && onConfigureUsage) ||
       onEdit ||
       onDelete,
@@ -147,7 +131,7 @@ function ProviderRow({
           aria-label={`${profile.name} 用量摘要`}
           title={usage.data ? formatUsageSummary(usage.data) : usage.error ?? undefined}
         >
-          {usage.data ? formatUsageHighlight(usage.data) : usage.error ? "用量查询失败" : "正在读取用量"}
+          {usage.data ? formatUsageHighlight(usage.data) : usage.error ? "用量查询失败" : usage.querying ? "正在读取用量" : "暂无用量读数"}
           {usage.data && usage.error && " · 更新失败"}
           {usage.data && usage.querying && " · 更新中"}
         </span>
@@ -233,20 +217,6 @@ function ProviderRow({
               </Button>
             </Tooltip>
           )}
-          {officialQuota && (
-            <Tooltip label={quotaLabel}>
-              <Button
-                variant="icon"
-                className={quotaOpen ? "is-active" : undefined}
-                aria-label={quotaLabel}
-                aria-controls={`codex-official-quota-${profile.id}`}
-                aria-expanded={quotaOpen}
-                onClick={() => onToggleUsage(profile)}
-              >
-                <UsageIcon />
-              </Button>
-            </Tooltip>
-          )}
           {!official && (hasUsageQuery || onConfigureUsage) && (
             <Tooltip label={usageLabel}>
               <Button
@@ -278,41 +248,31 @@ function ProviderRow({
         </>
       ) : undefined}
     >
-      {!official && baseUrl && testOpen && (
-        <ProviderTestPanel id={testId} name={profile.name} url={baseUrl} target={target}
-          onClose={() => { setTestOpen(false); testTriggerRef.current?.focus(); }} />
+      {!official && baseUrl && (
+        <RowPanelDisclosure open={testOpen}>
+          <ProviderTestPanel id={testId} name={profile.name} url={baseUrl} target={target}
+            onClose={() => { setTestOpen(false); testTriggerRef.current?.focus(); }} />
+        </RowPanelDisclosure>
       )}
-      {hasUsageQuery && usageOpen && usage && (
-        <ProviderUsagePanel
-          id={`provider-usage-${profile.id}`}
-          name={profile.name}
-          usage={usage}
-          onConfigure={onConfigureUsage ? () => onConfigureUsage(profile) : undefined}
-        />
+      {usage && (
+        <RowPanelDisclosure open={usageOpen}>
+          <ProviderUsagePanel
+            id={`provider-usage-${profile.id}`}
+            name={profile.name}
+            usage={usage}
+            onConfigure={onConfigureUsage ? () => onConfigureUsage(profile) : undefined}
+          />
+        </RowPanelDisclosure>
       )}
       {confirmation}
       {reloginOpen && official && (
-        <OfficialLoginPanel
-          app={profile.app}
-          onFinished={(completed) => {
-            if (completed) setQuotaNonce((nonce) => nonce + 1);
-          }}
-        />
-      )}
-      {officialQuota && quotaOpen && (
-        <CodexOfficialQuotaPanel
-          key={`codex-official-quota-${profile.id}-${quotaNonce}`}
-          id={`codex-official-quota-${profile.id}`}
-          profileId={profile.id}
-          profileName={profile.name}
-          refreshIntervalMinutes={profile.officialQuotaRefreshIntervalMinutes ?? 0}
-          onSaveInterval={(minutes) => onSaveQuotaInterval(profile, minutes)}
-        />
+        <OfficialLoginPanel app={profile.app} />
       )}
     </ProviderRowShell>
   );
 }
 
+/** Claude's list; Codex rows and official quotas belong to CodexProvidersPage. */
 export function ProviderList({
   profiles,
   activeProfileId,
@@ -323,7 +283,6 @@ export function ProviderList({
   activationCandidate,
   onReorder,
   onToggleUsage,
-  onSaveQuotaInterval,
   onActivate,
   onConfirmSwitch,
   onCancelActivation,
@@ -343,11 +302,6 @@ export function ProviderList({
           active={profile.id === activeProfileId}
           userConfigModel={userConfigModel}
           usageOpen={Boolean(profile.usageQuery) && !collapsedUsageIds.includes(profile.id)}
-          quotaOpen={
-            profile.routeMode === "official" &&
-            profile.app === "codex" &&
-            !collapsedUsageIds.includes(profile.id)
-          }
           sortable={Boolean(onReorder)}
           confirmation={confirming && activationCandidate ? (
             <SwitchConfirmationSection filePreview={activationCandidate.file}
@@ -356,7 +310,6 @@ export function ProviderList({
               onConfirm={onConfirmSwitch} onCancel={onCancelActivation} />
           ) : undefined}
           onToggleUsage={(toggled) => onToggleUsage?.(toggled)}
-          onSaveQuotaInterval={onSaveQuotaInterval}
           onActivate={onActivate}
           onEdit={onEdit}
           onConfigureUsage={onConfigureUsage}

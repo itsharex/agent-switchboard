@@ -7,7 +7,7 @@ mod validation;
 pub use import::import_fragment;
 pub use projection::{
     apply, apply_profile, changes, changes_profile, diff_documents, import_filter,
-    owned_dotted_paths, owned_paths, validate_scopes,
+    owned_key_paths, owned_paths, validate_scopes,
 };
 use serde_json::{Map, Value};
 pub use shared::{apply_visual, extra_leaf_paths, import_shared, merged_extra, SharedSnippet};
