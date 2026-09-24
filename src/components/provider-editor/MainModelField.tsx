@@ -2,7 +2,10 @@ import type { Dispatch, SetStateAction } from "react";
 import type {
   ClaudeModelSettings,
   ProviderModel,
+  LocalizedMessage,
 } from "../../api/client";
+import { useI18n } from "../../i18n";
+import { localizedMessageText } from "../../i18n/errors";
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
 import { Input } from "../Input";
@@ -21,14 +24,15 @@ interface Props {
   modelsError: string | null;
   modelsEndpointError: string | null;
   userConfigModel: string | null;
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
   fetchModels: () => Promise<unknown> | void;
   setDraft: Dispatch<SetStateAction<ProviderEditorDraft>>;
 }
 
 function PrimaryModelInput({ draft, busy, setDraft }: Pick<Props, "draft" | "busy" | "setDraft">) {
+  const { t } = useI18n();
   return (
-    <Input aria-label="主模型" value={draft.model ?? ""} disabled={busy} placeholder="（可选）"
+    <Input aria-label={t("providers.editor.mainModel")} value={draft.model ?? ""} disabled={busy} placeholder={t("providers.editor.optional")}
       onChange={(event) => setDraft((current) => {
         const model = event.target.value;
         if (!model.trim() && current.modelOptions?.kind === "claude") {
@@ -54,23 +58,24 @@ export function MainModelField({
   fetchModels,
   setDraft,
 }: Props) {
+  const { t } = useI18n();
   return (
     <div className="asb-field">
-      <span>主模型</span>
+      <span>{t("providers.editor.mainModel")}</span>
       <div className="asb-model-control">
         <PrimaryModelInput draft={draft} busy={busy} setDraft={setDraft} />
         {models && (
           <ModelPicker
             models={models.map(({ id, ownedBy }) => ({ value: id, label: id, group: ownedBy }))}
             current={draft.model}
-            ariaLabel="选择模型"
+            ariaLabel={t("providers.editor.pickModel")}
             disabled={busy}
             onSelect={(model) => setDraft((current) => ({ ...current, model }))}
           />
         )}
         <Checkbox
           label="1M"
-          ariaLabel="主模型启用 1M 上下文"
+          ariaLabel={t("providers.editor.primaryOneMAria")}
           checked={claudeSettings?.primaryOneM ?? false}
           disabled={busy || !draft.model?.trim()}
           onChange={(enabled) =>
@@ -81,10 +86,10 @@ export function MainModelField({
           }
         />
         <div className="asb-provider-model-actions">
-          <Tooltip label={modelsBusy ? "正在获取模型" : modelsEndpointError ?? "获取模型"}>
+          <Tooltip label={modelsBusy ? t("providers.editor.fetchingModels") : modelsEndpointError ?? t("providers.request.fetchModels")}>
             <Button
               variant="icon"
-              aria-label={modelsBusy ? "正在获取模型" : modelsEndpointError ?? "获取模型"}
+              aria-label={modelsBusy ? t("providers.editor.fetchingModels") : modelsEndpointError ?? t("providers.request.fetchModels")}
               aria-busy={modelsBusy || undefined}
               disabled={busy || modelsBusy || !baseUrl || !!modelsEndpointError}
               onClick={() => void fetchModels()}
@@ -95,11 +100,11 @@ export function MainModelField({
         </div>
       </div>
       {userConfigModel && (
-        <p className="asb-scope-note">当前用户级配置模型：{userConfigModel}</p>
+        <p className="asb-scope-note">{t("providers.editor.userConfigModel", { model: userConfigModel })}</p>
       )}
       {userConfigWarnings.map((warning) => (
-        <p key={warning} className="asb-scope-note asb-warn-text">
-          {warning}
+        <p key={warning.key} className="asb-scope-note asb-warn-text">
+          {localizedMessageText(warning, t)}
         </p>
       ))}
       {modelsEndpointError && <span className="asb-warn-text">{modelsEndpointError}</span>}

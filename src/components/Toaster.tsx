@@ -1,8 +1,10 @@
 import { useEffect } from "react";
+import { isToastMessage, type Toast, type ToastContent } from "./use-toast";
+import { useI18n } from "../i18n";
 import { CloseIcon } from "./icons";
 import { Button } from "./Button";
 import { ToastStatusIcon } from "./ToastStatusIcon";
-import { useToast, type Toast } from "./use-toast";
+import { useToast } from "./use-toast";
 
 /**
  * Global floating notifications (Frosted Relay structure replica, user
@@ -48,8 +50,19 @@ interface ToastItemProps {
   onResume: (toastId: string) => void;
 }
 
+/** Renders toast copy in the current language. Descriptors translate on every
+ * render so a visible toast follows a language switch; ready-made node
+ * content (pre-composed JSX) renders verbatim. Exported for toast-adjacent
+ * helpers that compose render-time-translated titles. */
+export function ToastText({ content }: { content: ToastContent }) {
+  const { t } = useI18n();
+  if (isToastMessage(content)) return <>{t(content.key, content.params)}</>;
+  return <>{content}</>;
+}
+
 function ToastItem({ toast, onDismiss, onPause, onResume }: ToastItemProps) {
   const { id, title, description, kind } = toast;
+  const { t } = useI18n();
   return (
     <div
       className="asb-toast"
@@ -60,17 +73,22 @@ function ToastItem({ toast, onDismiss, onPause, onResume }: ToastItemProps) {
     >
       <ToastStatusIcon kind={kind} />
       <div role={kind === "error" ? "alert" : "status"} aria-atomic="true" className="asb-toast-body">
-        {title ? <div className="asb-toast-title">{title}</div> : null}
-        {description ? <div className="asb-toast-description">{description}</div> : null}
+        {title ? <div className="asb-toast-title"><ToastText content={title} /></div> : null}
+        {description ? <div className="asb-toast-description"><ToastText content={description} /></div> : null}
       </div>
       <Button
         variant="unstyled"
         className="asb-toast-close"
-        aria-label="关闭通知"
+        aria-label={t("toast.dismiss")}
         onClick={() => onDismiss(id)}
       >
         <CloseIcon />
       </Button>
     </div>
   );
+}
+
+/** Retain each message descriptor so visible multi-line notifications translate together. */
+export function ToastMessageList({ items }: { items: readonly ToastContent[] }) {
+  return <>{items.map((content, index) => <div key={index}><ToastText content={content} /></div>)}</>;
 }

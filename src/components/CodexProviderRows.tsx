@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { CodexProviderRecord, ProviderProfile, ProviderRecord, ProviderRequestTarget } from "../api/client";
 import { queryCodexOfficialQuota, readCodexOfficialQuota } from "../api/client";
+import { useI18n } from "../i18n";
 import { CodexOfficialQuotaPanel } from "./CodexOfficialQuotaPanel";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderRowShell } from "./ProviderWorkspaceShell";
@@ -77,14 +78,15 @@ interface OfficialRowProps extends RowProps {
 
 /** Official login participates in the Codex provider order while retaining its own login and quota state. */
 export function CodexOfficialRow(props: OfficialRowProps) {
+  const { t } = useI18n();
   const { profile } = props.record;
   const [reloginOpen, setReloginOpen] = useState(false);
   const quota = useCachedQuery(profile.id, String(profile.officialQuotaRefreshIntervalMinutes ?? 0),
     readCodexOfficialQuota, queryCodexOfficialQuota);
   return (
     <ProviderRowShell id={profile.id} name={profile.name} active={props.active}
-      confirmationOpen={props.confirmationOpen} sortable model={profile.model ?? "默认模型"}
-      endpoint={<span>官方登录</span>}
+      confirmationOpen={props.confirmationOpen} sortable model={profile.model ?? t("codex.rows.defaultModel")}
+      endpoint={<span>{t("codex.identity.official")}</span>}
       summary={<OfficialQuotaSummary name={profile.name} quota={quota} />}
       primaryAction={!props.active ? <ProviderActivateButton name={profile.name} onActivate={props.onActivate} /> : undefined}
       secondaryAction={<ProviderLoginButton name={profile.name} open={reloginOpen} onToggle={() => setReloginOpen((open) => !open)} />}

@@ -81,6 +81,14 @@ fn ensure_window(app: &AppHandle) -> Result<WebviewWindow, String> {
         .iter()
         .find(|window| window.label == LABEL)
         .ok_or("托盘窗口配置缺失")?;
+    #[cfg(windows)]
+    let config = {
+        let mut config = config.clone();
+        crate::apply_startup_hardware_acceleration(app, std::slice::from_mut(&mut config));
+        config
+    };
+    #[cfg(windows)]
+    let config = &config;
     let builder =
         WebviewWindowBuilder::from_config(app, config).map_err(|error| error.to_string())?;
     #[cfg(windows)]

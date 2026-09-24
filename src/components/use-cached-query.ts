@@ -1,3 +1,4 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onTrayChanged } from "../api/client";
 
@@ -18,7 +19,7 @@ export function useCachedQuery<T>(
 ): CachedQuery<T> {
   const [data, setData] = useState<T | null>(null);
   const [querying, setQuerying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const runRef = useRef<() => Promise<void>>(async () => {});
   const run = useCallback(() => runRef.current(), []);
 
@@ -31,8 +32,6 @@ export function useCachedQuery<T>(
     setData(null);
     setError(null);
     setQuerying(false);
-    const message = (caught: unknown) => typeof caught === "string" ? caught
-      : (caught as { message?: string })?.message ?? "用量读取失败";
     const reload = async () => {
       const version = ++readVersion;
       try {
@@ -44,16 +43,16 @@ export function useCachedQuery<T>(
           setData(next);
         }
       } catch (caught) {
-        if (!disposed && version === readVersion) setError(message(caught));
+        if (!disposed && version === readVersion) setError(caught);
       }
     };
     runRef.current = async () => {
       const version = ++requestVersion;
       setQuerying(true);
       setError(null);
-      let failure: string | null = null;
+      let failure: unknown = null;
       try { await query(key); }
-      catch (caught) { failure = message(caught); }
+      catch (caught) { failure = caught; }
       if (disposed) return;
       // Network completion re-reads the cache instead of cancelling event
       // reads or displaying a second, independently ordered result.
@@ -69,7 +68,7 @@ export function useCachedQuery<T>(
         if (disposed) { stop(); return; }
         unlisten = stop;
       } catch (caught) {
-        if (!disposed) setError(message(caught));
+        if (!disposed) setError(caught);
       }
       if (!disposed) await reload();
     })();

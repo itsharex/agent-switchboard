@@ -137,7 +137,6 @@ fn parse_page(value: &Value) -> Result<(Vec<ProviderModel>, Option<String>), Str
         models.push(ProviderModel {
             id: id.into(),
             owned_by: Some("Google".into()),
-            image_input: None,
         });
     }
     let token = value

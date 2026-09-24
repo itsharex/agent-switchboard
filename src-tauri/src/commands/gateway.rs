@@ -22,13 +22,13 @@ fn local(app: &AppHandle) -> Result<crate::local_state::LocalState, CommandError
 fn preparations(app: &AppHandle) -> Result<PortChangePreparations, CommandError> {
     app.try_state::<PortChangePreparations>()
         .map(|state| state.inner().clone())
-        .ok_or_else(|| CommandError::new("gateway-unavailable", "端口修改准备状态尚未初始化"))
+        .ok_or_else(|| CommandError::keyed("gateway-unavailable", "errors.cfg.gatewayPreparationsUninitialized", "端口修改准备状态尚未初始化"))
 }
 
 fn write_gate(app: &AppHandle) -> Result<ConfigWriteGate, CommandError> {
     app.try_state::<ConfigWriteGate>()
         .map(|gate| gate.inner().clone())
-        .ok_or_else(|| CommandError::new("gateway-unavailable", "写入闸门尚未初始化"))
+        .ok_or_else(|| CommandError::keyed("gateway-unavailable", "errors.cfg.writeGateNotInitialized", "写入闸门尚未初始化"))
 }
 
 /// Read-only gateway observation for the status page.

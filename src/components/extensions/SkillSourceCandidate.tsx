@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMessageState } from "../../i18n/use-message-state";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, ExternalLink, FileArchive, FolderGit2, LoaderCircle } from "lucide-react";
+import { useI18n } from "../../i18n";
 import { isBrowserDevelopment } from "../../lib/runtime";
 import { Button } from "../Button";
 import { Tooltip } from "../Tooltip";
@@ -9,7 +10,8 @@ import { skillCandidateHost, sourceErrorMessage, type SkillSourceKind, type Skil
 import type { SkillSourceState } from "./useSkillSource";
 
 export function SkillSourceLink({ url, label }: { url: string | null; label: string }) {
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
+  const [error, setError] = useMessageState();
   if (!url) return null;
   return <>
     <Tooltip label={label}>
@@ -17,10 +19,10 @@ export function SkillSourceLink({ url, label }: { url: string | null; label: str
         onClick={(event) => {
           if (isBrowserDevelopment) return;
           event.preventDefault(); setError(null);
-          void openUrl(url).catch((reason: unknown) => setError(sourceErrorMessage(reason, "无法打开来源链接")));
+          void openUrl(url).catch((reason: unknown) => setError(reason));
         }}><ExternalLink size={16} /></a>
     </Tooltip>
-    {error && <span className="asb-warn-text" role="alert">{error}</span>}
+    {error && <span className="asb-warn-text" role="alert">{sourceErrorMessage(error, t("extensions.sources.openLinkFailed"))}</span>}
   </>;
 }
 
@@ -34,16 +36,19 @@ interface CandidateProps {
 }
 
 export function SkillSourceCandidate({ row, installed, imports, source, busy, installs }: CandidateProps) {
+  const { t } = useI18n();
   const { candidate } = row;
   const installing = imports.active === candidate.digest;
   const rejected = candidate.diagnostics.length > 0;
-  const label = installed ? "已安装" : installing ? "正在安装" : rejected ? "不可安装" : "安装";
+  const label = installed ? t("extensions.sources.installed")
+    : installing ? t("extensions.sources.installingBadge")
+    : rejected ? t("extensions.sources.uninstallable") : t("extensions.sources.install");
   return (
     <li className="asb-skill-source-card" aria-label={candidate.name}>
       <div className="asb-skill-source-card-heading">
         <h3 className="asb-group-title">{candidate.name}</h3>
-        {installed && <span className="asb-skill-source-installed"><CheckIcon />已安装</span>}
-        <SkillSourceLink url={row.sourceUrl} label={`查看 ${candidate.name} 来源`} />
+        {installed && <span className="asb-skill-source-installed"><CheckIcon />{t("extensions.sources.installed")}</span>}
+        <SkillSourceLink url={row.sourceUrl} label={t("extensions.sources.viewSourceAria", { name: candidate.name })} />
       </div>
       <p className="asb-skill-source-origin" title={row.label}>
         {source === "catalog" || source === "directory" ? <FolderGit2 size={14} /> :
@@ -51,14 +56,14 @@ export function SkillSourceCandidate({ row, installed, imports, source, busy, in
         <span>{row.label}</span>
       </p>
       {candidate.description && <p className="asb-skill-source-description">{candidate.description}</p>}
-      {rejected && <ul className="asb-skill-source-diagnostics" aria-label={`${candidate.name} 解析问题`}>
-        {candidate.diagnostics.map((message, index) => <li key={index}>{sourceErrorMessage(message, "清单无效")}</li>)}
+      {rejected && <ul className="asb-skill-source-diagnostics" aria-label={t("extensions.sources.diagnosticsAria", { name: candidate.name })}>
+        {candidate.diagnostics.map((message, index) => <li key={index}>{sourceErrorMessage(message, t("extensions.sources.invalidManifest"))}</li>)}
       </ul>}
       <div className="asb-skill-source-card-footer">
         <span className="asb-skill-source-meta">
-          <span>{skillCandidateHost(candidate) ? "仅 Claude" : "Codex · Claude"}</span>
-          <span className="asb-num">{candidate.fileCount} 个文件</span>
-          {installs !== undefined && <span className="asb-num">{installs.toLocaleString()} 次目录安装</span>}
+          <span>{skillCandidateHost(candidate) ? t("extensions.sources.hostClaudeOnly") : t("extensions.sources.hostBoth")}</span>
+          <span className="asb-num">{t("extensions.sources.fileCount", { count: candidate.fileCount })}</span>
+          {installs !== undefined && <span className="asb-num">{t("extensions.sources.installs", { count: installs.toLocaleString() })}</span>}
         </span>
         <Button variant={installed ? "secondary" : "primary"}
           disabled={busy || imports.busy || installed || rejected}

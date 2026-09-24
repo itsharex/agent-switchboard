@@ -194,11 +194,5 @@ pub(crate) fn invalidate(state: &LocalState, profile_id: &str) -> Result<(), Str
     Ok(())
 }
 
-/// Drops all snapshots when the application-owned profile store is reset.
-pub(crate) fn clear(state: &LocalState) -> Result<(), String> {
-    let _guard = WRITE_LOCK.lock().map_err(|_| "用量缓存写入锁不可用")?;
-    state.clear_usage_cache()
-}
-
 #[cfg(test)]
 mod tests;

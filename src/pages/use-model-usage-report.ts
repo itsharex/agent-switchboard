@@ -1,13 +1,10 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getModelUsageReport,
   type ModelUsageRange,
   type ModelUsageRead,
 } from "../api/client";
-
-function errorMessage(caught: unknown): string {
-  return (caught as { message?: string }).message ?? "无法汇总本地模型消耗";
-}
 
 function refreshDelay(refreshAfter: string): number {
   const target = new Date(refreshAfter).getTime();
@@ -25,7 +22,7 @@ export function useModelUsageReport(active: boolean, range: ModelUsageRange) {
     refreshAfter: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const requestVersion = useRef(0);
 
   const load = useCallback(async (forceRefresh: boolean): Promise<ModelUsageRead | null> => {
@@ -43,7 +40,7 @@ export function useModelUsageReport(active: boolean, range: ModelUsageRange) {
       }
       return next;
     } catch (caught) {
-      if (requestVersion.current === version) setError(errorMessage(caught));
+      if (requestVersion.current === version) setError(caught);
       return null;
     } finally {
       if (requestVersion.current === version) setLoading(false);

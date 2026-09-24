@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AppKind } from "../api/client";
+import { useI18n } from "../i18n";
 import { ClientLogo } from "../components/ClientLogo";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { Tabs } from "../components/Tabs";
@@ -14,6 +15,7 @@ interface ClientManagementPageProps {
 
 /** Only client-specific tools without another workspace owner belong here. */
 export function ClientManagementPage({ onChanged }: ClientManagementPageProps) {
+  const { t } = useI18n();
   const [client, setClient] = useState<AppKind>("codex");
   const codex = useCodexOperations(onChanged);
   const claude = useClaudeOperations(onChanged);
@@ -21,11 +23,11 @@ export function ClientManagementPage({ onChanged }: ClientManagementPageProps) {
   const contentId = "client-management-content";
 
   return (
-    <section className="asb-panel" aria-label="客户端工具">
+    <section className="asb-panel" aria-label={t("clientConfig.tools.title")}>
       <ModuleHeader
-        title="客户端工具"
+        title={t("clientConfig.tools.title")}
         primary={
-          <Tabs scope="client-management-client" label="客户端" value={client} onChange={setClient}
+          <Tabs scope="client-management-client" label={t("clientConfig.tools.clientLabel")} value={client} onChange={setClient}
             tabs={[
               {
                 value: "codex",

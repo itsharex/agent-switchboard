@@ -1,0 +1,35 @@
+import type { MessageEntry } from "../types";
+
+/** Shared formatter labels (dates, relative time, usage readings, window
+ * names) consumed by src/lib formatters through the module-level translator. */
+export const messages = {
+  "format.date.full": ["{year}年{month}月{day}日", "{day} {month} {year}"],
+  "format.time.hm": ["{hour}：{minute}", "{hour}:{minute}"],
+  "format.countdown.reached": ["已到重置时间", "Reset time reached"],
+  "format.countdown.underMinute": ["不到 1 分钟后", "in less than 1 minute"],
+  "format.countdown.daysHours": ["约 {days} 天 {hours} 小时后", "in about {days} days {hours} hours"],
+  "format.countdown.hoursMinutes": ["约 {hours} 小时 {minutes} 分钟后", "in about {hours} hours {minutes} minutes"],
+  "format.countdown.minutes": ["约 {minutes} 分钟后", "in about {minutes} minutes"],
+  "format.relative.justNow": ["刚刚", "just now"],
+  "format.relative.daysHours": ["{days} 天 {hours} 小时", "{days} days {hours} hours"],
+  "format.relative.hoursMinutes": ["{hours} 小时 {minutes} 分钟", "{hours} hours {minutes} minutes"],
+  "format.relative.minutes": ["{minutes} 分钟", "{minutes} minutes"],
+  "format.relative.past": ["{span}前", "{span} ago"],
+  "format.relative.future": ["{span}后", "in {span}"],
+  "format.usage.remaining": ["剩余", "remaining"],
+  "format.usage.balance": ["余额", "balance"],
+  "format.usage.used": ["已用", "used"],
+  "format.usage.total": ["总量", "total"],
+  "format.window.daysOne": ["{count} 天", "{count} day"],
+  "format.window.daysMany": ["{count} 天", "{count} days"],
+  "format.window.hoursOne": ["{count} 小时", "{count} hour"],
+  "format.window.hoursMany": ["{count} 小时", "{count} hours"],
+  "format.window.minutesOne": ["{count} 分钟", "{count} minute"],
+  "format.window.minutesMany": ["{count} 分钟", "{count} minutes"],
+  "format.tray.invalidReading": ["已失效", "Invalid"],
+  "format.tray.noReading": ["暂无读数", "No readings"],
+  "format.tray.depleted": ["· 已耗尽", "· depleted"],
+  "format.provider.notLoaded": ["未加载", "Not loaded"],
+  "format.provider.officialLogin": ["官方登录", "Official login"],
+  "format.provider.unrecognized": ["未识别的供应商", "Unrecognized provider"],
+} as const satisfies Record<string, MessageEntry>;

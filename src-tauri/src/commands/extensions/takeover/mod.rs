@@ -47,7 +47,11 @@ pub async fn takeover_discovered_extension(
             .get(&observation_id)
             .cloned()
             .ok_or_else(|| {
-                CommandError::new("observation-expired", "发现结果已过期；请重新扫描本机扩展")
+                CommandError::keyed(
+                    "observation-expired",
+                    "errors.extlib.observationExpired",
+                    "发现结果已过期；请重新扫描本机扩展",
+                )
             })?;
         match cached.observed.kind {
             ExtensionKind::Mcp => takeover_observed_mcp(&store, &cached, &paths),
@@ -113,16 +117,18 @@ pub(super) fn takeover_observed_mcp(
     planner.assert_native_key_free(&binding)?;
     for other in store.list_bindings().map_err(store_error)? {
         if other.resource_id == definition.id && other.target == binding.target {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-conflict",
+                "errors.extlib.alreadyBoundNoTakeover",
                 "该定义已绑定到所选目标，不能重复接管",
             ));
         }
     }
     planner.require_write_capabilities(&definition, &binding, PlanOperation::Install)?;
     let document = fs::read_to_string(&observed.path).map_err(|_| {
-        CommandError::new(
+        CommandError::keyed(
             "observation-stale",
+            "errors.extlib.mcpDocumentUnreadable",
             "发现到的 MCP 配置已无法读取；请重新扫描并确认",
         )
     })?;
@@ -176,12 +182,13 @@ pub(super) fn takeover_observed_skill(
             store
                 .get_definition(&mutation.id)
                 .map_err(store_error)?
-                .ok_or_else(|| CommandError::new("extension-store", "接管定义未持久化"))?
+                .ok_or_else(|| CommandError::keyed("extension-store", "errors.extlib.takeoverDefinitionNotPersisted", "接管定义未持久化"))?
         }
     };
     let ExtensionPayload::Skill(skill) = &definition.payload else {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-invalid",
+            "errors.extlib.notASkillDefinition",
             "该扩展不是 Skill 定义",
         ));
     };
@@ -210,8 +217,9 @@ pub(super) fn takeover_observed_skill(
     planner.require_write_capabilities(&definition, &binding, PlanOperation::Install)?;
     for other in store.list_bindings().map_err(store_error)? {
         if other.target == binding.target && other.deploy_name == binding.deploy_name {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-conflict",
+                "errors.extlib.targetManagedNoTakeover",
                 "该目标目录已被另一绑定管理，不能重复接管",
             ));
         }

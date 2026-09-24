@@ -14,6 +14,7 @@ import { CcSwitchImport } from "./provider-import/CcSwitchImport";
 import { LocalConfigImport } from "./provider-import/LocalConfigImport";
 import { SqlExport } from "./provider-import/SqlExport";
 import { SqlFileImport } from "./provider-import/SqlFileImport";
+import { useI18n } from "../i18n";
 import "../styles/base/provider-workspace.css";
 
 interface ProviderImportPageProps {
@@ -44,6 +45,7 @@ interface ProviderImportPageProps {
  * Scan and import actions belong to each source panel, so the frame runs
  * without a persistent bottom action bar. */
 export function ProviderImportPage(props: ProviderImportPageProps) {
+  const { t } = useI18n();
   const [source, setSource] = useState<"local" | "ccswitch" | "sql" | "export">("local");
   const importLocal = async () => {
     if (await props.onImportLocal()) props.onBack();
@@ -55,14 +57,14 @@ export function ProviderImportPage(props: ProviderImportPageProps) {
     if (await props.onImportSql()) props.onBack();
   };
   return (
-    <EditorFrame title="导入与导出供应商" backLabel="返回供应商" busy={props.busy} onBack={props.onBack}>
+    <EditorFrame title={t("importDiscovery.page.title")} backLabel={t("importDiscovery.page.back")} busy={props.busy} onBack={props.onBack}>
       <div className="asb-provider-import">
-        <Tabs value={source} onChange={setSource} scope="provider-import" label="导入与导出"
+        <Tabs value={source} onChange={setSource} scope="provider-import" label={t("importDiscovery.page.tabsAria")}
           tabs={[
-            { value: "local", label: "本机配置", controls: "provider-import-local-panel", disabled: props.busy },
-            { value: "ccswitch", label: "本机数据库", controls: "provider-import-ccswitch-panel", disabled: props.busy },
-            { value: "sql", label: "导入 SQL", controls: "provider-import-sql-panel", disabled: props.busy },
-            { value: "export", label: "导出 SQL", controls: "provider-import-export-panel", disabled: props.busy },
+            { value: "local", label: t("importDiscovery.tab.local"), controls: "provider-import-local-panel", disabled: props.busy },
+            { value: "ccswitch", label: t("importDiscovery.tab.database"), controls: "provider-import-ccswitch-panel", disabled: props.busy },
+            { value: "sql", label: t("importDiscovery.tab.sqlImport"), controls: "provider-import-sql-panel", disabled: props.busy },
+            { value: "export", label: t("importDiscovery.tab.sqlExport"), controls: "provider-import-export-panel", disabled: props.busy },
           ]} />
         {/* Every tabpanel stays mounted so each tab's aria-controls always
             resolves; inactive content unmounts inside its hidden panel. */}

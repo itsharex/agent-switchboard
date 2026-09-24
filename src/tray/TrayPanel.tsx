@@ -1,3 +1,4 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUpRight, LogOut } from "lucide-react";
 import {
@@ -13,8 +14,9 @@ import appIcon from "../assets/app-icon.svg";
 import { Button } from "@/components/Button";
 import { ClientLogo } from "@/components/ClientLogo";
 import { applyAppAppearance } from "@/lib/app-appearance";
+import { useI18n } from "@/i18n";
 import { TrayProviderItem } from "./TrayProviderItem";
-import { trayError, useTraySnapshot } from "./useTraySnapshot";
+import { useTraySnapshot } from "./useTraySnapshot";
 
 /** Hard cap for the native popup height. The single-line row density keeps
  * realistic provider counts fully visible below it; an extreme count scrolls
@@ -24,8 +26,8 @@ const TRAY_MAX_HEIGHT = 560;
 type TrayApp = "codex" | "claude";
 
 /** In-flight tray action. A provider switch carries the row id so that row
- * can show 切换中; panel commands (open/manage/quit) share one shape. The two
- * kinds never share an id namespace. */
+ * can show the switching state; panel commands (open/manage/quit) share one
+ * shape. The two kinds never share an id namespace. */
 type PendingAction = { kind: "switch"; providerId: string } | { kind: "panel" };
 
 interface TrayGroupProps {
@@ -39,10 +41,11 @@ interface TrayGroupProps {
 
 function TrayGroup({ app, providers, loaded, busy, switchingId, onSwitch }: TrayGroupProps) {
   const label = app === "codex" ? "Codex" : "Claude Code";
+  const { t } = useI18n();
   return (
     <section aria-label={label} className="tray-group">
       <h2 className="tray-group-heading"><ClientLogo app={app} className="tray-client-logo" />{label}</h2>
-      {loaded && providers.length === 0 && <p className="tray-group-empty">暂无供应商</p>}
+      {loaded && providers.length === 0 && <p className="tray-group-empty">{t("tray.emptyGroup")}</p>}
       {providers.map((provider) => (
         <TrayProviderItem
           key={provider.id}
@@ -56,9 +59,14 @@ function TrayGroup({ app, providers, loaded, busy, switchingId, onSwitch }: Tray
   );
 }
 
-export function TrayPanel() {
-  const { snapshot, error: readError, initialized, refresh } = useTraySnapshot();
-  const [actionError, setActionError] = useState<string | null>(null);
+function TrayPanelContent({ snapshot, readError, initialized, refresh }: {
+  snapshot: TraySnapshot | null;
+  readError: string | null;
+  initialized: boolean;
+  refresh: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [actionError, setActionError] = useMessageState();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const actionInFlight = useRef(false);
   const readySent = useRef(false);
@@ -72,7 +80,7 @@ export function TrayPanel() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        void hideTray().catch((caught) => { if (mounted.current) setActionError(trayError(caught)); });
+        void hideTray().catch((caught) => { if (mounted.current) setActionError(caught); });
       }
     };
     document.addEventListener("keydown", onKey);
@@ -97,7 +105,7 @@ export function TrayPanel() {
       void (async () => {
         try { await resizeTray(height); }
         catch (caught) {
-          if (!disposed && request === revision) setActionError(trayError(caught));
+          if (!disposed && request === revision) setActionError(caught);
         } finally {
           // A failed resize must still reveal the recovery controls. Only the
           // latest committed layout may complete the initial native handshake.
@@ -109,7 +117,7 @@ export function TrayPanel() {
               // the native side never-ready and the panel could never open.
               readySent.current = true;
             }
-            catch (caught) { if (mounted.current) setActionError(trayError(caught)); }
+            catch (caught) { if (mounted.current) setActionError(caught); }
           }
         }
       })();
@@ -127,7 +135,7 @@ export function TrayPanel() {
     setPending(mark);
     setActionError(null);
     try { await action(); }
-    catch (caught) { if (mounted.current) setActionError(trayError(caught)); }
+    catch (caught) { if (mounted.current) setActionError(caught); }
     finally {
       actionInFlight.current = false;
       if (mounted.current) setPending(null);
@@ -143,7 +151,7 @@ export function TrayPanel() {
     });
   };
   return (
-    <div ref={panel} className="tray-panel" aria-label="Agent Switchboard 托盘">
+    <div ref={panel} className="tray-panel" aria-label={t("tray.panel.aria")}>
       <header className="tray-header">
         <img src={appIcon} alt="" className="tray-app-logo" aria-hidden="true" />
         <span className="tray-app-name">Agent Switchboard</span>
@@ -151,7 +159,7 @@ export function TrayPanel() {
       {error && <div role="alert" className="tray-error">{error}</div>}
       <div ref={list} className="tray-list">
         <div>
-          {!snapshot && !readError && <p role="status" className="tray-loading">正在读取供应商…</p>}
+          {!snapshot && !readError && <p role="status" className="tray-loading">{t("tray.loading")}</p>}
           {(["codex", "claude"] as const).map((app) => (
             <TrayGroup
               key={app}
@@ -168,10 +176,21 @@ export function TrayPanel() {
       <footer className="tray-footer">
         <Button variant="unstyled" className="tray-ghost-button" disabled={busy} onClick={() => void run({ kind: "panel" }, openTrayMain)}>
           <ArrowUpRight size={16} aria-hidden="true" />
-          打开主界面
+          {t("tray.openMain")}
         </Button>
-        <Button variant="unstyled" className="tray-ghost-button" disabled={busy} onClick={() => void run({ kind: "panel" }, quitTray)}><LogOut size={16} aria-hidden="true" />退出</Button>
+        <Button variant="unstyled" className="tray-ghost-button" disabled={busy} onClick={() => void run({ kind: "panel" }, quitTray)}><LogOut size={16} aria-hidden="true" />{t("tray.quit")}</Button>
       </footer>
     </div>
+  );
+}
+
+/** The snapshot is accepted before the saved language preference reaches
+ * the panel before its first translated render. */
+export function TrayPanel() {
+  const { snapshot, error: readError, initialized, refresh } = useTraySnapshot();
+  return (
+    <>
+      <TrayPanelContent snapshot={snapshot} readError={readError} initialized={initialized} refresh={refresh} />
+    </>
   );
 }

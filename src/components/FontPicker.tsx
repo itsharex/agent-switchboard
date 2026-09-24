@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listSystemFonts } from "../api/client";
+import { useI18n } from "../i18n";
 import { quotedFontFamily } from "../lib/font-family";
 import { Input } from "./Input";
 import { Button } from "./Button";
@@ -28,6 +29,7 @@ interface Props {
  * families from `list_system_fonts`.
  */
 export function FontPicker({ value, busy, onChange }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
@@ -129,7 +131,7 @@ export function FontPicker({ value, busy, onChange }: Props) {
         className="asb-select-trigger asb-font-trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="选择界面字体"
+        aria-label={t("settings.font.pickerAria")}
         disabled={busy}
         onClick={() => (open ? close(false) : setOpen(true))}
       >
@@ -147,8 +149,8 @@ export function FontPicker({ value, busy, onChange }: Props) {
             <SearchIcon />
             <Input
               type="search"
-              aria-label="搜索字体"
-              placeholder="搜索字体"
+              aria-label={t("settings.font.searchAria")}
+              placeholder={t("settings.font.searchPlaceholder")}
               value={query}
               autoFocus
               onChange={(event) => setQuery(event.target.value)}
@@ -158,7 +160,7 @@ export function FontPicker({ value, busy, onChange }: Props) {
             className="asb-font-options"
             ref={options}
             role="listbox"
-            aria-label="可选字体"
+            aria-label={t("settings.font.listAria")}
           >
             {fonts.length > 0 ? (
               fonts.map((font) => (
@@ -182,7 +184,7 @@ export function FontPicker({ value, busy, onChange }: Props) {
                 </Button>
               ))
             ) : (
-              <p className="asb-font-empty">没有找到相关字体</p>
+              <p className="asb-font-empty">{t("settings.font.empty")}</p>
             )}
           </div>
         </div>

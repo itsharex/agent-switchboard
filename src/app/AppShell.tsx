@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { CommandError } from "../api/client";
-import { PAGES, type Page } from "./navigation";
+import { useI18n } from "../i18n";
+import { commandErrorText } from "../i18n/errors";
+import { PAGES, pageLabelKey, type Page } from "./navigation";
 import { PinTopButton } from "../components/PinTopButton";
 import { UpdateButton } from "../components/UpdateButton";
 import { Button } from "../components/Button";
@@ -21,7 +23,7 @@ interface AppShellProps {
   /** Replaces an unreadable settings file with validated defaults. */
   onRepairSettings: () => void;
   /** Offered only for an unsupported profile store. */
-  onResetStore: () => void;
+  onRepairStore: () => void;
   /** Always-on-top toggle state; null until settings load. */
   pin: { active: boolean; onToggle: () => void } | null;
   /** Update indicator; present only while a newer release is known. */
@@ -29,36 +31,37 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-function OperationNotices({ error, settingsError, busy, onResetStore, onRepairSettings }:
-  Pick<AppShellProps, "error" | "settingsError" | "busy" | "onResetStore" | "onRepairSettings">) {
+function OperationNotices({ error, settingsError, busy, onRepairStore, onRepairSettings }:
+  Pick<AppShellProps, "error" | "settingsError" | "busy" | "onRepairStore" | "onRepairSettings">) {
+  const { t } = useI18n();
   return (
-    <div className="asb-banner-stack" aria-label="操作状态">
+    <div className="asb-banner-stack" aria-label={t("shell.banner.aria")}>
       {/* Persistent decision errors only: the banner carries the store
-          reset entry. One-shot operation feedback lives in the global
+          repair entry. One-shot operation feedback lives in the global
           toaster (DESIGN.md §7/§8). */}
       {error && (
-        <div className="asb-banner asb-banner-error" role="alert" aria-label="操作错误">
-          <span>{error.message}</span>
-          {error.code === "profile-store-unsupported" && (
+        <div className="asb-banner asb-banner-error" role="alert" aria-label={t("shell.banner.error.aria")}>
+          <span>{commandErrorText(error, t)}</span>
+          {(error.code === "profile-store-unsupported" || error.code === "profile-store-repair-failed") && (
             <Button
-              variant="danger"
+              variant="secondary"
               disabled={busy}
-              onClick={onResetStore}
+              onClick={onRepairStore}
             >
-              清空旧档案并重新开始
+              {t("shell.banner.repairStore")}
             </Button>
           )}
         </div>
       )}
       {settingsError && (
-        <div className="asb-banner asb-banner-error" role="alert" aria-label="应用设置不可用">
-          <span>应用设置不可用：{settingsError}</span>
+        <div className="asb-banner asb-banner-error" role="alert" aria-label={t("shell.banner.settingsUnavailable.aria")}>
+          <span>{t("shell.banner.settingsUnavailable", { detail: settingsError })}</span>
           <Button
             variant="secondary"
             disabled={busy}
             onClick={onRepairSettings}
           >
-            一键修复
+            {t("shell.banner.repair")}
           </Button>
         </div>
       )}
@@ -76,11 +79,12 @@ export function AppShell({
   busy,
   settingsError,
   onRepairSettings,
-  onResetStore,
+  onRepairStore,
   pin,
   update,
   children,
 }: AppShellProps) {
+  const { t } = useI18n();
   return (
     <>
       <div className="asb-ambient" aria-hidden="true" />
@@ -91,11 +95,11 @@ export function AppShell({
             <h1 className="asb-topbar-title" data-tauri-drag-region>
               Agent Switchboard
             </h1>
-            <span className="asb-topbar-beta" aria-label="Beta 版本" data-tauri-drag-region>
+            <span className="asb-topbar-beta" aria-label={t("shell.beta.aria")} data-tauri-drag-region>
               Beta
             </span>
           </span>
-          <nav aria-label="主导航">
+          <nav aria-label={t("shell.nav.aria")}>
             <ul className="asb-nav">
               {PAGES.map((item) => (
                 <li key={item}>
@@ -104,13 +108,13 @@ export function AppShell({
                     aria-current={page === item ? "page" : undefined}
                     onClick={() => onPageChange(item)}
                   >
-                    {item}
+                    {t(pageLabelKey(item))}
                   </Button>
                 </li>
               ))}
             </ul>
           </nav>
-          {isBrowserDevelopment ? <span className="asb-web-development-badge">浏览器开发 · 本机后端</span> : null}
+          {isBrowserDevelopment ? <span className="asb-web-development-badge">{t("shell.devBadge")}</span> : null}
           {update ? (
             <UpdateButton latestVersion={update.latestVersion} onOpen={update.onOpen} />
           ) : null}
@@ -121,13 +125,13 @@ export function AppShell({
         </header>
         <div className="asb-workspace">
           <OperationNotices error={error} settingsError={settingsError} busy={busy}
-            onResetStore={onResetStore} onRepairSettings={onRepairSettings} />
+            onRepairStore={onRepairStore} onRepairSettings={onRepairSettings} />
           {children}
         </div>
       </div>
       {busy && (
-        <div className="asb-busy" role="status" aria-label="处理中">
-          处理中
+        <div className="asb-busy" role="status" aria-label={t("shell.busy.aria")}>
+          {t("shell.busy")}
         </div>
       )}
     </>

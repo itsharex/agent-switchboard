@@ -26,8 +26,9 @@ pub(super) fn ensure_restore_is_current(
     let baselines = current_baseline_files(store)?;
     for post in &snapshot.post_bindings {
         if !bindings.iter().any(|current| current == post) {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "plan-stale",
+                "errors.extops.libraryChangedSinceOperation",
                 "扩展库已在该操作后发生变化；请恢复最新操作",
             ));
         }
@@ -36,8 +37,9 @@ pub(super) fn ensure_restore_is_current(
         if !snapshot.post_bindings.iter().any(|post| post.id == pre.id)
             && bindings.iter().any(|current| current.id == pre.id)
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "plan-stale",
+                "errors.extops.libraryChangedSinceOperation",
                 "扩展库已在该操作后发生变化；请恢复最新操作",
             ));
         }
@@ -47,8 +49,9 @@ pub(super) fn ensure_restore_is_current(
             .iter()
             .any(|(current_id, current)| current_id == id && current == post)
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "plan-stale",
+                "errors.extops.baselineChangedSinceOperation",
                 "扩展基线已在该操作后发生变化；请恢复最新操作",
             ));
         }
@@ -60,8 +63,9 @@ pub(super) fn ensure_restore_is_current(
             .any(|(post_id, _)| post_id == id)
             && baselines.iter().any(|(current_id, _)| current_id == id)
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "plan-stale",
+                "errors.extops.baselineChangedSinceOperation",
                 "扩展基线已在该操作后发生变化；请恢复最新操作",
             ));
         }
@@ -152,22 +156,33 @@ pub(super) fn inverse_completed_step(
         } => match original_hash {
             Some(original_hash) => {
                 let backup = backup_reference.as_ref().ok_or_else(|| {
-                    CommandError::new("extension-invalid", "历史文档备份引用缺失")
+                    CommandError::keyed(
+                        "extension-invalid",
+                        "errors.extops.historyDocBackupRefMissing",
+                        "历史文档备份引用缺失",
+                    )
                 })?;
                 let bytes = fs::read(backup).map_err(|error| {
-                    CommandError::new(
+                    CommandError::localized(
                         "extension-invalid",
+                        "errors.extops.historyDocBackupUnreadable",
                         format!("历史文档备份无法读取：{error}"),
+                        serde_json::json!({ "detail": error.to_string() }),
                     )
                 })?;
                 if sha_hex(&bytes) != *original_hash {
-                    return Err(CommandError::new(
+                    return Err(CommandError::keyed(
                         "extension-invalid",
+                        "errors.extops.historyDocBackupDigestMismatch",
                         "历史文档备份摘要不匹配",
                     ));
                 }
                 let rendered = String::from_utf8(bytes).map_err(|_| {
-                    CommandError::new("extension-invalid", "历史文档备份不是 UTF-8 文本")
+                    CommandError::keyed(
+                        "extension-invalid",
+                        "errors.extops.historyDocBackupNotUtf8",
+                        "历史文档备份不是 UTF-8 文本",
+                    )
                 })?;
                 Ok(PlanStep::DocumentWrite {
                     client,
@@ -194,19 +209,26 @@ pub(super) fn inverse_completed_step(
             original_hash,
         } => {
             let bytes = fs::read(backup_reference).map_err(|error| {
-                CommandError::new(
+                CommandError::localized(
                     "extension-invalid",
+                    "errors.extops.historyDocBackupUnreadable",
                     format!("历史文档备份无法读取：{error}"),
+                    serde_json::json!({ "detail": error.to_string() }),
                 )
             })?;
             if sha_hex(&bytes) != *original_hash {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-invalid",
+                    "errors.extops.historyDocBackupDigestMismatch",
                     "历史文档备份摘要不匹配",
                 ));
             }
             let rendered = String::from_utf8(bytes).map_err(|_| {
-                CommandError::new("extension-invalid", "历史文档备份不是 UTF-8 文本")
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.historyDocBackupNotUtf8",
+                    "历史文档备份不是 UTF-8 文本",
+                )
             })?;
             Ok(PlanStep::DocumentWrite {
                 client,
@@ -226,7 +248,11 @@ pub(super) fn inverse_completed_step(
         } => match original_digest {
             Some(original_digest) => {
                 let backup = backup_reference.as_ref().ok_or_else(|| {
-                    CommandError::new("extension-invalid", "历史目录备份引用缺失")
+                    CommandError::keyed(
+                        "extension-invalid",
+                        "errors.extops.historyDirBackupRefMissing",
+                        "历史目录备份引用缺失",
+                    )
                 })?;
                 let entries = asb_switch::extensions::walk_content_entries(
                     &asb_switch::FsIo,
@@ -234,8 +260,9 @@ pub(super) fn inverse_completed_step(
                 )
                 .map_err(|error| CommandError::new("extension-invalid", error.to_string()))?;
                 if asb_core::extensions::skill::content_digest(&entries) != *original_digest {
-                    return Err(CommandError::new(
+                    return Err(CommandError::keyed(
                         "extension-invalid",
+                        "errors.extops.historyDirBackupDigestMismatch",
                         "历史目录备份摘要不匹配",
                     ));
                 }
@@ -275,8 +302,9 @@ pub(super) fn inverse_completed_step(
             )
             .map_err(|error| CommandError::new("extension-invalid", error.to_string()))?;
             if asb_core::extensions::skill::content_digest(&entries) != *digest {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-invalid",
+                    "errors.extops.historyDirBackupDigestMismatch",
                     "历史目录备份摘要不匹配",
                 ));
             }
@@ -316,16 +344,18 @@ pub(super) fn verify_completed_step_current(
             if current_document_hash(std::path::Path::new(path))?.as_deref()
                 != Some(written_hash.as_str())
             {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "plan-stale",
+                    "errors.extops.clientDocChangedSinceOperation",
                     "客户端文档已在该操作后发生变化；请恢复最新操作",
                 ));
             }
         }
         AppliedStep::DocumentRemoved { path, .. } => {
             if current_document_hash(std::path::Path::new(path))?.is_some() {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "plan-stale",
+                    "errors.extops.clientDocChangedSinceOperation",
                     "客户端文档已在该操作后发生变化；请恢复最新操作",
                 ));
             }
@@ -338,22 +368,25 @@ pub(super) fn verify_completed_step_current(
                 std::path::Path::new(target_dir),
             )
             .map_err(|_| {
-                CommandError::new(
+                CommandError::keyed(
                     "plan-stale",
+                    "errors.extops.clientDirChangedSinceOperation",
                     "客户端目录已在该操作后发生变化；请恢复最新操作",
                 )
             })?;
             if asb_core::extensions::skill::content_digest(&entries) != *digest {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "plan-stale",
+                    "errors.extops.clientDirChangedSinceOperation",
                     "客户端目录已在该操作后发生变化；请恢复最新操作",
                 ));
             }
         }
         AppliedStep::DirectoryRemoved { target_dir, .. } => {
             if std::path::Path::new(target_dir).exists() {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "plan-stale",
+                    "errors.extops.clientDirChangedSinceOperation",
                     "客户端目录已在该操作后发生变化；请恢复最新操作",
                 ));
             }
@@ -369,8 +402,9 @@ pub(super) fn current_document_hash(
         Ok(metadata) if metadata.is_file() => fs::read(path)
             .map(|bytes| Some(sha_hex(&bytes)))
             .map_err(|error| CommandError::new("extension-invalid", error.to_string())),
-        Ok(_) => Err(CommandError::new(
+        Ok(_) => Err(CommandError::keyed(
             "extension-invalid",
+            "errors.extops.historyDocPathNotFile",
             "历史文档路径不再是普通文件",
         )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),

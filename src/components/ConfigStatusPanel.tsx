@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { openConfigFileLocation, type AppKind, type ConfigFileStatus, type LockStatus, type MatchStatus, type ProviderProfile } from "../api/client";
 import { clientName } from "../lib/client-name";
 import { currentProviderName } from "../lib/current-provider-name";
+import { useI18n, type TFunction } from "../i18n";
+import { localizedMessageText } from "../i18n/errors";
 import { Button } from "./Button";
 import { ClientLogo } from "./ClientLogo";
 import { FactPath } from "./FactPath";
@@ -16,45 +18,45 @@ export interface ConfigStatusPanelProps {
   onRecoverLock: (app: AppKind) => void;
 }
 
-function matchLabel(status: MatchStatus): ReactNode {
+function matchLabel(t: TFunction, status: MatchStatus): ReactNode {
   switch (status.kind) {
     case "matchesProfile":
-      return `与档案「${status.profileName}」一致`;
+      return t("clientConfig.match.matchesProfile", { name: status.profileName });
     case "profileChanged":
-      return `档案「${status.profileName}」或客户端设置已变更，尚未应用`;
+      return t("clientConfig.match.profileChanged", { name: status.profileName });
     case "restoredBackup":
-      return <>当前为已恢复备份（<Time iso={status.at} />）</>;
+      return <>{t("clientConfig.match.restoredBefore")}<Time iso={status.at} />{t("clientConfig.match.restoredAfter")}</>;
     case "externallyModified":
-      return <>与上次切换（<Time iso={status.at} />）不符，配置可能被外部修改</>;
+      return <>{t("clientConfig.match.externalBefore")}<Time iso={status.at} />{t("clientConfig.match.externalAfter")}</>;
     case "unmanaged":
-      return "从未由本应用切换，也不匹配任何档案";
+      return t("clientConfig.match.unmanaged");
     case "unknown":
-      return "无法评估（文件缺失或语法错误）";
+      return t("clientConfig.match.unknown");
   }
 }
 
-function lockLabel(status: LockStatus | undefined): string {
-  if (!status) return "写入锁状态加载中";
+function lockLabel(t: TFunction, status: LockStatus | undefined): string {
+  if (!status) return t("clientConfig.lock.loading");
   switch (status.state) {
     case "free":
-      return "写入锁空闲";
+      return t("clientConfig.lock.free");
     case "held": {
-      const holder = status.processName ?? (status.pid ? `进程 ${status.pid}` : "其他进程");
-      return `写入锁由${holder}持有`;
+      const holder = status.processName ?? (status.pid ? t("clientConfig.lock.process", { pid: status.pid }) : t("clientConfig.lock.otherProcess"));
+      return t("clientConfig.lock.held", { holder });
     }
     case "stale":
-      return "发现遗留写入锁，可在确认后清理";
+      return t("clientConfig.lock.stale");
     case "indeterminate":
-      return `写入锁状态无法确定：${status.reason}`;
+      return t("clientConfig.lock.indeterminate", { reason: status.reason });
   }
 }
 
-function statusPill(status: ConfigFileStatus): { ok: boolean; text: string } {
-  if (status.recoveryIssue) return { ok: false, text: "等待配置恢复" };
-  if (status.readError) return { ok: false, text: "读取失败" };
-  if (!status.exists) return { ok: false, text: "未找到配置文件" };
-  if (!status.syntaxOk) return { ok: false, text: "语法错误" };
-  return { ok: true, text: "配置正常" };
+function statusPill(t: TFunction, status: ConfigFileStatus): { ok: boolean; text: string } {
+  if (status.recoveryIssue) return { ok: false, text: t("clientConfig.pill.recoveryPending") };
+  if (status.readError) return { ok: false, text: t("clientConfig.pill.readFailed") };
+  if (!status.exists) return { ok: false, text: t("clientConfig.pill.missing") };
+  if (!status.syntaxOk) return { ok: false, text: t("clientConfig.pill.syntaxError") };
+  return { ok: true, text: t("clientConfig.pill.ok") };
 }
 
 function StatusField({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
@@ -66,41 +68,42 @@ function ConfigStatusDetails({ status, profiles, lock }: {
   profiles: ProviderProfile[];
   lock: LockStatus | undefined;
 }) {
+  const { t } = useI18n();
   const readable = !status.readError && status.exists && status.syntaxOk;
   return (
     <dl className="asb-fact-row">
-      <StatusField label="配置文件">
+      <StatusField label={t("clientConfig.details.configFile")}>
         <FactPath path={status.path} open={() => openConfigFileLocation(status.app)} />
       </StatusField>
       {status.recoveryIssue && (
-        <StatusField label="恢复阻塞" className="asb-warn-text">
+        <StatusField label={t("clientConfig.details.recoveryBlocked")} className="asb-warn-text">
           <span role="status" className="asb-status-warn">{status.recoveryIssue}</span>
-          <span className="asb-status-warn">配置写入暂不可用。请前往「设置 → 备份恢复」查看对应备份与差异；恢复后刷新状态。</span>
+          <span className="asb-status-warn">{t("clientConfig.details.recoveryHelp")}</span>
         </StatusField>
       )}
-      {status.readError && <StatusField label="读取错误" className="asb-warn-text">{status.readError}</StatusField>}
+      {status.readError && <StatusField label={t("clientConfig.details.readError")} className="asb-warn-text">{status.readError}</StatusField>}
       {readable && <>
-        <StatusField label="当前服务">{currentProviderName(status, profiles)} · {status.route?.model ?? "默认模型"}</StatusField>
-        <StatusField label="匹配状态">{matchLabel(status.matchStatus)}</StatusField>
+        <StatusField label={t("clientConfig.details.currentProvider")}>{currentProviderName(status, profiles)} · {status.route?.model ?? t("clientConfig.details.defaultModel")}</StatusField>
+        <StatusField label={t("clientConfig.details.matchStatus")}>{matchLabel(t, status.matchStatus)}</StatusField>
       </>}
       {status.lastSwitch && (
-        <StatusField label="上次写入">
+        <StatusField label={t("clientConfig.details.lastWrite")}>
           <Time iso={status.lastSwitch.at} />
           {status.lastSwitch.operation === "restore"
-            ? " · 已恢复备份"
+            ? t("clientConfig.details.lastRestore")
             : status.lastSwitch.operation === "gatewayPortChange"
-              ? " · 已修改网关监听端口"
+              ? t("clientConfig.details.lastGatewayPort")
               : status.lastSwitch.profileName
-                ? ` · 已投影供应商「${status.lastSwitch.profileName}」`
-                : " · 已写入客户端配置"}
+                ? t("clientConfig.details.lastProjected", { name: status.lastSwitch.profileName })
+                : t("clientConfig.details.lastWritten")}
         </StatusField>
       )}
       {(status.route?.scopeWarnings.length ?? 0) > 0 && (
-        <StatusField label="范围警告">
-          {status.route?.scopeWarnings.map((warning) => <span key={warning} className="asb-warn-text asb-status-warn">{warning}</span>)}
+        <StatusField label={t("clientConfig.details.scopeWarnings")}>
+          {status.route?.scopeWarnings.map((warning) => <span key={warning.key} className="asb-warn-text asb-status-warn">{localizedMessageText(warning, t)}</span>)}
         </StatusField>
       )}
-      <StatusField label="写入锁">{lockLabel(lock)}</StatusField>
+      <StatusField label={t("clientConfig.details.writeLock")}>{lockLabel(t, lock)}</StatusField>
     </dl>
   );
 }
@@ -112,9 +115,10 @@ function ConfigStatusCard({ status, profiles, lock, busy, onRecoverLock }: {
   busy: boolean;
   onRecoverLock: (app: AppKind) => void;
 }) {
-  const pill = statusPill(status);
+  const { t } = useI18n();
+  const pill = statusPill(t, status);
   return (
-    <article className="asb-client-status" aria-label={`${clientName(status.app)} 配置状态`}>
+    <article className="asb-client-status" aria-label={t("clientConfig.details.statusAria", { name: clientName(status.app) })}>
       <header className="asb-client-status-head">
         <span className="asb-client-status-name"><ClientLogo app={status.app} className="asb-status-logo" />{clientName(status.app)}</span>
         <span className={`asb-status-pill${pill.ok ? " is-ok" : ""}`}>
@@ -124,7 +128,7 @@ function ConfigStatusCard({ status, profiles, lock, busy, onRecoverLock }: {
       <ConfigStatusDetails status={status} profiles={profiles} lock={lock} />
       {lock?.state === "stale" && (
         <div className="asb-kv-actions">
-          <Button variant="secondary" disabled={busy} onClick={() => onRecoverLock(status.app)}>清理遗留锁</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => onRecoverLock(status.app)}>{t("clientConfig.details.recoverLock")}</Button>
         </div>
       )}
     </article>
@@ -132,13 +136,14 @@ function ConfigStatusCard({ status, profiles, lock, busy, onRecoverLock }: {
 }
 
 export function ConfigStatusPanel({ statuses, profiles, locks, busy, onRecoverLock }: ConfigStatusPanelProps) {
+  const { t } = useI18n();
   return (
     <section className="asb-panel" aria-labelledby="configuration-status-heading">
-      <ModuleHeader id="configuration-status-heading" title="配置状态" />
+      <ModuleHeader id="configuration-status-heading" title={t("clientConfig.statusPanel.title")} />
       {statuses === null ? (
         /* Two client sections at the real anatomy's footprint: a head line and
            five fact lines each, so the panel does not reflow on arrival. */
-        <div role="status" aria-label="正在读取配置状态">
+        <div role="status" aria-label={t("clientConfig.statusPanel.loading")}>
           {Array.from({ length: 2 }, (_, section) => (
             <div key={section} className="asb-client-status asb-client-status-skeleton" aria-hidden="true">
               {Array.from({ length: 6 }, (_, line) => (

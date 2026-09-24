@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
-import { PreviewIcon, TrashIcon, UpdateIcon } from "../icons";
+import { ExportIcon, PreviewIcon, TrashIcon, UpdateIcon } from "../icons";
 import { Time } from "../Time";
 import { Tooltip } from "../Tooltip";
 import { CapabilityPanel } from "./CapabilityPanel";
@@ -33,27 +34,28 @@ function ManagementAction({ label, disabled, danger = false, onClick, children }
 }
 
 function ManagementActions(props: ExtensionManagementProps) {
+  const { t } = useI18n();
   const { item, busy } = props;
   return (
-    <div className="asb-ext-management-actions" role="group" aria-label={`${item.name} 操作`}>
+    <div className="asb-ext-management-actions" role="group" aria-label={t("extensions.management.actionsAria", { name: item.name })}>
       {item.kind === "skill" && (
-        <ManagementAction label="检查更新" disabled={busy} onClick={props.onCheckUpdates}>
+        <ManagementAction label={t("extensions.management.checkUpdates")} disabled={busy} onClick={props.onCheckUpdates}>
           <UpdateIcon />
         </ManagementAction>
       )}
       {props.onExportPortable && (
-        <ManagementAction label="导出便携包" disabled={busy} onClick={props.onExportPortable}>
-          <UpdateIcon />
+        <ManagementAction label={t("extensions.management.exportPortable")} disabled={busy} onClick={props.onExportPortable}>
+          <ExportIcon />
         </ManagementAction>
       )}
       {item.bindings.some(
         (binding) => binding.desired === "enabled" && binding.fileState === "pendingApply",
       ) && (
-        <ManagementAction label="部署当前版本" disabled={busy} onClick={props.onDeployCurrent}>
+        <ManagementAction label={t("extensions.management.deployCurrent")} disabled={busy} onClick={props.onDeployCurrent}>
           <PreviewIcon />
         </ManagementAction>
       )}
-      <ManagementAction label="删除定义" disabled={busy} danger onClick={props.onDelete}>
+      <ManagementAction label={t("extensions.management.deleteDefinition")} disabled={busy} danger onClick={props.onDelete}>
         <TrashIcon />
       </ManagementAction>
     </div>
@@ -61,26 +63,29 @@ function ManagementActions(props: ExtensionManagementProps) {
 }
 
 function SkillUpdateManagement({ item, updateReport: report, busy, onApplyUpdate }: ExtensionManagementProps) {
+  const { t } = useI18n();
   if (item.kind !== "skill" || !report) return null;
   if (report.error)
     return (
       <p className="asb-warn-text" role="alert">
-        检查更新失败：{report.error}
+        {t("extensions.management.checkFailed", { error: report.error })}
       </p>
     );
   const current = report.upToDate || report.newDigest === item.contentDigest;
   return (
     <div className="asb-ext-section">
       <div className="asb-ext-section-heading">
-        <h4 className="asb-section-title">来源更新</h4>
+        <h4 className="asb-section-title">{t("extensions.management.sourceUpdates")}</h4>
         <span className="asb-scope-note">
           {current
-            ? "来源内容已是最新"
-            : `发现新版本${report.newCommit ? `（提交 ${report.newCommit.slice(0, 12)}）` : ""}`}
+            ? t("extensions.management.upToDate")
+            : report.newCommit
+              ? t("extensions.management.newVersionCommit", { commit: report.newCommit.slice(0, 12) })
+              : t("extensions.management.newVersion")}
         </span>
         {!current && (
           <Button variant="secondary" disabled={busy || !report.newDigest} onClick={onApplyUpdate}>
-            更新内容
+            {t("extensions.management.applyUpdate")}
           </Button>
         )}
       </div>
@@ -88,7 +93,7 @@ function SkillUpdateManagement({ item, updateReport: report, busy, onApplyUpdate
         <ul className="asb-ext-file-list">
           {report.changedFiles.map((file) => (
             <li key={`${file.action}-${file.relativePath}`}>
-              {SKILL_CHANGE_LABELS[file.action]} {file.relativePath}
+              {t(SKILL_CHANGE_LABELS[file.action])} {file.relativePath}
             </li>
           ))}
         </ul>
@@ -98,13 +103,14 @@ function SkillUpdateManagement({ item, updateReport: report, busy, onApplyUpdate
 }
 
 export function ExtensionManagement(props: ExtensionManagementProps) {
+  const { t } = useI18n();
   const { item, installTargets, busy, capabilities } = props;
   const checkTarget = installTargets.length > 0 ? parseTargetValue(installTargets[0]) : null;
   return (
-    <section className="asb-ext-management" aria-label={`部署与诊断 ${item.name}`}>
+    <section className="asb-ext-management" aria-label={t("extensions.management.aria", { name: item.name })}>
       <header className="asb-ext-management-head">
         <p className="asb-scope-note">
-          {item.kind === "mcp" ? "MCP 服务" : "Skill"} · 更新于 <Time iso={item.updatedAt} /> · 修订 r{item.revision}
+          {item.kind === "mcp" ? t("extensions.kind.mcp") : t("extensions.kind.skill")} · {t("extensions.management.updatedAt")} <Time iso={item.updatedAt} /> · {t("extensions.management.revision", { revision: item.revision })}
         </p>
         <ManagementActions {...props} />
       </header>

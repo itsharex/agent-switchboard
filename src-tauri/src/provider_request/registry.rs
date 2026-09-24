@@ -55,8 +55,9 @@ impl ProviderRequests {
             Entry::Running { .. } => true,
         });
         if entries.len() >= MAX_REQUESTS {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "provider-request-limit",
+                "errors.misc.providerRequestLimitReached",
                 "待处理请求过多，请关闭其他请求面板后重试",
             ));
         }
@@ -188,15 +189,17 @@ impl Drop for ActiveRequest {
 }
 
 fn unavailable() -> CommandError {
-    CommandError::new(
+    CommandError::keyed(
         "provider-request-unavailable",
+        "errors.misc.providerRequestPreparationUnavailable",
         "请求准备已失效、已取消或已经使用，请重新准备后发送",
     )
 }
 
 fn registry_error() -> CommandError {
-    CommandError::new(
+    CommandError::keyed(
         "provider-request-state",
+        "errors.misc.providerRequestStateUnavailable",
         "请求状态不可用，请重新打开应用后重试",
     )
 }

@@ -166,13 +166,16 @@ pub(super) fn store_error(error: crate::extensions::store::ExtensionStoreError) 
 /// class only; the full source identity remains inside the source boundary.
 pub(super) fn source_error(error: sources::SourceError) -> CommandError {
     match error {
-        sources::SourceError::Unreachable(_) => CommandError::new(
+        sources::SourceError::Unreachable(_) => CommandError::keyed(
             "source-unreachable",
+            "errors.extlib.sourceUnreachable",
             "来源不可达；请检查网络、地址和访问权限",
         ),
-        sources::SourceError::Rejected(_) => {
-            CommandError::new("source-rejected", "来源内容未通过完整性或安全校验")
-        }
+        sources::SourceError::Rejected(_) => CommandError::keyed(
+            "source-rejected",
+            "errors.extlib.sourceRejected",
+            "来源内容未通过完整性或安全校验",
+        ),
     }
 }
 
@@ -340,13 +343,14 @@ pub(super) fn extension_mutation(definition: &ExtensionDefinition) -> ExtensionM
 
 
 pub(super) fn projection_error(error: asb_core::extensions::ProjectionError) -> CommandError {
-    let message = match error {
-        asb_core::extensions::ProjectionError::SecretUnavailable(_) => {
-            "扩展所需凭据当前不可用；请在系统凭据存储中补充后重新预览".to_string()
-        }
-        other => other.to_string(),
-    };
-    CommandError::new("extension-projection", message)
+    match error {
+        asb_core::extensions::ProjectionError::SecretUnavailable(_) => CommandError::keyed(
+            "extension-projection",
+            "errors.extlib.secretUnavailableRepreview",
+            "扩展所需凭据当前不可用；请在系统凭据存储中补充后重新预览",
+        ),
+        other => CommandError::new("extension-projection", other.to_string()),
+    }
 }
 
 pub(super) fn adapter_error(error: asb_core::adapter::AdapterError) -> CommandError {

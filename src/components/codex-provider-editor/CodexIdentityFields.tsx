@@ -1,4 +1,5 @@
 import type { AppKind } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { ClientLogo } from "../ClientLogo";
 import { Input } from "../Input";
 import { RadioOption } from "../RadioOption";
@@ -22,16 +23,17 @@ interface AccessModeProps {
 }
 
 export function CodexAccessMode({ busy, onSwitchAccessMode }: AccessModeProps) {
+  const { t } = useI18n();
   return (
-    <section className="asb-editor-section" aria-label="接入方式">
-      <h3 className="asb-section-title">接入方式</h3>
+    <section className="asb-editor-section" aria-label={t("codex.identity.accessMode")}>
+      <h3 className="asb-section-title">{t("codex.identity.accessMode")}</h3>
       <div className="asb-editor-section-fields">
         <div className="asb-field">
-          <span>选择连接类型</span>
-          <div className="asb-segments" role="radiogroup" aria-label="接入方式">
-            <RadioOption name="codex-access-mode" checked label="第三方服务"
+          <span>{t("codex.identity.chooseConnectionType")}</span>
+          <div className="asb-segments" role="radiogroup" aria-label={t("codex.identity.accessMode")}>
+            <RadioOption name="codex-access-mode" checked label={t("codex.identity.thirdParty")}
               disabled={busy} onChange={() => onSwitchAccessMode(false)} />
-            <RadioOption name="codex-access-mode" checked={false} label="官方登录"
+            <RadioOption name="codex-access-mode" checked={false} label={t("codex.identity.official")}
               disabled={busy} onChange={() => onSwitchAccessMode(true)} />
           </div>
         </div>
@@ -41,20 +43,21 @@ export function CodexAccessMode({ busy, onSwitchAccessMode }: AccessModeProps) {
 }
 
 function ClientField({ busy, editing, onSwitchClient }: IdentityProps) {
+  const { t } = useI18n();
   if (editing) {
     return <>
-      <div className="asb-field"><span>客户端</span>
+      <div className="asb-field"><span>{t("codex.identity.client")}</span>
         <p className="asb-provider-identity-value"><ClientLogo app="codex" className="asb-edit-logo" />Codex</p>
       </div>
-      <div className="asb-field"><span>接入方式</span>
-        <p className="asb-provider-identity-value">第三方服务</p>
+      <div className="asb-field"><span>{t("codex.identity.accessMode")}</span>
+        <p className="asb-provider-identity-value">{t("codex.identity.thirdParty")}</p>
       </div>
     </>;
   }
-  return <label className="asb-field"><span>客户端</span>
+  return <label className="asb-field"><span>{t("codex.identity.client")}</span>
     <div className="asb-client-control">
       <ClientLogo app="codex" className="asb-edit-logo" />
-      <Select ariaLabel="客户端" value="codex" disabled={busy}
+      <Select ariaLabel={t("codex.identity.client")} value="codex" disabled={busy}
         options={[{ value: "codex", label: "Codex" }, { value: "claude", label: "Claude" }]}
         onChange={(app) => { if (app !== "codex") onSwitchClient(app as AppKind); }} />
     </div>
@@ -62,19 +65,20 @@ function ClientField({ busy, editing, onSwitchClient }: IdentityProps) {
 }
 
 export function CodexIdentityFields(props: IdentityProps) {
+  const { t } = useI18n();
   const { draft, busy, setDraft } = props;
   return (
-    <section className="asb-editor-section" aria-label="基本资料">
-      <h3 className="asb-section-title">基本资料</h3>
+    <section className="asb-editor-section" aria-label={t("codex.identity.title")}>
+      <h3 className="asb-section-title">{t("codex.identity.title")}</h3>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-field-grid"><ClientField {...props} /></div>
         <div className="asb-provider-field-grid">
-          <label className="asb-field"><span>名称</span>
+          <label className="asb-field"><span>{t("codex.identity.name")}</span>
             <Input value={draft.name} required disabled={busy}
               onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
           </label>
-          <label className="asb-field"><span>官网地址</span>
-            <Input type="url" value={draft.websiteUrl} disabled={busy} placeholder="（可选）"
+          <label className="asb-field"><span>{t("codex.identity.website")}</span>
+            <Input type="url" value={draft.websiteUrl} disabled={busy} placeholder={t("codex.optional")}
               onChange={(event) => setDraft((current) => ({ ...current, websiteUrl: event.target.value }))} />
           </label>
         </div>

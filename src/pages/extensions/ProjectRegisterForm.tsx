@@ -1,6 +1,7 @@
 import { Button } from "../../components/Button";
 import { FolderOpenIcon } from "../../components/icons";
 import { Input } from "../../components/Input";
+import { useI18n } from "../../i18n";
 
 interface Props {
   busy: boolean;
@@ -18,17 +19,18 @@ export function ProjectRegisterForm({
   browseProject,
   submitProject,
 }: Props) {
+  const { t } = useI18n();
   return (
     <form
       className="asb-form"
-      aria-label="注册项目目录"
+      aria-label={t("extensions.toolbar.registerProject")}
       onSubmit={(event) => {
         event.preventDefault();
         void submitProject();
       }}
     >
       <label className="asb-field">
-        <span>项目根目录（绝对路径）</span>
+        <span>{t("extensions.project.rootLabel")}</span>
         <div className="asb-field-input-row">
           <Input
             required
@@ -39,13 +41,13 @@ export function ProjectRegisterForm({
           />
           <Button variant="secondary" disabled={busy} onClick={() => void browseProject()}>
             <FolderOpenIcon />
-            浏览目录
+            {t("extensions.sources.browse")}
           </Button>
         </div>
       </label>
       <div className="asb-form-actions">
         <Button type="submit" variant="primary" disabled={busy}>
-          注册项目
+          {t("extensions.project.submit")}
         </Button>
       </div>
     </form>

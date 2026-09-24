@@ -85,7 +85,7 @@ pub(crate) struct GatewayPortChangeResult {
     pub(crate) from_port: u16,
     pub(crate) to_port: u16,
     pub(crate) clients: Vec<GatewayPortChangeClient>,
-    pub(crate) warnings: Vec<String>,
+    pub(crate) warnings: Vec<asb_core::contracts::LocalizedMessage>,
 }
 
 #[derive(Debug, Clone, Serialize)]

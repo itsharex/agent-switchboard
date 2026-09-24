@@ -26,7 +26,10 @@ const EXCHANGE_REJECTED: &str = "登录凭据交换被拒绝";
 const DENIED_BY_BROWSER: &str = "浏览器端拒绝了本次登录";
 const STATE_MISMATCH: &str = "登录回跳校验失败，请重新开始";
 
-const COMPLETED_PAGE: &str = "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>Agent Switchboard</title></head><body style=\"font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0\"><p>登录完成，请返回应用。</p></body></html>";
+/// The loopback completion page renders both product languages side by side:
+/// the desktop language preference is not readable from the browser context
+/// that lands here, so no single-language choice can be assumed.
+const COMPLETED_PAGE: &str = "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>Agent Switchboard</title></head><body style=\"font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0\"><p>登录完成，请返回应用。<br><span lang=\"en\" style=\"color:#666\">Sign-in complete. You can return to the app.</span></p></body></html>";
 
 /// Endpoints as a value so tests point the flow at loopback fakes.
 pub(crate) struct ClaudeOAuthEndpoints {

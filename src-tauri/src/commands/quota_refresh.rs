@@ -17,10 +17,16 @@ fn profile(state: &LocalState, id: &str) -> Result<ProviderProfile, CommandError
     let file = load_provider_files(&state.configuration(), AppKind::Codex)
         .map_err(|error| operation_error("profile-not-found", error.into()))?
         .into_iter().find(|file| file.id == id)
-        .ok_or_else(|| CommandError::new("profile-not-found", "供应商不存在"))?;
+        .ok_or_else(|| {
+            CommandError::keyed("profile-not-found", "errors.misc.providerNotFound", "供应商不存在")
+        })?;
     let profile = file.into_profile(AppKind::Codex);
     if profile.route_mode != RouteMode::Official {
-        return Err(CommandError::new("official-codex-quota-unavailable", "此档案不是 Codex 官方登录"));
+        return Err(CommandError::keyed(
+            "official-codex-quota-unavailable",
+            "errors.misc.profileNotCodexOfficial",
+            "此档案不是 Codex 官方登录",
+        ));
     }
     Ok(profile)
 }
@@ -35,7 +41,13 @@ pub(crate) fn read(state: &LocalState, profile_id: &str) -> Result<Option<CodexO
 
 pub(crate) fn refresh(state: &LocalState, id: &str, force: bool) -> Result<bool, CommandError> {
     let mut attempts = ATTEMPTS.get_or_init(|| Mutex::new(HashMap::new())).lock()
-        .map_err(|_| CommandError::new("official-quota-busy", "官方额度查询锁不可用"))?;
+        .map_err(|_| {
+            CommandError::keyed(
+                "official-quota-busy",
+                "errors.misc.quotaLockUnavailable",
+                "官方额度查询锁不可用",
+            )
+        })?;
     let profile = profile(state, id)?;
     let interval = profile.official_quota_refresh_interval_minutes.unwrap_or(0);
     let key = (state.root().to_path_buf(), id.to_string());

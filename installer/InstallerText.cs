@@ -24,12 +24,12 @@ namespace AgentSwitchboard.Installer
 
         internal string ReadyTitle
         {
-            get { return T("安装 Agent Switchboard", "Install Agent Switchboard"); }
+            get { return T("准备安装", "Ready to install"); }
         }
 
         internal string ReadySummary
         {
-            get { return T("为这台 Windows 电脑准备本地配置工作台。", "Set up the local configuration workspace on this Windows PC."); }
+            get { return T("在本机统一管理 Codex 与 Claude Code 的供应商和配置。", "Manage Codex and Claude Code providers and configuration on this PC."); }
         }
 
         internal string InstallLocation

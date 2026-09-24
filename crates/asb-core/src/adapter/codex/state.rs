@@ -120,7 +120,7 @@ pub(crate) fn full_diff(current: &str, previous: &str) -> Result<Vec<KeyChange>,
 
 /// Scope-of-effect warnings for facts inside this file that a `--profile`
 /// launch or other override can shadow.
-fn scope_warnings(doc: &DocumentMut) -> Vec<String> {
+fn scope_warnings(doc: &DocumentMut) -> Vec<crate::contracts::LocalizedMessage> {
     let profiles = doc
         .as_table()
         .get("profiles")
@@ -128,8 +128,12 @@ fn scope_warnings(doc: &DocumentMut) -> Vec<String> {
         .map(|table| table.len())
         .unwrap_or(0);
     if profiles > 0 {
-        vec![format!(
-            "config.toml 定义了 {profiles} 个配置档；使用 --profile 启动 Codex 时会覆盖这里的用户级设置"
+        vec![crate::contracts::LocalizedMessage::new(
+            "warnings.codex.profileShadowing",
+            serde_json::json!({ "profiles": profiles }),
+            format!(
+                "config.toml 定义了 {profiles} 个配置档；使用 --profile 启动 Codex 时会覆盖这里的用户级设置"
+            ),
         )]
     } else {
         vec![]

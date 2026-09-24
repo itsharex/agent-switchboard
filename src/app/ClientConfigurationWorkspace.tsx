@@ -1,9 +1,11 @@
 import { ClientSettingsPanel } from "../components/ClientSettingsPanel";
 import { CodexSubagentSettingsPanel } from "../components/CodexSubagentSettingsPanel";
 import { GlobalPromptManager } from "../components/GlobalPromptManager";
+import { useI18n } from "../i18n";
 import type { SwitchboardModel } from "./useSwitchboardModel";
 
 export function ClientConfigurationWorkspace({ model }: { model: SwitchboardModel }) {
+  const { t } = useI18n();
   const {
     clientSettings: settings,
     codexSubagentSettings,
@@ -14,7 +16,7 @@ export function ClientConfigurationWorkspace({ model }: { model: SwitchboardMode
   } = model;
   const promptDocument = prompts.documents[app];
   return (
-    <section className="asb-panel" aria-label="客户端配置">
+    <section className="asb-panel" aria-label={t("clientConfig.title")}>
       <ClientSettingsPanel
         key={app}
         app={app}

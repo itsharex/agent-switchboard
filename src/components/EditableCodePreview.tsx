@@ -1,4 +1,5 @@
 import { useRef, type ChangeEvent } from "react";
+import { useI18n } from "../i18n";
 
 interface EditableCodePreviewProps {
   target: string;
@@ -15,16 +16,17 @@ export function EditableCodePreview({
   disabled,
   onChange,
 }: EditableCodePreviewProps) {
+  const { t } = useI18n();
   const gutter = useRef<HTMLDivElement>(null);
   const lines = content.replace(/\n$/, "").split("\n");
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     onChange(event.target.value);
   };
   return (
-    <div className="asb-filepreview asb-fileeditor" aria-label={`${target} 配置编辑器`}>
+    <div className="asb-filepreview asb-fileeditor" aria-label={t("providers.code.editorAria", { target })}>
       <div className="asb-filepreview-head">
         <span className="asb-code">{target}</span>
-        <span className="asb-filepreview-meta">{lines.length} 行</span>
+        <span className="asb-filepreview-meta">{t("providers.code.lines", { count: lines.length })}</span>
       </div>
       <div className="asb-fileeditor-body">
         <div className="asb-fileeditor-gutter" aria-hidden="true">
@@ -33,7 +35,7 @@ export function EditableCodePreview({
           </div>
         </div>
         <textarea
-          aria-label={`${target} 配置编辑器内容`}
+          aria-label={t("providers.code.editorContentAria", { target })}
           className="asb-fileeditor-input"
           disabled={disabled}
           onChange={handleChange}

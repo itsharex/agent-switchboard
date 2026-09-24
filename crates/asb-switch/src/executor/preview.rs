@@ -47,9 +47,11 @@ pub fn read_preview<Io: SwitchIo>(
     let mut preview = adapter::preview(&current, plan, backup_dir).map_err(plan_rejected)?;
     let rendered = adapter::render(&current, plan).map_err(plan_rejected)?;
     if !target_existed {
-        preview
-            .warnings
-            .push("配置文件尚不存在，确认后将创建新的用户级配置".to_string());
+        preview.warnings.push(asb_core::contracts::LocalizedMessage::new(
+            "warnings.preview.fileCreated",
+            serde_json::json!({}),
+            "配置文件尚不存在，确认后将创建新的用户级配置",
+        ));
     }
     let rendered_hash = sha256_hex(&rendered);
     crate::codex_auth::validate_storage(&current, plan)?;

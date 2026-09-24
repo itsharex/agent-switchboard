@@ -1,3 +1,5 @@
+import { uiMessage } from "../i18n/errors";
+import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getUsageHistory,
@@ -7,10 +9,6 @@ import {
 
 function requestKey(request: UsageHistoryRequest): string {
   return request.kind === "provider" ? `provider:${request.profileId}` : "official";
-}
-
-function errorMessage(reason: unknown): string {
-  return (reason as { message?: string }).message ?? "无法读取用量历史";
 }
 
 /** Owns a rendered panel's read-only history request. A completed live query
@@ -24,7 +22,7 @@ export function useUsageHistory(request: UsageHistoryRequest, enabled: boolean) 
   );
   const [series, setSeries] = useState<UsageHistorySeries[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const version = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -33,10 +31,10 @@ export function useUsageHistory(request: UsageHistoryRequest, enabled: boolean) 
     setError(null);
     try {
       const next = await getUsageHistory(currentRequest);
-      if (!Array.isArray(next)) throw new Error("用量历史响应格式无效");
+      if (!Array.isArray(next)) throw uiMessage("usage.history.invalidResponse");
       if (version.current === current) setSeries(next);
     } catch (reason) {
-      if (version.current === current) setError(errorMessage(reason));
+      if (version.current === current) setError(reason);
     } finally {
       if (version.current === current) setLoading(false);
     }

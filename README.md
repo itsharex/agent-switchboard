@@ -104,18 +104,38 @@ Inspect the loopback address, protocol translation paths, request counts, failur
 
 | Location | What you can do |
 | --- | --- |
-| Providers | Create, edit, reorder, import, and delete profiles; manage models, authentication, protocols, model mappings, and runtime parameters; export provider SQL files |
+| Providers | Create, edit, reorder, import, and delete profiles; manage models, authentication, protocols, model mappings, and runtime parameters; diagnose configuration and connections, preview repairs and undo them; export provider SQL files |
 | Client configuration | Manage shared settings, Codex sub-agent runtime settings, and global instructions; preview and apply drafts, including controlled edits to fields outside the regular form |
 | Extensions | Manage Skills and MCP with per-client enable/disable, search, updates, import/export, local discovery, and advanced management |
-| Sessions | View local Codex and Claude Code sessions |
+| Sessions | Full-text search and message navigation, project groups, pins, tags, local aliases, time filters, and bulk organization; resume or delete sessions, export Markdown, and save prompts or answers as snippets |
 | Usage | Inspect consumption, quotas, and reset times; run degradation radar and browse probe history |
 | Settings → Client tools | Save and restore Codex work scenarios; manage Claude client integration |
-| Settings → Preferences | Select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, and choose the startup page |
+| Settings → Preferences | Follow the system, Simplified Chinese, or English for the interface; select 90%, 100%, 110%, or 125% interface scale, record a global shortcut, and choose the startup page |
 | Settings → Local gateway / Diagnostics | Inspect gateway status, configuration and environment issues, and runtime logs |
+
+**Interface language.** The whole desktop app — main window, tray panel, notifications, dialogs, and app-owned error explanations — ships in Simplified Chinese and English. The preference offers 跟随系统 / 简体中文 / English and is saved like every other application preference: switching applies to the main window and tray immediately, survives a restart, and never touches user content (provider names, session text, configuration originals, and third-party diagnostics stay verbatim). A fresh install follows the system locale — a Chinese desktop gets Simplified Chinese, everything else gets English — while an existing installation upgraded from an earlier release keeps Chinese. Dates, numbers, and quota window names follow the chosen language with identical precision and business meaning.
 
 Codex work scenarios save combinations of existing providers, extensions, and instructions, with a change preview before restoration. The global shortcut shows and focuses the main window, or hides it to the tray when already focused. Startup can open the provider list or the last visited top-level page, without restoring editing drafts. Unreadable preferences require explicit repair, which resets only application preferences.
 
 Provider switches and configuration draft writes require preview and confirmation, with backup and recovery. Extension operations apply immediately by default; sensitive connection data, deleting definitions with existing installs, and disabling a Claude project-shared Skill require extra confirmation.
+
+### Session search and saved snippets
+
+Session search reads current local transcripts, including message bodies, titles, summaries, project paths, and session IDs. Submit a phrase, error, or code fragment; matching ignores case and collapses whitespace, including line breaks. Results are paginated with message excerpts. Opening a match reloads the source and expands and focuses the matching message; changed or removed messages are reported instead of jumping to a different message. Unreadable sources are reported alongside available results.
+
+Export Markdown uses the system save dialog and includes the complete readable transcript and source metadata. Save a user or assistant message to keep an independent local snapshot in **Saved snippets**, where it can be searched, read, copied, removed, or opened in its source conversation. Deleting a session does not delete its saved snippets. These snapshots live in `state/sessions/collections.sqlite3` inside the app data directory and are not included in provider exports or cloud backups. A damaged or unexpected collection database is reported and preserved, never silently reset.
+
+Group sessions by client and project, filter by last activity, tags, or pinned status, and open a search result's project directly. Pins, tags, and local aliases are stored in `state/sessions/organization.sqlite3` inside the app data directory; client transcripts stay unchanged. Bulk actions pin, unpin, add tags, or remove tags. Filtering and sorting happen before pagination, and page selection deduplicates sessions.
+
+### Provider diagnostics and repair
+
+Open a saved provider's details and select **Diagnose**. Local checks cover the endpoint, protocol, authentication configuration, model, environment variables, client configuration, and gateway routing. Environment checks report variable names and their inspection scope without exposing secret values. Manually run connectivity checks or real model requests to verify the upstream service; model requests may consume provider quota. Direct upstream tests do not verify the client's complete path through the gateway.
+
+Configuration repair applies only to the currently active saved profile. Review the changes before confirming; profile-owned fields are regenerated through the existing switch executor with backup and recovery. Undo previews are tied to that repair and reject later configuration changes. Persistent backups remain available in **Settings → Backup recovery** after closing the diagnostic window. Inactive profiles, environment overrides, and upstream failures receive guidance without silently switching providers or guessing credentials.
+
+Generated immutable model catalogs are retained; undo restores configuration and authentication. A repair that only recreates a missing catalog explains this outcome and does not offer an empty undo action.
+
+When provider storage fails validation, **Repair provider data** fills only missing automatic setting intents or removes a leading JSON BOM. It validates a complete staged copy before activation and retains the original configuration directory. Ambiguous files, retired layouts, and pending transactions are reported with their paths and left unchanged. This action does not clear profiles or edit live Codex or Claude Code configuration.
 
 ### Quota cache and degradation radar
 
@@ -223,6 +243,12 @@ Run on the corresponding target operating system:
 The two Windows commands wrap NSIS or MSI engines in a custom `.exe` installer under `target/release/bundle/installer/`. macOS and Linux packages are in format-specific directories under `target/release/bundle/`. Setting `CARGO_TARGET_DIR` changes the output root accordingly.
 
 The workspace version in [Cargo.toml](Cargo.toml) owns the application version. See [package.json](package.json) for all scripts and the [packaging workflow](.github/workflows/package.yml) for the platform matrix and release steps. Local builds do not automatically publish a release.
+
+### Local build caches and verification data
+
+Development and test builds use smaller debug information and disable incremental compilation to slow growth in `target/` and `target-dev/`; the release profile is unchanged. Set `CARGO_PROFILE_DEV_DEBUG=full` for a single build when variable-level debugging is needed. Small Rust edits may take longer to rebuild without incremental compilation.
+
+On Windows, `npm run prune:local` previews cache sizes and eligible stale directories. Close related verification windows and build processes, review the list, then run `npm run prune:local -- -Apply` to remove them. By default, known verification browser profiles have a three-day protection window and a roughly 0.5 GiB budget; Rust development directories and release intermediates each have an 8 GiB cleanup threshold and a one-day protection window. Cleanup runs only when explicitly invoked, so build-time peak usage has no hard cap. Screenshots, verification scripts, release executables, and installers are excluded.
 
 ## Project documentation
 

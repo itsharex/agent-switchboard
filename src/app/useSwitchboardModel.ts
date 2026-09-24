@@ -20,7 +20,7 @@ function useTrayEvents(reportError: (error: CommandError) => void) {
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
-    void onTrayError((message) => reportError({ code: "TRAY_WINDOW", message })).then((unlisten) => {
+    void onTrayError(reportError).then((unlisten) => {
       if (disposed) unlisten();
       else stop = unlisten;
     }).catch((error: unknown) => reportError({ code: "TRAY_EVENT", message: error instanceof Error ? error.message : String(error) }));
@@ -54,15 +54,15 @@ export function useSwitchboardModel() {
   const clientSettings = useClientSettings({
     app: appFilter,
     busy,
-    active: page === "客户端配置",
+    active: page === "clientConfiguration",
   });
   const codexSubagentSettings = useCodexSubagentSettings({
-    active: page === "客户端配置" && appFilter === "codex",
+    active: page === "clientConfiguration" && appFilter === "codex",
     busy,
     onError: reportError,
   });
   const promptDocuments = usePromptDocuments({
-    ...operationContext, active: page === "客户端配置",
+    ...operationContext, active: page === "clientConfiguration",
   });
   const cloudBackup = useCloudBackup({ ...operationContext, invalidateCandidates, refresh });
   const updateCheck = useUpdateCheck({ onError: reportError });

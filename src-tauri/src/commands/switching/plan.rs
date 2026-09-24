@@ -8,7 +8,7 @@ use std::path::Path;
 /// Official Codex is not a third-party profile: switching to it targets the
 /// stored official-login record, whose direct plan is built by
 /// `build_plan_for_profile` exactly like any other profile.
-pub(super) fn build_plan(
+pub(in crate::commands) fn build_plan(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
     profile_id: &str,
@@ -77,7 +77,7 @@ pub(super) fn build_plan_for_profile(
         .map_err(|error| CommandError::new("gateway-projection-invalid", error))
 }
 
-pub(super) fn preview_projection(
+pub(in crate::commands) fn preview_projection(
     state: &crate::local_state::LocalState,
     projection: &crate::gateway::GatewayProjection,
 ) -> Result<asb_switch::FilePreview, CommandError> {
@@ -93,34 +93,51 @@ pub(super) fn preview_projection(
             .preview
             .warnings
             .push(if plan.codex_preserve_official_login() {
-                "第三方认证与 ChatGPT 登录分开；保留现有官方令牌，缺少登录时网关使用本机专用凭据"
-                    .into()
+                asb_core::contracts::LocalizedMessage::new(
+                    "warnings.codex.keepOfficialLogin",
+                    serde_json::json!({}),
+                    "第三方认证与 ChatGPT 登录分开；保留现有官方令牌，缺少登录时网关使用本机专用凭据",
+                )
             } else {
-                "已选择不保留官方登录：本次切换会备份并移除 auth.json 中的 OAuth 令牌".into()
+                asb_core::contracts::LocalizedMessage::new(
+                    "warnings.codex.dropOfficialLogin",
+                    serde_json::json!({}),
+                    "已选择不保留官方登录：本次切换会备份并移除 auth.json 中的 OAuth 令牌",
+                )
             });
     }
     if plan.codex_managed_auth().is_some() {
-        preview.preview.warnings.push(
-            "将使用绑定的 Codex 托管账号；认证文件独立备份、校验并可恢复，令牌不会显示在预览中"
-                .into(),
-        );
+        preview.preview.warnings.push(asb_core::contracts::LocalizedMessage::new(
+            "warnings.codex.managedAuth",
+            serde_json::json!({}),
+            "将使用绑定的 Codex 托管账号；认证文件独立备份、校验并可恢复，令牌不会显示在预览中",
+        ));
     }
     if let Some(warning) = projection.warning() {
-        preview.preview.warnings.push(warning.to_string());
+        preview.preview.warnings.push(asb_core::contracts::LocalizedMessage::new(
+            "warnings.gateway.freeform",
+            serde_json::json!({ "detail": warning }),
+            warning.to_string(),
+        ));
     }
     if let Some(catalog) = &projection.codex_catalog {
-        preview.preview.warnings.push(format!(
-            "将生成并写入 ASB 管理的 Codex 模型目录 {}，并由 model_catalog_json 指向该文件。",
-            catalog.file_name
+        preview.preview.warnings.push(asb_core::contracts::LocalizedMessage::new(
+            "warnings.codex.catalogCreated",
+            serde_json::json!({ "fileName": catalog.file_name }),
+            format!(
+                "将生成并写入 ASB 管理的 Codex 模型目录 {}，并由 model_catalog_json 指向该文件。",
+                catalog.file_name
+            ),
         ));
     } else if plan.app() == AppKind::Codex
         && plan.profile.route_mode == asb_core::RouteMode::Official
         && official_catalog_artifact(&target)?.is_some()
     {
-        preview.preview.warnings.push(
-            "将清理当前 model_catalog_json 指向的 ASB 管理模型目录；用户自己的目录文件不会被删除。"
-                .to_string(),
-        );
+        preview.preview.warnings.push(asb_core::contracts::LocalizedMessage::new(
+            "warnings.codex.catalogCleanup",
+            serde_json::json!({}),
+            "将清理当前 model_catalog_json 指向的 ASB 管理模型目录；用户自己的目录文件不会被删除。",
+        ));
     }
     preview.preview.target = target.to_string_lossy().to_string();
     Ok(preview)
@@ -146,8 +163,9 @@ pub(super) fn execute_projection(
         .map_err(CommandError::from)?;
         if preview.content_hash != expected_hash || preview.rendered_hash != expected_rendered_hash
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "switch-stale",
+                "errors.sw.codexPreviewStale",
                 "Codex 配置预览已失效，请重新查看差异",
             ));
         }
@@ -173,7 +191,7 @@ pub(super) fn execute_projection(
     )
 }
 
-pub(super) fn execute_projection_with_auth(
+pub(in crate::commands) fn execute_projection_with_auth(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
     projection: &crate::gateway::GatewayProjection,
@@ -249,15 +267,22 @@ pub(super) fn official_catalog_artifact(
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-catalog-unreadable",
+                "errors.sw.codexConfigUnreadableForCatalogCleanup",
                 "无法读取 Codex 配置以清理模型目录",
             ));
         }
     };
     let document = text
         .parse::<toml_edit::DocumentMut>()
-        .map_err(|_| CommandError::new("codex-catalog-pointer-invalid", "Codex 配置无法解析"))?;
+        .map_err(|_| {
+            CommandError::keyed(
+                "codex-catalog-pointer-invalid",
+                "errors.sw.codexConfigUnparseable",
+                "Codex 配置无法解析",
+            )
+        })?;
     let Some(pointer) = document
         .get("model_catalog_json")
         .and_then(|item| item.as_str())
@@ -274,14 +299,21 @@ pub(super) fn official_catalog_artifact(
     }
     let directory = config_target
         .parent()
-        .ok_or_else(|| CommandError::new("codex-catalog-path-invalid", "Codex 配置目录无效"))?;
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "codex-catalog-path-invalid",
+                "errors.sw.codexConfigDirInvalid",
+                "Codex 配置目录无效",
+            )
+        })?;
     let path = directory.join(pointer);
     let before = match fs::read_to_string(&path) {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(_) => {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-catalog-unreadable",
+                "errors.sw.ownedCodexCatalogUnreadable",
                 "无法读取 ASB 管理的 Codex 模型目录",
             ));
         }
@@ -300,14 +332,21 @@ pub(super) fn catalog_artifact(
     };
     let directory = config_target
         .parent()
-        .ok_or_else(|| CommandError::new("codex-catalog-path-invalid", "Codex 配置目录无效"))?;
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "codex-catalog-path-invalid",
+                "errors.sw.codexConfigDirInvalid",
+                "Codex 配置目录无效",
+            )
+        })?;
     let path = directory.join(&catalog.file_name);
     let before = match fs::read_to_string(&path) {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(_) => {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-catalog-unreadable",
+                "errors.sw.codexCatalogFileUnreadable",
                 "无法读取 Codex 模型目录文件",
             ));
         }
@@ -316,8 +355,9 @@ pub(super) fn catalog_artifact(
         .as_deref()
         .is_some_and(|content| content != catalog.content)
     {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "codex-catalog-revision-conflict",
+            "errors.sw.codexCatalogRevisionConflict",
             "同一 Codex 路由修订的模型目录内容不一致，拒绝覆盖",
         ));
     }

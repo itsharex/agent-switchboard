@@ -1,43 +1,47 @@
 import type { ProviderProfile, WorkspacePage } from "../api/client";
+import type { MessageKey } from "../i18n/messages";
 
-export const WORKSPACE_PAGE_LABELS = {
-  providers: "供应商切换", clientConfiguration: "客户端配置", extensions: "扩展",
-  sessions: "会话记录", usage: "用量监控", settings: "设置",
-} as const satisfies Record<WorkspacePage, string>;
-export type Page = (typeof WORKSPACE_PAGE_LABELS)[WorkspacePage];
-export const PAGES = Object.values(WORKSPACE_PAGE_LABELS);
-export function workspacePageId(page: Page): WorkspacePage {
-  return (Object.keys(WORKSPACE_PAGE_LABELS) as WorkspacePage[])
-    .find((id) => WORKSPACE_PAGE_LABELS[id] === page)!;
+/** Pages are identified by the backend `WorkspacePage` contract values, never
+ * by display text; labels resolve from the catalog at render time. */
+export type Page = WorkspacePage;
+export const PAGES: readonly Page[] = [
+  "providers", "clientConfiguration", "extensions", "sessions", "usage", "settings",
+];
+export function pageLabelKey(page: Page): MessageKey {
+  return `nav.page.${page}`;
 }
+
 export type ProviderView =
   | { kind: "list" }
   | { kind: "import" }
   | { kind: "usage"; profile: ProviderProfile };
 
 export const SETTINGS_SECTIONS = [
-  { value: "application", label: "偏好设置" },
-  { value: "client-management", label: "客户端工具" },
-  { value: "gateway", label: "本机网关" },
-  { value: "backups", label: "备份恢复" },
-  { value: "diagnostics", label: "诊断" },
-  { value: "about", label: "关于" },
-] as const;
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["value"];
+  { value: "application", labelKey: "nav.section.application" },
+  { value: "client-management", labelKey: "nav.section.clientManagement" },
+  { value: "gateway", labelKey: "nav.section.gateway" },
+  { value: "backups", labelKey: "nav.section.backups" },
+  { value: "diagnostics", labelKey: "nav.section.diagnostics" },
+  { value: "about", labelKey: "nav.section.about" },
+] as const satisfies ReadonlyArray<{ value: SettingsSection; labelKey: MessageKey }>;
+export type SettingsSection =
+  | "application" | "client-management" | "gateway" | "backups" | "diagnostics" | "about";
 
 export const EXTENSION_SECTIONS = [
-  { value: "skill", label: "Skills" },
-  { value: "mcp", label: "MCP" },
-] as const;
-export type ExtensionSection = (typeof EXTENSION_SECTIONS)[number]["value"];
+  { value: "skill", labelKey: "nav.section.skill" },
+  { value: "mcp", labelKey: "nav.section.mcp" },
+] as const satisfies ReadonlyArray<{ value: ExtensionSection; labelKey: MessageKey }>;
+export type ExtensionSection = "skill" | "mcp";
+
 export const USAGE_SECTIONS = [
-  { value: "consumption", label: "消耗统计" },
-  { value: "quota", label: "额度与重置" },
-  { value: "radar", label: "降智雷达" },
-] as const;
-export type UsageSection = (typeof USAGE_SECTIONS)[number]["value"];
+  { value: "consumption", labelKey: "nav.section.consumption" },
+  { value: "quota", labelKey: "nav.section.quota" },
+  { value: "radar", labelKey: "nav.section.radar" },
+] as const satisfies ReadonlyArray<{ value: UsageSection; labelKey: MessageKey }>;
+export type UsageSection = "consumption" | "quota" | "radar";
+
 export const DIAGNOSTIC_SECTIONS = [
-  { value: "configuration", label: "配置与环境" },
-  { value: "logs", label: "运行日志" },
-] as const;
-export type DiagnosticSection = (typeof DIAGNOSTIC_SECTIONS)[number]["value"];
+  { value: "configuration", labelKey: "nav.section.configuration" },
+  { value: "logs", labelKey: "nav.section.logs" },
+] as const satisfies ReadonlyArray<{ value: DiagnosticSection; labelKey: MessageKey }>;
+export type DiagnosticSection = "configuration" | "logs";

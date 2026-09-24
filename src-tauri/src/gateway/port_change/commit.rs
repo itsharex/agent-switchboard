@@ -173,7 +173,11 @@ fn apply_changes(
         let warning = format!("监听端口已修改，但无法清理恢复材料：{error}");
         controller.block_port_change(blocked(&journal, warning.clone()));
         log::warn!("{warning}");
-        warnings.push(warning);
+        warnings.push(asb_core::contracts::LocalizedMessage::new(
+            "warnings.gateway.portChangeCleanup",
+            serde_json::json!({ "detail": error.to_string() }),
+            warning,
+        ));
     }
     Ok(GatewayPortChangeResult {
         from_port: prepared.plan.from_port,

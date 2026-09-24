@@ -1,6 +1,9 @@
+import { uiMessage } from "../i18n/errors";
+import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useRef, useState } from "react";
 
 import { parseClaudeExtraConfiguration } from "../api/client";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { EditableCodePreview } from "./EditableCodePreview";
 
@@ -21,12 +24,13 @@ function leafCount(value: unknown): number {
 }
 
 export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props) {
+  const { t } = useI18n();
   const source = serialized(extra);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(source);
   const [parsing, setParsing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
+  const [notice, setNotice] = useMessageState();
   const revision = useRef(0);
   const count = Object.values(extra ?? {}).reduce<number>((total, value) => total + leafCount(value), 0);
 
@@ -50,10 +54,10 @@ export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props)
       if (revision.current !== currentRevision) return;
       onChange(next);
       setEditing(false);
-      setNotice("已加入当前通用设置草稿；收起通用配置文件后可保存并预览应用。");
+      setNotice(uiMessage("clientConfig.extra.savedNotice"));
     }).catch((caught: { message?: string }) => {
       if (revision.current === currentRevision) {
-        setError(caught.message ?? "Claude 额外通用配置无效");
+        setError(caught);
       }
     }).finally(() => {
       if (revision.current === currentRevision) setParsing(false);
@@ -61,28 +65,28 @@ export function ClaudeExtraConfigurationEditor({ extra, busy, onChange }: Props)
   };
 
   return (
-    <section className="asb-client-claude-extra-editor" aria-label="ASB 管理的额外通用配置">
+    <section className="asb-client-claude-extra-editor" aria-label={t("clientConfig.extra.editorTitle")}>
       <div className="asb-client-claude-extra-editor-heading">
         <div>
-          <h3 className="asb-section-title">ASB 管理的额外通用配置</h3>
+          <h3 className="asb-section-title">{t("clientConfig.extra.editorTitle")}</h3>
           <p className="asb-field-help">
-            仅用于 Claude 未被可视化表单覆盖的通用字段；供应商、凭据与扩展字段会被拒绝。
+            {t("clientConfig.extra.editorHelp")}
           </p>
         </div>
-        {!editing && <Button variant="secondary" disabled={busy} onClick={begin}>编辑额外通用配置</Button>}
+        {!editing && <Button variant="secondary" disabled={busy} onClick={begin}>{t("clientConfig.extra.editButton")}</Button>}
       </div>
-      {!editing && <p className="asb-field-help">当前管理 {count} 项额外配置。</p>}
+      {!editing && <p className="asb-field-help">{t("clientConfig.extra.countLine", { count })}</p>}
       {editing && <>
         <EditableCodePreview
-          target="Claude 额外通用配置草稿"
+          target={t("clientConfig.extra.draftTarget")}
           content={draft}
           disabled={busy || parsing}
           onChange={(content) => { setDraft(content); setError(null); setNotice(null); }}
         />
         <div className="asb-client-claude-extra-editor-actions">
-          <Button variant="secondary" disabled={busy || parsing} onClick={discard}>放弃修改</Button>
+          <Button variant="secondary" disabled={busy || parsing} onClick={discard}>{t("clientConfig.editor.discard")}</Button>
           <Button variant="primary" disabled={busy || parsing || draft === source} onClick={save}>
-            {parsing ? "正在校验" : "保存额外配置草稿"}
+            {parsing ? t("clientConfig.extra.validating") : t("clientConfig.extra.saveDraft")}
           </Button>
         </div>
       </>}

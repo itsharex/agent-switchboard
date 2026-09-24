@@ -183,10 +183,20 @@ fn commit_prepared(
         }
         Err(error) => {
             super::transaction::recover(state, gateway).map_err(|recovery| {
-                recovery_error(format!("{}；客户端事务恢复失败：{recovery}", error.message))
+                CommandError::localized(
+                    "codex-policy-recovery-required",
+                    "errors.sw.clientRecoveryFailed",
+                    format!("{}；客户端事务恢复失败：{recovery}", error.message),
+                    serde_json::json!({ "detail": error.message.clone(), "recovery": recovery }),
+                )
             })?;
             journal::recover(state, gateway, true).map_err(|recovery| {
-                recovery_error(format!("{}；策略恢复失败：{recovery}", error.message))
+                CommandError::localized(
+                    "codex-policy-recovery-required",
+                    "errors.sw.policyRecoveryFailed",
+                    format!("{}；策略恢复失败：{recovery}", error.message),
+                    serde_json::json!({ "detail": error.message.clone(), "recovery": recovery }),
+                )
             })?;
             Err(error)
         }

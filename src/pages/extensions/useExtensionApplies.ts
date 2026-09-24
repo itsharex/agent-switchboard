@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 import type {
   ExtensionOperationRecord,
   ExtensionPlanView,
@@ -14,8 +14,9 @@ import {
 } from "../../api/client";
 import { needsDisableScope } from "../../app/extensions/deployment-state";
 import type { DiscoverScan } from "../../app/extensions/useDiscoverScan";
+import { ToastMessageList } from "../../components/Toaster";
 import type { useExtensions } from "../../app/useExtensions";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
 import { useExtensionApplyConfirmation } from "./useExtensionApplyConfirmation";
 
 export type ExtensionApplyResult =
@@ -106,8 +107,12 @@ function reportRollback(record: ExtensionOperationRecord | null) {
       ? [target.outcome.message] : [])) ?? [];
   toast({
     kind: "error",
-    title: failures.length > 0 ? "应用失败，部分变更未能回滚" : "应用失败，已回滚变更",
-    description: [...messages, ...failures].join("；") || "请在操作历史中查看失败记录。",
+    title: failures.length > 0
+      ? toastMessage("extensions.apply.failedPartialRollback")
+      : toastMessage("extensions.apply.failedRolledBack"),
+    description: messages.length + failures.length > 0
+      ? createElement(ToastMessageList, { items: [...messages, ...failures] })
+      : toastMessage("extensions.apply.failureDetails"),
   });
 }
 
@@ -124,7 +129,7 @@ async function applyPrepared(
   const workspace = await ext.refresh();
   if (context.signal.aborted) return { status: "cancelled" };
   if (outcome.rejected !== null) {
-    toast({ kind: "warning", title: "变更未能应用", description: outcome.rejected });
+    toast({ kind: "warning", title: toastMessage("extensions.apply.rejectedTitle"), description: outcome.rejected });
     return { status: "rejected", message: outcome.rejected };
   }
   if (outcome.rolledBack) {
@@ -134,13 +139,13 @@ async function applyPrepared(
   if (workspace === null || (repair && (await discovery.scan()) === null)) {
     toast({
       kind: "warning",
-      title: repair ? "修复已执行，验证未完成" : "变更已应用，状态刷新失败",
-      description: "请刷新扩展库并重新扫描，确认客户端的实际状态。",
+      title: repair ? toastMessage("extensions.apply.repairUnverified") : toastMessage("extensions.apply.appliedRefreshFailed"),
+      description: toastMessage("extensions.apply.refreshHint"),
     });
     return { status: "unverified", record: outcome.record };
   }
   if (context.signal.aborted) return { status: "cancelled" };
-  toast({ kind: "success", title: repair ? "已完成扩展修复并重新扫描" : "已应用扩展变更" });
+  toast({ kind: "success", title: repair ? toastMessage("extensions.apply.repaired") : toastMessage("extensions.apply.applied") });
   return { status: "applied", record: outcome.record, workspace };
 }
 

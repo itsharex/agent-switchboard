@@ -1,5 +1,6 @@
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
+import { useI18n } from "../../i18n";
 
 interface Props {
   busy: boolean;
@@ -19,17 +20,18 @@ export function NewSkillForm({
   setNewSkillDescription,
   createSkill,
 }: Props) {
+  const { t } = useI18n();
   return (
     <form
       className="asb-form"
-      aria-label="新建本地 Skill"
+      aria-label={t("extensions.toolbar.newSkill")}
       onSubmit={(event) => {
         event.preventDefault();
         void createSkill();
       }}
     >
       <label className="asb-field">
-        <span>Skill 名称（小写字母、数字、连字符）</span>
+        <span>{t("extensions.newSkill.name")}</span>
         <Input
           required
           placeholder="note-helper"
@@ -39,10 +41,10 @@ export function NewSkillForm({
         />
       </label>
       <label className="asb-field">
-        <span>描述（通用 Skill 必填）</span>
+        <span>{t("extensions.newSkill.description")}</span>
         <Input
           required
-          placeholder="这个 Skill 做什么、何时使用"
+          placeholder={t("extensions.newSkill.descriptionPlaceholder")}
           value={newSkillDescription}
           disabled={busy}
           onChange={(event) => setNewSkillDescription(event.target.value)}
@@ -50,7 +52,7 @@ export function NewSkillForm({
       </label>
       <div className="asb-form-actions">
         <Button type="submit" variant="primary" disabled={busy}>
-          从模板创建
+          {t("extensions.newSkill.create")}
         </Button>
       </div>
     </form>

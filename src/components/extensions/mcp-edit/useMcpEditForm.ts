@@ -1,3 +1,4 @@
+import { uiMessage } from "../../../i18n/errors";
 import { useState } from "react";
 import type { AppKind, McpEditRequest, McpEditViewEnvelope } from "../../../api/client";
 import type { PutSecret } from "../mcp-create/mcp-draft";
@@ -29,7 +30,7 @@ export function useMcpEditForm(props: McpEditFormProps) {
     const source = parseMcpJson(document.json, document.name, original.server);
     const request = await buildMcpEdit(props.envelope, source, metadata, clients, props.onPutSecret, props.existingNames);
     if (await props.onSave(request, [...clients])) props.onCancel();
-    else throw new Error("保存未完成，配置已保留，请检查错误后重试");
+    else throw uiMessage("mcp.error.saveIncomplete");
   }, props.onBusyChange);
   const { setError } = submission;
   const changeName = (name: string) => {
@@ -48,7 +49,7 @@ export function useMcpEditForm(props: McpEditFormProps) {
   };
   const openWizard = () => {
     try { setWizard(parseMcpJson(document.json, document.name, original.server)); setError(null); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "JSON 配置无法解析"); }
+    catch (caught) { setError(caught); }
   };
   const closeWizard = () => { setWizard(null); setFocusJson(true); };
   const applyWizard = (source: CreateSource) => {

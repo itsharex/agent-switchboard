@@ -98,14 +98,16 @@ fn validate_model_fetch_request(request: &ProviderModelsRequest) -> Result<(), C
     if request.app == asb_core::AppKind::Codex
         && request.upstream_protocol == asb_core::UpstreamProtocol::GeminiGenerateContent
     {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "provider-endpoint-invalid",
+            "errors.cfg.geminiNativeCodexUnsupported",
             "Gemini Native 不能用于 Codex 模型列表",
         ));
     }
     if request.connection.claude_native.is_some() {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "claude-native-sdk-only",
+            "errors.cfg.claudeNativeNoModelList",
             "原生云 SDK 不提供此通用 HTTP 模型接口，请填写云服务已开通的模型 ID",
         ));
     }
@@ -154,6 +156,8 @@ fn fetch_models(
     .map_err(|message| CommandError {
         code: "models-fetch-failed",
         message,
+        message_key: None,
+        params: None,
     })
 }
 

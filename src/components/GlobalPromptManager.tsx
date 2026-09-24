@@ -1,4 +1,5 @@
 import type { GlobalPromptDocument } from "../api/client";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { Textarea } from "./Textarea";
 
@@ -28,17 +29,18 @@ export function GlobalPromptManager({
   onDiscard,
   onReload,
 }: GlobalPromptManagerProps) {
-  const fileName = document?.fileName ?? "全局文档";
+  const { t } = useI18n();
+  const fileName = document?.fileName ?? t("clientConfig.prompt.fallbackName");
   return (
     <>
       <label className="asb-prompt-editor-field">
         <span className="asb-prompt-file-name">{fileName}</span>
         <Textarea
           code
-          aria-label={`${fileName} 内容`}
+          aria-label={t("clientConfig.prompt.contentAria", { name: fileName })}
           value={draft}
           disabled={busy || !document}
-          placeholder={document ? `在这里编写 ${fileName}。` : "正在读取文档。"}
+          placeholder={document ? t("clientConfig.prompt.placeholder", { name: fileName }) : t("clientConfig.prompt.loadingPlaceholder")}
           onChange={(event) => onChange(event.target.value)}
         />
       </label>
@@ -48,15 +50,15 @@ export function GlobalPromptManager({
           disabled={busy || dirty}
           onClick={onReload}
         >
-          重新读取
+          {t("clientConfig.common.reload")}
         </Button>
         {dirty && (
           <Button variant="secondary" disabled={busy} onClick={onDiscard}>
-            放弃草稿
+            {t("clientConfig.prompt.discardDraft")}
           </Button>
         )}
         <Button variant="primary" disabled={busy || !document || !dirty} onClick={onSave}>
-          {busy ? "保存中" : `保存 ${fileName}`}
+          {busy ? t("clientConfig.prompt.saving") : t("clientConfig.prompt.save", { name: fileName })}
         </Button>
       </div>
     </>

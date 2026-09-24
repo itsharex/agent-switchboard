@@ -1,6 +1,14 @@
 import { invoke } from "./client";
 import type { AppKind, RouteMode, CodexModelSettings } from "./shared";
 
+/** One backend-produced warning with renderer translation coordinates; `text`
+ * is the scrubbed product-language rendering used as detail and fallback. */
+export interface LocalizedMessage {
+  key: string;
+  params?: Record<string, string | number>;
+  text: string;
+}
+
 export interface RouteState {
   app: AppKind;
   routeMode: RouteMode;
@@ -14,7 +22,7 @@ export interface RouteState {
   sonnetModel: string | null;
   opusModel: string | null;
   availableModels: string[] | null;
-  scopeWarnings: string[];
+  scopeWarnings: LocalizedMessage[];
 }
 
 export type WriteOperation = "projection" | "gatewayPortChange" | "restore";
@@ -46,7 +54,7 @@ export interface SwitchPreview {
   app: AppKind;
   target: string;
   changes: KeyChange[];
-  warnings: string[];
+  warnings: LocalizedMessage[];
   backupDir: string;
 }
 
@@ -83,7 +91,7 @@ export interface SwitchOutcome {
   lock: LockStatus;
   acquiredAt: string;
   changed: string[];
-  warnings: string[];
+  warnings: LocalizedMessage[];
   backup: BackupRecord;
   preview: SwitchPreview;
   recovery: RecoveryOutcome;
@@ -93,7 +101,7 @@ export interface SwitchOutcome {
 export interface RestoreOutcome {
   preRestoreBackup: BackupRecord;
   restoredHash: string;
-  warnings: string[];
+  warnings: LocalizedMessage[];
 }
 
 export interface RecoveryEntry {

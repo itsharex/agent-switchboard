@@ -1,3 +1,5 @@
+import { uiMessage } from "../i18n/errors";
+import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useState } from "react";
 import {
   deleteCodexProbeBatches, getCodexProbeBatch, listCodexProbeHistory,
@@ -6,12 +8,6 @@ import {
 } from "../api/client";
 
 const PAGE_SIZE = 20;
-function errorMessage(reason: unknown): string {
-  if (typeof reason === "object" && reason !== null && "message" in reason &&
-      typeof reason.message === "string" && reason.message.trim()) return reason.message;
-  return "未提供具体原因";
-}
-
 export interface CodexProbeHistoryProfileOption {
   profileId: string;
   profileName: string;
@@ -38,7 +34,7 @@ function useHistoryPage(enabled: boolean, revision: string, epoch: number,
   const [items, setItems] = useState<CodexProbeHistoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listError, setListError] = useMessageState();
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     if (!enabled) return;
@@ -58,7 +54,7 @@ function useHistoryPage(enabled: boolean, revision: string, epoch: number,
       const selectable = new Set(result.items.filter((item) => item.status !== "running").map((item) => item.batchId));
       setSelection((previous) => new Set([...previous].filter((id) => selectable.has(id))));
     }).catch((reason) => {
-      if (active) setListError(errorMessage(reason));
+      if (active) setListError(reason);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [enabled, revision, epoch, range, profileFilter, statusFilter, page, setPage]);
@@ -75,13 +71,13 @@ function useHistoryPage(enabled: boolean, revision: string, epoch: number,
 
 function useHistoryProfiles(enabled: boolean, revision: string, epoch: number) {
   const [profiles, setProfiles] = useState<CodexProbeHistoryProfileOption[] | null>(null);
-  const [profilesError, setProfilesError] = useState<string | null>(null);
+  const [profilesError, setProfilesError] = useMessageState();
   useEffect(() => {
     if (!enabled) return;
     let active = true;
     listCodexProbeHistoryProfiles().then((options) => {
       if (active) { setProfiles(options); setProfilesError(null); }
-    }).catch((reason) => { if (active) setProfilesError(errorMessage(reason)); });
+    }).catch((reason) => { if (active) setProfilesError(reason); });
     return () => { active = false; };
   }, [enabled, revision, epoch]);
   return { profiles, profilesError };
@@ -91,7 +87,7 @@ function useHistoryDetail(enabled: boolean, revision: string) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CodexProbeBatch | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useMessageState();
   const [epoch, setEpoch] = useState(0);
   useEffect(() => {
     if (!enabled || detailId === null) return;
@@ -101,8 +97,8 @@ function useHistoryDetail(enabled: boolean, revision: string) {
     getCodexProbeBatch(detailId).then((batch) => {
       if (!active) return;
       setDetail(batch);
-      setDetailError(batch === null ? "该检测记录不存在，可能已被删除" : null);
-    }).catch((reason) => { if (active) setDetailError(errorMessage(reason)); })
+      setDetailError(batch === null ? uiMessage("codex.history.missingBatch") : null);
+    }).catch((reason) => { if (active) setDetailError(reason); })
       .finally(() => { if (active) setDetailLoading(false); });
     return () => { active = false; };
   }, [enabled, detailId, epoch, revision]);
@@ -125,7 +121,7 @@ export function useCodexProbeHistory(enabled: boolean, revision: string) {
   const profiles = useHistoryProfiles(enabled, revision, epoch);
   const detail = useHistoryDetail(enabled, revision);
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useMessageState();
   const refresh = useCallback(() => setEpoch((value) => value + 1), []);
   const { setPage } = filters;
   const { clearSelection } = page;
@@ -136,7 +132,7 @@ export function useCodexProbeHistory(enabled: boolean, revision: string) {
       clearSelection(); setPage(1); refresh();
       return true;
     } catch (reason) {
-      setDeleteError(errorMessage(reason));
+      setDeleteError(reason);
       return false;
     } finally { setDeleting(false); }
   }, [clearSelection, setPage, refresh]);

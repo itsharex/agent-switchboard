@@ -57,8 +57,9 @@ fn load_checked(
 ) -> Result<(Vec<CodexProjectPlan>, Option<String>, String), CommandError> {
     let (plans, current, revision) = codex_project_plans::load(root).map_err(plan_error)?;
     if revision != expected {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "codex-project-plan-stale",
+            "errors.cfg.planLibraryStale",
             "Codex 项目方案库已变化，请刷新后重试",
         ));
     }
@@ -113,7 +114,7 @@ pub(crate) struct CodexProjectApplyStep {
 pub(crate) struct CodexProjectApplyPreview {
     pub(crate) plan_id: String,
     pub(crate) steps: Vec<CodexProjectApplyStep>,
-    pub(crate) warnings: Vec<String>,
+    pub(crate) warnings: Vec<asb_core::contracts::LocalizedMessage>,
     /// The plan that will be re-snapshotted from the live state before this
     /// one is applied, matching the CC "autosave the old project" semantics.
     pub(crate) autosave_plan_id: Option<String>,
@@ -123,7 +124,7 @@ pub(crate) struct CodexProjectApplyPreview {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CodexProjectApplyOutcome {
     pub(crate) steps: Vec<CodexProjectApplyStep>,
-    pub(crate) warnings: Vec<String>,
+    pub(crate) warnings: Vec<asb_core::contracts::LocalizedMessage>,
     pub(crate) view: CodexProjectPlansView,
 }
 
@@ -202,8 +203,9 @@ fn prepare(
     let (plans, current, revision) = codex_project_plans::load(state.root()).map_err(plan_error)?;
     if let Some(expected) = expected_revision {
         if expected != revision {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-project-plan-stale",
+                "errors.cfg.planLibraryStale",
                 "Codex 项目方案库已变化，请刷新后重试",
             ));
         }
@@ -213,9 +215,11 @@ fn prepare(
         .find(|plan| plan.id == plan_id)
         .cloned()
         .ok_or_else(|| {
-            CommandError::new(
+            CommandError::localized(
                 "codex-project-plan-missing",
+                "errors.cfg.planMissing",
                 format!("项目方案 {plan_id} 不存在"),
+                serde_json::json!({ "planId": plan_id }),
             )
         })?;
 
@@ -356,8 +360,9 @@ pub(crate) async fn create_codex_project_plan(
         let state = state(&app)?;
         let name = name.trim().to_string();
         if name.is_empty() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-project-plan-name-empty",
+                "errors.cfg.planNameEmpty",
                 "项目方案名称不能为空",
             ));
         }
@@ -387,8 +392,9 @@ pub(crate) async fn rename_codex_project_plan(
         let state = state(&app)?;
         let name = name.trim().to_string();
         if name.is_empty() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-project-plan-name-empty",
+                "errors.cfg.planNameEmpty",
                 "项目方案名称不能为空",
             ));
         }
@@ -397,9 +403,11 @@ pub(crate) async fn rename_codex_project_plan(
             .iter_mut()
             .find(|plan| plan.id == plan_id)
             .ok_or_else(|| {
-                CommandError::new(
+                CommandError::localized(
                     "codex-project-plan-missing",
+                    "errors.cfg.planMissing",
                     format!("项目方案 {plan_id} 不存在"),
+                    serde_json::json!({ "planId": plan_id }),
                 )
             })?;
         target.name = name;
@@ -427,9 +435,11 @@ pub(crate) async fn resnapshot_codex_project_plan(
             .iter_mut()
             .find(|plan| plan.id == plan_id)
             .ok_or_else(|| {
-                CommandError::new(
+                CommandError::localized(
                     "codex-project-plan-missing",
+                    "errors.cfg.planMissing",
                     format!("项目方案 {plan_id} 不存在"),
+                    serde_json::json!({ "planId": plan_id }),
                 )
             })?;
         target.slot = snapshot.slot;
@@ -452,9 +462,11 @@ pub(crate) async fn delete_codex_project_plan(
         let before = plans.len();
         plans.retain(|plan| plan.id != plan_id);
         if plans.len() == before {
-            return Err(CommandError::new(
+            return Err(CommandError::localized(
                 "codex-project-plan-missing",
+                "errors.cfg.planMissing",
                 format!("项目方案 {plan_id} 不存在"),
+                serde_json::json!({ "planId": plan_id }),
             ));
         }
         // Deleting the bound project clears only the Codex pointer.
@@ -478,9 +490,11 @@ pub(crate) async fn set_current_codex_project_plan(
         let (plans, _, revision) = load_checked(state.root(), &expected_revision)?;
         if let Some(id) = plan_id.as_deref() {
             if !plans.iter().any(|plan| plan.id == id) {
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "codex-project-plan-missing",
+                    "errors.cfg.planMissing",
                     format!("项目方案 {id} 不存在"),
+                    serde_json::json!({ "planId": id }),
                 ));
             }
         }
@@ -565,9 +579,10 @@ pub(crate) async fn apply_codex_project_plan(
                     warnings.extend(outcome.warnings);
                     applied.push(prepared.steps.iter().find(|step| step.kind == "provider").cloned());
                 }
-                Err(error) => warnings.push(format!(
-                    "供应商切换失败（{provider_id}）：{}",
-                    error.message
+                Err(error) => warnings.push(asb_core::contracts::LocalizedMessage::new(
+                    "errors.cfg.applyProviderSwitchFailed",
+                    serde_json::json!({ "providerId": provider_id, "detail": error.message }),
+                    format!("供应商切换失败（{provider_id}）：{}", error.message),
                 )),
             }
         }
@@ -596,13 +611,29 @@ pub(crate) async fn apply_codex_project_plan(
                 .await
             {
                 Ok(()) => applied.push(Some(step.clone())),
-                Err(error) => warnings.push(format!(
-                    "{} {} {} 失败：{}",
-                    if step.kind == "mcp" { "MCP" } else { "Skill" },
-                    step.label,
-                    if enable { "启用" } else { "停用" },
-                    error.message
-                )),
+                Err(error) => {
+                    let kind_label = if step.kind == "mcp" { "MCP" } else { "Skill" };
+                let (key, description) = if enable {
+                    (
+                        "errors.cfg.applyBindingEnableFailed",
+                        format!("{kind_label} {} 启用失败：{}", step.label, error.message),
+                    )
+                } else {
+                    (
+                        "errors.cfg.applyBindingDisableFailed",
+                        format!("{kind_label} {} 停用失败：{}", step.label, error.message),
+                    )
+                };
+                    warnings.push(asb_core::contracts::LocalizedMessage::new(
+                        key,
+                        serde_json::json!({
+                            "kind": kind_label,
+                            "label": step.label,
+                            "detail": error.message,
+                        }),
+                        description,
+                    ));
+                }
             }
         }
 
@@ -616,9 +647,10 @@ pub(crate) async fn apply_codex_project_plan(
                         .find(|step| step.kind == "prompt")
                         .cloned(),
                 ),
-                Err(error) => warnings.push(format!(
-                    "指令预设 {preset_id} 激活失败：{}",
-                    error.message
+                Err(error) => warnings.push(asb_core::contracts::LocalizedMessage::new(
+                    "errors.cfg.applyPromptActivateFailed",
+                    serde_json::json!({ "presetId": preset_id, "detail": error.message }),
+                    format!("指令预设 {preset_id} 激活失败：{}", error.message),
                 )),
             }
         }

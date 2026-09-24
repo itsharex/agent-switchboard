@@ -1,4 +1,5 @@
 import type { KeyChange } from "../api/client";
+import { useI18n } from "../i18n";
 
 interface Props {
   changes: KeyChange[];
@@ -14,6 +15,7 @@ interface Props {
  * each change legible without relying on color alone.
  */
 export function DiffView({ changes, label }: Props) {
+  const { t } = useI18n();
   return (
     <ul className="asb-diff" aria-label={label}>
       {changes.map((change) => (
@@ -21,7 +23,7 @@ export function DiffView({ changes, label }: Props) {
           <span className="asb-diff-key">{change.key}</span>
           <span className="asb-diff-value">
             {change.before === null ? (
-              <span className="asb-diff-none">（无）</span>
+              <span className="asb-diff-none">{t("providers.diff.none")}</span>
             ) : (
               <span className="asb-diff-old">{change.before}</span>
             )}{" "}
@@ -29,7 +31,7 @@ export function DiffView({ changes, label }: Props) {
               →
             </span>{" "}
             {change.after === null ? (
-              <span className="asb-diff-remove">移除</span>
+              <span className="asb-diff-remove">{t("providers.diff.removed")}</span>
             ) : (
               <span className="asb-diff-new">{change.after}</span>
             )}

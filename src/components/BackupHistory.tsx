@@ -1,3 +1,4 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { Fragment, useEffect, useState } from "react";
 import { backupDiff, type BackupRecord, type KeyChange } from "../api/client";
 import { DiffView } from "./DiffView";
@@ -7,6 +8,8 @@ import { Pagination } from "./Pagination";
 import { type TableColumn } from "./Table";
 import { Time } from "./Time";
 import { RestoreIcon } from "./icons";
+import { useI18n, type MessageKey } from "../i18n";
+import { tr } from "../i18n/current";
 import { cx } from "@/utils/cx";
 
 interface Props {
@@ -18,18 +21,22 @@ interface Props {
 /** The backup table's page size, matching the codebase's page-size convention. */
 const BACKUP_PAGE_SIZE = 20;
 
+const REASON_LABEL: Record<string, MessageKey> = {
+  "switch": "backup.reason.switch",
+  "provider-projection": "backup.reason.providerProjection",
+  "restore-precheck": "backup.reason.restorePrecheck",
+  "gateway-port-change": "backup.reason.gatewayPortChange",
+  "gateway-port-rollback": "backup.reason.gatewayPortRollback",
+  "client-configuration-apply": "backup.reason.clientConfigApply",
+  "client-configuration-repair": "backup.reason.clientConfigRepair",
+  "client-configuration-native-defaults": "backup.reason.nativeDefaults",
+  "client-configuration-native-defaults-unmanaged": "backup.reason.nativeDefaultsUnmanaged",
+  "client-configuration-clear-extra-configuration": "backup.reason.clearExtraConfiguration",
+};
+
 function reasonLabel(reason: string): string {
-  if (reason === "switch") return "切换前备份";
-  if (reason === "provider-projection") return "供应商切换前备份";
-  if (reason === "restore-precheck") return "恢复前备份";
-  if (reason === "gateway-port-change") return "网关端口修改前备份";
-  if (reason === "gateway-port-rollback") return "网关端口恢复前备份";
-  if (reason === "client-configuration-apply") return "应用客户端配置前备份";
-  if (reason === "client-configuration-repair") return "自动修复客户端配置前备份";
-  if (reason === "client-configuration-native-defaults") return "恢复客户端原生默认值前备份";
-  if (reason === "client-configuration-native-defaults-unmanaged") return "恢复默认值并移除界面外字段前备份";
-  if (reason === "client-configuration-clear-extra-configuration") return "清空额外通用配置前备份";
-  return reason;
+  const key = REASON_LABEL[reason];
+  return key ? tr(key) : reason;
 }
 
 function isGatewayPortBackup(reason: string): boolean {
@@ -42,8 +49,9 @@ function clientLabel(app: string): string {
 
 /** File and saved client preference differences, fetched while the region is open. */
 function BackupDiff({ record }: { record: BackupRecord }) {
+  const { t } = useI18n();
   const [changes, setChanges] = useState<KeyChange[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
 
   useEffect(() => {
     let active = true;
@@ -52,7 +60,7 @@ function BackupDiff({ record }: { record: BackupRecord }) {
         if (active) setChanges(next);
       })
       .catch((caught) => {
-        if (active) setError((caught as { message?: string }).message ?? "无法生成差异");
+        if (active) setError(caught);
       });
     return () => {
       active = false;
@@ -64,8 +72,8 @@ function BackupDiff({ record }: { record: BackupRecord }) {
   if (changes === null) {
     return <div className="asb-skeleton asb-backup-diff-loading" aria-hidden="true" />;
   }
-  if (changes.length === 0) return <p className="asb-empty">备份覆盖的配置与当前一致</p>;
-  return <DiffView changes={changes} label="当前配置与备份的差异" />;
+  if (changes.length === 0) return <p className="asb-empty">{t("backup.diff.identical")}</p>;
+  return <DiffView changes={changes} label={t("backup.diff.label")} />;
 }
 
 /** Recent validation and restore history (DESIGN.md §7 bottom band). The
@@ -73,6 +81,7 @@ function BackupDiff({ record }: { record: BackupRecord }) {
  * a full-width expansion row under its own row, which the shared renderer
  * does not emit. */
 export function BackupHistory({ records, busy, onRestore }: Props) {
+  const { t } = useI18n();
   const [pending, setPending] = useState<BackupRecord | null>(null);
   const [openDiffs, setOpenDiffs] = useState<ReadonlySet<string>>(() => new Set());
   const [page, setPage] = useState(1);
@@ -107,34 +116,34 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
   const columns: Array<TableColumn<BackupRecord>> = [
     {
       key: "createdAt",
-      header: "时间",
+      header: t("backup.col.time"),
       cellClassName: "asb-code",
       render: (record) => <Time iso={record.createdAt} />,
     },
-    { key: "app", header: "客户端", render: (record) => clientLabel(record.app) },
-    { key: "reason", header: "原因", render: (record) => reasonLabel(record.reason) },
+    { key: "app", header: t("backup.col.client"), render: (record) => clientLabel(record.app) },
+    { key: "reason", header: t("backup.col.reason"), render: (record) => reasonLabel(record.reason) },
     {
       key: "contentHash",
-      header: "内容哈希",
+      header: t("backup.col.hash"),
       cellClassName: "asb-code",
       render: (record) => record.contentHash.slice(0, 12),
     },
     {
       key: "actions",
-      header: "操作",
+      header: t("backup.col.actions"),
       render: (record) => {
         const isGatewayPortChange = isGatewayPortBackup(record.reason);
         return (
           <div className="asb-backup-actions">
             {isGatewayPortChange ? (
-              <span className="asb-scope-note">请在设置的本机网关中修改端口</span>
+              <span className="asb-scope-note">{t("backup.history.gatewayPortNote")}</span>
             ) : (
               <Button
                 variant="secondary"
                 disabled={busy}
                 onClick={() => setPending(record)}
               >
-                恢复
+                {t("backup.history.restore")}
               </Button>
             )}
             <Button
@@ -143,7 +152,7 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
               aria-expanded={openDiffs.has(record.id)}
               onClick={() => toggleDiff(record.id)}
             >
-              查看差异
+              {t("backup.history.viewDiff")}
             </Button>
           </div>
         );
@@ -157,14 +166,14 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
         <span className="asb-empty-state-icon" aria-hidden="true">
           <RestoreIcon />
         </span>
-        <h3 className="asb-section-title">暂无备份</h3>
+        <h3 className="asb-section-title">{t("backup.history.empty")}</h3>
       </div>
     );
   }
 
   return (
     <div className="asb-backups">
-      <table className="asb-table" aria-label="备份历史">
+      <table className="asb-table" aria-label={t("backup.history.tableAria")}>
         <thead>
           <tr>
             {columns.map((column) => (
@@ -200,12 +209,12 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
         page={currentPage}
         pageSize={BACKUP_PAGE_SIZE}
         onPageChange={turnPage}
-        label="备份历史分页"
+        label={t("backup.history.paginationAria")}
       />
       {pending && (
         <ConfirmSheet
-          title="恢复备份"
-          confirmLabel="确认恢复"
+          title={t("backup.history.confirmTitle")}
+          confirmLabel={t("backup.confirmRestore")}
           onConfirm={() => {
             onRestore(pending.id);
             setPending(null);
@@ -213,11 +222,11 @@ export function BackupHistory({ records, busy, onRestore }: Props) {
           onCancel={() => setPending(null)}
         >
           <ul className="asb-dialog-details">
-            <li>时间 <Time iso={pending.createdAt} /></li>
-            <li>客户端 {clientLabel(pending.app)}</li>
-            <li>内容哈希 {pending.contentHash.slice(0, 12)}</li>
-            <li>当前内容会先另行备份，恢复本身可撤销。</li>
-            <li>客户端配置操作的备份会同时还原当时保存的 ASB 设置。</li>
+            <li>{t("backup.col.time")} <Time iso={pending.createdAt} /></li>
+            <li>{t("backup.col.client")} {clientLabel(pending.app)}</li>
+            <li>{t("backup.col.hash")} {pending.contentHash.slice(0, 12)}</li>
+            <li>{t("backup.history.confirmBackupFirst")}</li>
+            <li>{t("backup.history.confirmRestoreSettings")}</li>
           </ul>
         </ConfirmSheet>
       )}

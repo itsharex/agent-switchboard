@@ -1,19 +1,29 @@
+import { uiMessage } from "../../i18n/errors";
 import { useEffect, useId, useState } from "react";
 import * as api from "../../api/codex-project-plans";
+import type { MessageKey, TFunction } from "../../i18n";
+import { useI18n } from "../../i18n";
+import { localizedMessageText } from "../../i18n/errors";
 import { Button } from "../Button";
 import { Input } from "../Input";
 import { ClientManagementModule } from "../client-management/ClientManagementModule";
 import type { CodexOperations } from "./operations";
 
-const ACTION_LABELS: Record<api.CodexProjectApplyStep["action"], string> = {
-  switch: "切换至", enable: "启用", disable: "停用", activate: "激活",
+const ACTION_LABELS: Record<api.CodexProjectApplyStep["action"], MessageKey> = {
+  switch: "codex.plans.actionSwitch", enable: "codex.plans.actionEnable",
+  disable: "codex.plans.actionDisable", activate: "codex.plans.actionActivate",
 };
-const KIND_LABELS: Record<api.CodexProjectApplyStep["kind"], string> = {
-  provider: "供应商", mcp: "MCP", skill: "Skill", prompt: "指令预设",
+const KIND_LABELS: Record<api.CodexProjectApplyStep["kind"], MessageKey> = {
+  provider: "codex.plans.kindProvider", mcp: "codex.plans.kindMcp",
+  skill: "codex.plans.kindSkill", prompt: "codex.plans.kindPrompt",
 };
 
-function stepText(step: api.CodexProjectApplyStep): string {
-  return `${KIND_LABELS[step.kind]}：${ACTION_LABELS[step.action]} ${step.label}`;
+function stepText(step: api.CodexProjectApplyStep, t: TFunction): string {
+  return t("codex.plans.stepText", {
+    kind: t(KIND_LABELS[step.kind]),
+    action: t(ACTION_LABELS[step.action]),
+    label: step.label,
+  });
 }
 
 function projectPlanName(view: api.CodexProjectPlansView, id: string): string {
@@ -54,6 +64,7 @@ function ProjectPlanDetails({
   reset,
 }: ProjectPlanDetailsProps) {
   const { run, busy, changed } = operations;
+  const { t } = useI18n();
   const selected = view.plans.find((plan) => plan.id === selectedId) ?? null;
   const nameOf = (id: string) => projectPlanName(view, id);
   const ledgerName = useId();
@@ -63,15 +74,20 @@ function ProjectPlanDetails({
     setPreview(null); setDeleting(false); clearOutcome();
   };
 
-  return <section className="asb-client-management-group" aria-label="工作场景内容">
-    <h4 className="asb-group-title">场景</h4>
-    <p className="asb-scope-note">当前工作状态 · 供应商：{view.activeProviderId ? nameOf(view.activeProviderId) : "无"} · MCP：{view.bindings.filter((binding) => binding.kind === "mcp" && binding.enabled).length} · Skills：{view.bindings.filter((binding) => binding.kind === "skill" && binding.enabled).length} · 指令：{view.activePromptId ? nameOf(view.activePromptId) : "无"}</p>
-    <div role="radiogroup" aria-label="选择工作场景" className="asb-client-management-ledger">
+  return <section className="asb-client-management-group" aria-label={t("codex.plans.contentAria")}>
+    <h4 className="asb-group-title">{t("codex.plans.groupScenario")}</h4>
+    <p className="asb-scope-note">{t("codex.plans.statusLine", {
+      provider: view.activeProviderId ? nameOf(view.activeProviderId) : t("codex.plans.none"),
+      mcp: view.bindings.filter((binding) => binding.kind === "mcp" && binding.enabled).length,
+      skills: view.bindings.filter((binding) => binding.kind === "skill" && binding.enabled).length,
+      prompt: view.activePromptId ? nameOf(view.activePromptId) : t("codex.plans.none"),
+    })}</p>
+    <div role="radiogroup" aria-label={t("codex.plans.selectAria")} className="asb-client-management-ledger">
       <label className={"asb-client-management-option" + (!selectedId ? " is-active" : "")}>
         <input type="radio" name={ledgerName} checked={!selectedId} disabled={busy} onChange={() => select(null)} />
         <span className="asb-client-management-option-text">
-          <span className="asb-client-management-option-name">新建场景</span>
-          <span className="asb-client-management-option-meta">把当前工作状态保存为新场景</span>
+          <span className="asb-client-management-option-name">{t("codex.plans.newScenario")}</span>
+          <span className="asb-client-management-option-meta">{t("codex.plans.newScenarioMeta")}</span>
         </span>
       </label>
       {view.plans.map((plan) => (
@@ -83,27 +99,27 @@ function ProjectPlanDetails({
             <span className="asb-client-management-option-meta">{api.describeCodexProjectSlot(plan.slot, nameOf)}</span>
           </span>
           {plan.id === view.current && <span className="asb-status-pill is-ok">
-            <span className="asb-status-pill-dot" aria-hidden="true" />当前场景
+            <span className="asb-status-pill-dot" aria-hidden="true" />{t("codex.plans.currentPill")}
           </span>}
         </label>
       ))}
     </div>
     {selected
-      ? <label className="asb-field is-medium"><span>场景名称</span><Input value={name} disabled={busy} onChange={(event) => setName(event.target.value)} /></label>
-      : <label className="asb-field is-medium"><span>新场景名称</span><Input value={newName} disabled={busy} onChange={(event) => setNewName(event.target.value)} /></label>}
+      ? <label className="asb-field is-medium"><span>{t("codex.plans.nameLabel")}</span><Input value={name} disabled={busy} onChange={(event) => setName(event.target.value)} /></label>
+      : <label className="asb-field is-medium"><span>{t("codex.plans.newNameLabel")}</span><Input value={newName} disabled={busy} onChange={(event) => setNewName(event.target.value)} /></label>}
     <div className="asb-form-actions">
       {selected
         ? <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void run(async () => {
             reset(await api.renameCodexProjectPlan(selected.id, name, view.revision));
-            changed("场景名称已保存。");
-          })}>保存名称</Button>
+            changed(uiMessage("codex.plans.nameSaved"));
+          })}>{t("codex.plans.saveName")}</Button>
         : <Button variant="primary" disabled={busy || !newName.trim()} onClick={() => void run(async () => {
             const next = await api.createCodexProjectPlan(newName, view.revision);
             reset(next);
             const created = next.plans[next.plans.length - 1] ?? null;
             setSelectedId(created?.id ?? null); setName(created?.name ?? ""); setNewName("");
-            changed("当前工作状态已保存为场景；尚未修改 Codex 配置。");
-          })}>保存当前场景</Button>}
+            changed(uiMessage("codex.plans.currentSaved"));
+          })}>{t("codex.plans.saveCurrent")}</Button>}
     </div>
   </section>;
 }
@@ -133,62 +149,63 @@ function ProjectPlanActions({
   reset,
 }: ProjectPlanActionsProps) {
   const { run, busy, changed } = operations;
+  const { t } = useI18n();
   const selected = view.plans.find((plan) => plan.id === selectedId) ?? null;
   const isCurrent = !!selected && selected.id === view.current;
 
   const setCurrent = () => void run(async () => {
     if (!selected) return;
     reset(await api.setCurrentCodexProjectPlan(isCurrent ? null : selected.id, view.revision));
-    changed(isCurrent ? "已取消当前场景标记。" : "已设为当前场景；尚未修改 Codex 配置。");
+    changed(isCurrent ? uiMessage("codex.plans.clearedCurrent") : uiMessage("codex.plans.setCurrentDone"));
   });
 
   return <>
-    <section className="asb-client-management-group asb-project-plan-actions" aria-label="场景操作">
-      <h4 className="asb-group-title">恢复场景</h4>
-      <p className="asb-scope-note">恢复前会先显示配置变更。场景只组合已有的供应商、扩展和指令，不会创建第二套配置。</p>
+    <section className="asb-client-management-group asb-project-plan-actions" aria-label={t("codex.plans.actionsAria")}>
+      <h4 className="asb-group-title">{t("codex.plans.restoreGroup")}</h4>
+      <p className="asb-scope-note">{t("codex.plans.restoreNote")}</p>
       {selected
         ? <div className="asb-project-plan-action-grid">
             <Button className="asb-project-plan-apply-action" variant="primary" disabled={busy} onClick={() => void run(async () => {
               clearOutcome();
               setPreview(await api.previewCodexProjectPlanApply(selected.id, view.revision));
-            })}>预览并恢复场景</Button>
+            })}>{t("codex.plans.previewApply")}</Button>
             <Button variant="secondary" disabled={busy} onClick={() => void run(async () => {
               reset(await api.resnapshotCodexProjectPlan(selected.id, view.revision));
-              changed("已用当前工作状态更新场景。");
-            })}>用当前状态更新场景</Button>
-            <Button variant="secondary" disabled={busy} onClick={setCurrent}>{isCurrent ? "取消当前场景标记" : "设为当前场景"}</Button>
+              changed(uiMessage("codex.plans.updatedFromCurrent"));
+            })}>{t("codex.plans.updateFromCurrent")}</Button>
+            <Button variant="secondary" disabled={busy} onClick={setCurrent}>{isCurrent ? t("codex.plans.clearCurrent") : t("codex.plans.setCurrentLabel")}</Button>
           </div>
-        : <p className="asb-scope-note">先保存或选择一个场景，再进行恢复和维护。</p>}
+        : <p className="asb-scope-note">{t("codex.plans.selectFirst")}</p>}
     </section>
-    {selected && <section className="asb-client-management-group asb-project-plan-delete" aria-label="删除工作场景">
-      <h4 className="asb-group-title">删除场景</h4>
-      <p className="asb-scope-note">删除不会修改 Codex 当前配置，但该工作场景无法恢复。</p>
+    {selected && <section className="asb-client-management-group asb-project-plan-delete" aria-label={t("codex.plans.deleteGroupAria")}>
+      <h4 className="asb-group-title">{t("codex.plans.deleteGroup")}</h4>
+      <p className="asb-scope-note">{t("codex.plans.deleteNote")}</p>
       {deleting
-        ? <div className="asb-project-plan-delete-confirmation" role="group" aria-label="确认删除工作场景">
-            <p className="asb-warn-text">确认删除「{selected.name}」？此操作只删除保存的工作场景，不能恢复。</p>
+        ? <div className="asb-project-plan-delete-confirmation" role="group" aria-label={t("codex.plans.deleteConfirmAria")}>
+            <p className="asb-warn-text">{t("codex.plans.deleteConfirm", { name: selected.name })}</p>
             <div className="asb-form-actions">
-              <Button variant="secondary" disabled={busy} onClick={() => setDeleting(false)}>保留场景</Button>
+              <Button variant="secondary" disabled={busy} onClick={() => setDeleting(false)}>{t("codex.plans.keep")}</Button>
               <Button variant="danger" disabled={busy} onClick={() => void run(async () => {
                 reset(await api.deleteCodexProjectPlan(selected.id, view.revision));
                 setSelectedId(null); setName(""); setDeleting(false);
-                changed("场景已删除，并已清除当前场景标记；尚未修改 Codex 配置。");
-              })}>确认删除</Button>
+                changed(uiMessage("codex.plans.deleted"));
+              })}>{t("codex.plans.confirmDelete")}</Button>
             </div>
           </div>
-        : <div className="asb-form-actions"><Button variant="danger" disabled={busy} onClick={() => setDeleting(true)}>删除当前场景</Button></div>}
+        : <div className="asb-form-actions"><Button variant="danger" disabled={busy} onClick={() => setDeleting(true)}>{t("codex.plans.deleteCurrent")}</Button></div>}
     </section>}
   </>;
 }
 interface ProjectPlanOutcomeProps {
   view: api.CodexProjectPlansView;
   preview: api.CodexProjectApplyPreview | null;
-  applied: string[];
-  warnings: string[];
+  applied: api.CodexProjectApplyStep[];
+  warnings: api.CodexProjectApplyOutcome["warnings"];
   operations: CodexOperations;
   setView: (view: api.CodexProjectPlansView) => void;
   setPreview: (preview: api.CodexProjectApplyPreview | null) => void;
-  setApplied: (applied: string[]) => void;
-  setWarnings: (warnings: string[]) => void;
+  setApplied: (applied: api.CodexProjectApplyStep[]) => void;
+  setWarnings: (warnings: api.CodexProjectApplyOutcome["warnings"]) => void;
 }
 
 function ProjectPlanOutcome({
@@ -203,50 +220,52 @@ function ProjectPlanOutcome({
   setWarnings,
 }: ProjectPlanOutcomeProps) {
   const { run, busy, changed } = operations;
+  const { t } = useI18n();
   const nameOf = (id: string) => projectPlanName(view, id);
 
   return <>
-    {preview && <section className="asb-client-management-group" aria-label="Codex 工作场景恢复预览">
-      <h4 className="asb-group-title">恢复预览</h4>
+    {preview && <section className="asb-client-management-group" aria-label={t("codex.plans.previewAria")}>
+      <h4 className="asb-group-title">{t("codex.plans.previewGroup")}</h4>
       <p className="asb-scope-note">{preview.autosavePlanId
-        ? `恢复前会先将当前工作状态保存到「${nameOf(preview.autosavePlanId)}」。`
-        : "没有当前场景需要保存。"}</p>
+        ? t("codex.plans.autosaveNote", { name: nameOf(preview.autosavePlanId) })
+        : t("codex.plans.noAutosave")}</p>
       {preview.steps.length
-        ? <ul>{preview.steps.map((step, index) => <li key={`${step.kind}-${step.target}-${index}`}>{stepText(step)}</li>)}</ul>
-        : <p className="asb-scope-note">该工作场景已与当前状态一致，无需写入配置。</p>}
-      {preview.warnings.map((warning) => <p key={warning} className="asb-warn-text">{warning}</p>)}
+        ? <ul>{preview.steps.map((step, index) => <li key={`${step.kind}-${step.target}-${index}`}>{stepText(step, t)}</li>)}</ul>
+        : <p className="asb-scope-note">{t("codex.plans.uptodate")}</p>}
+      {preview.warnings.map((warning) => <p key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</p>)}
       <div className="asb-form-actions">
-        <Button variant="secondary" disabled={busy} onClick={() => setPreview(null)}>返回场景</Button>
+        <Button variant="secondary" disabled={busy} onClick={() => setPreview(null)}>{t("codex.plans.backToScenarios")}</Button>
         <Button variant="primary" disabled={busy} onClick={() => void run(async () => {
           const outcome = await api.applyCodexProjectPlan(preview.planId, view.revision, true);
           setView(outcome.view); setPreview(null);
-          setApplied(outcome.steps.map(stepText)); setWarnings(outcome.warnings);
+          setApplied(outcome.steps); setWarnings(outcome.warnings);
           changed(outcome.warnings.length
-            ? "场景已恢复，但部分项目未完成；请查看下方提示。"
-            : "场景已恢复，当前场景标记已更新。");
-        })}>确认恢复场景</Button>
+            ? uiMessage("codex.plans.appliedWithWarnings")
+            : uiMessage("codex.plans.appliedClean"));
+        })}>{t("codex.plans.confirmApply")}</Button>
       </div>
     </section>}
-    {applied.length > 0 && <section className="asb-client-management-group" aria-label="Codex 工作场景恢复结果">
-      <h4 className="asb-group-title">恢复结果</h4>
-      {applied.map((entry) => <p key={entry} className="asb-scope-note">{entry}</p>)}
+    {applied.length > 0 && <section className="asb-client-management-group" aria-label={t("codex.plans.resultAria")}>
+      <h4 className="asb-group-title">{t("codex.plans.resultGroup")}</h4>
+      {applied.map((entry, index) => <p key={`${entry.kind}-${entry.target}-${index}`} className="asb-scope-note">{stepText(entry, t)}</p>)}
     </section>}
-    {warnings.map((warning) => <p key={warning} className="asb-warn-text">{warning}</p>)}
+    {warnings.map((warning) => <p key={warning.key} className="asb-warn-text">{localizedMessageText(warning, t)}</p>)}
   </>;
 }
 
 /** Creates, maintains, previews, and applies Codex project snapshots. */
 export function ProjectPlansPane({ operations }: { operations: CodexOperations }) {
   const { run, busy } = operations;
+  const { t } = useI18n();
   const [view, setView] = useState<api.CodexProjectPlansView | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [newName, setNewName] = useState("");
   const [preview, setPreview] = useState<api.CodexProjectApplyPreview | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [applied, setApplied] = useState<string[]>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const description = "保存和恢复当前 Codex 工作场景。工作场景只记录已有供应商、扩展与指令的组合状态，不创建第二套配置；恢复时仍通过各功能原有的可恢复流程执行。";
+  const [applied, setApplied] = useState<api.CodexProjectApplyStep[]>([]);
+  const [warnings, setWarnings] = useState<api.CodexProjectApplyOutcome["warnings"]>([]);
+  const description = t("codex.plans.description");
   const reload = () => void run(async () => setView(await api.listCodexProjectPlans()));
   const clearOutcome = () => { setApplied([]); setWarnings([]); };
   const reset = (next: api.CodexProjectPlansView) => {
@@ -256,8 +275,8 @@ export function ProjectPlansPane({ operations }: { operations: CodexOperations }
   useEffect(() => { void run(async () => setView(await api.listCodexProjectPlans())); }, [run]);
 
   if (!view) return (
-    <ClientManagementModule title="工作场景" description={description} refreshLabel="重新读取场景" busy={busy} onRefresh={reload}>
-      <div className="asb-client-management-skeleton" role="status" aria-label="正在读取">
+    <ClientManagementModule title={t("codex.plans.title")} description={description} refreshLabel={t("codex.plans.refresh")} busy={busy} onRefresh={reload}>
+      <div className="asb-client-management-skeleton" role="status" aria-label={t("codex.loading")}>
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
@@ -266,7 +285,7 @@ export function ProjectPlansPane({ operations }: { operations: CodexOperations }
     </ClientManagementModule>
   );
 
-  return <ClientManagementModule title="工作场景" description={description} refreshLabel="重新读取场景" busy={busy} onRefresh={reload}>
+  return <ClientManagementModule title={t("codex.plans.title")} description={description} refreshLabel={t("codex.plans.refresh")} busy={busy} onRefresh={reload}>
     <ProjectPlanDetails
       view={view}
       operations={operations}

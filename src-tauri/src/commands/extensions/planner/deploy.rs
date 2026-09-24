@@ -54,7 +54,13 @@ impl Planner<'_> {
                 let key = binding
                     .native_key
                     .as_deref()
-                    .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
+                    .ok_or_else(|| {
+                        CommandError::keyed(
+                            "extension-invalid",
+                            "errors.extops.mcpBindingMissingKey",
+                            "MCP 绑定缺少服务键",
+                        )
+                    })?;
                 let enabled = binding.desired == DesiredState::Enabled;
                 let work = self.document_work(batch, &document, client, syntax)?;
                 let base = work.rendered.clone();
@@ -154,7 +160,11 @@ impl Planner<'_> {
         CommandError,
     > {
         let ExtensionPayload::Skill(skill) = &definition.payload else {
-            return Err(CommandError::new("extension-invalid", "不是 Skill 定义"));
+            return Err(CommandError::keyed(
+                "extension-invalid",
+                "errors.extops.notSkillDefinition",
+                "不是 Skill 定义",
+            ));
         };
         if binding.desired != DesiredState::Enabled {
             return Ok((
@@ -233,14 +243,24 @@ impl Planner<'_> {
         let project_id = binding
             .target
             .project_id()
-            .ok_or_else(|| CommandError::new("extension-invalid", "项目绑定缺少项目 id"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.projectBindingMissingId",
+                    "项目绑定缺少项目 id",
+                )
+            })?;
         let projects = self.store.list_projects().map_err(store_error)?;
         projects
             .iter()
             .find(|project| project.id == project_id)
             .map(|project| project.root.clone())
             .ok_or_else(|| {
-                CommandError::new("extension-invalid", "项目位置已失效；请重新注册并选择项目")
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.projectRootMissing",
+                    "项目位置已失效；请重新注册并选择项目",
+                )
             })
     }
 
@@ -251,7 +271,13 @@ impl Planner<'_> {
         let name = binding
             .deploy_name
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "Skill 绑定缺少部署名"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.skillBindingMissingDeployName",
+                    "Skill 绑定缺少部署名",
+                )
+            })?;
         match &binding.target {
             ExtensionTarget::App { client } => Ok(match client {
                 AppKind::Codex => {
@@ -353,11 +379,12 @@ pub(super) fn merge_baseline_file_entry(
 
 pub(super) fn required_id<'a>(
     value: &'a Option<String>,
+    key: &'static str,
     message: &str,
 ) -> Result<&'a str, CommandError> {
     value
         .as_deref()
-        .ok_or_else(|| CommandError::new("extension-invalid", message))
+        .ok_or_else(|| CommandError::keyed("extension-invalid", key, message))
 }
 
 pub(super) fn write_entries_to(
@@ -381,8 +408,9 @@ pub(super) fn write_entries_to(
                     .map_err(|error| CommandError::new("extension-staging", error.to_string()))?;
             }
             asb_core::extensions::validate::ContentEntryKind::Link => {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-staging",
+                    "errors.extops.stagingContainsLink",
                     "Skill 暂存内容不能包含链接或重解析点",
                 ));
             }

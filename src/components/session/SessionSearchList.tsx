@@ -1,0 +1,76 @@
+import type { SessionSearchHit, SessionMeta } from "../../api/client";
+import { useI18n } from "../../i18n";
+import { Button } from "../Button";
+import { ClientLogo } from "../ClientLogo";
+import { Pagination } from "../Pagination";
+import { Time } from "../Time";
+import { SessionProjects } from "./SessionProjects";
+import { sessionKey, sessionTitle } from "./session-content";
+import { SESSION_PAGE_SIZE, type SessionSearch } from "./use-session-search";
+
+interface Props {
+  search: SessionSearch;
+  selected: SessionMeta | null;
+  selecting: boolean;
+  chosen: ReadonlyMap<string, SessionMeta>;
+  disabled: boolean;
+  onSelect: (hit: SessionSearchHit) => void;
+  onToggle: (session: SessionMeta) => void;
+  onToggleMode: () => void;
+}
+
+function SearchRow({ hit, active, picked, selecting, disabled, onClick, onProject }: {
+  hit: SessionSearchHit; active: boolean; picked: boolean; selecting: boolean;
+  disabled: boolean; onClick: () => void; onProject: () => void;
+}) {
+  const { t } = useI18n();
+  const { session } = hit;
+  return <div className="asb-session-result-row"><Button variant="unstyled" disabled={disabled} onClick={onClick}
+    aria-pressed={selecting ? picked : active}
+    className={`asb-session-item${active ? " is-active" : ""}${picked ? " is-selected" : ""}`}>
+    <span className="asb-session-item-title">
+      <ClientLogo app={session.app} className="asb-session-logo" />
+      <span title={sessionTitle(session)}>{sessionTitle(session)}</span>
+    </span>
+    {(session.pinned || session.tags.length > 0) && <span className="asb-session-labels">
+      {session.pinned && <span>{t("sessions.organize.pinned")}</span>}
+      {session.tags.map((tag) => <span key={tag}>#{tag}</span>)}
+    </span>}
+    <span className="asb-session-search-excerpt">{hit.excerpt}</span>
+    {hit.messageId && <span className="asb-session-item-time">{t("sessions.search.messageHit")}</span>}
+    <span className="asb-session-item-time">
+      {session.lastActiveAt ? <Time iso={session.lastActiveAt} /> : t("sessions.time.unknown")}
+    </span>
+  </Button><Button variant="unstyled" className="asb-session-result-project" disabled={disabled} onClick={onProject}
+    title={t("sessions.projects.openHint", { dir: session.projectDir ?? t("sessions.projects.none") })}>
+    {session.projectDir ?? t("sessions.projects.none")}
+  </Button></div>;
+}
+
+export function SessionSearchList({ search, selected, selecting, chosen, disabled, onSelect, onToggle, onToggleMode }: Props) {
+  const { t } = useI18n();
+  const { result, busy, error } = search;
+  return <section className="asb-session-list" aria-label={t("sessions.list.aria")} aria-busy={busy}>
+    <div className="asb-session-list-heading">
+      <span>{t(search.query ? "sessions.search.results" : "sessions.list.heading")}</span>
+      <div className="asb-session-list-heading-actions">
+        {result && <span className="asb-session-count">{result.total}</span>}
+        {!selecting && <Button variant="unstyled" className="asb-session-quiet-action" disabled={disabled}
+          onClick={onToggleMode}>{t("sessions.batch.enter")}</Button>}
+      </div>
+    </div>
+    <SessionProjects search={search} disabled={disabled} />
+    {busy && <p role="status">{t("sessions.list.scanning.aria")}</p>}
+    {error && <p className="asb-warn-text" role="alert">{error}</p>}
+    {result?.total === 0 && <p className="asb-empty-state">{t("sessions.list.empty")}</p>}
+    <div className="asb-session-items">
+      {result?.results.map((hit) => <SearchRow key={`${sessionKey(hit.session)}:${hit.messageId ?? "metadata"}`}
+        hit={hit} active={selected !== null && sessionKey(selected) === sessionKey(hit.session)}
+        picked={chosen.has(sessionKey(hit.session))} selecting={selecting} disabled={disabled}
+        onProject={() => search.openProject({ app: hit.session.app, projectDir: hit.session.projectDir })}
+        onClick={() => selecting ? onToggle(hit.session) : onSelect(hit)} />)}
+    </div>
+    {result && <Pagination total={result.total} page={search.page} pageSize={SESSION_PAGE_SIZE}
+      onPageChange={search.setPage} label={t("sessions.search.pagination")} />}
+  </section>;
+}

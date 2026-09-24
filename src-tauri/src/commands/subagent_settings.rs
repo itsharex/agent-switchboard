@@ -14,7 +14,7 @@ pub async fn get_codex_subagent_settings(
             .target(asb_core::AppKind::Codex)
             .map_err(|error| CommandError::new("subagent-settings-path-unavailable", error))?;
         read_codex_subagent_settings(&asb_switch::FsIo, &target)
-            .map_err(|_| CommandError::new("subagent-settings-unreadable", "无法读取用户级 Codex 配置"))
+            .map_err(|_| CommandError::keyed("subagent-settings-unreadable", "errors.cfg.subagentSettingsUnreadable", "无法读取用户级 Codex 配置"))
     })
     .await
 }

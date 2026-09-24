@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { UpdateIcon } from "./icons";
 import { Button } from "./Button";
 import { Tooltip } from "./Tooltip";
@@ -12,7 +13,8 @@ export function UpdateButton({
   latestVersion: string;
   onOpen: () => void;
 }) {
-  const label = `发现新版本 ${latestVersion}`;
+  const { t } = useI18n();
+  const label = t("update.available", { version: latestVersion });
   return (
     <Tooltip label={label} side="bottom">
       <span className="asb-tooltip-anchor">
@@ -23,7 +25,7 @@ export function UpdateButton({
           onClick={onOpen}
         >
           <UpdateIcon />
-          <span className="asb-updatebtn-label">更新</span>
+          <span className="asb-updatebtn-label">{t("update.button")}</span>
           <span className="asb-updatebtn-dot" aria-hidden="true" />
         </Button>
       </span>

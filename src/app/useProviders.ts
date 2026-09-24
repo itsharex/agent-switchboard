@@ -8,7 +8,7 @@ import {
   prepareCodexProfileSave,
   prepareProfileSave,
   reorderClaudeProfiles,
-  resetProfileStore,
+  repairProfileStore,
   type AppKind,
   type CommandError,
   type CodexProviderDraft,
@@ -19,7 +19,8 @@ import {
   type ProviderRecord,
   type UsageQuery,
 } from "../api/client";
-import { codexDraftFrom, prepareCodexDraft } from "../components/codex-provider-editor/draft";
+import { codexUsageDraftFrom } from "../components/codex-provider-editor/draft";
+import { toast, toastMessage } from "../components/use-toast";
 
 /** What a Codex editor session edits: a stored third-party record or the
  * client's official-login record. The variants never convert into each other;
@@ -171,7 +172,7 @@ function useProviderSaves(
       );
       if (prepared.kind === "saveAndApply") {
         if (!prepared.preview) {
-          throw { code: "profile-preview-missing", message: "无法生成供应商变更预览" };
+          throw { code: "profile-preview-missing", message: "", messageKey: "operations.save.previewMissing" };
         }
         setPendingSave({ kind: "generic", app: "claude", preparationId: prepared.preparationId, preview: prepared.preview });
         return;
@@ -218,7 +219,7 @@ function useProviderSaves(
       );
       if (prepared.kind === "saveAndApply") {
         if (!prepared.preview) {
-          throw { code: "codex-profile-save-stale", message: "Codex 保存预览缺失，请重新保存" };
+          throw { code: "codex-profile-save-stale", message: "", messageKey: "operations.save.codexPreviewMissing" };
         }
         setPendingSave({ kind: "codex", app: "codex", preparationId: prepared.preparationId, preview: prepared.preview });
         return;
@@ -256,7 +257,7 @@ function useProviderSaves(
       );
       if (prepared.kind === "saveAndApply") {
         if (!prepared.preview) {
-          throw { code: "profile-preview-missing", message: "无法生成供应商变更预览" };
+          throw { code: "profile-preview-missing", message: "", messageKey: "operations.save.previewMissing" };
         }
         setPendingSave({ kind: "generic", app: "codex", preparationId: prepared.preparationId, preview: prepared.preview });
         return;
@@ -334,7 +335,7 @@ function useProviderMetadata(deps: ProvidersDeps) {
         if (prepared.kind === "saveAndApply") {
           throw {
             code: "profile-save-invalid",
-            message: "此修改只允许保存供应商资料，不能应用客户端配置",
+            message: "", messageKey: "operations.save.patchNoApply",
           };
         }
         await commitProfileSave(prepared.preparationId, false);
@@ -366,10 +367,7 @@ function useProviderMetadata(deps: ProvidersDeps) {
       setBusy(true);
       clearError();
       try {
-        const draft = prepareCodexDraft({ ...codexDraftFrom(record), usageQuery });
-        if (!draft) {
-          throw { code: "codex-profile-save-invalid", message: "无法生成 Codex 供应商变更" };
-        }
+        const draft = codexUsageDraftFrom(record, usageQuery);
         const prepared = await prepareCodexProfileSave(
           record.profile.id,
           draft,
@@ -378,7 +376,7 @@ function useProviderMetadata(deps: ProvidersDeps) {
         if (prepared.kind === "saveAndApply") {
           throw {
             code: "profile-save-invalid",
-            message: "此修改只允许保存供应商资料，不能应用客户端配置",
+            message: "", messageKey: "operations.save.patchNoApply",
           };
         }
         await commitCodexProfileSave(prepared.preparationId, false);
@@ -414,7 +412,6 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
   const { busy, clearError, codexOfficialRecords, invalidateCandidates, onError, records, refresh,
     targetProfileId, setBusy, setTargetProfileId } = deps;
   const [deletePending, setDeletePending] = useState<PendingProviderRemoval | null>(null);
-  const [resetStorePending, setResetStorePending] = useState(false);
   const runDelete = useCallback(async () => {
     if (busy || !deletePending) return;
     const target = deletePending;
@@ -440,7 +437,7 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
     const record = [...records, ...codexOfficialRecords]
       .find((candidate) => candidate.profile.id === id);
     if (!record) {
-      onError({ code: "profile-not-found", message: "供应商已不存在，请重新读取" });
+      onError({ code: "profile-not-found", message: "", messageKey: "operations.delete.missing" });
       return;
     }
     invalidateCandidates();
@@ -467,25 +464,27 @@ function useProviderRemoval(deps: ProvidersDeps, setEditorSession: SetEditorSess
   }, [busy, clearError, codexOfficialRecords, deletePending, invalidateCandidates, onError, records,
     refresh, targetProfileId, setBusy, setTargetProfileId, setEditorSession]);
 
-  const runResetStore = useCallback(async () => {
-    if (busy || !resetStorePending) return;
-    setResetStorePending(false);
+  const runRepairStore = useCallback(async () => {
+    if (busy) return;
     invalidateCandidates();
     setBusy(true);
-    clearError();
-    setTargetProfileId(null);
-    setEditorSession(null);
     try {
-      await resetProfileStore(true);
+      const report = await repairProfileStore();
+      clearError();
+      setEditorSession(null);
       await refresh();
+      toast({ kind: "success", durationMs: 10000, title: toastMessage("operations.repairStore.done", {
+        count: report.repairedFiles.length,
+      }), description: report.backupPath
+        ? toastMessage("operations.repairStore.backup", { path: report.backupPath })
+        : undefined });
     } catch (caught) {
       onError(caught as CommandError);
     } finally {
       setBusy(false);
     }
-  }, [busy, clearError, invalidateCandidates, onError, refresh,
-    resetStorePending, setBusy, setTargetProfileId, setEditorSession]);
-  return { deletePending, setDeletePending, resetStorePending, setResetStorePending, runDelete, runResetStore };
+  }, [busy, clearError, invalidateCandidates, onError, refresh, setBusy, setEditorSession]);
+  return { deletePending, setDeletePending, runDelete, runRepairStore };
 }
 
 /** Editor identity remains independent of the current list selection and refreshed records. */

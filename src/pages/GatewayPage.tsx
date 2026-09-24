@@ -1,3 +1,4 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../components/Button";
 import { ClientLogo } from "../components/ClientLogo";
@@ -9,6 +10,7 @@ import {
   GatewayPanel,
 } from "../components/GatewayPagePrimitives";
 import { GatewayIcon } from "../components/icons";
+import { useI18n, type MessageKey } from "../i18n";
 import { NATIVE_PROTOCOL, PROTOCOL_LABELS, isProtocolTranslation } from "../lib/protocol";
 import {
   discardGatewayPortChange,
@@ -27,13 +29,13 @@ const TRAFFIC_WINDOW_MS = 3_600_000;
 const APP_ORDER: AppKind[] = ["codex", "claude"];
 const APP_LABELS: Record<AppKind, string> = { codex: "Codex", claude: "Claude Code" };
 
-const STATUS_LABELS: Record<GatewayStatusKind, string> = {
-  standby: "待命",
-  running: "运行中",
-  portConflict: "端口冲突",
-  bindRejected: "绑定被拒绝",
-  needsRepair: "需要修复",
-  recoveryBlocked: "需要恢复",
+const STATUS_KEYS: Record<GatewayStatusKind, MessageKey> = {
+  standby: "gateway.status.standby",
+  running: "gateway.status.running",
+  portConflict: "gateway.status.portConflict",
+  bindRejected: "gateway.status.bindRejected",
+  needsRepair: "gateway.status.needsRepair",
+  recoveryBlocked: "gateway.status.recoveryBlocked",
 };
 
 const FAILURE_STATES: ReadonlySet<GatewayStatusKind> = new Set([
@@ -95,7 +97,7 @@ export function GatewayPage({ active, profiles }: Props) {
 function useGatewayRuntime(active: boolean) {
   const [status, setStatus] = useState<GatewayStatus | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const [retrying, setRetrying] = useState(false);
   const refresh = useCallback(async () => {
     try {
@@ -103,7 +105,7 @@ function useGatewayRuntime(active: boolean) {
       setRefreshedAt(Date.now());
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(cause);
     }
   }, []);
 
@@ -121,7 +123,7 @@ function useGatewayRuntime(active: boolean) {
       setRefreshedAt(Date.now());
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(cause);
     } finally {
       setRetrying(false);
     }
@@ -133,7 +135,7 @@ function useGatewayRuntime(active: boolean) {
       setRefreshedAt(Date.now());
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(cause);
     }
   }, []);
 
@@ -174,6 +176,7 @@ function GatewayMap({ status, failed, refreshedAt, retrying, onRetry, onChangePo
   onDiscardRecovery: () => void;
   profileNames: Map<string, string>;
 }) {
+  const { t } = useI18n();
   const routes = status.routes;
   const rows = Math.max(APP_ORDER.length, routes.length);
   const clientRows = [1, rows];
@@ -182,11 +185,11 @@ function GatewayMap({ status, failed, refreshedAt, retrying, onRetry, onChangePo
     isProtocolTranslation(NATIVE_PROTOCOL[route.app], route.upstreamProtocol)
   ).length;
   return (
-    <section className={`asb-gateway-map${failed ? " is-failure" : ""}`} aria-label="网关拓扑">
+    <section className={`asb-gateway-map${failed ? " is-failure" : ""}`} aria-label={t("gateway.mapAriaLabel")}>
       <header className="asb-gateway-map-heading">
-        <h3 className="asb-section-title">连接拓扑</h3>
+        <h3 className="asb-section-title">{t("gateway.topologyTitle")}</h3>
         <span className="asb-gateway-section-count">
-          {translated} 条协议转换 · {routes.length - translated} 条本机转发
+          {t("gateway.topologySummary", { translated, direct: routes.length - translated })}
         </span>
       </header>
       <div
@@ -208,8 +211,8 @@ function GatewayMap({ status, failed, refreshedAt, retrying, onRetry, onChangePo
         <GatewayProviderNodes routes={routes} profileNames={profileNames} counts={traffic.byRoute} />
         {routes.length === 0 && (
           <div className="asb-gateway-node is-empty" style={{ gridRow: `1 / span ${rows}` }} role="status">
-            <strong>当前没有网关路由</strong>
-            <span>客户端通过直连或官方登录访问供应商。</span>
+            <strong>{t("gateway.emptyRoutesTitle")}</strong>
+            <span>{t("gateway.emptyRoutesCopy")}</span>
           </div>
         )}
       </div>
@@ -219,10 +222,14 @@ function GatewayMap({ status, failed, refreshedAt, retrying, onRetry, onChangePo
           {status.blockedRecovery && (
             <div className="asb-gateway-guidance-item" role="alert">
               <p className="asb-gateway-guidance-title">
-                上次端口修改（{status.blockedRecovery.fromPort} → {status.blockedRecovery.toPort}）需要处理：{status.blockedRecovery.reason}
+                {t("gateway.recoveryBlockedTitle", {
+                  from: status.blockedRecovery.fromPort,
+                  to: status.blockedRecovery.toPort,
+                  reason: status.blockedRecovery.reason,
+                })}
               </p>
               <p className="asb-gateway-guidance-copy">
-                已保留恢复记录与备份，不会覆盖当前配置；经网关的切换与新的端口修改已暂停。
+                {t("gateway.recoveryBlockedCopy")}
               </p>
               <ConfirmGatewayRecoveryDiscard onConfirm={() => void onDiscardRecovery()} />
             </div>
@@ -234,6 +241,7 @@ function GatewayMap({ status, failed, refreshedAt, retrying, onRetry, onChangePo
 }
 
 function GatewayClientNodes({ rows, counts }: { rows: number[]; counts: Map<AppKind, number> }) {
+  const { t } = useI18n();
   return (
     <>
       {APP_ORDER.map((app, index) => (
@@ -241,7 +249,7 @@ function GatewayClientNodes({ rows, counts }: { rows: number[]; counts: Map<AppK
           <div className="asb-gateway-node is-client" style={{ gridRow: rows[index] }}>
             <ClientLogo app={app} className="asb-gateway-node-logo" />
             <div>
-              <span className="asb-gateway-node-caption">客户端</span>
+              <span className="asb-gateway-node-caption">{t("gateway.client")}</span>
               <strong>{APP_LABELS[app]}</strong>
             </div>
           </div>
@@ -260,6 +268,7 @@ function GatewayProviderNodes({ routes, profileNames, counts }: {
   profileNames: Map<string, string>;
   counts: Map<string, number>;
 }) {
+  const { t } = useI18n();
   return (
     <>
       {routes.map((route, index) => {
@@ -274,13 +283,13 @@ function GatewayProviderNodes({ routes, profileNames, counts }: {
               <TrafficBadge count={counts.get(routeKey(route)) ?? 0} />
             </div>
             <div className="asb-gateway-node is-provider" style={{ gridRow: index + 1 }}>
-              <span className="asb-gateway-node-caption">{APP_LABELS[route.app]} 的供应商</span>
-              <strong>{profileNames.get(route.profileId) ?? "已删除的供应商"}</strong>
+              <span className="asb-gateway-node-caption">{t("gateway.providerCaption", { app: APP_LABELS[route.app] })}</span>
+              <strong>{profileNames.get(route.profileId) ?? t("gateway.deletedProvider")}</strong>
               <span className="asb-gateway-route-protocol">
                 {PROTOCOL_LABELS[NATIVE_PROTOCOL[route.app]]} → {PROTOCOL_LABELS[route.upstreamProtocol]}
               </span>
               <span className={`asb-gateway-mode${translated ? " is-translation" : ""}`}>
-                {translated ? "协议转换" : "本机转发"}
+                {translated ? t("gateway.modeTranslation") : t("gateway.modeRelay")}
               </span>
             </div>
           </div>
@@ -301,6 +310,7 @@ function GatewayHub({ status, failed, refreshedAt, retrying, onRetry, onChangePo
   onChangePort: () => void;
   rows: number;
 }) {
+  const { t } = useI18n();
   return (
     <section
       className={`asb-gateway-hub${failed ? " is-failure" : ""}`}
@@ -309,40 +319,41 @@ function GatewayHub({ status, failed, refreshedAt, retrying, onRetry, onChangePo
       <div className="asb-gateway-hub-identity">
         <span className="asb-gateway-hub-symbol" aria-hidden="true"><GatewayIcon size={24} /></span>
         <div className="asb-gateway-hub-copy">
-          <p className="asb-gateway-kicker">本机协议网关</p>
+          <p className="asb-gateway-kicker">{t("gateway.title")}</p>
           <p className="asb-gateway-hub-state">
             <span className={`asb-gateway-lamp${failed ? " is-failure" : status.status === "running" ? " is-running" : ""}`} aria-hidden="true" />
-            {STATUS_LABELS[status.status]}
+            {t(STATUS_KEYS[status.status])}
           </p>
           <GatewayUpdatedAgo at={refreshedAt} />
         </div>
       </div>
       <div className="asb-gateway-hub-address">
-        <p className="asb-gateway-kicker">回环访问地址</p>
+        <p className="asb-gateway-kicker">{t("gateway.loopbackKicker")}</p>
         <div className={`asb-gateway-plate${status.baseUrl ? "" : " is-unavailable"}`}>
-          <span className="asb-gateway-plate-address asb-code">{status.baseUrl ?? "未在监听"}</span>
+          <span className="asb-gateway-plate-address asb-code">{status.baseUrl ?? t("gateway.addressNotListening")}</span>
           {status.baseUrl && <CopyGatewayAddressButton value={status.baseUrl} />}
         </div>
       </div>
       {status.failure && <p className="asb-gateway-hub-message" role="alert">{status.failure.message}</p>}
       <dl className="asb-fact-row">
-        <div><dt>配置端口</dt><dd className="asb-num">{status.configuredPort}</dd></div>
-        <div><dt>实际监听</dt><dd className="asb-num">{status.listeningPort ?? "未监听"}</dd></div>
+        <div><dt>{t("gateway.configuredPort")}</dt><dd className="asb-num">{status.configuredPort}</dd></div>
+        <div><dt>{t("gateway.actualPort")}</dt><dd className="asb-num">{status.listeningPort ?? t("gateway.portNotListening")}</dd></div>
       </dl>
       <div className="asb-gateway-hub-actions">
         {status.failure && (
-          <Button variant="secondary" disabled={retrying} onClick={() => void onRetry()}>重试监听</Button>
+          <Button variant="secondary" disabled={retrying} onClick={() => void onRetry()}>{t("gateway.retryListen")}</Button>
         )}
-        <Button variant="secondary" disabled={status.status === "recoveryBlocked"} onClick={onChangePort}>修改端口</Button>
+        <Button variant="secondary" disabled={status.status === "recoveryBlocked"} onClick={onChangePort}>{t("gateway.changePort")}</Button>
       </div>
     </section>
   );
 }
 
 function TrafficBadge({ count }: { count: number }) {
+  const { t } = useI18n();
   if (count === 0) return null;
   return (
-    <span className="asb-gateway-run-count" aria-label={`近 60 分钟 ${count} 次请求`}>
+    <span className="asb-gateway-run-count" aria-label={t("gateway.trafficBadge", { count })}>
       {count}
     </span>
   );
@@ -350,6 +361,7 @@ function TrafficBadge({ count }: { count: number }) {
 
 /** 「N 秒前更新」的独立计时器：每秒重渲染只发生在这个组件内。 */
 function GatewayUpdatedAgo({ at }: { at: number | null }) {
+  const { t } = useI18n();
   const [, setTick] = useState(0);
   useEffect(() => {
     if (at === null) return;
@@ -359,38 +371,40 @@ function GatewayUpdatedAgo({ at }: { at: number | null }) {
   if (at === null) return null;
   const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
   const text = seconds < 5
-    ? "刚刚更新"
+    ? t("gateway.updatedJustNow")
     : seconds < 60
-      ? `${seconds} 秒前更新`
-      : `${Math.floor(seconds / 60)} 分钟前更新`;
+      ? t("gateway.updatedSecondsAgo", { seconds })
+      : t("gateway.updatedMinutesAgo", { minutes: Math.floor(seconds / 60) });
   return <p className="asb-gateway-hub-updated">{text}</p>;
 }
 
 /** 修复指引是主图的内嵌子条：附着在图下方，不另起平级告警卡。 */
 function GatewayRepairGuidance({ status }: { status: GatewayStatus }) {
+  const { t } = useI18n();
   return (
     <div className="asb-gateway-guidance-item" role="alert">
       <p className="asb-gateway-guidance-title">
-        {status.repairReason ?? "本机协议网关需要修复。客户端仍指向本网关时，状态损坏会保留诊断副本，身份不匹配会拒绝恢复旧路由。"}
+        {status.repairReason ?? t("gateway.repairFallbackTitle")}
       </p>
       <p className="asb-gateway-guidance-copy">
-        {status.listeningPort === null && "先点击重试恢复监听；状态无法读取时会先保存诊断副本，再重建网关状态。"}
-        请在供应商页重新应用指向本网关的供应商：预览会先展示新的服务地址与本机能力令牌；不再使用网关的客户端可切换到直连或官方登录。
+        {status.listeningPort === null && t("gateway.repairRetryCopy")}
+        {t("gateway.repairReapplyCopy")}
       </p>
     </div>
   );
 }
 
 function GatewayUnavailable({ error, onRetry }: { error: string; onRetry: () => void }) {
+  const { t } = useI18n();
   return (
     <GatewayPanel>
       <div className="asb-gateway-unavailable" role="alert">
         <GatewayIcon />
         <div>
-          <p className="asb-gateway-unavailable-title">无法读取网关状态</p>
+          <p className="asb-gateway-unavailable-title">{t("gateway.unavailableTitle")}</p>
           <p className="asb-gateway-error">{error}</p>
         </div>
-        <Button variant="secondary" onClick={() => void onRetry()}>重试</Button>
+        <Button variant="secondary" onClick={() => void onRetry()}>{t("gateway.retry")}</Button>
       </div>
     </GatewayPanel>
   );
@@ -398,9 +412,10 @@ function GatewayUnavailable({ error, onRetry }: { error: string; onRetry: () => 
 
 /* Loading reserves the new page's footprint (map, strip, recent requests). */
 function GatewayLoading() {
+  const { t } = useI18n();
   return (
     <GatewayPanel>
-      <div className="asb-gateway-loading" role="status" aria-label="正在读取">
+      <div className="asb-gateway-loading" role="status" aria-label={t("gateway.loadingAriaLabel")}>
         <span className="asb-skeleton" aria-hidden="true" />
         <span className="asb-skeleton" aria-hidden="true" />
         <span className="asb-skeleton" aria-hidden="true" />

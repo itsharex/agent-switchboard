@@ -8,12 +8,14 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../i18n";
 import { Input } from "./Input";
 import { Button } from "./Button";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 
-/** Group label for models the endpoint did not attribute to a vendor. */
-const OTHER_GROUP = "其他";
+/** Group label key for models the endpoint did not attribute to a vendor;
+ * translated at render so the language switch relabels the fallback group. */
+const OTHER_GROUP_KEY = "providers.models.otherGroup";
 
 /** Menu offsets in px: the trigger gap mirrors --asb-space-unit, the viewport
  * margin keeps the fixed menu inside the window on every side. */
@@ -33,10 +35,10 @@ interface Group {
 
 /** Vendor-grouped models sorted for browsing; `needle` matches either the
  * model id or its vendor, case-insensitively. */
-function groupModels(models: ModelPickerOption[], needle: string): Group[] {
+function groupModels(models: ModelPickerOption[], needle: string, otherGroup: string): Group[] {
   const groups = new Map<string, ModelPickerOption[]>();
   for (const model of models) {
-    const vendor = model.group ?? OTHER_GROUP;
+    const vendor = model.group ?? otherGroup;
     if (!groups.has(vendor)) groups.set(vendor, []);
     groups.get(vendor)!.push(model);
   }
@@ -54,7 +56,7 @@ function groupModels(models: ModelPickerOption[], needle: string): Group[] {
     .filter((group) => group.models.length > 0)
     // The unattributed fallback group stays last regardless of locale.
     .sort((a, b) =>
-      a.vendor === OTHER_GROUP ? 1 : b.vendor === OTHER_GROUP ? -1 : a.vendor.localeCompare(b.vendor),
+      a.vendor === otherGroup ? 1 : b.vendor === otherGroup ? -1 : a.vendor.localeCompare(b.vendor),
     );
 }
 
@@ -196,6 +198,7 @@ function ModelMenu({
   onSelect,
   onClose,
 }: ModelMenuProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const options = useRef<HTMLDivElement>(null);
 
@@ -231,7 +234,7 @@ function ModelMenu({
   };
 
   const needle = query.trim().toLocaleLowerCase();
-  const groups = useMemo(() => groupModels(models, needle), [models, needle]);
+  const groups = useMemo(() => groupModels(models, needle, t(OTHER_GROUP_KEY)), [models, needle, t]);
 
   return (
     <div
@@ -244,8 +247,8 @@ function ModelMenu({
         <SearchIcon />
         <Input
           type="search"
-          aria-label={`搜索${ariaLabel}`}
-          placeholder="搜索模型"
+          aria-label={t("providers.models.searchAria", { label: ariaLabel })}
+          placeholder={t("providers.models.searchPlaceholder")}
           value={query}
           autoFocus
           onChange={(event) => setQuery(event.target.value)}
@@ -260,7 +263,7 @@ function ModelMenu({
         {groups.length > 0 ? (
           <ModelOptionGroups groups={groups} current={current} onSelect={onSelect} />
         ) : (
-          <p className="asb-model-empty">没有找到相关模型</p>
+          <p className="asb-model-empty">{t("providers.models.empty")}</p>
         )}
       </div>
     </div>

@@ -10,7 +10,8 @@ import {
   type PortableImportReport,
   type SkillCandidateDto,
 } from "../../api/client";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
+import { tr } from "../../i18n/current";
 import type { ExclusiveRunner, WorkspaceRefresher } from "./extension-ops";
 
 interface ImportDeps {
@@ -37,7 +38,7 @@ export function useExtensionImport({ refresh, runExclusive }: ImportDeps) {
       runExclusive(async (): Promise<ExtensionMutation> => {
         const definition = await importSkillCandidate(digest, name, hostScoped);
         await refresh();
-        toast({ kind: "success", title: "已导入 Skill 到扩展库", description: definition.name });
+        toast({ kind: "success", title: toastMessage("extensions.importOp.importedSkill"), description: definition.name });
         return definition;
       }),
     [refresh, runExclusive],
@@ -47,7 +48,7 @@ export function useExtensionImport({ refresh, runExclusive }: ImportDeps) {
     (definitionId: string, targetPath: string) =>
       runExclusive(async (): Promise<boolean> => {
         await exportExtensionPortable(definitionId, targetPath);
-        toast({ kind: "success", title: "已导出便携包", description: targetPath });
+        toast({ kind: "success", title: toastMessage("extensions.importOp.exported"), description: targetPath });
         return true;
       }),
     [runExclusive],
@@ -61,11 +62,11 @@ export function useExtensionImport({ refresh, runExclusive }: ImportDeps) {
         const missing = report.missingEnvSlots;
         toast({
           kind: missing.length > 0 ? "warning" : "success",
-          title: "已导入便携包",
+          title: toastMessage("extensions.importOp.imported"),
           description:
             missing.length > 0
-              ? `请在编辑器中补配置这些凭据槽：${missing.join("、")}`
-              : report.warnings[0] ?? "定义已加入扩展库",
+              ? toastMessage("extensions.importOp.missingEnv", { slots: missing.join(tr("extensions.join.comma")) })
+              : report.warnings[0] ?? toastMessage("extensions.importOp.added"),
         });
         return report;
       }),

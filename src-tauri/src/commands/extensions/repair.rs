@@ -30,15 +30,17 @@ pub async fn prepare_extension_repair(
         let scan = match latest {
             Some(scan) if scan.scan_id == request.scan_id => scan,
             _ => {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-stale-scan",
+                    "errors.extops.staleScanForRepair",
                     "扫描结果已过期或不存在；请重新扫描后再修复",
                 ))
             }
         };
         if request.diagnostic_ids.is_empty() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.noDiagnosticsSelected",
                 "没有选择任何要修复的警告",
             ));
         }
@@ -47,7 +49,11 @@ pub async fn prepare_extension_repair(
         let mut binding_ids: Vec<String> = Vec::new();
         for diagnostic_id in &request.diagnostic_ids {
             let diagnostic = scan.diagnostics.get(diagnostic_id).ok_or_else(|| {
-                CommandError::new("extension-stale-scan", "警告不属于当前扫描结果；请重新扫描")
+                CommandError::keyed(
+                    "extension-stale-scan",
+                    "errors.extops.diagnosticNotInScan",
+                    "警告不属于当前扫描结果；请重新扫描",
+                )
             })?;
             match (&diagnostic.remediation, &diagnostic.binding_id) {
                 (
@@ -59,8 +65,9 @@ pub async fn prepare_extension_repair(
                     }
                 }
                 _ => {
-                    return Err(CommandError::new(
+                    return Err(CommandError::keyed(
                         "extension-invalid",
+                        "errors.extops.diagnosticNotAutoRepairable",
                         "所选警告不能自动修复；请在展开的列表中查看其处理方式",
                     ))
                 }

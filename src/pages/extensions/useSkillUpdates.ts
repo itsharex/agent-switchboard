@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { createElement, useState } from "react";
 import type { ExtensionListItem, SkillUpdateReport } from "../../api/client";
 import type { useExtensions } from "../../app/useExtensions";
-import { toast } from "../../components/use-toast";
+import { CommandErrorLines } from "../../app/notifications";
+import { ToastMessageList } from "../../components/Toaster";
+import { toast, toastMessage } from "../../components/use-toast";
 import type { ExtensionApplies } from "./useExtensionApplies";
 
 type Extensions = ReturnType<typeof useExtensions>;
@@ -35,10 +37,11 @@ async function updateSkills(
     : { advanced: [], failed: [], workspace: ext.workspace };
   if (!result) return false;
   if (result.failed.length > 0) toast({
-    kind: "warning", title: "部分 Skill 更新失败",
-    description: result.failed.map((failure) =>
-      (items.find((item) => item.id === failure.definitionId)?.name ?? failure.definitionId) +
-      "：" + failure.message).join("；"),
+    kind: "warning", title: toastMessage("extensions.updates.partialFailure"),
+    description: createElement(ToastMessageList, { items: result.failed.map((failure) =>
+      createElement("div", null,
+        items.find((item) => item.id === failure.definitionId)?.name ?? failure.definitionId,
+        createElement(CommandErrorLines, { error: failure.error }))) }),
   });
   if (result.workspace === null) return false;
   const currentItems = result.workspace.items;
@@ -54,7 +57,7 @@ async function updateSkills(
       complete(ready.filter((id) => !operations.some((operation) => operation.definitionId === id)));
       return false;
     }
-  } else if (ready.length > 0) toast({ kind: "success", title: "Skill 已更新到扩展库" });
+  } else if (ready.length > 0) toast({ kind: "success", title: toastMessage("extensions.updates.updatedToLibrary") });
   complete(ready);
   return ready.length > 0 && result.failed.length === 0;
 }
@@ -71,13 +74,15 @@ export function useSkillUpdates(ext: Extensions, applies: ExtensionApplies) {
     setReports((previous) => [...result, ...previous.filter((report) => !ids.includes(report.definitionId))]);
     const failures = result.filter((report) => report.error !== null);
     if (failures.length > 0) toast({
-      kind: "warning", title: failures.length + " 个 Skill 检查更新失败",
-      description: failures.map((report) =>
-        (items.find((item) => item.id === report.definitionId)?.name ?? report.definitionId) +
-        "：" + report.error).join("；"),
+      kind: "warning", title: toastMessage("extensions.updates.checkFailedCount", { count: failures.length }),
+      description: createElement(ToastMessageList, { items: failures.map((report) =>
+        toastMessage("extensions.updates.failureEntry", {
+          name: items.find((item) => item.id === report.definitionId)?.name ?? report.definitionId,
+          message: report.error ?? "",
+        })) }),
     });
     else if (result.length > 0 && result.every((report) => report.upToDate)) {
-      toast({ kind: "success", title: "所检查的 Skill 来源内容均为最新" });
+      toast({ kind: "success", title: toastMessage("extensions.updates.allUpToDate") });
     }
   };
   const update = (selected: SkillUpdateReport[]) => updateSkills(ext, applies, updatable, selected,

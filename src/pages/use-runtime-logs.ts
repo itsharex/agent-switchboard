@@ -7,36 +7,36 @@ import {
   type RuntimeLogLevel,
   type RuntimeLogSeverity,
 } from "../api/client";
+import type { MessageKey } from "../i18n";
+import { tr } from "../i18n/current";
 
 export type RuntimeLogFilter = "all" | RuntimeLogSeverity;
 
-export const LEVEL_FILTERS: ReadonlyArray<{ value: RuntimeLogFilter; label: string }> = [
-  { value: "all", label: "全部" },
-  { value: "debug", label: "调试" },
-  { value: "info", label: "信息" },
-  { value: "warn", label: "警告" },
-  { value: "error", label: "错误" },
+export const LEVEL_FILTERS: ReadonlyArray<{ value: RuntimeLogFilter; labelKey: MessageKey }> = [
+  { value: "all", labelKey: "backup.level.all" },
+  { value: "debug", labelKey: "backup.level.debug" },
+  { value: "info", labelKey: "backup.level.info" },
+  { value: "warn", labelKey: "backup.level.warn" },
+  { value: "error", labelKey: "backup.level.error" },
 ];
 
-export const LOG_LEVEL_OPTIONS: ReadonlyArray<{ value: RuntimeLogLevel; label: string }> = [
-  { value: "debug", label: "调试" },
-  { value: "info", label: "信息" },
-  { value: "warn", label: "警告" },
-  { value: "error", label: "错误" },
-  { value: "silent", label: "静默" },
+export const LOG_LEVEL_OPTIONS: ReadonlyArray<{ value: RuntimeLogLevel; labelKey: MessageKey }> = [
+  { value: "debug", labelKey: "backup.level.debug" },
+  { value: "info", labelKey: "backup.level.info" },
+  { value: "warn", labelKey: "backup.level.warn" },
+  { value: "error", labelKey: "backup.level.error" },
+  { value: "silent", labelKey: "backup.level.silent" },
 ];
+
+const SEVERITY_LABEL: Record<RuntimeLogSeverity, MessageKey> = {
+  debug: "backup.level.debug",
+  info: "backup.level.info",
+  warn: "backup.level.warn",
+  error: "backup.level.error",
+};
 
 export function levelLabel(level: RuntimeLogSeverity): string {
-  switch (level) {
-    case "debug":
-      return "调试";
-    case "info":
-      return "信息";
-    case "warn":
-      return "警告";
-    case "error":
-      return "错误";
-  }
+  return tr(SEVERITY_LABEL[level]);
 }
 
 /** The log table's page size, matching the codebase's page-size convention. */

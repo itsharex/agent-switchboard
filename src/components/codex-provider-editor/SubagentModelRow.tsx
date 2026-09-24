@@ -1,6 +1,10 @@
+import { uiMessage } from "../../i18n/errors";
+import { useMessageState } from "../../i18n/use-message-state";
 import { useEffect, useState } from "react";
 import type { CodexProviderRecord, CodexSubagentRoute } from "../../api/client";
 import { listCodexProfiles } from "../../api/providers";
+import type { TFunction } from "../../i18n";
+import { useI18n } from "../../i18n";
 import { Checkbox } from "../Checkbox";
 import { ModelPicker } from "../ModelPicker";
 import { RadioOption } from "../RadioOption";
@@ -14,24 +18,26 @@ interface Props {
   busy: boolean;
 }
 
-function routeLabel(route: CodexSubagentRoute | null | undefined, records: CodexProviderRecord[]) {
-  if (!route) return "自动";
+function routeLabel(route: CodexSubagentRoute | null | undefined, records: CodexProviderRecord[], t: TFunction) {
+  if (!route) return t("codex.subagent.auto");
   const owner = records.find(({ profile }) => profile.id === route.profileId);
-  return owner ? `${owner.profile.name} · ${route.model}` : `${route.profileId}/${route.model}`;
+  return owner ? t("codex.subagent.routeOwner", { name: owner.profile.name, model: route.model })
+    : `${route.profileId}/${route.model}`;
 }
 
 function useSubagentModel({ baselineRoute, selfId, editor }: Props) {
+  const { t } = useI18n();
   const { draft, setDraft } = editor;
   const route = draft.subagentRoute;
   const [records, setRecords] = useState<CodexProviderRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   useEffect(() => {
     let cancelled = false;
     listCodexProfiles().then((all) => {
       if (!cancelled) { setRecords(all); setLoaded(true); }
     }).catch(() => {
-      if (!cancelled) setError("无法读取供应商档案列表，跨供应商选择暂不可用");
+      if (!cancelled) setError(uiMessage("codex.subagent.listError"));
     });
     return () => { cancelled = true; };
   }, []);
@@ -63,60 +69,62 @@ function useSubagentModel({ baselineRoute, selfId, editor }: Props) {
     else if (others[0]) setRoute(others[0].route);
   };
   const target = cross ? records.find(({ profile }) => profile.id === route?.profileId) : null;
-  const warning = error ?? (cross && loaded && !target ? "引用的供应商档案不存在；请重新选择"
-    : target?.profile.connection?.authBinding ? "目标档案绑定了账号凭据；请重新选择"
+  const warning = error ?? (cross && loaded && !target ? t("codex.subagent.missingTarget")
+    : target?.profile.connection?.authBinding ? t("codex.subagent.authBoundTarget")
     : target && !target.profile.catalog.some(({ id }) => id === route?.model)
-      ? "模型不在目标档案目录中；请重新选择" : null);
+      ? t("codex.subagent.modelNotInCatalog") : null);
   return { route, cross, models, pick, setCross, setRoute, specify, warning,
     current: route ? (cross ? subagentModelKey(route) : route.model) : null,
     changed: route?.profileId !== baselineRoute?.profileId || route?.model !== baselineRoute?.model,
-    baselineLabel: routeLabel(baselineRoute, records), pendingLabel: routeLabel(route, records) };
+    baselineLabel: routeLabel(baselineRoute, records, t), pendingLabel: routeLabel(route, records, t) };
 }
 
 function RouteSelection({ model, busy, selfId }: {
   model: ReturnType<typeof useSubagentModel>; busy: boolean; selfId?: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="asb-model-control asb-provider-subagent-model-control">
       <div className="asb-client-settings-reset-advanced">
-        <Checkbox checked={model.cross} disabled={busy || !selfId} label="跨供应商选择（高级）"
+        <Checkbox checked={model.cross} disabled={busy || !selfId} label={t("codex.subagent.crossProvider")}
           onChange={model.setCross} />
         <p className="asb-field-help">
-          关闭时只列出本档案目录的模型；开启后从其他已保存且未绑定账号的档案中选择。子代理请求由本机网关转发到目标档案，失败不会回退到主模型；配置路由后本档案将强制经网关路由。
+          {t("codex.subagent.crossHelp")}
         </p>
       </div>
       {model.models.length > 0 ? (
-        <ModelPicker models={model.models} current={model.current} ariaLabel="选择子 agent 模型"
+        <ModelPicker models={model.models} current={model.current} ariaLabel={t("codex.subagent.pickerAria")}
           disabled={busy} onSelect={model.pick} />
-      ) : <span className="asb-field-help">{model.cross ? "没有其他档案的模型目录可选"
-        : "本档案目录为空；请先在「模型」分区添加模型"}</span>}
+      ) : <span className="asb-field-help">{model.cross ? t("codex.subagent.noOtherModels")
+        : t("codex.subagent.emptyCatalog")}</span>}
       {model.warning && <span className="asb-warn-text">{model.warning}</span>}
     </div>
   );
 }
 
 export function SubagentModelRow(props: Props) {
+  const { t } = useI18n();
   const model = useSubagentModel(props);
   return (
     <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
-          <span className="asb-checkbox-label">默认子 agent 模型</span>
-          <span className="asb-app-setting-detail">以跨档案路由引用保存，经本机网关转发到目标档案；自动时使用供应商默认模型，任务或角色显式模型仍可覆盖。</span>
+          <span className="asb-checkbox-label">{t("codex.subagent.defaultModel")}</span>
+          <span className="asb-app-setting-detail">{t("codex.subagent.defaultDetail")}</span>
         </div>
-        <span className="asb-setting-actual" aria-live="polite">当前设置：{model.baselineLabel}</span>
+        <span className="asb-setting-actual" aria-live="polite">{t("codex.subagent.currentSetting", { value: model.baselineLabel })}</span>
       </div>
       <div className="asb-choice-controls">
-        <div className="asb-segments" role="radiogroup" aria-label="默认子 agent 模型配置方式">
+        <div className="asb-segments" role="radiogroup" aria-label={t("codex.subagent.modeAria")}>
           <RadioOption name="subagent-route-mode" checked={model.route === null} disabled={props.busy}
-            label="自动" onChange={() => model.setRoute(null)} />
+            label={t("codex.subagent.auto")} onChange={() => model.setRoute(null)} />
           <RadioOption name="subagent-route-mode" checked={model.route !== null} disabled={props.busy}
-            label="指定路由" onChange={model.specify} />
+            label={t("codex.subagent.specify")} onChange={model.specify} />
         </div>
         {model.route !== null && <RouteSelection model={model} busy={props.busy} selfId={props.selfId} />}
       </div>
       {model.changed && <p className="asb-setting-pending" role="status">
-        {model.route === null ? "待保存：移除此项，恢复默认模型" : `待保存：写入「${model.pendingLabel}」`}
+        {model.route === null ? t("codex.subagent.pendingRemove") : t("codex.subagent.pendingWrite", { value: model.pendingLabel })}
       </p>}
     </div>
   );

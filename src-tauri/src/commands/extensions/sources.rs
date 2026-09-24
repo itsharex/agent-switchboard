@@ -140,7 +140,7 @@ pub(super) fn import_cached_skill_candidate(
         .expect("candidates")
         .get(digest)
         .cloned()
-        .ok_or_else(|| CommandError::new("candidate-expired", "候选内容已过期；请重新扫描来源"))?;
+        .ok_or_else(|| CommandError::keyed("candidate-expired", "errors.extlib.candidateExpiredRescan", "候选内容已过期；请重新扫描来源"))?;
     import_candidate_content(store, &candidate, name, host_scoped)
 }
 
@@ -211,12 +211,17 @@ fn candidate_manifest(candidate: &SkillCandidate) -> Result<SkillManifest, Comma
         .find(|entry| entry.relative_path == "SKILL.md")
         .and_then(|entry| std::str::from_utf8(&entry.bytes).ok())
         .ok_or_else(|| {
-            CommandError::new("source-rejected", "候选内容缺少 UTF-8 格式的 SKILL.md")
+            CommandError::keyed(
+                "source-rejected",
+                "errors.extlib.candidateMissingSkillMd",
+                "候选内容缺少 UTF-8 格式的 SKILL.md",
+            )
         })?;
     match asb_core::extensions::skill::extract_manifest(text) {
         asb_core::extensions::skill::ManifestExtraction::Parsed(manifest) => Ok(manifest),
-        _ => Err(CommandError::new(
+        _ => Err(CommandError::keyed(
             "source-rejected",
+            "errors.extlib.candidateSkillMdNoFrontmatter",
             "候选内容缺少可解析的 SKILL.md frontmatter",
         )),
     }
@@ -256,31 +261,38 @@ pub async fn import_discovered_skill(
             .get(&observation_id)
             .cloned()
             .ok_or_else(|| {
-                CommandError::new("observation-expired", "发现结果已过期；请重新扫描本机扩展")
+                CommandError::keyed(
+                    "observation-expired",
+                    "errors.extlib.observationExpired",
+                    "发现结果已过期；请重新扫描本机扩展",
+                )
             })?
             .observed;
         if observed.kind != ExtensionKind::Skill {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.observationNotSkillImport",
                 "该发现结果不是 Skill，不能按 Skill 导入",
             ));
         }
         let digest = observed.content_digest.clone().ok_or_else(|| {
-            CommandError::new(
+            CommandError::keyed(
                 "source-rejected",
+                "errors.extlib.skillNoDigestImport",
                 "该 Skill 没有可验证的内容摘要，不能安全导入",
             )
         })?;
         let root = std::path::Path::new(&observed.path)
             .parent()
-            .ok_or_else(|| CommandError::new("source-rejected", "发现到的 Skill 路径无效"))?;
+            .ok_or_else(|| CommandError::keyed("source-rejected", "errors.extlib.discoveredSkillPathInvalid", "发现到的 Skill 路径无效"))?;
         let scanned = sources::scan_local_source(root, None).map_err(source_error)?;
         let candidate = scanned
             .iter()
             .find(|candidate| candidate.content_digest == digest)
             .ok_or_else(|| {
-                CommandError::new(
+                CommandError::keyed(
                     "observation-stale",
+                    "errors.extlib.skillChangedSinceScan",
                     "该 Skill 内容已在扫描后变化；请重新扫描并确认",
                 )
             })?
@@ -308,18 +320,24 @@ pub async fn import_discovered_mcp(
             .get(&observation_id)
             .cloned()
             .ok_or_else(|| {
-                CommandError::new("observation-expired", "发现结果已过期；请重新扫描本机扩展")
+                CommandError::keyed(
+                    "observation-expired",
+                    "errors.extlib.observationExpired",
+                    "发现结果已过期；请重新扫描本机扩展",
+                )
             })?;
         let observed = cached.observed;
         if observed.kind != ExtensionKind::Mcp {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.observationNotMcpImport",
                 "该发现结果不是 MCP 服务，不能按 MCP 导入",
             ));
         }
         if !observed.managed_binding_ids.is_empty() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-already-managed",
+                "errors.extlib.mcpAlreadyManagedImport",
                 "该 MCP 服务已由扩展库管理，无需再次导入",
             ));
         }
@@ -378,20 +396,22 @@ fn read_unchanged_mcp_document(
     expected_digest: Option<&str>,
 ) -> Result<String, CommandError> {
     let document = fs::read(path).map_err(|_| {
-        CommandError::new(
+        CommandError::keyed(
             "observation-stale",
+            "errors.extlib.mcpDocumentUnreadable",
             "发现到的 MCP 配置已无法读取；请重新扫描并确认",
         )
     })?;
     let digest = sha_hex(&document);
     if expected_digest != Some(digest.as_str()) {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "observation-stale",
+            "errors.extlib.mcpChangedSinceScan",
             "该 MCP 配置已在扫描后变化；请重新扫描并确认",
         ));
     }
     String::from_utf8(document)
-        .map_err(|_| CommandError::new("source-rejected", "MCP 配置不是有效文本，不能安全导入"))
+        .map_err(|_| CommandError::keyed("source-rejected", "errors.extlib.mcpNotTextImport", "MCP 配置不是有效文本，不能安全导入"))
 }
 
 #[cfg(test)]

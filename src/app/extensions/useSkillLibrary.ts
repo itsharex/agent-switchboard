@@ -16,7 +16,7 @@ import {
   type SkillUpdateReport,
   type SkillVersion,
 } from "../../api/client";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
 import type {
   ExclusiveRunner,
   ExtensionReader,
@@ -47,7 +47,7 @@ function useSkillSourceUpdates({ refresh, runExclusive }: SkillLibraryDeps) {
     (entries: Array<{ definitionId: string; newDigest: string }>) =>
       runExclusive(async (): Promise<SkillBatchAdvance> => {
         const advanced: string[] = [];
-        const failed: Array<{ definitionId: string; message: string }> = [];
+        const failed: Array<{ definitionId: string; error: unknown }> = [];
         for (const entry of entries) {
           try {
             await updateSkillDefinition(entry.definitionId, entry.newDigest);
@@ -55,15 +55,15 @@ function useSkillSourceUpdates({ refresh, runExclusive }: SkillLibraryDeps) {
           } catch (caught) {
             failed.push({
               definitionId: entry.definitionId,
-              message: (caught as { message?: string }).message ?? "内容更新失败",
+              error: caught,
             });
           }
         }
         const workspace = await refresh();
         if (workspace === null) toast({
           kind: "warning",
-          title: "更新结果尚未验证",
-          description: "扩展状态刷新失败；请刷新后确认内容版本和客户端部署。",
+          title: toastMessage("extensions.skillOp.batchUnverified"),
+          description: toastMessage("extensions.skillOp.batchUnverifiedBody"),
         });
         return { advanced, failed, workspace };
       }),
@@ -87,8 +87,8 @@ function useLocalSkills({ refresh, runExclusive }: SkillLibraryDeps) {
       runExclusive(async (): Promise<ExtensionMutation> => {
         const definition = await createLocalSkill(draft);
         await refreshLibraryWrite(refresh, {
-          title: "已创建本地 Skill",
-          description: "模板内容已作为首个不可变版本入库，可继续编辑。",
+          title: toastMessage("extensions.skillOp.created"),
+          description: toastMessage("extensions.skillOp.createdBody"),
         });
         return definition;
       }),
@@ -100,8 +100,8 @@ function useLocalSkills({ refresh, runExclusive }: SkillLibraryDeps) {
       runExclusive(async (): Promise<ExtensionMutation> => {
         const definition = await forkLocalSkill(definitionId);
         await refreshLibraryWrite(refresh, {
-          title: "已创建本地副本",
-          description: "副本不再跟随来源更新，可在编辑器中修改。",
+          title: toastMessage("extensions.skillOp.forked"),
+          description: toastMessage("extensions.skillOp.forkedBody"),
         });
         return definition;
       }),
@@ -140,8 +140,8 @@ function useSkillContent({ refresh, runExclusive, runRead }: SkillLibraryDeps) {
       runExclusive(async (): Promise<ExtensionMutation> => {
         const definition = await updateSkillDependencies(definitionId, update);
         await refreshLibraryWrite(refresh, {
-          title: "已更新依赖关联",
-          description: "下次部署时会一并部署依赖的 MCP。",
+          title: toastMessage("extensions.skillOp.depsSaved"),
+          description: toastMessage("extensions.skillOp.depsSavedBody"),
         });
         return definition;
       }),

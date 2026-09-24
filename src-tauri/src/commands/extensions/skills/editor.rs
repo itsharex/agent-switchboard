@@ -55,9 +55,9 @@ pub async fn get_skill_editor(
         let definition = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         let ExtensionPayload::Skill(skill) = &definition.payload else {
-            return Err(CommandError::new("extension-invalid", "该扩展不是 Skill"));
+            return Err(CommandError::keyed("extension-invalid", "errors.extlib.notASkill", "该扩展不是 Skill"));
         };
         let entries = store
             .load_skill_version(&definition.id, &skill.content_digest)
@@ -130,25 +130,28 @@ pub async fn update_skill_files(
         let mut definition = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         if definition.revision != update.expected_revision {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-conflict",
+                "errors.extlib.skillConflictRefreshEditor",
                 "该 Skill 已被其他窗口修改；请刷新编辑器后重试",
             ));
         }
         let ExtensionPayload::Skill(skill) = &definition.payload else {
-            return Err(CommandError::new("extension-invalid", "该扩展不是 Skill"));
+            return Err(CommandError::keyed("extension-invalid", "errors.extlib.notASkill", "该扩展不是 Skill"));
         };
         if skill.source.is_some() || skill.host_scoped.is_some() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.scopedSkillNotEditable",
                 "带来源或宿主限定的 Skill 不能直接编辑；请先创建本地副本",
             ));
         }
         if skill.content_digest != update.expected_digest {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-conflict",
+                "errors.extlib.contentVersionChangedReload",
                 "内容版本已变化；请重新加载编辑器",
             ));
         }
@@ -159,7 +162,7 @@ pub async fn update_skill_files(
         let mut edited: BTreeMap<String, ContentEntry> = BTreeMap::new();
         for file in update.files {
             if file.relative_path.trim().is_empty() {
-                return Err(CommandError::new("extension-invalid", "文件路径不能为空"));
+                return Err(CommandError::keyed("extension-invalid", "errors.extlib.filePathEmpty", "文件路径不能为空"));
             }
             if edited
                 .insert(
@@ -173,8 +176,9 @@ pub async fn update_skill_files(
                 )
                 .is_some()
             {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-invalid",
+                    "errors.extlib.duplicateFilePath",
                     "保存请求包含重复的文件路径",
                 ));
             }
@@ -228,16 +232,18 @@ pub async fn update_skill_files(
             .find(|entry| entry.relative_path == "SKILL.md")
             .map(|entry| String::from_utf8_lossy(&entry.bytes).to_string());
         let Some(skill_md) = skill_md else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.savedContentMissingSkillMd",
                 "保存后的内容缺少 SKILL.md",
             ));
         };
         let manifest = match asb_core::extensions::skill::extract_manifest(&skill_md) {
             asb_core::extensions::skill::ManifestExtraction::Parsed(manifest) => manifest,
             _ => {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-invalid",
+                    "errors.extlib.skillMdFrontmatterUnparsable",
                     "SKILL.md 的 frontmatter 无法解析；需要 name 字段和闭合的 --- 块",
                 ))
             }
@@ -253,9 +259,11 @@ pub async fn update_skill_files(
             .map(|entry| (entry.relative_path.clone(), entry.kind, entry.size()))
             .collect();
         asb_core::extensions::validate::validate_content_paths(&paths).map_err(|errors| {
-            CommandError::new(
+            CommandError::localized(
                 "extension-invalid",
+                "errors.extlib.skillContentInvalid",
                 format!("Skill 内容无效：{}", errors.join("；")),
+                serde_json::json!({ "detail": errors.join("；") }),
             )
         })?;
         let digest = asb_core::extensions::skill::content_digest(&entries);
@@ -294,39 +302,46 @@ pub async fn update_skill_dependencies(
         let mut definition = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         if definition.revision != update.expected_revision {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-conflict",
+                "errors.extlib.skillConflictRefreshRetry",
                 "该 Skill 已被其他窗口修改；请刷新后重试",
             ));
         }
         for dependency in &update.dependencies {
             let Some(resource_id) = &dependency.resource_id else {
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "extension-invalid",
+                    "errors.extlib.dependencyMissingResourceId",
                     format!("依赖 {} 缺少资源标识", dependency.name),
+                    serde_json::json!({ "name": dependency.name }),
                 ));
             };
             let linked = store
                 .get_definition(resource_id)
                 .map_err(store_error)?
                 .ok_or_else(|| {
-                    CommandError::new(
+                    CommandError::localized(
                         "extension-invalid",
+                        "errors.extlib.dependencyNotFound",
                         format!("依赖 {} 不存在", dependency.name),
+                        serde_json::json!({ "name": dependency.name }),
                     )
                 })?;
             if linked.kind() != ExtensionKind::Mcp {
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "extension-invalid",
+                    "errors.extlib.dependencyMustBeMcp",
                     format!("依赖 {} 必须指向 MCP 定义", dependency.name),
+                    serde_json::json!({ "name": dependency.name }),
                 ));
             }
         }
         let previous_revision = definition.revision;
         let ExtensionPayload::Skill(skill) = &mut definition.payload else {
-            return Err(CommandError::new("extension-invalid", "该扩展不是 Skill"));
+            return Err(CommandError::keyed("extension-invalid", "errors.extlib.notASkill", "该扩展不是 Skill"));
         };
         skill.dependencies = update.dependencies;
         definition.revision += 1;
@@ -364,9 +379,9 @@ pub async fn list_skill_versions(
         let definition = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         let ExtensionPayload::Skill(skill) = &definition.payload else {
-            return Err(CommandError::new("extension-invalid", "该扩展不是 Skill"));
+            return Err(CommandError::keyed("extension-invalid", "errors.extlib.notASkill", "该扩展不是 Skill"));
         };
         let versions = store
             .list_skill_versions(&definition_id)

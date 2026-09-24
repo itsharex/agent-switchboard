@@ -8,7 +8,7 @@ import {
 } from "../../app/extensions/deployment-state";
 import { useDiscoverScan } from "../../app/extensions/useDiscoverScan";
 import { useExtensions } from "../../app/useExtensions";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
 import { searchNeedle } from "./list-filters";
 import { useExtensionApplies } from "./useExtensionApplies";
 import { useExtensionView, type ExtensionNavigation } from "./useExtensionView";
@@ -46,8 +46,8 @@ function definitionActions(
     if (!definition) return null;
     const result = await install(definition.id, hostScoped ? [hostScoped] : EXTENSION_CLIENTS);
     if (result.status !== "applied") toast({
-      kind: "warning", title: "Skill 已入库，客户端部署未完成",
-      description: "可从列表的“部署与诊断”操作重新部署当前版本。",
+      kind: "warning", title: toastMessage("extensions.workspace.skillImportPartial"),
+      description: toastMessage("extensions.editor.redeployHint"),
     });
     return definition;
   };
@@ -57,8 +57,8 @@ function definitionActions(
     if (clients.length > 0 && (await install(definition.id, clients)).status !== "applied") {
       toast({
         kind: "warning",
-        title: "MCP 已保存，客户端部署未完成",
-        description: "可从列表的“部署与诊断”操作重新部署当前版本。",
+        title: toastMessage("extensions.workspace.mcpSavePartial"),
+        description: toastMessage("extensions.editor.redeployHint"),
       });
     }
     nav.closeDialog();

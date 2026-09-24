@@ -62,13 +62,13 @@ export function onClientConfigChanged(handler: () => void): Promise<() => void> 
   if (isBrowserDevelopment) return Promise.resolve(() => {});
   return listen("client-config-changed", handler);
 }
-export function onTrayError(handler: (message: string) => void): Promise<() => void> {
+export function onTrayError(handler: (error: CommandError) => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
-  return listen<string>("tray-error", (event) => handler(event.payload));
+  return listen<CommandError>("tray-error", (event) => handler(event.payload));
 }
-export function onDesktopSettingsError(handler: (message: string) => void): Promise<() => void> {
+export function onDesktopSettingsError(handler: (error: CommandError) => void): Promise<() => void> {
   if (isBrowserDevelopment) return Promise.resolve(() => {});
-  return listen<string>("desktop-settings-error", (event) => handler(event.payload));
+  return listen<CommandError>("desktop-settings-error", (event) => handler(event.payload));
 }
 
 interface WebCommandResponse<T> {
@@ -109,6 +109,7 @@ export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> 
     throw {
       code: "web-backend-unavailable",
       message: "本机开发后端未就绪；请通过 npm run dev 启动应用",
+      messageKey: "errors.dev.backendNotReady",
     } satisfies CommandError;
   });
 
@@ -117,6 +118,7 @@ export async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> 
     throw {
       code: "web-backend-unavailable",
       message: "本机开发后端没有返回有效响应",
+      messageKey: "errors.dev.noResponse",
     } satisfies CommandError;
   }
   if (payload.kind === "failure") {
@@ -178,15 +180,37 @@ function updateFailure(operation: "check" | "install", caught: unknown): Command
     return {
       code: "updater-signature-invalid",
       message: "更新包签名验证失败，请从 GitHub Release 页面下载安装包后重试。",
+      messageKey: "errors.updater.signatureInvalid",
     };
   }
   if (structured) return structured;
 
-  const action = operation === "check" ? "检查更新" : "下载或安装更新";
-  return {
-    code: `updater-${operation}-failed`,
-    message: detail ? `${action}失败：${detail}` : `${action}失败，请稍后重试。`,
-  };
+  if (operation === "check") {
+    return detail
+      ? {
+          code: "updater-check-failed",
+          message: `检查更新失败：${detail}`,
+          messageKey: "errors.updater.checkFailed",
+          params: { detail },
+        }
+      : {
+          code: "updater-check-failed",
+          message: "检查更新失败，请稍后重试。",
+          messageKey: "errors.updater.checkFailedRetry",
+        };
+  }
+  return detail
+    ? {
+        code: "updater-install-failed",
+        message: `下载或安装更新失败：${detail}`,
+        messageKey: "errors.updater.installFailed",
+        params: { detail },
+      }
+    : {
+        code: "updater-install-failed",
+        message: "下载或安装更新失败，请稍后重试。",
+        messageKey: "errors.updater.installFailedRetry",
+      };
 }
 
 /** Checks the signed update manifest. `null` means the installed build is current. */

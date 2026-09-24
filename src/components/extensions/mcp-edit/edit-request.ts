@@ -1,3 +1,4 @@
+import { uiMessage } from "../../../i18n/errors";
 import type { AppKind, FieldEdit, McpEditRequest, McpEditViewEnvelope, McpFieldEdits, SecretValue } from "../../../api/client";
 import { codexOptionsEqual } from "../mcp-create/codex-options";
 import { materializeCredential, materializeMcpDraft, validateMcpSource, type PutSecret } from "../mcp-create/mcp-draft";
@@ -63,7 +64,7 @@ export async function buildMcpEdit(
   }
   if (source.server.type !== original.server.type) {
     const { payload } = await materializeMcpDraft(source, put);
-    if (payload.kind !== "mcp") throw new Error("MCP 配置类型无效");
+    if (payload.kind !== "mcp") throw uiMessage("mcp.error.invalidTransportPayload");
     const { kind: _kind, ...transport } = payload;
     request.transport = transport;
   } else {

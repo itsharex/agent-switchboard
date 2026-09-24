@@ -37,4 +37,10 @@ export type ModelOptions =
 export interface CommandError {
   code: string;
   message: string;
+  /** Catalog key for the app-owned explanation of the current language;
+   * present for app-owned explanations. External diagnostics retain `message`, which
+   * remains the scrubbed raw diagnostic and the fallback rendering. */
+  messageKey?: string;
+  /** Interpolation values for `messageKey` placeholders. */
+  params?: Record<string, string | number>;
 }

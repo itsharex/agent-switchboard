@@ -15,8 +15,11 @@ pub(crate) fn preview(
     let mut warnings = Vec::new();
     let root = parse(current)?;
     if plan.profile.model.is_some() && get(&root, ENV_MODEL_KEY).is_some() {
-        warnings
-            .push("settings.json 的 env.ANTHROPIC_MODEL 会覆盖 model；切换将移除该键".to_string());
+        warnings.push(crate::contracts::LocalizedMessage::new(
+            "warnings.claude.modelOverridden",
+            serde_json::json!({}),
+            "settings.json 的 env.ANTHROPIC_MODEL 会覆盖 model；切换将移除该键",
+        ));
     }
     let mut entries = overlay(plan);
     entries.extend(super::native::entries(current, plan)?);
@@ -53,7 +56,7 @@ pub(crate) fn preview(
 fn preview_entries_from_root(
     root: Json,
     entries: Vec<(String, OverlayEntry)>,
-    warnings: Vec<String>,
+    warnings: Vec<crate::contracts::LocalizedMessage>,
     backup_dir: &str,
 ) -> Result<SwitchPreview, AdapterError> {
     for (key, entry) in &entries {

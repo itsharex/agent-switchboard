@@ -1,18 +1,10 @@
-/* Source discovery has three deliberate levels: source controls, results,
-   and repository maintenance. Each gets one work surface instead of a stack
-   of unrelated borders. */
+/* Source controls, results and repository maintenance share one work surface;
+   the source controls are separated by a single hairline. */
 .asb-skill-source-browser {
   display: grid;
   align-content: start;
   gap: var(--asb-space-4);
   min-width: 0;
-}
-
-.asb-skill-source-browser > .asb-skill-source-form,
-.asb-skill-source-browser > .asb-skill-source-results,
-.asb-skill-source-browser > .asb-skill-repository-manager,
-.asb-skill-source-browser > .asb-skill-source-empty {
-  margin: 0;
   padding: var(--asb-space-4);
   border: 1px solid var(--asb-hairline);
   border-radius: var(--asb-radius);
@@ -31,6 +23,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--asb-space-3);
+  padding-bottom: var(--asb-space-4);
+  border-bottom: 1px solid var(--asb-hairline);
 }
 
 .asb-skill-source-input-row,

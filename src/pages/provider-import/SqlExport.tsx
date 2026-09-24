@@ -4,7 +4,8 @@ import { pickDirectory, type CommandError } from "../../api/client";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { ModuleHeader } from "../../components/WorkspaceHeader";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
+import { useI18n } from "../../i18n";
 
 /** File name filled in when a folder is picked and nothing is typed yet. */
 const DEFAULT_EXPORT_FILE_NAME = "agent-switchboard-providers.sql";
@@ -25,22 +26,23 @@ interface SqlExportProps {
 }
 
 function ExportResult({ result }: { result: ProviderSqlExport }) {
+  const { t } = useI18n();
   return (
     <div className="asb-ccscan">
       <div
         className={`asb-banner ${result.skipped.length > 0 ? "asb-banner-warning" : "asb-banner-ok"}`}
         role="status"
-        aria-label="导出结果"
+        aria-label={t("importDiscovery.export.aria")}
       >
         <span>
-          已导出 {result.exportedCount} 项供应商
-          {result.skipped.length > 0 && ` · 未导出 ${result.skipped.length} 项`}
+          {t("importDiscovery.export.exported", { count: result.exportedCount })}
+          {result.skipped.length > 0 && ` · ${t("importDiscovery.export.notExported", { count: result.skipped.length })}`}
         </span>
       </div>
       {result.skipped.map((skip, index) => (
         <div className="asb-kv" key={`${skip.name}-${index}`}>
           <span className="asb-kv-label">{skip.name}</span>
-          <span className="asb-kv-value asb-warn-text">未导出：{skip.reason}</span>
+          <span className="asb-kv-value asb-warn-text">{skip.reason}</span>
         </div>
       ))}
     </div>
@@ -52,6 +54,7 @@ function ExportResult({ result }: { result: ProviderSqlExport }) {
  * another device without any command line; the file itself carries provider
  * credentials. */
 export function SqlExport({ busy, onError }: SqlExportProps) {
+  const { t } = useI18n();
   const [path, setPath] = useState("");
   const [working, setWorking] = useState(false);
   const [result, setResult] = useState<ProviderSqlExport | null>(null);
@@ -65,7 +68,7 @@ export function SqlExport({ busy, onError }: SqlExportProps) {
       setResult(outcome);
       toast({
         kind: outcome.skipped.length > 0 ? "warning" : "success",
-        title: `已导出 ${outcome.exportedCount} 项供应商`,
+        title: toastMessage("importDiscovery.export.exported", { count: outcome.exportedCount }),
         description: target,
       });
     } catch (caught) {
@@ -81,7 +84,7 @@ export function SqlExport({ busy, onError }: SqlExportProps) {
   };
   return (
     <>
-      <ModuleHeader title="导出 SQL" />
+      <ModuleHeader title={t("importDiscovery.tab.sqlExport")} />
       <form
         className="asb-form"
         onSubmit={(event) => {
@@ -90,12 +93,10 @@ export function SqlExport({ busy, onError }: SqlExportProps) {
         }}
       >
         <p className="asb-scope-note">
-          将全部供应商（Claude、Codex 第三方与官方登录记录）的完整配置导出为一个 SQL
-          文件；在其他设备打开「导入 / 导出 → 导入 SQL」选择该文件即可导入，配置完整还原，无需命令行。文件包含
-          API 密钥，请妥善保管。
+          {t("importDiscovery.export.note")}
         </p>
         <label className="asb-field">
-          <span>导出文件路径</span>
+          <span>{t("importDiscovery.export.pathLabel")}</span>
           <Input
             required
             placeholder={`D:\\providers\\${DEFAULT_EXPORT_FILE_NAME}`}
@@ -106,10 +107,10 @@ export function SqlExport({ busy, onError }: SqlExportProps) {
         </label>
         <div className="asb-form-actions">
           <Button variant="secondary" disabled={disabled} onClick={() => void pickFolder()}>
-            选择文件夹
+            {t("importDiscovery.export.pickFolder")}
           </Button>
           <Button type="submit" variant="primary" disabled={disabled || !path.trim()}>
-            {working ? "正在导出…" : "导出到文件"}
+            {working ? t("importDiscovery.export.working") : t("importDiscovery.export.toFile")}
           </Button>
         </div>
       </form>

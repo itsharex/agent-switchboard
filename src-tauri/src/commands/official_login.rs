@@ -42,8 +42,9 @@ pub async fn official_login_start(target: AppKind) -> Result<OfficialLoginStart,
         if let Some(previous) = guard.remove(&target) {
             if !previous.expired(Instant::now()) {
                 guard.insert(target, previous);
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "official-login-in-progress",
+                    "errors.misc.officialLoginInProgress",
                     "已有进行中的官方登录，请先完成或取消",
                 ));
             }
@@ -96,8 +97,9 @@ pub async fn official_login_poll(target: AppKind) -> Result<OfficialLoginStatus,
     let status = blocking(move || {
         let mut guard = official_login::sessions().lock().expect("login sessions");
         let Some(session) = guard.get(&target) else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "official-login-not-started",
+                "errors.misc.officialLoginNotStarted",
                 "尚未开始官方登录",
             ));
         };
@@ -136,8 +138,9 @@ fn poll_codex(
         ..
     }) = guard.get(&target)
     else {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "official-login-not-started",
+            "errors.misc.officialLoginNotStarted",
             "尚未开始官方登录",
         ));
     };
@@ -175,8 +178,9 @@ fn poll_claude(
     target: AppKind,
 ) -> Result<OfficialLoginStatus, CommandError> {
     let Some(LoginSession::Claude { listener, .. }) = guard.get(&target) else {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "official-login-not-started",
+            "errors.misc.officialLoginNotStarted",
             "尚未开始官方登录",
         ));
     };

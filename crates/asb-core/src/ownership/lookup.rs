@@ -31,14 +31,18 @@ pub fn setting_choices(app: AppKind) -> &'static [ChoiceSpec] {
 pub fn setting_groups(app: AppKind) -> &'static [&'static str] {
     match app {
         AppKind::Codex => &[
-            "模型行为",
-            "子 agent",
-            "安全与审批",
-            "隐私与数据",
-            "终端界面",
-            "工具与功能",
+            "ownership.group.modelBehavior",
+            "ownership.group.subagent",
+            "ownership.group.safetyAndApprovals",
+            "ownership.group.privacyAndData",
+            "ownership.group.terminalUi",
+            "ownership.group.toolsAndFeatures",
         ],
-        AppKind::Claude => &["模型行为", "界面与交互", "文件与 Git"],
+        AppKind::Claude => &[
+            "ownership.group.modelBehavior",
+            "ownership.group.interfaceAndInteraction",
+            "ownership.group.filesAndGit",
+        ],
     }
 }
 
@@ -60,10 +64,8 @@ pub fn official_setting_directory(app: AppKind) -> Vec<OfficialSettingEntry> {
             related_paths: &[],
             disposition: OfficialSettingDisposition::Direct,
             detail: match spec.owner {
-                SettingOwner::Provider => {
-                    "在供应商编辑页的“运行参数”中独立保存，切换时随档案应用。"
-                }
-                SettingOwner::Client => "在设置页的“客户端设置”中保存，所有供应商共用。",
+                SettingOwner::Provider => "ownership.label.officialDirectoryDetailProvider",
+                SettingOwner::Client => "ownership.label.officialDirectoryDetailClient",
                 SettingOwner::Host => unreachable!("host settings have no editor control"),
             },
         })

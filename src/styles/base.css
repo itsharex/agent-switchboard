@@ -24,6 +24,8 @@
 @import "./base/tables-backups.css";
 @import "./base/logs-and-usage.css";
 @import "./base/sessions.css";
+@import "./base/session-message.css";
+@import "./base/session-library.css";
 @import "./base/gateway.css";
 @import "./base/gateway-telemetry.css";
 @import "./base/gateway-responsive.css";
@@ -40,12 +42,6 @@
   flex-direction: column;
   gap: var(--asb-space-4);
   min-width: 0;
-}
-
-.asb-client-picker .asb-seg-opt {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--asb-space-2);
 }
 
 .asb-nav {
@@ -129,6 +125,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--asb-space-2);
   min-height: var(--asb-control-height-compact);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
@@ -143,6 +140,11 @@
 
 .asb-seg-opt:hover {
   color: var(--asb-text);
+}
+
+.asb-seg-opt:has(input:focus-visible) {
+  outline: 2px solid var(--asb-action);
+  outline-offset: 2px;
 }
 
 /* The selected segment stays flush with its rail: a surface step plus a
@@ -247,6 +249,11 @@
   box-shadow: 0 1px 4px rgb(10 132 255 / 0.22);
 }
 
+.asb-checkbox:has(.asb-checkbox-input:focus-visible) .asb-checkbox-box {
+  outline: 2px solid var(--asb-action);
+  outline-offset: 2px;
+}
+
 .asb-checkbox-box svg {
   display: block;
   width: 72%;
@@ -347,16 +354,17 @@
   translate: var(--asb-switch-thumb-travel) 0;
 }
 
-/* The provider URL uses the dedicated link color and opens in the system
-   browser via the opener plugin (wry blocks in-webview new windows). */
-.asb-row-host {
+/* The provider website link, shared by provider rows and route cards; it
+   uses the dedicated link color and opens in the system browser via the
+   opener plugin (wry blocks in-webview new windows). */
+.asb-provider-link {
   color: var(--asb-link);
   cursor: pointer;
   text-decoration: none;
   transition: color var(--asb-motion-press) var(--asb-easing);
 }
 
-.asb-row-host:hover {
+.asb-provider-link:hover {
   color: var(--asb-action);
   text-decoration: underline;
 }

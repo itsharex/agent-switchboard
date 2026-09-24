@@ -1,5 +1,7 @@
 import { Cell, Pie, PieChart } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
+import { useI18n } from "../../i18n";
+import { tr } from "../../i18n/current";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
 import { formatUsageValue } from "../../lib/usage-format";
 import { ChartFrame } from "./ChartFrame";
@@ -20,20 +22,22 @@ interface Props {
 /** A model ledger rendered as one prominent ring with an adjacent, auditable
  * legend. Only the tail is combined, and its label records that fact. */
 export function ModelUsageDistributionChart({ items, ariaLabel, emptyMessage }: Props) {
+  const { t } = useI18n();
   const visible = resolveDisplayItems(items);
   if (visible.length === 0) {
-    return <p className="asb-chart-empty" role="status">{emptyMessage || "暂无可用模型构成数据。"}</p>;
+    return <p className="asb-chart-empty" role="status">{emptyMessage || t("usage.composition.noData")}</p>;
   }
 
   return <DonutCard visible={visible} ariaLabel={ariaLabel} />;
 }
 
 function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: string }) {
+  const { t } = useI18n();
   const total = visible.reduce((sum, item) => sum + item.value, 0);
   const display = useCountUp(Math.round(total));
   return (
     <figure className="asb-usage-donut-card" aria-label={ariaLabel}>
-      <figcaption className="asb-usage-donut-title">模型构成</figcaption>
+      <figcaption className="asb-usage-donut-title">{t("usage.composition.title")}</figcaption>
       <div className="asb-usage-donut-layout">
         <div className="asb-usage-donut-stage">
           <ChartFrame>
@@ -74,7 +78,7 @@ function DonutCard({ visible, ariaLabel }: { visible: DisplayItem[]; ariaLabel: 
         <ol className="asb-usage-donut-legend">
           {visible.map((item, index) => {
             const percent = (item.value / total) * 100;
-            const label = item.otherCount === null ? item.label : `其他（${item.otherCount} 个模型）`;
+            const label = item.otherCount === null ? item.label : t("usage.composition.otherCount", { count: item.otherCount });
             const color =
               item.otherCount === null ? chartSeriesColor(index) : "var(--asb-hairline-strong)";
             return (
@@ -102,7 +106,7 @@ function resolveDisplayItems(items: ModelUsageDistributionItem[]): DisplayItem[]
     .map((item, index) => ({
       ...item,
       id: item.id.trim() || `model-${index}`,
-      label: item.label.trim() || "未记录模型",
+      label: item.label.trim() || tr("usage.composition.unrecordedModel"),
       otherCount: null,
     }))
     .sort((left, right) => right.value - left.value);
@@ -114,7 +118,7 @@ function resolveDisplayItems(items: ModelUsageDistributionItem[]): DisplayItem[]
     ...leading,
     {
       id: "model-usage-other",
-      label: "其他",
+      label: tr("usage.composition.otherName"),
       value: remainder.reduce((sum, item) => sum + item.value, 0),
       otherCount: remainder.length,
     },

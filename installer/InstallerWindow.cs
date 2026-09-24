@@ -11,15 +11,25 @@ using System.Windows.Shell;
 
 namespace AgentSwitchboard.Installer
 {
+    internal enum InstallerViewState
+    {
+        Ready,
+        Installing,
+        Complete,
+        Failure,
+    }
+
     internal sealed partial class InstallerWindow : Window
     {
         private readonly InstallerInvocation invocation;
         private readonly InstallerText copy;
         private TextBox directory;
         private TextBlock title;
-        private TextBlock status;
+        private TextBlock summary;
+        private TextBlock version;
         private TextBlock diagnostic;
         private TextBlock existing;
+        private FrameworkElement locationCard;
         private Button primary;
         private Button cancel;
         private Button close;
@@ -27,8 +37,7 @@ namespace AgentSwitchboard.Installer
         private CheckBox launch;
         private ProgressBar progress;
         private string installedDirectory;
-        private bool running;
-        private bool completed;
+        private InstallerViewState viewState = InstallerViewState.Ready;
         private bool restartFailed;
 
         internal InstallerWindow(InstallerInvocation invocation)
@@ -86,15 +95,14 @@ namespace AgentSwitchboard.Installer
 
         private async void OnPrimaryClick(object sender, RoutedEventArgs eventArgs)
         {
-            if (completed) Finish();
+            if (viewState == InstallerViewState.Complete) Finish();
             else await InstallAsync();
         }
 
         private async System.Threading.Tasks.Task InstallAsync()
         {
-            if (running) return;
+            if (viewState == InstallerViewState.Installing) return;
 
-            running = true;
             ExitCode = 1;
             EnterRunningState();
             try
@@ -114,39 +122,47 @@ namespace AgentSwitchboard.Installer
                 LeaveRunningState();
             }
 
-            if (invocation.StartsImmediately && completed && !restartFailed) Close();
+            if (invocation.StartsImmediately && viewState == InstallerViewState.Complete && !restartFailed) Close();
         }
 
         private void EnterRunningState()
         {
+            viewState = InstallerViewState.Installing;
             directory.IsEnabled = false;
             browse.IsEnabled = false;
-            primary.IsEnabled = false;
-            cancel.IsEnabled = false;
-            close.IsEnabled = false;
-            launch.Visibility = Visibility.Collapsed;
-            progress.Visibility = Visibility.Visible;
-            progress.IsIndeterminate = SystemParameters.ClientAreaAnimation;
+            locationCard.Visibility = Visibility.Collapsed;
+            version.Visibility = Visibility.Collapsed;
             title.Text = copy.InstallingTitle;
-            status.Foreground = Brush("Muted");
-            status.Text = copy.InstallingStatus;
-            status.Visibility = Visibility.Visible;
+            summary.Foreground = Brush("Muted");
+            summary.Text = copy.InstallingStatus;
             diagnostic.Visibility = Visibility.Collapsed;
+            launch.Visibility = Visibility.Collapsed;
+            progress.Value = SystemParameters.ClientAreaAnimation ? 0 : 35;
+            progress.IsIndeterminate = SystemParameters.ClientAreaAnimation;
+            progress.Visibility = Visibility.Visible;
+            primary.IsEnabled = false;
+            cancel.Visibility = Visibility.Collapsed;
+            close.IsEnabled = false;
         }
 
         private void EnterCompletedState(InstallResult result)
         {
-            completed = true;
+            viewState = InstallerViewState.Complete;
             ExitCode = 0;
+            locationCard.Visibility = Visibility.Collapsed;
+            version.Visibility = Visibility.Collapsed;
+            progress.IsIndeterminate = false;
+            progress.Visibility = Visibility.Collapsed;
             title.Text = copy.CompleteTitle;
-            status.Foreground = Brush("Ink");
-            status.Text = copy.CompleteStatus;
+            summary.Foreground = Brush("Muted");
+            summary.Text = copy.CompleteStatus;
             restartFailed = result.LaunchError != null;
             diagnostic.Visibility = Visibility.Collapsed;
 
             if (restartFailed)
             {
-                status.Text = copy.LaunchFailureStatus;
+                summary.Foreground = Brush("Error");
+                summary.Text = copy.LaunchFailureStatus;
                 diagnostic.Text = copy.LaunchFailureDiagnostic(result.LaunchError);
                 diagnostic.Visibility = Visibility.Visible;
             }
@@ -154,7 +170,6 @@ namespace AgentSwitchboard.Installer
             primary.Content = copy.Finish;
             cancel.Visibility = Visibility.Collapsed;
             launch.Content = copy.LaunchWhenFinished;
-            // 勾选（打开应用）是完成页的默认意图；不勾选才是仅完成。
             launch.IsChecked = true;
             launch.Visibility = invocation.RestartAfterInstall && !restartFailed
                 ? Visibility.Collapsed
@@ -163,12 +178,17 @@ namespace AgentSwitchboard.Installer
 
         private void EnterFailureState(Exception error)
         {
-            completed = false;
+            viewState = InstallerViewState.Failure;
             restartFailed = false;
+            version.Visibility = Visibility.Collapsed;
+            progress.IsIndeterminate = false;
+            progress.Visibility = Visibility.Collapsed;
+            locationCard.Visibility = FailureUsesLocation(error)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             title.Text = copy.FailureTitle(error);
-            status.Foreground = Brush("Error");
-            status.Text = copy.FailureStatus(error);
-            status.Visibility = Visibility.Visible;
+            summary.Foreground = Brush("Error");
+            summary.Text = copy.FailureStatus(error);
             diagnostic.Text = copy.FailureDiagnostic(error);
             diagnostic.Visibility = String.IsNullOrWhiteSpace(diagnostic.Text)
                 ? Visibility.Collapsed
@@ -178,15 +198,20 @@ namespace AgentSwitchboard.Installer
             launch.Visibility = Visibility.Collapsed;
         }
 
+        private static bool FailureUsesLocation(Exception error)
+        {
+            var installerError = error as InstallerException;
+            return installerError != null
+                && installerError.Kind == InstallerFailureKind.InvalidDirectory;
+        }
+
         private void LeaveRunningState()
         {
-            running = false;
-            progress.IsIndeterminate = false;
-            progress.Visibility = Visibility.Collapsed;
             primary.IsEnabled = true;
             cancel.IsEnabled = true;
             close.IsEnabled = true;
-            if (!completed
+            if (viewState == InstallerViewState.Failure
+                && locationCard.Visibility == Visibility.Visible
                 && invocation.Kind == InstallerInvocationKind.Interactive
                 && !InstallerProductMetadata.UsesMsiEngine)
             {
@@ -203,8 +228,8 @@ namespace AgentSwitchboard.Installer
                 try { InstallerEngine.Launch(installedDirectory); }
                 catch (Exception error)
                 {
-                    status.Foreground = Brush("Error");
-                    status.Text = copy.LaunchFailureStatus;
+                    summary.Foreground = Brush("Error");
+                    summary.Text = copy.LaunchFailureStatus;
                     diagnostic.Text = copy.LaunchFailureDiagnostic(error.Message);
                     diagnostic.Visibility = Visibility.Visible;
                     launch.IsChecked = false;
@@ -220,7 +245,7 @@ namespace AgentSwitchboard.Installer
             existing.Text = existingInstallation
                 ? copy.ExistingInstallationNotice
                 : copy.NewInstallationNotice;
-            if (!running && !completed && primary != null)
+            if (viewState == InstallerViewState.Ready && primary != null)
                 primary.Content = existingInstallation ? copy.Update : copy.Install;
         }
 
@@ -244,10 +269,9 @@ namespace AgentSwitchboard.Installer
 
         private void OnClosing(object sender, CancelEventArgs eventArgs)
         {
-            if (!running) return;
+            if (viewState != InstallerViewState.Installing) return;
             eventArgs.Cancel = true;
-            status.Text = copy.InstallingCannotClose;
-            status.Visibility = Visibility.Visible;
+            summary.Text = copy.InstallingCannotClose;
             diagnostic.Visibility = Visibility.Collapsed;
         }
 

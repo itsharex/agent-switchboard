@@ -77,7 +77,11 @@ fn prepare(
     auth: Option<AuthIntent>,
 ) -> Result<SwitchIntent, CommandError> {
     if load(state).map_err(error)?.is_some() {
-        return Err(error("存在未完成配置事务，请先恢复"));
+        return Err(CommandError::keyed(
+            "config-recovery-required",
+            "errors.sw.pendingTransactionExists",
+            "存在未完成配置事务，请先恢复",
+        ));
     }
     let target = state.target(app).map_err(error)?;
     let (before, before_existed) = read_target(&target, app).map_err(error)?;
@@ -85,7 +89,11 @@ fn prepare(
         if app != AppKind::Codex
             || !auth_snapshot_matches(&target, &auth.before_hash, auth.before_existed).map_err(error)?
         {
-            return Err(error("Codex 认证文件在预览后已发生变化，请重新查看差异"));
+            return Err(CommandError::keyed(
+                "config-recovery-required",
+                "errors.sw.codexAuthChangedAfterPreview",
+                "Codex 认证文件在预览后已发生变化，请重新查看差异",
+            ));
         }
     }
     validate_catalog_target(&target, catalog.as_ref()).map_err(error)?;

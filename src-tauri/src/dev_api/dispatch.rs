@@ -12,6 +12,9 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
         if let Some(result) = super::settings_dispatch::dispatch(app, &request).await? {
             return Ok(result);
         }
+        if let Some(result) = super::provider_diagnostics_dispatch::dispatch(app, &request).await? {
+            return Ok(result);
+        }
         if let Some(result) = super::codex_dispatch::dispatch(app, &request).await? {
             return Ok(result);
         }
@@ -86,10 +89,7 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 ))
             }
             "list_profiles" => command!(commands::list_profiles(app.clone())),
-            "reset_profile_store" => command!(commands::reset_profile_store(
-                app.clone(),
-                argument(&request.args, "confirmWrite")?,
-            )),
+            "repair_profile_store" => command!(commands::repair_profile_store(app.clone())),
             "prepare_profile_save" => command!(commands::switching::prepare_profile_save(
                 app.clone(),
                 argument::<Option<String>>(&request.args, "profileId")?,
@@ -421,7 +421,36 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 app.clone(),
                 argument::<UsageHistoryRequest>(&request.args, "request")?,
             )),
-            "list_sessions" => command!(commands::list_sessions()),
+            "search_sessions" => command!(commands::search_sessions(
+                app.clone(),
+                argument::<crate::session_manager::SessionSearchRequest>(&request.args, "request")?,
+            )),
+            "update_session_organization" => command!(commands::update_session_organization(
+                app.clone(),
+                argument::<Vec<crate::session_manager::SessionDeleteRequest>>(&request.args, "requests")?,
+                argument::<crate::session_manager::SessionOrganizationChange>(&request.args, "change")?,
+            )),
+            "export_session_markdown" => command!(commands::export_session_markdown(
+                app.clone(),
+                argument::<AppKind>(&request.args, "app")?,
+                argument(&request.args, "sessionId")?,
+            )),
+            "list_session_bookmarks" => command!(commands::list_session_bookmarks(app.clone())),
+            "save_session_bookmark" => command!(commands::save_session_bookmark(
+                app.clone(),
+                argument::<AppKind>(&request.args, "app")?,
+                argument(&request.args, "sessionId")?,
+                argument(&request.args, "messageId")?,
+            )),
+            "delete_session_bookmark" => command!(commands::delete_session_bookmark(
+                app.clone(),
+                argument(&request.args, "id")?,
+            )),
+            "get_session_metadata" => command!(commands::get_session_metadata(
+                app.clone(),
+                argument::<AppKind>(&request.args, "app")?,
+                argument(&request.args, "sessionId")?,
+            )),
             "get_session_messages" => command!(commands::get_session_messages(
                 argument::<AppKind>(&request.args, "app")?,
                 argument(&request.args, "sessionId")?,
@@ -431,16 +460,18 @@ pub(super) fn dispatch(app: &AppHandle, request: InvokeRequest) -> Result<Value,
                 argument(&request.args, "sessionId")?,
             )),
             "delete_session" => command!(commands::delete_session(
+                app.clone(),
                 argument::<AppKind>(&request.args, "app")?,
                 argument(&request.args, "sessionId")?,
             )),
-            "delete_sessions" => command!(commands::delete_sessions(argument::<
+            "delete_sessions" => command!(commands::delete_sessions(app.clone(), argument::<
                 Vec<crate::session_manager::SessionDeleteRequest>,
             >(
                 &request.args, "requests"
             )?)),
-            _ => Err(CommandError::new(
+            _ => Err(CommandError::keyed(
                 "web-command-unavailable",
+                "errors.misc.webCommandUnavailable",
                 "浏览器开发环境不支持该原生窗口命令",
             )),
         }

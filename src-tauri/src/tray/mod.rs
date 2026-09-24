@@ -130,14 +130,17 @@ pub fn tray_hide(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn tray_open_main(app: AppHandle) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("主窗口不可用")?;
-    window.show().map_err(|error| error.to_string())?;
-    if window.is_minimized().map_err(|error| error.to_string())? {
-        window.unminimize().map_err(|error| error.to_string())?;
+pub fn tray_open_main(app: AppHandle) -> Result<(), CommandError> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| CommandError::keyed("main-window-unavailable", "errors.mainWindowUnavailable", "主窗口不可用"))?;
+    let op = |error: String| CommandError::new("tray-open-failed", error);
+    window.show().map_err(|error| op(error.to_string()))?;
+    if window.is_minimized().map_err(|error| op(error.to_string()))? {
+        window.unminimize().map_err(|error| op(error.to_string()))?;
     }
-    window.set_focus().map_err(|error| error.to_string())?;
-    popup::hide(&app)
+    window.set_focus().map_err(|error| op(error.to_string()))?;
+    popup::hide(&app).map_err(op)
 }
 
 pub(crate) fn recover_main(app: &AppHandle, error: &str) {
@@ -146,7 +149,10 @@ pub(crate) fn recover_main(app: &AppHandle, error: &str) {
         log::warn!("恢复主窗口失败: {open_error}");
     }
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.emit("tray-error", asb_core::adapter::scrub_message(error));
+        let _ = window.emit("tray-error", CommandError::localized(
+            "tray-panel-unavailable", "errors.trayPanelUnavailable", error,
+            serde_json::json!({ "detail": error }),
+        ));
     }
 }
 
@@ -165,8 +171,9 @@ pub async fn tray_switch(app: AppHandle, profile_id: String) -> Result<(), Comma
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
     {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "tray-switch-busy",
+            "errors.trayBusy",
             "供应商正在切换，请稍候",
         ));
     }

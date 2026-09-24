@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CodexOfficialQuota } from "../api/client";
+import { useI18n } from "../i18n";
 import { Input } from "./Input";
 import { QuotaWindowsTable } from "./QuotaWindowsTable";
 import type { CachedQuery } from "./use-cached-query";
@@ -19,6 +20,7 @@ function QuotaRefreshInterval({
   refreshIntervalMinutes,
   onSaveInterval,
 }: Pick<Props, "refreshIntervalMinutes" | "onSaveInterval">) {
+  const { t } = useI18n();
   const [intervalText, setIntervalText] = useState(() => String(refreshIntervalMinutes));
   const [savingInterval, setSavingInterval] = useState(false);
   useEffect(() => {
@@ -48,13 +50,13 @@ function QuotaRefreshInterval({
 
   return (
     <label className="asb-field asb-usage-interval">
-      <span>自动刷新间隔（分钟，0 为关闭）</span>
+      <span>{t("codex.quota.intervalLabel")}</span>
       <Input
         type="number"
         min={0}
         max={1440}
         step={1}
-        aria-label="自动刷新间隔（分钟，0 为关闭）"
+        aria-label={t("codex.quota.intervalLabel")}
         value={intervalText}
         disabled={savingInterval}
         onChange={(event) => setIntervalText(event.target.value)}
@@ -75,20 +77,21 @@ export function CodexOfficialQuotaPanel({
   refreshIntervalMinutes,
   onSaveInterval,
 }: Props) {
+  const { t } = useI18n();
   const { data: reading } = quota;
   const showsWindows = (reading?.windows.length ?? 0) > 0;
   return (
-    <section id={id} className="asb-official-quota" aria-label={`${profileName} 官方订阅额度`}>
+    <section id={id} className="asb-official-quota" aria-label={t("codex.quota.panelAria", { name: profileName })}>
       <header className="asb-provider-usage-head">
         <div className="asb-provider-usage-title">
-          <h3 className="asb-section-title">订阅额度</h3>
+          <h3 className="asb-section-title">{t("codex.quota.title")}</h3>
         </div>
       </header>
       <QuotaRefreshInterval refreshIntervalMinutes={refreshIntervalMinutes} onSaveInterval={onSaveInterval} />
       {showsWindows && (
         <QuotaWindowsTable
           windows={reading!.windows}
-          ariaLabel={`${profileName} 官方订阅额度`}
+          ariaLabel={t("codex.quota.panelAria", { name: profileName })}
         />
       )}
     </section>

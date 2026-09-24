@@ -43,8 +43,8 @@ pub use model::{
     ModelOptions,
 };
 pub use plan::{
-    BackupRecord, ChangeKind, CodexCommonFragment, ConfigWriteRecord, KeyChange, MatchStatus,
-    RouteState, SwitchPlan, SwitchPreview, WriteOperation,
+    BackupRecord, ChangeKind, CodexCommonFragment, ConfigWriteRecord, KeyChange, LocalizedMessage,
+    MatchStatus, RouteState, SwitchPlan, SwitchPreview, WriteOperation,
 };
 pub use provider::{
     classify_profile_save, codex_official_draft, ProfileSaveKind, ProviderDisplay, ProviderDraft,

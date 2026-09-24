@@ -9,7 +9,8 @@ import {
   type ProviderSqlImportOutcome,
   type ProviderSqlScan,
 } from "../api/client";
-import { toast } from "../components/use-toast";
+import { toast, toastMessage } from "../components/use-toast";
+import { tr } from "../i18n/current";
 import type { ProviderInventory } from "./useConfigSnapshot";
 
 interface SqlImportDeps {
@@ -85,8 +86,10 @@ export function useSqlImport({
       const result = await importProvidersSql(ids, sqlPath);
       setSqlResult(result);
       toast({ kind: result.notImported.length > 0 ? "warning" : "success",
-        title: `已导入 ${result.importedCount} 项${result.updatedCount > 0 ? ` · 覆盖更新 ${result.updatedCount} 项` : ""}`,
-        description: result.notImported.length > 0 ? `${result.notImported.length} 项未导入，请查看导入结果` : undefined });
+        title: result.updatedCount > 0
+          ? `${tr("importDiscovery.result.imported", { count: result.importedCount })} · ${tr("importDiscovery.result.updated", { count: result.updatedCount })}`
+          : toastMessage("importDiscovery.result.imported", { count: result.importedCount }),
+        description: result.notImported.length > 0 ? toastMessage("importDiscovery.toast.notImported", { count: result.notImported.length }) : undefined });
       setSqlScan(null);
       setSqlSelected({});
       const nextInventory = await refresh();

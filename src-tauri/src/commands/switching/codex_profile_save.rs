@@ -99,9 +99,13 @@ pub(super) fn prepare_data(
             &dependencies::projection(state, gateway, owner, &candidate)?,
         )?;
         if owner.profile.id != candidate.profile.id {
-            preview.preview.warnings.push(format!(
-                "当前主供应商「{}」引用了「{}」的子代理模型；本次保存同步更新其模型目录，主供应商保持不变。",
-                owner.profile.name, candidate.profile.name
+            preview.preview.warnings.push(asb_core::contracts::LocalizedMessage::new(
+                "warnings.codex.subagentModelSynced",
+                serde_json::json!({ "owner": owner.profile.name, "candidate": candidate.profile.name }),
+                format!(
+                    "当前主供应商「{}」引用了「{}」的子代理模型；本次保存同步更新其模型目录，主供应商保持不变。",
+                    owner.profile.name, candidate.profile.name
+                ),
             ));
         }
         Some(preview)
@@ -145,8 +149,9 @@ pub(super) fn commit(
                 &prepared.draft, preview,
             )
         }
-        ProfileSaveKind::Create => Err(CommandError::new(
+        ProfileSaveKind::Create => Err(CommandError::keyed(
             "codex-profile-save-invalid",
+            "errors.sw.codexCreateNoActiveSave",
             "Codex 新建供应商不使用活跃保存事务",
         )),
     }
@@ -168,10 +173,17 @@ fn classify(
         .map_err(store_error)?
         .into_iter()
         .find(|record| record.profile.id == profile_id)
-        .ok_or_else(|| CommandError::new("codex-profile-not-found", "Codex 供应商不存在"))?;
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "codex-profile-not-found",
+                "errors.sw.codexProfileNotFound",
+                "Codex 供应商不存在",
+            )
+        })?;
     if stored.file_hash != expected_file_hash {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "codex-profile-save-stale",
+            "errors.sw.codexProfileFileModified",
             "Codex 供应商文件已被外部修改，请重新读取后再保存",
         ));
     }
@@ -220,12 +232,14 @@ pub(crate) fn validate_subagent_route_reference(
         .configuration()
         .find_codex_provider_file(&route.profile_id)
         .map_err(|_| {
-            CommandError::new(
+            CommandError::localized(
                 "codex-subagent-route-unresolved",
+                "errors.sw.subagentRouteTargetMissing",
                 format!(
                     "子代理路由引用的 Codex 供应商不存在：{}（模型 {}）",
                     route.profile_id, route.model
                 ),
+                serde_json::json!({ "profileId": route.profile_id, "model": route.model }),
             )
         })?;
     dependencies::validate_target(route, &target)
@@ -324,28 +338,40 @@ fn rollback(
             .and_then(|_| super::profile_rollback::clear(state))
         {
             Ok(()) => original,
-            Err(error) => recovery_required(format!(
-                "{}；Codex 供应商档案已回滚，但{error}",
-                original.message
-            )),
+            Err(error) => CommandError::localized(
+                "codex-profile-save-recovery-required",
+                "errors.sw.codexProfileRolledBackClearFailed",
+                format!(
+                    "{}；Codex 供应商档案已回滚，但{error}",
+                    original.message
+                ),
+                serde_json::json!({ "detail": original.message, "error": error }),
+            ),
         },
-        Err(error) => recovery_required(format!(
-            "{}；Codex 供应商未能回滚：{error}；已保留恢复记录以继续完成已确认的保存",
-            original.message
-        )),
+        Err(error) => CommandError::localized(
+            "codex-profile-save-recovery-required",
+            "errors.sw.codexProfileRollbackFailedRecoveryKept",
+            format!(
+                "{}；Codex 供应商未能回滚：{error}；已保留恢复记录以继续完成已确认的保存",
+                original.message
+            ),
+            serde_json::json!({ "detail": original.message, "error": error }),
+        ),
     }
 }
 
 fn unavailable() -> CommandError {
-    CommandError::new(
+    CommandError::keyed(
         "codex-profile-save-unavailable",
+        "errors.sw.codexPreparationStateUnavailable",
         "Codex 供应商保存准备状态不可用",
     )
 }
 
 fn stale() -> CommandError {
-    CommandError::new(
+    CommandError::keyed(
         "codex-profile-save-stale",
+        "errors.sw.codexSavePreviewStale",
         "Codex 保存预览已失效，请重新保存并查看最新差异",
     )
 }

@@ -1,7 +1,9 @@
 import { useId } from "react";
-import type { AppKind, ProviderDraft, ProviderProfile } from "../api/client";
+import type { AppKind, ProviderDraft, ProviderProfile, LocalizedMessage } from "../api/client";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
+import { ProviderDiagnosticsEntry } from "./provider-diagnostics/ProviderDiagnosticsEntry";
 import { ClaudeModelMapping } from "./provider-editor/ClaudeModelMapping";
 import { MainModelField } from "./provider-editor/MainModelField";
 import { ProviderAdvancedSettings } from "./provider-editor/ProviderAdvancedSettings";
@@ -28,18 +30,19 @@ interface Props {
   /** Replaces the editor session when the user picks the other client. */
   onSwitchClient: (app: AppKind) => void;
   userConfigModel: string | null;
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
   onSave: (draft: ProviderDraft) => void;
   onCancel: () => void;
 }
 
 function ModelSection({ editor, busy, userConfigModel, userConfigWarnings, profile }:
   Pick<Props, "busy" | "userConfigModel" | "userConfigWarnings" | "profile"> & { editor: ProviderEditorState }) {
+  const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
   const claudeSettings = draft.modelOptions?.kind === "claude" ? draft.modelOptions : null;
   return (
-    <section className="asb-editor-section" aria-label="模型">
-      <h3 className="asb-section-title">模型</h3>
+    <section className="asb-editor-section" aria-label={t("providers.editor.section.model")}>
+      <h3 className="asb-section-title">{t("providers.editor.section.model")}</h3>
       <div className="asb-editor-section-fields">
         <MainModelField draft={draft} busy={busy} baseUrl={connection.baseUrl}
           claudeSettings={claudeSettings}
@@ -55,15 +58,16 @@ function ModelSection({ editor, busy, userConfigModel, userConfigWarnings, profi
 }
 
 function AdvancedSettings({ editor, ...props }: Props & { editor: ProviderEditorState }) {
+  const { t } = useI18n();
   const { draft, setDraft, parameters, setParametersOpen, triggerRef } = editor;
   return <ProviderAdvancedSettings>
     {draft.upstreamProtocol === "responses" && <ResponsesOptionsFields busy={props.busy}
       options={draft.responsesOptions}
       onChange={(next) => setDraft((current) => ({ ...current, responsesOptions: next }))} />}
     <div className="asb-provider-advanced-action">
-      <div><strong>运行参数</strong><span>随此供应商保存，不直接写入客户端配置。</span></div>
+      <div><strong>{t("providers.editor.parameters")}</strong><span>{t("providers.editor.parametersNote")}</span></div>
       <Button ref={triggerRef} variant="secondary" disabled={props.busy || !parameters.ready}
-        onClick={() => setParametersOpen(true)}>配置运行参数 <span aria-hidden="true">→</span></Button>
+        onClick={() => setParametersOpen(true)}>{t("providers.editor.configureParameters")} <span aria-hidden="true">→</span></Button>
     </div>
     <ParametersLoadStatus busy={props.busy} ready={parameters.ready}
       error={parameters.error} retry={parameters.retry} />
@@ -73,11 +77,12 @@ function AdvancedSettings({ editor, ...props }: Props & { editor: ProviderEditor
 }
 
 function ProviderForm({ editor, formId, ...props }: Props & { editor: ProviderEditorState; formId: string }) {
+  const { t } = useI18n();
   const { draft } = editor;
   const { busy, profile, onSave } = props;
   const official = draft.routeMode === "official";
   return (
-    <form id={formId} className="asb-provider-form" aria-label={profile ? "编辑供应商" : "新建供应商"}
+    <form id={formId} className="asb-provider-form" aria-label={profile ? t("providers.editor.title.edit") : t("providers.workspace.newProvider")}
       onSubmit={(event) => { event.preventDefault(); editor.save(onSave); }}>
       {!profile && <ProviderAccessMode editor={editor} busy={busy} officialTakenApps={props.officialTakenApps}
         onOpenOfficial={props.onOpenOfficial} />}
@@ -92,8 +97,8 @@ function ProviderForm({ editor, formId, ...props }: Props & { editor: ProviderEd
         <ModelSection editor={editor} busy={busy} profile={profile}
           userConfigModel={props.userConfigModel} userConfigWarnings={props.userConfigWarnings} />
       </>}
-      {official && <section className="asb-editor-section" aria-label="官方登录">
-        <h3 className="asb-section-title">官方登录</h3>
+      {official && <section className="asb-editor-section" aria-label={t("providers.label.officialLogin")}>
+        <h3 className="asb-section-title">{t("providers.label.officialLogin")}</h3>
         <div className="asb-editor-section-fields"><OfficialLoginPanel app={draft.app} onFinished={editor.setLoginDone} /></div>
       </section>}
       <AdvancedSettings {...props} editor={editor} />
@@ -102,15 +107,21 @@ function ProviderForm({ editor, formId, ...props }: Props & { editor: ProviderEd
 }
 
 function ProviderEditorSession(props: Props) {
+  const { t } = useI18n();
   const editor = useProviderEditor(props.profile, props.initialApp, props.busy);
   const formId = useId();
   const parametersOpen = editor.parametersOpen;
-  const title = parametersOpen ? "运行参数" : props.profile ? "编辑供应商" : "新建供应商";
-  const backLabel = parametersOpen ? "返回编辑" : "返回供应商";
+  const title = parametersOpen ? t("providers.editor.parameters")
+    : props.profile ? t("providers.editor.title.edit") : t("providers.workspace.newProvider");
+  const backLabel = parametersOpen ? t("providers.editor.backToEditor") : t("providers.editor.backToProviders");
   const goBack = () => parametersOpen ? editor.setParametersOpen(false) : props.onCancel();
   return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel}
     busy={props.busy} onBack={goBack} onCancel={props.onCancel} formId={formId} canSave={editor.canSave}>
-    <div hidden={parametersOpen}><ProviderForm {...props} editor={editor} formId={formId} /></div>
+    <div hidden={parametersOpen}>
+      <ProviderForm {...props} editor={editor} formId={formId} />
+      {props.profile && <ProviderDiagnosticsEntry profileId={props.profile.id} name={props.profile.name}
+        active={props.active && !parametersOpen} disabled={props.busy} />}
+    </div>
     {parametersOpen && <ProviderParametersPage value={editor.draft.parameters} parameters={editor.parameters}
       onChange={(parameters) => editor.setDraft((current) => ({ ...current, parameters }))} busy={props.busy}
       baselineValues={props.profile?.parameters.settings} />}

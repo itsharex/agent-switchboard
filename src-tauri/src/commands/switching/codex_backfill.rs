@@ -42,15 +42,17 @@ pub(super) fn prepare(
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-live-backfill-read-failed",
+                "errors.sw.codexLiveReadFailed",
                 "无法读取当前 Codex 配置，已取消切换以保护供应商档案",
             ));
         }
     };
     if asb_switch::sha256_hex(&text) != expected_config_hash {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "switch-stale",
+            "errors.sw.codexLiveChanged",
             "当前 Codex 配置已变化，请重新预览后再切换",
         ));
     }
@@ -79,24 +81,29 @@ pub(super) fn prepare(
         .find(|record| record.profile.id == profile_id)
         .map(|record| record.file_hash)
         .ok_or_else(|| {
-            CommandError::new(
+            CommandError::keyed(
                 "codex-live-backfill-profile-failed",
+                "errors.sw.codexLiveProfileMissing",
                 "当前 Codex 网关路由找不到对应供应商档案",
             )
         })?;
     let candidate = merge_live(&before, &text).map_err(|error| {
-        CommandError::new(
+        CommandError::localized(
             "codex-live-backfill-invalid",
+            "errors.sw.codexBackfillFailed",
             format!("无法回填 Codex 供应商：{error}"),
+            serde_json::json!({ "error": error }),
         )
     })?;
     if candidate == before {
         return Ok(None);
     }
     let after_hash = serialized_revision(&candidate).map_err(|error| {
-        CommandError::new(
+        CommandError::localized(
             "codex-live-backfill-invalid",
+            "errors.sw.codexBackfillRevisionFailed",
             format!("无法计算 Codex 供应商回填版本：{error}"),
+            serde_json::json!({ "error": error }),
         )
     })?;
     Ok(Some(PreparedCodexBackfill {
@@ -117,8 +124,9 @@ pub(super) fn apply(
         .update_codex_provider_file(prepared.candidate, &prepared.before_hash)
         .map_err(|error| CommandError::new("codex-live-backfill-save-failed", error.to_string()))?;
     if record.file_hash != prepared.after_hash {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "codex-live-backfill-save-failed",
+            "errors.sw.codexBackfillRevisionMismatch",
             "Codex 供应商回填版本与 durable 事务记录不一致",
         ));
     }

@@ -1,29 +1,34 @@
 import type { ExtensionListItem, McpCheckOutcome, SkillUpdateReport } from "../../api/client";
 import { Button } from "../../components/Button";
-import { PreviewIcon, TrashIcon, UpdateIcon } from "../../components/icons";
+import { TrashIcon, UpdateIcon } from "../../components/icons";
 import { Table, type TableColumn } from "../../components/Table";
 import { Tooltip } from "../../components/Tooltip";
 import { ClientToggleGroup } from "../../components/extensions/ClientToggleGroup";
 import { MANAGEMENT_CLIENTS } from "../../components/extensions/client-presentation";
 import { TRANSPORT_LABELS } from "../../components/extensions/labels";
+import { useI18n } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { tr } from "../../i18n/current";
 import { pendingDeployment } from "./pending-deployment";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
-const MCP_CHECK_STATES: Record<McpCheckOutcome["kind"], { tone?: "safe" | "warning" | "danger"; label: string }> = {
-  passed: { tone: "safe", label: "最近检测通过" },
-  partial: { tone: "warning", label: "最近检测部分通过" },
-  failed: { tone: "danger", label: "最近检测失败" },
-  cancelled: { label: "最近检测已取消" },
-  needsNativeConfirmation: { label: "最近检测需原生确认" },
+const MCP_CHECK_STATES: Record<McpCheckOutcome["kind"], { tone?: "safe" | "warning" | "danger"; key: MessageKey }> = {
+  passed: { tone: "safe", key: "extensions.list.checkPassed" },
+  partial: { tone: "warning", key: "extensions.list.checkPartial" },
+  failed: { tone: "danger", key: "extensions.list.checkFailed" },
+  cancelled: { key: "extensions.list.checkCancelled" },
+  needsNativeConfirmation: { key: "extensions.list.checkNativeConfirmation" },
 };
 
 function rowDescription(item: ExtensionListItem): { tone: string | null; text: string } {
   if (item.kind === "skill") return { tone: null, text: item.manifest.description ?? "" };
-  const detail = item.transport === "stdio" ? `${item.command} · ${item.argumentCount} 个启动参数` : "";
+  const detail = item.transport === "stdio"
+    ? tr("extensions.list.argsDetail", { command: item.command, count: item.argumentCount })
+    : "";
   const state = item.lastCheck ? MCP_CHECK_STATES[item.lastCheck.outcome.kind] : null;
   return {
     tone: state?.tone ?? null,
-    text: [state ? state.label : "尚未检测连接", detail].filter(Boolean).join(" · "),
+    text: [state ? tr(state.key) : tr("extensions.list.neverChecked"), detail].filter(Boolean).join(" · "),
   };
 }
 
@@ -36,38 +41,39 @@ function RowActions({
   report?: SkillUpdateReport;
   workspace: ExtensionWorkspace;
 }) {
+  const { t } = useI18n();
   return (
-    <div className={`asb-ext-table-actions${report ? " has-update" : ""}`}>
+    <div className="asb-ext-table-actions">
       {report && (
-        <Tooltip label={`更新 ${item.name}`}>
+        <Tooltip label={t("extensions.list.updateAria", { name: item.name })}>
           <Button
             variant="icon"
             className="asb-ext-table-action"
             disabled={workspace.writeBlocked}
-            aria-label={`更新 ${item.name}`}
+            aria-label={t("extensions.list.updateAria", { name: item.name })}
             onClick={() => void workspace.updates.update([report])}
           >
             <UpdateIcon />
           </Button>
         </Tooltip>
       )}
-      <Tooltip label={`部署与诊断 ${item.name}`}>
+      <Tooltip label={t("extensions.management.aria", { name: item.name })}>
         <Button
-          variant="icon"
-          className="asb-ext-table-action"
+          variant="secondary"
+          className="asb-ext-table-manage"
           disabled={workspace.writeBlocked}
-          aria-label={`打开 ${item.name} 的部署与诊断`}
+          aria-label={t("extensions.list.openManagementAria", { name: item.name })}
           onClick={() => workspace.nav.openManagement(item.id, item.kind)}
         >
-          <PreviewIcon />
+          {t("extensions.list.manage")}
         </Button>
       </Tooltip>
-      <Tooltip label={`删除 ${item.name}`}>
+      <Tooltip label={t("extensions.list.deleteAria", { name: item.name })}>
         <Button
           variant="icon"
           className="asb-ext-table-action asb-ext-table-action-danger"
           disabled={workspace.writeBlocked}
-          aria-label={`删除 ${item.name}`}
+          aria-label={t("extensions.list.deleteAria", { name: item.name })}
           onClick={() => workspace.nav.setDialog({ type: "remove", item })}
         >
           <TrashIcon />
@@ -78,22 +84,27 @@ function RowActions({
 }
 
 function ExtensionIdentity({ item, workspace }: { item: ExtensionListItem; workspace: ExtensionWorkspace }) {
+  const { t } = useI18n();
   const report = workspace.updates.reportMap.get(item.id);
   const updatable = workspace.updates.updatable.find((entry) => entry.definitionId === item.id);
   const description = rowDescription(item);
-  const meta = item.kind === "mcp" ? TRANSPORT_LABELS[item.transport] : item.source?.resolvedCommit ? "GitHub" : "本地";
+  const meta = item.kind === "mcp"
+    ? t(TRANSPORT_LABELS[item.transport])
+    : item.source?.resolvedCommit ? "GitHub" : t("extensions.list.sourceLocal");
   return (
     <Button
       variant="unstyled"
       className="asb-ext-table-definition"
-      aria-label={item.kind === "mcp" ? `编辑 MCP ${item.name}` : `编辑 Skill ${item.name}`}
+      aria-label={item.kind === "mcp"
+        ? t("extensions.list.editMcpAria", { name: item.name })
+        : t("extensions.list.editSkillAria", { name: item.name })}
       onClick={() => void workspace.edit(item)}
     >
       <span className="asb-ext-table-title">
         <span className="asb-ext-table-name">{item.name}</span>
         <span className="asb-ext-table-meta">{meta}</span>
-        {updatable && <span className="asb-ext-update-badge">可更新</span>}
-        {report?.error && <span className="asb-ext-table-error" title={report.error}>检查失败</span>}
+        {updatable && <span className="asb-ext-update-badge">{t("extensions.list.updatable")}</span>}
+        {report?.error && <span className="asb-ext-table-error" title={report.error}>{t("extensions.list.checkError")}</span>}
       </span>
       {description.text && (
         <span className="asb-ext-table-description" title={description.text}>
@@ -111,13 +122,13 @@ function columns(workspace: ExtensionWorkspace): Array<TableColumn<ExtensionList
   return [
     {
       key: "definition",
-      header: "扩展",
+      header: tr("extensions.list.colDefinition"),
       cellClassName: "asb-ext-table-definition-cell",
       render: (item) => <ExtensionIdentity item={item} workspace={workspace} />,
     },
     {
       key: "deployments",
-      header: "客户端",
+      header: tr("extensions.list.colClients"),
       cellClassName: "asb-ext-table-deployments",
       render: (item) => (
         <ClientToggleGroup
@@ -131,7 +142,7 @@ function columns(workspace: ExtensionWorkspace): Array<TableColumn<ExtensionList
     },
     {
       key: "actions",
-      header: "操作",
+      header: tr("extensions.list.colActions"),
       cellClassName: "asb-ext-table-action-cell",
       render: (item) => (
         <RowActions
@@ -145,13 +156,14 @@ function columns(workspace: ExtensionWorkspace): Array<TableColumn<ExtensionList
 }
 
 export function ExtensionList({ workspace }: { workspace: ExtensionWorkspace }) {
+  const { t } = useI18n();
   return (
     <Table
       className="asb-ext-table"
       columns={columns(workspace)}
       rows={workspace.visible}
       rowKey={(item) => item.id}
-      ariaLabel="扩展列表"
+      ariaLabel={t("extensions.list.aria")}
     />
   );
 }

@@ -36,6 +36,7 @@ pub(super) fn handle_request(
             return error_response(
                 403,
                 "web-origin-rejected",
+                "errors.misc.webOriginRejected",
                 "开发后端只接受本机 Vite 页面请求",
             );
         }
@@ -49,6 +50,7 @@ pub(super) fn handle_request(
             return error_response(
                 403,
                 "web-origin-rejected",
+                "errors.misc.webOriginRejected",
                 "开发后端只接受本机 Vite 页面请求",
             );
         }
@@ -58,12 +60,18 @@ pub(super) fn handle_request(
         );
     }
     if request.method() != &Method::Post || request.url() != "/invoke" {
-        return error_response(404, "web-command-not-found", "开发后端不存在该接口");
+        return error_response(
+            404,
+            "web-command-not-found",
+            "errors.misc.webCommandNotFound",
+            "开发后端不存在该接口",
+        );
     }
     if !has_development_origin(request, development_origin) {
         return error_response(
             403,
             "web-origin-rejected",
+            "errors.misc.webOriginRejected",
             "开发后端只接受本机 Vite 页面请求",
         );
     }
@@ -71,7 +79,12 @@ pub(super) fn handle_request(
         header.field.equiv("Content-Type") && header.value.as_str().starts_with("application/json")
     }) {
         return cors_response(
-            error_response(415, "web-content-type-invalid", "开发后端请求必须使用 JSON"),
+            error_response(
+                415,
+                "web-content-type-invalid",
+                "errors.misc.webContentTypeInvalid",
+                "开发后端请求必须使用 JSON",
+            ),
             development_origin,
         );
     }
@@ -79,14 +92,24 @@ pub(super) fn handle_request(
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return cors_response(
-            error_response(400, "web-request-unreadable", "无法读取开发后端请求"),
+            error_response(
+                400,
+                "web-request-unreadable",
+                "errors.misc.webRequestUnreadable",
+                "无法读取开发后端请求",
+            ),
             development_origin,
         );
     }
     let request = match serde_json::from_str::<InvokeRequest>(&body) {
         Ok(request) => request,
         Err(_) => return cors_response(
-            error_response(400, "web-request-invalid", "开发后端请求格式无效"),
+            error_response(
+                400,
+                "web-request-invalid",
+                "errors.misc.webRequestInvalid",
+                "开发后端请求格式无效",
+            ),
             development_origin,
         ),
     };
@@ -138,19 +161,22 @@ pub(super) fn is_health_request(method: &Method, url: &str) -> bool {
 fn error_response(
     status: u16,
     code: &'static str,
+    key: &'static str,
     message: &'static str,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
     json_response(
         status,
         &InvokeResponse::Failure {
-            error: CommandError::new(code, message),
+            error: CommandError::keyed(code, key, message),
         },
     )
 }
 
 fn json_response<T: Serialize>(status: u16, value: &T) -> Response<std::io::Cursor<Vec<u8>>> {
     let body = serde_json::to_string(value).unwrap_or_else(|_| {
-        "{\"kind\":\"failure\",\"error\":{\"code\":\"web-response-invalid\",\"message\":\"开发后端响应无法序列化\"}}".to_string()
+        // Mirrors the serialized `CommandError` shape: `message` stays the raw
+        // fallback rendering, `messageKey` lets the renderer translate it.
+        "{\"kind\":\"failure\",\"error\":{\"code\":\"web-response-invalid\",\"message\":\"开发后端响应无法序列化\",\"messageKey\":\"errors.misc.webResponseSerializeFailed\"}}".to_string()
     });
     Response::from_string(body)
         .with_status_code(StatusCode(status))
@@ -164,9 +190,23 @@ pub(super) fn argument<T: DeserializeOwned>(args: &Value, name: &str) -> Result<
     let value = args
         .get(name)
         .cloned()
-        .ok_or_else(|| CommandError::new("web-argument-missing", format!("缺少参数：{name}")))?;
+        .ok_or_else(|| {
+            CommandError::localized(
+                "web-argument-missing",
+                "errors.misc.webArgumentMissing",
+                format!("缺少参数：{name}"),
+                serde_json::json!({ "name": name }),
+            )
+        })?;
     serde_json::from_value(value)
-        .map_err(|_| CommandError::new("web-argument-invalid", format!("参数无效：{name}")))
+        .map_err(|_| {
+            CommandError::localized(
+                "web-argument-invalid",
+                "errors.misc.webArgumentInvalid",
+                format!("参数无效：{name}"),
+                serde_json::json!({ "name": name }),
+            )
+        })
 }
 
 pub(super) fn optional_argument<T: DeserializeOwned>(
@@ -177,7 +217,14 @@ pub(super) fn optional_argument<T: DeserializeOwned>(
         .cloned()
         .map(|value| {
             serde_json::from_value(value)
-                .map_err(|_| CommandError::new("web-argument-invalid", format!("参数无效：{name}")))
+                .map_err(|_| {
+                    CommandError::localized(
+                        "web-argument-invalid",
+                        "errors.misc.webArgumentInvalid",
+                        format!("参数无效：{name}"),
+                        serde_json::json!({ "name": name }),
+                    )
+                })
         })
         .transpose()
 }
@@ -186,7 +233,12 @@ pub(super) fn as_json<T: Serialize>(
     result: Result<T, CommandError>,
 ) -> Result<Value, CommandError> {
     result.and_then(|value| {
-        serde_json::to_value(value)
-            .map_err(|_| CommandError::new("web-response-invalid", "开发后端响应无法序列化"))
+        serde_json::to_value(value).map_err(|_| {
+            CommandError::keyed(
+                "web-response-invalid",
+                "errors.misc.webResponseSerializeFailed",
+                "开发后端响应无法序列化",
+            )
+        })
     })
 }

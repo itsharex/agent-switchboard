@@ -1,5 +1,6 @@
 import { formatCompactUsageValue, formatUsageValue } from "../../lib/usage-format";
 import { formatCompactTokenCount, formatTokenValue } from "../../lib/token-format";
+import { currentLanguage, tr } from "../../i18n/current";
 
 export interface UsageTrendPoint {
   at: string;
@@ -48,7 +49,7 @@ export function prepareTrendSeries(series: UsageTrendSeries[]): PreparedTrendSer
 
     return [{
       id: entry.id.trim() || `series-${seriesIndex}`,
-      label: entry.label.trim() || "未命名系列",
+      label: entry.label.trim() || tr("usage.chart.unnamedSeries"),
       unit: normalizedUnit(entry.unit),
       points,
     }];
@@ -103,21 +104,16 @@ export function formatChartAxisTime(timestamp: number): string {
   return `${month}/${day}`;
 }
 
-/** A human day label ("9月15日") for hover tooltips; unlike tick labels it
- * keeps no zero padding. */
+/** A human day label ("9月15日" / "Sep 15") for hover tooltips; unlike tick
+ * labels it keeps no zero padding. */
 export function formatChartTooltipDate(timestamp: number): string {
-  const date = new Date(timestamp);
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+  return new Intl.DateTimeFormat(currentLanguage(), { month: "short", day: "numeric" })
+    .format(new Date(timestamp));
 }
 
 export function formatChartTimestamp(timestamp: number): string {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${year}年${month}月${day}日 ${hour}:${minute}`;
+  return new Intl.DateTimeFormat(currentLanguage(), { dateStyle: "medium", timeStyle: "short" })
+    .format(new Date(timestamp));
 }
 
 /** The categorical hue for the nth series, shared by every usage chart.

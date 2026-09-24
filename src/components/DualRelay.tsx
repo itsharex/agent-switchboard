@@ -1,46 +1,53 @@
 import { useLayoutEffect, useRef } from "react";
-import type { AppKind, ConfigFileStatus, LockStatus, ProviderProfile, RouteState } from "../api/client";
+import type { ReactNode } from "react";
+import type { AppKind, ConfigFileStatus, LockStatus, RouteState } from "../api/client";
+import type { TFunction } from "../i18n";
+import { useI18n } from "../i18n";
+import { localizedMessageText } from "../i18n/errors";
 import { clientName } from "../lib/client-name";
-import { currentProviderName } from "../lib/current-provider-name";
+import { currentProviderName, currentProviderProfile, type ActiveProfileRef } from "../lib/current-provider-name";
 import { ClientLogo } from "./ClientLogo";
+import { ProviderEndpoint } from "./ProviderRowControls";
 import "../styles/base/route-cards.css";
 
 interface RouteCardProps {
   app: AppKind;
   status: ConfigFileStatus | undefined;
-  profiles: ProviderProfile[];
+  profiles: readonly ActiveProfileRef[];
   lock: LockStatus | undefined;
 }
 
-function configurationNotes(status: ConfigFileStatus | undefined): string[] {
-  if (!status) return ["配置状态尚未读取"];
-  if (status.readError) return [`读取失败：${status.readError}`];
-  if (!status.exists) return ["未找到配置文件"];
-  if (!status.syntaxOk) return ["配置语法错误"];
+function configurationNotes(status: ConfigFileStatus | undefined, t: TFunction): string[] {
+  if (!status) return [t("providers.route.notes.notRead")];
+  if (status.readError) return [t("providers.route.notes.readError", { detail: status.readError })];
+  if (!status.exists) return [t("providers.route.notes.missing")];
+  if (!status.syntaxOk) return [t("providers.route.notes.syntaxError")];
   const notes: string[] = [];
   switch (status.matchStatus.kind) {
-    case "externallyModified": notes.push("配置已被外部修改，与上次切换不一致"); break;
-    case "profileChanged": notes.push("档案或客户端偏好已更改，尚未应用"); break;
-    case "unmanaged": notes.push("当前配置未匹配已存档案"); break;
-    case "restoredBackup": notes.push("当前配置来自已恢复的备份"); break;
-    case "unknown": notes.push("配置匹配状态无法确定"); break;
+    case "externallyModified": notes.push(t("providers.route.notes.externallyModified")); break;
+    case "profileChanged": notes.push(t("providers.route.notes.profileChanged")); break;
+    case "unmanaged": notes.push(t("providers.route.notes.unmanaged")); break;
+    case "restoredBackup": notes.push(t("providers.route.notes.restoredBackup")); break;
+    case "unknown": notes.push(t("providers.route.notes.unknown")); break;
   }
-  return [...notes, ...(status.route?.scopeWarnings ?? [])];
+  return [...notes, ...(status.route?.scopeWarnings ?? []).map((warning) => localizedMessageText(warning, t))];
 }
 
-function lockNote(lock: LockStatus | undefined): string | null {
-  if (!lock) return "写入锁状态尚未读取";
+function lockNote(lock: LockStatus | undefined, t: TFunction): string | null {
+  if (!lock) return t("providers.route.lock.notRead");
   switch (lock.state) {
     case "free": return null;
-    case "stale": return "发现遗留写入锁，可在诊断中清理";
-    case "held": return `写入锁由${lock.processName ?? (lock.pid ? `进程 ${lock.pid}` : "其他进程")}持有`;
-    case "indeterminate": return `写入锁状态无法确定：${lock.reason}`;
+    case "stale": return t("providers.route.lock.stale");
+    case "held": return t("providers.route.lock.held", {
+      name: lock.processName ?? (lock.pid ? t("providers.route.lock.process", { pid: lock.pid }) : t("providers.route.lock.otherProcess")),
+    });
+    case "indeterminate": return t("providers.route.lock.indeterminate", { detail: lock.reason });
   }
 }
 
-function accessLabel(route: RouteState | null): string {
-  if (!route) return "未读取";
-  return route.routeMode === "official" ? "官方登录" : "自定义服务";
+function accessLabel(route: RouteState | null, t: TFunction): string {
+  if (!route) return t("providers.label.notRead");
+  return route.routeMode === "official" ? t("providers.label.officialLogin") : t("providers.route.access.custom");
 }
 
 /** Swapping client tabs or views remounts these cards, which would restart
@@ -67,26 +74,31 @@ function useContinuousFlowPhase() {
 function RouteCard({
   app, status, profiles, lock,
 }: RouteCardProps) {
+  const { t } = useI18n();
   const cardRef = useContinuousFlowPhase();
   const readable = status && !status.readError && status.exists && status.syntaxOk;
   const route = readable ? status.route : null;
-  const notes = configurationNotes(status);
-  const lockWarning = lockNote(lock);
+  const activeProfile = currentProviderProfile(status, profiles);
+  const modelValue = route ? route.model ?? t("providers.label.clientDefault") : t("providers.label.notRead");
+  const serviceValue = serviceAddress(route, t);
+  const notes = configurationNotes(status, t);
+  const lockWarning = lockNote(lock, t);
   if (lockWarning) notes.push(lockWarning);
   return (
-    <section ref={cardRef} className={`asb-route-card${route ? " is-on" : ""}`} data-app={app} aria-label={`${clientName(app)} 当前连接`}>
+    <section ref={cardRef} className={`asb-route-card${route ? " is-on" : ""}`} data-app={app} aria-label={t("providers.route.cardAria", { client: clientName(app) })}>
       <div className="asb-route-card-body">
         <div>
           <div className="asb-route-ident">
             <ClientLogo app={app} className="asb-route-logo" />
             <span className="asb-route-client">{clientName(app)}</span>
           </div>
-          <h3 className="asb-route-provider">{route ? currentProviderName(status, profiles) : "未读取"}</h3>
+          <h3 className="asb-route-provider">{route ? currentProviderName(status, profiles) : t("providers.label.notRead")}</h3>
         </div>
         <dl className="asb-route-values">
-          <div><dt className="asb-route-key">模型</dt><dd className="asb-route-value">{route ? route.model ?? "客户端默认" : "未读取"}</dd></div>
-          <div><dt className="asb-route-key">服务地址</dt><dd className="asb-route-value">{serviceAddress(route)}</dd></div>
-          <div><dt className="asb-route-key">接入方式</dt><dd className="asb-route-value">{accessLabel(route)}</dd></div>
+          <div><dt className="asb-route-key">{t("providers.label.model")}</dt><dd className="asb-route-value" title={modelValue}>{modelValue}</dd></div>
+          <div><dt className="asb-route-key">{t("providers.label.serviceAddress")}</dt><dd className="asb-route-value" title={serviceValue}>{serviceValue}</dd></div>
+          <div><dt className="asb-route-key">{t("providers.label.accessMode")}</dt><dd className="asb-route-value">{accessLabel(route, t)}</dd></div>
+          <div><dt className="asb-route-key">{t("providers.label.website")}</dt><dd className="asb-route-value">{websiteValue(route, activeProfile?.websiteUrl ?? null, t)}</dd></div>
         </dl>
         {notes.length > 0 && (
           <ul className="asb-route-notes">
@@ -98,15 +110,23 @@ function RouteCard({
   );
 }
 
-function serviceAddress(route: RouteState | null): string {
-  if (!route) return "未读取";
-  if (!route.baseUrl) return route.routeMode === "official" ? "官方服务" : "未设置";
-  try { return new URL(route.baseUrl).host; } catch { return "地址无法解析"; }
+function serviceAddress(route: RouteState | null, t: TFunction): string {
+  if (!route) return t("providers.label.notRead");
+  if (!route.baseUrl) return route.routeMode === "official" ? t("providers.route.officialService") : t("providers.label.notSet");
+  try { return new URL(route.baseUrl).host; } catch { return t("providers.route.unresolvable"); }
+}
+
+/** The active profile's homepage as a system-browser link; the route card
+ * only states facts read from the real configuration. */
+function websiteValue(route: RouteState | null, profileUrl: string | null, t: TFunction): ReactNode {
+  if (!route) return t("providers.label.notRead");
+  if (!profileUrl) return t("providers.label.notSet");
+  return <ProviderEndpoint url={profileUrl} link />;
 }
 
 interface DualRelayProps {
   statuses: ConfigFileStatus[] | null;
-  profiles: ProviderProfile[];
+  profiles: readonly ActiveProfileRef[];
   locks: Partial<Record<AppKind, LockStatus>>;
 }
 

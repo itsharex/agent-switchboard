@@ -1,3 +1,5 @@
+import { uiMessage } from "../i18n/errors";
+import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { setShortcutRecording } from "../api/client";
 import { captureGlobalShortcut } from "../lib/global-shortcut";
@@ -5,12 +7,12 @@ import { captureGlobalShortcut } from "../lib/global-shortcut";
 export function useGlobalShortcutRecorder(onChange: (value: string) => Promise<boolean>) {
   const [recording, setRecording] = useState(false);
   const [preparing, setPreparing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const captureButton = useRef<HTMLButtonElement>(null);
   const mounted = useRef(false);
   const session = useRef(0);
   const report = (cause: unknown) => {
-    if (mounted.current) setError((cause as { message?: string }).message ?? String(cause));
+    if (mounted.current) setError(cause);
     else console.error("结束快捷键录入失败", cause);
   };
   const finish = () => {
@@ -52,7 +54,7 @@ export function useGlobalShortcutRecorder(onChange: (value: string) => Promise<b
     if (event.key === "Escape") { finish(); return; }
     if (event.repeat || /^(Control|Alt|Shift|Meta)(Left|Right)$/.test(event.code)) return;
     const chord = captureGlobalShortcut(event);
-    if (!chord) { setError("请按 Ctrl、Alt 或 Command/Win 与字母、数字、空格或 F1–F12 的组合"); return; }
+    if (!chord) { setError(uiMessage("settings.shortcut.invalidChord")); return; }
     finish();
     void onChange(chord);
   };

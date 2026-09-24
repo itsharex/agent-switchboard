@@ -21,16 +21,18 @@ pub async fn open_runtime_log_dir(app: AppHandle) -> Result<(), CommandError> {
         let directory = runtime_log::log_directory(&app)
             .map_err(|error| CommandError::new("runtime-log-directory-unavailable", error))?;
         std::fs::create_dir_all(&directory).map_err(|_| {
-            CommandError::new(
+            CommandError::keyed(
                 "runtime-log-directory-create-failed",
+                "errors.misc.logDirCreateFailed",
                 "无法创建应用日志目录",
             )
         })?;
         app.opener()
             .open_path(directory.to_string_lossy().into_owned(), None::<&str>)
             .map_err(|_| {
-                CommandError::new(
+                CommandError::keyed(
                     "runtime-log-directory-open-failed",
+                    "errors.misc.logDirOpenFailed",
                     "无法打开应用日志文件夹",
                 )
             })

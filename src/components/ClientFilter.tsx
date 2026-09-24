@@ -1,6 +1,7 @@
 import { useId } from "react";
 import type { AppKind } from "../api/client";
 import { clientName } from "../lib/client-name";
+import { useI18n } from "../i18n";
 import { ClientLogo } from "./ClientLogo";
 
 export type ClientFilterValue = "all" | AppKind;
@@ -27,6 +28,7 @@ export function ClientFilter({
   label: string;
   showLogos?: boolean;
 }) {
+  const { t } = useI18n();
   const name = useId();
   return (
     <div className="asb-segments asb-client-filter" role="radiogroup" aria-label={label}>
@@ -41,7 +43,7 @@ export function ClientFilter({
           {showLogos && option !== "all" && (
             <ClientLogo app={option} className="asb-seg-logo" />
           )}
-          {option === "all" ? "全部" : clientName(option)}
+          {option === "all" ? t("clientConfig.filter.all") : clientName(option)}
         </label>
       ))}
     </div>

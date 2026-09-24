@@ -1,5 +1,6 @@
 import type { Ref } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { ConnectivityIcon, EditIcon, TrashIcon, UsageIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
@@ -8,21 +9,24 @@ export function ProviderEndpoint({ url, link = false }: { url: string; link?: bo
   let host = url;
   try { host = new URL(url).host; } catch { /* Keep the supplied endpoint readable. */ }
   if (!link) return <span title={url}>{host}</span>;
-  return <a className="asb-row-host" href={url} title={url}
+  return <a className="asb-provider-link" href={url} title={url}
     onClick={(event) => { event.preventDefault(); void openUrl(url); }}>{host}</a>;
 }
 
 export function ProviderActivateButton({ name, onActivate }: { name: string; onActivate: () => void }) {
-  return <Tooltip label={`启用 ${name}`}>
-    <Button variant="primary" className="asb-row-activate" aria-label={`启用 ${name}`} onClick={onActivate}>启用</Button>
+  const { t } = useI18n();
+  const label = t("providers.row.activate", { name });
+  return <Tooltip label={label}>
+    <Button variant="primary" className="asb-row-activate" aria-label={label} onClick={onActivate}>{t("providers.row.activateShort")}</Button>
   </Tooltip>;
 }
 
 export function ProviderLoginButton({ name, open, onToggle }: { name: string; open: boolean; onToggle: () => void }) {
-  const label = open ? `收起 ${name} 登录` : `重新登录 ${name}`;
+  const { t } = useI18n();
+  const label = open ? t("providers.row.loginCollapse", { name }) : t("providers.row.relogin", { name });
   return <Tooltip label={label}>
     <Button variant="secondary" className={`asb-row-activate${open ? " is-active" : ""}`}
-      aria-label={label} aria-expanded={open} onClick={onToggle}>{open ? "收起登录" : "重新登录"}</Button>
+      aria-label={label} aria-expanded={open} onClick={onToggle}>{open ? t("providers.row.loginCollapseShort") : t("providers.row.reloginShort")}</Button>
   </Tooltip>;
 }
 
@@ -36,11 +40,15 @@ interface Props {
 
 /** Both clients use the same actions and disclosure semantics. */
 export function ProviderRowActions({ name, onEdit, onDelete, test, usage }: Props) {
-  const testLabel = test?.open ? `收起 ${name} 供应商测试` : `测试 ${name} 供应商`;
-  const usageLabel = !usage?.configured ? `配置 ${name} 用量` : usage.open ? `收起 ${name} 用量详情` : `查看 ${name} 用量详情`;
+  const { t } = useI18n();
+  const testLabel = test?.open ? t("providers.row.testCollapse", { name }) : t("providers.row.test", { name });
+  const usageLabel = !usage?.configured ? t("providers.row.usageConfigure", { name })
+    : usage.open ? t("providers.row.usageCollapse", { name }) : t("providers.row.usageView", { name });
+  const editLabel = t("providers.row.edit", { name });
+  const deleteLabel = t("providers.row.delete", { name });
   return <>
-    {onEdit && <Tooltip label={`编辑 ${name}`}>
-      <Button variant="icon" aria-label={`编辑 ${name}`} onClick={onEdit}><EditIcon /></Button>
+    {onEdit && <Tooltip label={editLabel}>
+      <Button variant="icon" aria-label={editLabel} onClick={onEdit}><EditIcon /></Button>
     </Tooltip>}
     {test && <Tooltip label={testLabel}>
       <Button ref={test.trigger} variant="icon" className={test.open ? "is-active" : undefined}
@@ -52,8 +60,8 @@ export function ProviderRowActions({ name, onEdit, onDelete, test, usage }: Prop
         aria-label={usageLabel} aria-controls={usage.configured && usage.open ? usage.id : undefined}
         aria-expanded={usage.configured ? usage.open : undefined} onClick={usage.onOpen}><UsageIcon /></Button>
     </Tooltip>}
-    {onDelete && <Tooltip label={`删除 ${name}`}>
-      <Button variant="icon" aria-label={`删除 ${name}`} onClick={onDelete}><TrashIcon /></Button>
+    {onDelete && <Tooltip label={deleteLabel}>
+      <Button variant="icon" aria-label={deleteLabel} onClick={onDelete}><TrashIcon /></Button>
     </Tooltip>}
   </>;
 }

@@ -1,6 +1,7 @@
 import { Button } from "../../components/Button";
 import { ExtensionLoading } from "../../components/extensions/ExtensionLoading";
 import { SearchIcon } from "../../components/icons";
+import { useI18n } from "../../i18n";
 import { Server, Sparkles } from "lucide-react";
 import { ExtensionList } from "./ExtensionList";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
@@ -9,6 +10,7 @@ import type { ExtensionWorkspace } from "./useExtensionWorkspace";
  * and the action saying which kind of empty this is — nothing added yet, or a
  * filter that matched nothing. */
 function EmptyLibrary({ workspace }: { workspace: ExtensionWorkspace }) {
+  const { t } = useI18n();
   const empty = workspace.kindItems.length === 0;
   const { nav } = workspace;
   return (
@@ -17,11 +19,13 @@ function EmptyLibrary({ workspace }: { workspace: ExtensionWorkspace }) {
         {empty ? nav.kind === "skill" ? <Sparkles /> : <Server /> : <SearchIcon />}
       </span>
       <h3 className="asb-section-title">
-        {empty ? `还没有${nav.kind === "skill" ? " Skills" : " MCP 服务"}` : "没有符合过滤条件的扩展"}
+        {empty
+          ? t(nav.kind === "skill" ? "extensions.library.emptySkills" : "extensions.library.emptyMcp")
+          : t("extensions.library.noFilterMatches")}
       </h3>
       {!empty && (
         <Button variant="secondary" onClick={nav.clearFilters}>
-          清除搜索
+          {t("extensions.library.clearSearch")}
         </Button>
       )}
     </div>
@@ -29,25 +33,26 @@ function EmptyLibrary({ workspace }: { workspace: ExtensionWorkspace }) {
 }
 
 export function ExtensionLibraryPanel({ workspace }: { workspace: ExtensionWorkspace }) {
+  const { t } = useI18n();
   if (workspace.nav.kind === null) return null;
   if (!workspace.ext.loaded) return <ExtensionLoading />;
   if (!workspace.ext.workspace)
     return (
       <div className="asb-empty-state" role="alert">
-        <h3 className="asb-section-title">扩展库加载失败</h3>
-        <p className="asb-empty-state-detail">重试以读取本机扩展库。</p>
+        <h3 className="asb-section-title">{t("extensions.library.loadFailed")}</h3>
+        <p className="asb-empty-state-detail">{t("extensions.library.loadFailedDetail")}</p>
         <Button
           variant="secondary"
           disabled={workspace.busy}
           onClick={() => void workspace.ext.runExclusive(workspace.ext.refresh)}
         >
-          重新加载
+          {t("extensions.library.reload")}
         </Button>
       </div>
     );
   const filtered = workspace.visible.length !== workspace.kindItems.length;
   return (
-    <section className="asb-ext-library-panel" aria-label="扩展库">
+    <section className="asb-ext-library-panel" aria-label={t("extensions.library.aria")}>
       <div className="asb-ext-library-scroll">
         {workspace.visible.length > 0 ? (
           <ExtensionList workspace={workspace} />
@@ -55,7 +60,7 @@ export function ExtensionLibraryPanel({ workspace }: { workspace: ExtensionWorks
           <EmptyLibrary workspace={workspace} />
         )}
         {filtered && (
-          <p className="asb-ext-result-count" role="status">显示 {workspace.visible.length} 项</p>
+          <p className="asb-ext-result-count" role="status">{t("extensions.library.showing", { count: workspace.visible.length })}</p>
         )}
       </div>
     </section>

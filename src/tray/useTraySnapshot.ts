@@ -1,16 +1,11 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getTraySnapshot, onTrayChanged, type TraySnapshot } from "../api/client";
-
-export function trayError(caught: unknown): string {
-  if (typeof caught === "string") return caught;
-  if (caught instanceof Error) return caught.message;
-  if (caught && typeof caught === "object" && "message" in caught) return String(caught.message);
-  return "托盘操作失败，请打开主界面检查。";
-}
+import { applyLanguagePreference } from "../i18n/current";
 
 export function useTraySnapshot() {
   const [snapshot, setSnapshot] = useState<TraySnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const [initialized, setInitialized] = useState(false);
   const refreshRef = useRef<() => Promise<void>>(async () => {});
   const refresh = useCallback(() => refreshRef.current(), []);
@@ -23,9 +18,13 @@ export function useTraySnapshot() {
       const request = ++revision;
       try {
         const next = await getTraySnapshot();
-        if (!disposed && request === revision) { setSnapshot(next); setError(null); }
+        if (!disposed && request === revision) {
+          if (next.settings) applyLanguagePreference(next.settings.language);
+          setSnapshot(next);
+          setError(null);
+        }
       } catch (caught) {
-        if (!disposed && request === revision) setError(trayError(caught));
+        if (!disposed && request === revision) setError(caught);
       }
     };
     refreshRef.current = reload;
@@ -36,7 +35,7 @@ export function useTraySnapshot() {
         unlisten = stop;
         await reload();
       } catch (caught) {
-        if (!disposed) setError(trayError(caught));
+        if (!disposed) setError(caught);
       } finally {
         if (!disposed) setInitialized(true);
       }

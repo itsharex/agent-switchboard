@@ -15,8 +15,6 @@
   --asb-action: #0a84ff;
   --asb-claude: #8b7cff;
   --asb-safe: #30d158;
-  --asb-extension-codex: #15803d;
-  --asb-extension-claude: #c2410c;
   --asb-text-on-action: #ffffff;
   --asb-focus-ring: rgba(10, 132, 255, 0.42);
 
@@ -228,8 +226,6 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --asb-extension-codex: #86efac;
-    --asb-extension-claude: #fdba74;
     /* Semantic colors — dark mode (Deep Current, never pure black) */
     --asb-canvas: var(--asb-current);
     --asb-text: #edf0f7;
@@ -271,8 +267,6 @@
 
 
 :root[data-theme="dark"] {
-    --asb-extension-codex: #86efac;
-    --asb-extension-claude: #fdba74;
     /* Semantic colors — dark mode (Deep Current, never pure black) */
     --asb-canvas: var(--asb-current);
     --asb-text: #edf0f7;

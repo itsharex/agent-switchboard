@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { pickDirectory, pickFile } from "../../api/client";
 import { AppDialog } from "../../components/AppDialog";
+import { useI18n } from "../../i18n";
 import { ExtensionHistory } from "../../components/extensions/ExtensionHistory";
 import { NewMcpForm } from "../../components/extensions/NewMcpForm";
 import { NewSkillForm } from "./NewSkillForm";
@@ -11,8 +12,9 @@ import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 type Props = { workspace: ExtensionWorkspace };
 
 export function NewMcpDialog({ workspace: w }: Props) {
+  const { t } = useI18n();
   return (
-    <AppDialog title="添加 MCP" busy={w.busy} onClose={w.nav.closeDialog}>
+    <AppDialog title={t("extensions.toolbar.addMcp")} busy={w.busy} onClose={w.nav.closeDialog}>
       <NewMcpForm
         busy={w.writeBlocked}
         onPutSecret={w.ext.putSecret}
@@ -23,10 +25,11 @@ export function NewMcpDialog({ workspace: w }: Props) {
 }
 
 export function NewSkillDialog({ workspace: w }: Props) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   return (
-    <AppDialog title="新建本地 Skill" busy={w.busy} onClose={w.nav.closeDialog}>
+    <AppDialog title={t("extensions.toolbar.newSkill")} busy={w.busy} onClose={w.nav.closeDialog}>
       <NewSkillForm
         busy={w.writeBlocked}
         newSkillName={name}
@@ -43,9 +46,10 @@ export function NewSkillDialog({ workspace: w }: Props) {
 }
 
 export function PortableImportDialog({ workspace: w }: Props) {
+  const { t } = useI18n();
   const [path, setPath] = useState("");
   return (
-    <AppDialog title="导入便携包" busy={w.busy} onClose={w.nav.closeDialog}>
+    <AppDialog title={t("extensions.toolbar.importPortable")} busy={w.busy} onClose={w.nav.closeDialog}>
       <PortableImportForm
         busy={w.writeBlocked}
         portablePath={path}
@@ -65,9 +69,10 @@ export function PortableImportDialog({ workspace: w }: Props) {
 }
 
 export function ProjectDialog({ workspace: w }: Props) {
+  const { t } = useI18n();
   const [root, setRoot] = useState("");
   return (
-    <AppDialog title="注册项目目录" busy={w.busy} onClose={w.nav.closeDialog}>
+    <AppDialog title={t("extensions.toolbar.registerProject")} busy={w.busy} onClose={w.nav.closeDialog}>
       <ProjectRegisterForm
         busy={w.writeBlocked}
         projectRoot={root}
@@ -85,8 +90,9 @@ export function ProjectDialog({ workspace: w }: Props) {
 }
 
 export function HistoryDialog({ workspace: w }: Props) {
+  const { t } = useI18n();
   return (
-    <AppDialog title="操作历史" busy={w.busy} onClose={w.nav.closeDialog} wide>
+    <AppDialog title={t("extensions.toolbar.history")} busy={w.busy} onClose={w.nav.closeDialog} wide>
       <ExtensionHistory
         records={w.ext.workspace?.history ?? []}
         items={w.items}

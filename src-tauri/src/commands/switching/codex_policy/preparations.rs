@@ -40,8 +40,9 @@ impl CodexPolicyPreparations {
             .remove(id)
             .filter(|entry| entry.created.elapsed() < Duration::from_secs(600))
             .ok_or_else(|| {
-                CommandError::new(
+                CommandError::keyed(
                     "codex-policy-preview-stale",
+                    "errors.sw.codexPolicyPreviewStale",
                     "Codex 网关预览已失效，请重新预览",
                 )
             })?;
@@ -53,7 +54,11 @@ impl CodexPolicyPreparations {
     }
 }
 fn unavailable() -> CommandError {
-    CommandError::new("codex-policy-preview-unavailable", "Codex 网关预览暂不可用")
+    CommandError::keyed(
+        "codex-policy-preview-unavailable",
+        "errors.sw.codexPolicyPreviewUnavailable",
+        "Codex 网关预览暂不可用",
+    )
 }
 
 pub(super) fn prepare(
@@ -65,7 +70,11 @@ pub(super) fn prepare(
     let invalid = |message| CommandError::new("codex-policy-invalid", message);
     policy.validate().map_err(invalid)?;
     if policy.enabled && policy.provider_ids.first() != Some(&profile_id) {
-        return Err(invalid("开启故障转移必须先通过事务激活队列首项".into()));
+        return Err(CommandError::keyed(
+            "codex-policy-invalid",
+            "errors.sw.failoverRequiresQueueHead",
+            "开启故障转移必须先通过事务激活队列首项",
+        ));
     }
     let (_, policy_revision) = policy::load(state.root()).map_err(invalid)?;
     let store = state.configuration();
@@ -95,8 +104,9 @@ pub(super) fn validate(
     prepared: &Prepared,
 ) -> Result<(), CommandError> {
     let stale = || {
-        CommandError::new(
+        CommandError::keyed(
             "codex-policy-preview-stale",
+            "errors.sw.policyContextChanged",
             "供应商、网关策略或配置来源已变化，请重新预览",
         )
     };

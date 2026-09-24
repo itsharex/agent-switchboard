@@ -102,8 +102,9 @@ impl Planner<'_> {
                         .strip_prefix("skills.config[path=")
                         .and_then(|pointer| pointer.strip_suffix(']'))
                     else {
-                        return Err(CommandError::new(
+                        return Err(CommandError::keyed(
                             "extension-baseline",
+                            "errors.extops.codexSkillRulePointerInvalid",
                             "Codex Skill 基线规则指针无效",
                         ));
                     };
@@ -114,8 +115,9 @@ impl Planner<'_> {
                 }
                 AppKind::Claude => {
                     let Some(name) = entry_pointer.strip_prefix("skillOverrides.") else {
-                        return Err(CommandError::new(
+                        return Err(CommandError::keyed(
                             "extension-baseline",
+                            "errors.extops.claudeSkillRulePointerInvalid",
                             "Claude Skill 基线规则指针无效",
                         ));
                     };
@@ -168,26 +170,38 @@ impl Planner<'_> {
         CommandError,
     > {
         let ExtensionPayload::Mcp(mcp) = &definition.payload else {
-            return Err(CommandError::new("extension-invalid", "不是 MCP 定义"));
+            return Err(CommandError::keyed(
+                "extension-invalid",
+                "errors.extops.notMcpDefinition",
+                "不是 MCP 定义",
+            ));
         };
         let target = self.mcp_document(binding)?;
         let McpScope::ClaudeProjectPrivate { project_path } = target.scope else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.mcpBindingNotClaudePrivate",
                 "该 MCP 绑定不是 Claude 项目私有目标",
             ));
         };
         let document = target.path;
         if !self.document_baseline_is_current(binding, &document)? {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-baseline",
+                "errors.extops.mcpBaselineMissingForEnable",
                 "MCP 绑定缺少可验证的部署基线，不能安全启用",
             ));
         }
         let key = binding
             .native_key
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.mcpBindingMissingKey",
+                    "MCP 绑定缺少服务键",
+                )
+            })?;
         let work = self.document_work(
             batch,
             &document,

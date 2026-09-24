@@ -1,6 +1,8 @@
+import { commandErrorText } from "../i18n/errors";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { type AppKind, type CodexSubagentSettings, type SettingValue, type ConfigFileStatus } from "../api/client";
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
+import { useI18n, type TFunction } from "../i18n";
 import { Button } from "./Button";
 import { ClientPicker } from "./ClientPicker";
 import { CurrentConfigurationEditor } from "./CurrentConfigurationEditor";
@@ -35,30 +37,31 @@ interface ClientSettingsPanelProps {
 }
 
 function clientConfigStatus(
+  t: TFunction,
   configStatus: ConfigFileStatus | undefined,
 ): string | null {
   switch (configStatus?.matchStatus.kind) {
     case "matchesProfile":
-      return `已应用：真实配置与「${configStatus.matchStatus.profileName}」一致`;
+      return t("clientConfig.status.matchesProfile", { name: configStatus.matchStatus.profileName });
     case "externallyModified":
       return null;
     case "profileChanged":
-      return `供应商「${configStatus.matchStatus.profileName}」或客户端设置已更新，请重新应用`;
+      return t("clientConfig.status.profileChanged", { name: configStatus.matchStatus.profileName });
     case "restoredBackup":
-      return "真实配置已恢复备份，请前往供应商页重新应用";
+      return t("clientConfig.status.restoredBackup");
     case "unmanaged":
-      return "真实配置尚未由供应商应用管理";
+      return t("clientConfig.status.unmanaged");
     default:
       return null;
   }
 }
 
-function actionStatus(props: ClientSettingsPanelProps) {
+function actionStatus(t: TFunction, props: ClientSettingsPanelProps) {
   if (props.configStatus?.exists && !props.configStatus.syntaxOk) {
-    return { message: "真实客户端配置格式错误，请在“通用配置文件”中生成自动修复预览", error: true };
+    return { message: t("clientConfig.status.syntaxError"), error: true };
   }
-  if (props.editorState.phase === "dirty") return { message: "有未应用修改", error: false };
-  const message = clientConfigStatus(props.configStatus);
+  if (props.editorState.phase === "dirty") return { message: t("clientConfig.status.dirty"), error: false };
+  const message = clientConfigStatus(t, props.configStatus);
   return message ? { message, error: props.configStatus?.matchStatus.kind === "externallyModified" } : null;
 }
 
@@ -78,9 +81,10 @@ function ClientConfigurationReviewButton({
   reviewId,
   onToggle,
 }: ConfigurationReviewButtonProps) {
+  const { t } = useI18n();
   const label = state.currentConfigurationLoading
-    ? "正在读取配置"
-    : open ? "收起通用配置文件" : "通用配置文件";
+    ? t("clientConfig.review.reading")
+    : open ? t("clientConfig.review.collapse") : t("clientConfig.review.title");
   return (
     <Button
       variant="secondary"
@@ -102,16 +106,17 @@ function ClientConfigurationReview({
   subagentDraft,
   onClaudeExtraChange,
 }: ConfigurationReviewProps) {
+  const { t } = useI18n();
   const source = state.currentConfiguration;
   if (!source && !state.currentConfigurationLoading && !state.currentConfigurationError) {
-    return <p className="asb-field-help" role="status">正在准备通用配置文件。</p>;
+    return <p className="asb-field-help" role="status">{t("clientConfig.review.preparing")}</p>;
   }
   return (
     <div className="asb-client-configuration-review">
-      {state.currentConfigurationLoading && <p className="asb-field-help" role="status">正在读取当前机器的真实配置。</p>}
+      {state.currentConfigurationLoading && <p className="asb-field-help" role="status">{t("clientConfig.review.readingReal")}</p>}
       {state.currentConfigurationError && (
         <p className="asb-field-error" role="alert">
-          无法读取当前机器的真实配置：{state.currentConfigurationError.message}
+          {t("clientConfig.review.readError", { message: commandErrorText(state.currentConfigurationError, t) })}
         </p>
       )}
       {source && (
@@ -124,13 +129,13 @@ function ClientConfigurationReview({
           onApplied={onApplied}
         />
       )}
-      <section className="asb-client-configuration-review-scope" aria-label="ASB 管理范围">
-        <h3 className="asb-section-title">ASB 管理范围</h3>
+      <section className="asb-client-configuration-review-scope" aria-label={t("clientConfig.review.scopeTitle")}>
+        <h3 className="asb-section-title">{t("clientConfig.review.scopeTitle")}</h3>
         <p className="asb-field-help">
-          标准通用设置由本页表单管理；收起通用配置文件后，请使用对应设置项修改。
+          {t("clientConfig.review.scopeHelp")}
         </p>
         {app === "codex" && (
-          <p className="asb-field-help">Codex 子 agent 的三项全局运行设置由“子 agent 运行”模块管理。</p>
+          <p className="asb-field-help">{t("clientConfig.review.scopeCodexHelp")}</p>
         )}
       </section>
       {app === "claude" && (
@@ -145,10 +150,11 @@ function ClientConfigurationReview({
 }
 function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
   const { editorState: state, app, busy } = props;
+  const { t } = useI18n();
   if (state.phase === "idle" || state.phase === "loading")
     return <>
       {props.subagentSettings}
-      <div className="asb-settings-skeleton" role="status" aria-label="正在读取">
+      <div className="asb-settings-skeleton" role="status" aria-label={t("clientConfig.loading")}>
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
@@ -160,22 +166,24 @@ function ClientPreferencesEditor(props: ClientSettingsPanelProps) {
         {props.subagentSettings}
         <div className="asb-empty" role="alert">
           <p>
-            无法读取客户端设置：{state.error?.message ?? "本地应用数据不可用"}
+            {t("clientConfig.loadError", { message: state.error ? commandErrorText(state.error, t) : t("clientConfig.loadErrorFallback") })}
           </p>
           <Button
             variant="secondary"
             disabled={busy}
             onClick={() => props.onRetryLoad(app)}
           >
-            重新读取
+            {t("clientConfig.common.reload")}
           </Button>
         </div>
       </>
     );
   }
   const working = busy;
-  const modelBehaviorGroups = state.editor.groups.filter((group) => group === "模型行为");
-  const remainingGroups = state.editor.groups.filter((group) => group !== "模型行为");
+  // The backend catalog emits stable group keys; the display name resolves
+  // through the catalog at render time.
+  const modelBehaviorGroups = state.editor.groups.filter((group) => group === "ownership.group.modelBehavior");
+  const remainingGroups = state.editor.groups.filter((group) => group !== "ownership.group.modelBehavior");
   return (
     <>
       {modelBehaviorGroups.length > 0 && (
@@ -259,18 +267,19 @@ function ClientSettingsToolbar({
   configuration,
   onSectionChange,
 }: ClientSettingsToolbarProps) {
+  const { t } = useI18n();
   const directoryOpen = openSection === "directory";
   const reviewOpen = openSection === "review";
   const instructionsOpen = openSection === "instructions";
   const resetOpen = openSection === "reset";
   return (
     <WorkspaceHeader
-      title="客户端配置"
+      title={t("clientConfig.title")}
       primary={
         <ClientPicker
           app={panel.app}
           disabled={panel.busy}
-          label="客户端配置客户端"
+          label={t("clientConfig.pickerLabel")}
           onChange={(target) => panel.onSelectApp(target)}
         />
       }
@@ -283,7 +292,7 @@ function ClientSettingsToolbar({
             disabled={!panel.editorState.editor}
             onClick={(event) => onSectionChange(directoryOpen ? null : "directory", event.currentTarget)}
           >
-            {directoryOpen ? "返回客户端配置" : "官方设置目录"}
+            {directoryOpen ? t("clientConfig.toolbar.backFromDirectory") : t("clientConfig.toolbar.directory")}
           </Button>
           <ClientConfigurationReviewButton
             {...panel}
@@ -302,7 +311,7 @@ function ClientSettingsToolbar({
             disabled={panel.busy}
             onClick={(event) => onSectionChange(instructionsOpen ? null : "instructions", event.currentTarget)}
           >
-            {instructionsOpen ? "收起全局指令" : "全局指令"}
+            {instructionsOpen ? t("clientConfig.toolbar.collapseInstructions") : t("clientConfig.toolbar.instructions")}
           </Button>
           <Button
             variant="danger"
@@ -316,8 +325,8 @@ function ClientSettingsToolbar({
             }}
           >
             {resetOpen && configuration.applying
-              ? configuration.resetView === "clearExtraConfiguration" ? "正在生成清空预览" : "正在生成恢复预览"
-              : resetOpen ? "收起恢复设置" : "恢复为客户端原生默认值"}
+              ? configuration.resetView === "clearExtraConfiguration" ? t("clientConfig.toolbar.generatingClear") : t("clientConfig.toolbar.generatingNative")
+              : resetOpen ? t("clientConfig.toolbar.collapseReset") : t("clientConfig.reset.nativeTitle")}
           </Button>
         </>
       }
@@ -338,15 +347,16 @@ function ClientSettingsForm({
   resetOpen: boolean;
   configuration: ClientConfigurationActionState;
 }) {
-  const status = configuration.status ?? actionStatus(panel);
+  const { t } = useI18n();
+  const status = configuration.status ?? actionStatus(t, panel);
   return <div hidden={directoryOpen || reviewOpen || resetOpen}>
     {panel.configStatus?.clientSettingsError && (
       <p className="asb-field-error" role="alert">
-        无法提取真实文件中的客户端设置：{panel.configStatus.clientSettingsError}
+        {t("clientConfig.status.extractError", { message: panel.configStatus.clientSettingsError })}
       </p>
     )}
     <ClientPreferencesEditor {...panel} />
-    <section className="asb-client-configuration-actions" aria-label="配置操作">
+    <section className="asb-client-configuration-actions" aria-label={t("clientConfig.form.actionsAria")}>
       <div className="asb-client-configuration-notice">
         {status && <span className={status.error ? "asb-field-error" : "asb-field-help"} role={status.error ? "alert" : "status"}>{status.message}</span>}
         {configuration.recoveryBlocker && <p className="asb-field-help">{configuration.recoveryBlocker}</p>}
@@ -355,7 +365,7 @@ function ClientSettingsForm({
       <div className="asb-client-configuration-commit">
         <Button variant="primary" disabled={!configuration.canApply || panel.busy || configuration.applying}
           onClick={configuration.prepareApply}>
-          保存并预览应用
+          {t("clientConfig.apply.saveAndPreview")}
         </Button>
       </div>
     </section>
@@ -363,6 +373,7 @@ function ClientSettingsForm({
 }
 
 export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
+  const { t } = useI18n();
   const [openSection, setOpenSection] = useState<ClientSettingsSection | null>(null);
   const directoryId = useId();
   const reviewId = useId();
@@ -379,7 +390,7 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
   };
   const configuration = useClientConfigurationApply(props, () => setOpenSection(null));
   return <>
-    <div className="asb-client-settings-panel" aria-label="客户端配置" onKeyDown={(event) => {
+    <div className="asb-client-settings-panel" aria-label={t("clientConfig.title")} onKeyDown={(event) => {
       if (event.key !== "Escape" || !openSection) return;
       event.preventDefault(); setOpenSection(null); panelTrigger.current?.focus();
     }}>
@@ -393,16 +404,16 @@ export function ClientSettingsPanel(props: ClientSettingsPanelProps) {
         configuration={configuration}
         onSectionChange={changeSection}
       />
-      <ClientSettingsDisclosure id={reviewId} label="通用配置文件" section="review" open={reviewOpen}>
+      <ClientSettingsDisclosure id={reviewId} label={t("clientConfig.review.title")} section="review" open={reviewOpen}>
         <ClientConfigurationReview {...props} open={reviewOpen} />
       </ClientSettingsDisclosure>
-      <ClientSettingsDisclosure id={instructionsId} label="全局指令编辑器" section="instructions" open={instructionsOpen}>
+      <ClientSettingsDisclosure id={instructionsId} label={t("clientConfig.toolbar.instructionsEditor")} section="instructions" open={instructionsOpen}>
         {props.globalInstructions}
       </ClientSettingsDisclosure>
-      <ClientSettingsDisclosure id={directoryId} label="官方设置目录" section="directory" open={directoryOpen}>
+      <ClientSettingsDisclosure id={directoryId} label={t("clientConfig.toolbar.directory")} section="directory" open={directoryOpen}>
         <OfficialSettingsDirectory entries={props.editorState.editor?.directory ?? []} />
       </ClientSettingsDisclosure>
-      <ClientSettingsDisclosure id={resetId} label="恢复为客户端原生默认值" section="reset" open={resetOpen}>
+      <ClientSettingsDisclosure id={resetId} label={t("clientConfig.reset.nativeTitle")} section="reset" open={resetOpen}>
         <ClientConfigurationResetPanel app={props.app} busy={props.busy} configuration={configuration} />
       </ClientSettingsDisclosure>
       <ClientSettingsForm panel={props} directoryOpen={directoryOpen} reviewOpen={reviewOpen} resetOpen={resetOpen} configuration={configuration} />

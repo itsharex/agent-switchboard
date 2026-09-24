@@ -24,8 +24,12 @@ pub(crate) fn preview(
         super::OFFICIAL_PROVIDER
     };
     if previous != selected {
-        preview.warnings.push(format!(
-            "Codex 的 Provider 标识将从 {previous} 变为 {selected}。Codex 按 Provider 归属区分会话；此操作不会改写已有会话，需要在对应 Provider 下继续原会话。"
+        preview.warnings.push(crate::contracts::LocalizedMessage::new(
+            "warnings.codex.providerChanged",
+            serde_json::json!({ "previous": previous, "selected": selected }),
+            format!(
+                "Codex 的 Provider 标识将从 {previous} 变为 {selected}。Codex 按 Provider 归属区分会话；此操作不会改写已有会话，需要在对应 Provider 下继续原会话。"
+            ),
         ));
     }
     Ok(preview)

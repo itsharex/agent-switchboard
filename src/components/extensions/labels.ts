@@ -8,69 +8,71 @@ import type {
   SkillFileChange,
   TargetOutcome,
 } from "../../api/client";
+import type { MessageKey } from "../../i18n";
+import { tr } from "../../i18n/current";
 import { clientName } from "../../lib/client-name";
 
-export const FILE_STATE_LABELS: Record<FileState, string> = {
-  notDeployed: "未部署",
-  inSync: "已一致",
-  pendingApply: "待应用",
-  externalChange: "外部改动",
-  missing: "文件缺失",
-  unreadable: "不可读",
+export const FILE_STATE_LABELS: Record<FileState, MessageKey> = {
+  notDeployed: "extensions.fileState.notDeployed",
+  inSync: "extensions.fileState.inSync",
+  pendingApply: "extensions.fileState.pendingApply",
+  externalChange: "extensions.fileState.externalChange",
+  missing: "extensions.fileState.missing",
+  unreadable: "extensions.fileState.unreadable",
 };
 
-export const SKILL_CHANGE_LABELS: Record<SkillFileChange["action"], string> = {
-  added: "新增",
-  removed: "移除",
-  modified: "修改",
+export const SKILL_CHANGE_LABELS: Record<SkillFileChange["action"], MessageKey> = {
+  added: "extensions.skillChange.added",
+  removed: "extensions.skillChange.removed",
+  modified: "extensions.skillChange.modified",
 };
 
-export const OPERATION_LABELS: Record<PlanOperation, string> = {
-  install: "安装",
-  update: "更新",
-  enable: "启用",
-  disable: "停用",
-  remove: "移除",
-  restore: "恢复",
-  repair: "修复",
+export const OPERATION_LABELS: Record<PlanOperation, MessageKey> = {
+  install: "extensions.operation.install",
+  update: "extensions.operation.update",
+  enable: "extensions.operation.enable",
+  disable: "extensions.operation.disable",
+  remove: "extensions.operation.remove",
+  restore: "extensions.operation.restore",
+  repair: "extensions.operation.repair",
 };
 
-/** Renderer-safe labels for diagnostic problem codes. */
-export const DIAGNOSTIC_CODE_LABELS: Record<string, string> = {
-  skillManifestMissing: "缺少 SKILL.md",
-  skillFrontmatterMissing: "缺少 frontmatter",
-  skillFrontmatterInvalid: "frontmatter 无法解析",
-  skillDirUnreadable: "目录无法读取",
-  skillEntryLink: "包含链接或重解析点",
-  skillEntryUnsupported: "包含不支持的文件类型",
-  skillRootUnreadable: "Skill 根目录无法读取",
-  skillRootEntryUnreadable: "Skill 目录项无法读取",
-  mcpDocumentUnreadable: "MCP 文档无法读取",
-  mcpDocumentUnparsable: "MCP 文档无法解析",
-  mcpCollectionInvalid: "MCP 集合类型错误",
-  mcpEntryNotAnObject: "MCP 条目不是对象",
-  mcpTransportMissing: "缺少传输字段",
-  mcpTransportConflicting: "传输字段冲突",
-  mcpTransportUnknown: "未知传输类型",
-  mcpUnknownFields: "未识别字段（按原文保留）",
-  mcpIgnoredField: "该客户端忽略的字段",
-  managedTargetMissing: "托管目标缺失",
-  managedEntryMissing: "托管条目缺失",
-  managedTargetExternalChange: "外部改动",
-  managedTargetUnreadable: "托管目标不可读",
+/** Renderer-safe label keys for diagnostic problem codes. */
+export const DIAGNOSTIC_CODE_LABELS: Record<string, MessageKey> = {
+  skillManifestMissing: "extensions.diagnostic.skillManifestMissing",
+  skillFrontmatterMissing: "extensions.diagnostic.skillFrontmatterMissing",
+  skillFrontmatterInvalid: "extensions.diagnostic.skillFrontmatterInvalid",
+  skillDirUnreadable: "extensions.diagnostic.skillDirUnreadable",
+  skillEntryLink: "extensions.diagnostic.skillEntryLink",
+  skillEntryUnsupported: "extensions.diagnostic.skillEntryUnsupported",
+  skillRootUnreadable: "extensions.diagnostic.skillRootUnreadable",
+  skillRootEntryUnreadable: "extensions.diagnostic.skillRootEntryUnreadable",
+  mcpDocumentUnreadable: "extensions.diagnostic.mcpDocumentUnreadable",
+  mcpDocumentUnparsable: "extensions.diagnostic.mcpDocumentUnparsable",
+  mcpCollectionInvalid: "extensions.diagnostic.mcpCollectionInvalid",
+  mcpEntryNotAnObject: "extensions.diagnostic.mcpEntryNotAnObject",
+  mcpTransportMissing: "extensions.diagnostic.mcpTransportMissing",
+  mcpTransportConflicting: "extensions.diagnostic.mcpTransportConflicting",
+  mcpTransportUnknown: "extensions.diagnostic.mcpTransportUnknown",
+  mcpUnknownFields: "extensions.diagnostic.mcpUnknownFields",
+  mcpIgnoredField: "extensions.diagnostic.mcpIgnoredField",
+  managedTargetMissing: "extensions.diagnostic.managedTargetMissing",
+  managedEntryMissing: "extensions.diagnostic.managedEntryMissing",
+  managedTargetExternalChange: "extensions.fileState.externalChange",
+  managedTargetUnreadable: "extensions.diagnostic.managedTargetUnreadable",
 };
 
-export const REMEDIATION_LABELS: Record<ExtensionDiagnosticRemediation["kind"], string> = {
-  auto: "可自动修复",
-  manual: "需人工处理",
-  info: "信息提示",
+export const REMEDIATION_LABELS: Record<ExtensionDiagnosticRemediation["kind"], MessageKey> = {
+  auto: "extensions.remediation.auto",
+  manual: "extensions.remediation.manual",
+  info: "extensions.remediation.info",
 };
 
-export const TRANSPORT_LABELS: Record<string, string> = {
-  stdio: "stdio",
-  http: "HTTP",
-  claudeSse: "SSE（仅 Claude）",
-  claudeWs: "WebSocket（仅 Claude）",
+export const TRANSPORT_LABELS: Record<string, MessageKey> = {
+  stdio: "extensions.transport.stdio",
+  http: "extensions.transport.http",
+  claudeSse: "extensions.transport.claudeSse",
+  claudeWs: "extensions.transport.claudeWs",
 };
 
 /** Worst-state-first ordering: the summary names the state that needs
@@ -89,20 +91,27 @@ const FILE_STATE_SEVERITY: Array<ExtensionListItem["bindings"][number]["fileStat
  * alone. */
 export function clientSummary(item: ExtensionListItem, client: AppKind): string {
   const rows = item.bindings.filter((binding) => binding.target.client === client);
-  if (rows.length === 0) return "未部署";
+  if (rows.length === 0) return tr(FILE_STATE_LABELS.notDeployed);
   const worst =
     FILE_STATE_SEVERITY.find((state) => rows.some((binding) => binding.fileState === state)) ?? "inSync";
   const enabled = rows.filter((binding) => binding.desired === "enabled").length;
-  if (enabled > 0 && enabled < rows.length) return `${FILE_STATE_LABELS[worst]} · 部分启用`;
-  return enabled === 0 ? `${FILE_STATE_LABELS[worst]} · 已停用` : FILE_STATE_LABELS[worst];
+  if (enabled > 0 && enabled < rows.length)
+    return `${tr(FILE_STATE_LABELS[worst])} · ${tr("extensions.summary.partialEnabled")}`;
+  return enabled === 0
+    ? `${tr(FILE_STATE_LABELS[worst])} · ${tr("extensions.summary.disabled")}`
+    : tr(FILE_STATE_LABELS[worst]);
 }
 
 export function targetLabel(target: ExtensionTarget, projectNames?: ReadonlyMap<string, string>): string {
   const client = clientName(target.client);
-  if (target.scope === "app") return `${client} 用户配置`;
+  if (target.scope === "app") return tr("extensions.target.user", { client });
   const project = projectNames?.get(target.projectId);
-  const scope = target.scope === "projectShared" ? "项目共享" : "项目私有";
-  return project ? `${project} · ${client} ${scope}` : `${client} ${scope}`;
+  const scope = target.scope === "projectShared"
+    ? tr("extensions.target.projectShared")
+    : tr("extensions.target.projectPrivate");
+  return project
+    ? tr("extensions.target.projectNamed", { project, client, scope })
+    : tr("extensions.target.clientScope", { client, scope });
 }
 
 /** Encodes one target for the Select control; the client stays a plain
@@ -130,14 +139,14 @@ export function parseTargetValue(value: string): ExtensionTarget | null {
 export function outcomeText(outcome: TargetOutcome): string {
   switch (outcome.kind) {
     case "applied":
-      return "已应用";
+      return tr("extensions.outcome.applied");
     case "failed":
-      return `失败：${outcome.message}`;
+      return tr("extensions.outcome.failed", { message: outcome.message });
     case "restored":
-      return `已恢复：${outcome.message}`;
+      return tr("extensions.outcome.restored", { message: outcome.message });
     case "restoreFailed":
-      return `恢复失败：${outcome.message}（备份 ${outcome.backup}）`;
+      return tr("extensions.outcome.restoreFailed", { message: outcome.message, backup: outcome.backup });
     case "skipped":
-      return `已跳过：${outcome.message}`;
+      return tr("extensions.outcome.skipped", { message: outcome.message });
   }
 }

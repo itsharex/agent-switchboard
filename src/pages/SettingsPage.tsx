@@ -4,6 +4,7 @@ import type { AppSettings, UpdateChannel, UpdateCheck } from "../api/client";
 import appIcon from "../assets/app-icon.svg";
 import { SETTINGS_SECTIONS, type SettingsSection } from "../app/navigation";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
+import { useI18n } from "../i18n";
 import { AppSettingsForm } from "../components/AppSettingsForm";
 import { Button } from "../components/Button";
 import { ModuleHeader } from "../components/WorkspaceHeader";
@@ -58,6 +59,7 @@ interface SettingsPageProps {
 
 function ApplicationSettings(props: SettingsPageProps) {
   const { settings, busy, onPatch } = props;
+  const { t } = useI18n();
   return (
     <div className="asb-app-settings">
       {settings ? (
@@ -67,18 +69,18 @@ function ApplicationSettings(props: SettingsPageProps) {
         <>
           <div className="asb-app-setting-row" role="alert">
             <div className="asb-app-setting-copy">
-              <span className="asb-checkbox-label">设置加载失败：{props.loadError}</span>
-              <span className="asb-app-setting-detail">读取失败期间，外观与关闭行为使用默认值</span>
+              <span className="asb-checkbox-label">{t("settings.loadFailed", { detail: props.loadError })}</span>
+              <span className="asb-app-setting-detail">{t("settings.loadFailedDetail")}</span>
             </div>
             <div className="asb-app-settings-error-actions">
-              <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>重试</Button>
+              <Button variant="secondary" disabled={busy} onClick={props.onRetryLoad}>{t("settings.retry")}</Button>
             </div>
           </div>
           <div className="asb-app-settings-danger-zone">
-            <Button variant="danger" disabled={busy} onClick={props.onRepair}>一键修复</Button>
+            <Button variant="danger" disabled={busy} onClick={props.onRepair}>{t("shell.banner.repair")}</Button>
           </div>
         </>
-      ) : <div className="asb-settings-skeleton" role="status" aria-label="正在读取设置">
+      ) : <div className="asb-settings-skeleton" role="status" aria-label={t("settings.page.loading")}>
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
         <div className="asb-skeleton" />
@@ -88,13 +90,14 @@ function ApplicationSettings(props: SettingsPageProps) {
 }
 
 function AboutSettings(props: SettingsPageProps) {
+  const { t } = useI18n();
   return (
     <div className="asb-app-settings">
       <div className="asb-about-product">
         <img className="asb-about-logo" src={appIcon} alt="" />
         <div className="asb-about-copy">
           <h3 className="asb-section-title">Agent Switchboard</h3>
-          <p className="asb-field-help">Codex 与 Claude Code 的本地配置控制台。</p>
+          <p className="asb-field-help">{t("settings.about.tagline")}</p>
         </div>
       </div>
       <UpdateSection channel={props.updateChannel} appVersion={props.appVersion}
@@ -110,7 +113,8 @@ function SettingsPanel({ section, selected, children }: {
   selected: SettingsSection;
   children: ReactNode;
 }) {
-  const title = SETTINGS_SECTIONS.find((item) => item.value === section)!.label;
+  const { t } = useI18n();
+  const title = t(SETTINGS_SECTIONS.find((item) => item.value === section)!.labelKey);
   return (
     <section className="asb-panel" hidden={selected !== section} aria-label={title}>
       <ModuleHeader title={title} />
@@ -121,21 +125,22 @@ function SettingsPanel({ section, selected, children }: {
 
 export function SettingsPage(props: SettingsPageProps) {
   const { section, onSectionChange } = props;
+  const { t } = useI18n();
   return (
-    <section className="asb-settings-workspace" aria-label="设置">
+    <section className="asb-settings-workspace" aria-label={t("nav.page.settings")}>
       <aside className="asb-settings-sidebar">
         <div className="asb-settings-sidebar-heading">
-          <h2 className="asb-settings-sidebar-title">设置</h2>
-          {props.onReturnToProviders && <Button variant="secondary" onClick={props.onReturnToProviders}>返回供应商</Button>}
+          <h2 className="asb-settings-sidebar-title">{t("nav.page.settings")}</h2>
+          {props.onReturnToProviders && <Button variant="secondary" onClick={props.onReturnToProviders}>{t("settings.page.backToProviders")}</Button>}
         </div>
-        <nav className="asb-settings-navigation" aria-label="设置分类">
-          {SETTINGS_SECTIONS.map(({ value, label }) => {
+        <nav className="asb-settings-navigation" aria-label={t("settings.page.categories.aria")}>
+          {SETTINGS_SECTIONS.map(({ value, labelKey }) => {
             const Icon = SECTION_ICONS[value];
             return (
               <Button key={value} variant="unstyled" aria-current={section === value ? "page" : undefined}
                 className="asb-settings-category" onClick={() => onSectionChange(value)}>
                 <span className="asb-settings-category-icon" aria-hidden="true"><Icon size={18} /></span>
-                <span>{label}</span>
+                <span>{t(labelKey)}</span>
               </Button>
             );
           })}

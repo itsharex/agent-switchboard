@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ExtensionListItem, SecretValueView as CredentialView } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { TRANSPORT_LABELS } from "./labels";
 
@@ -17,20 +18,22 @@ function Facts({ rows }: { rows: Array<[string, ReactNode]> }) {
 }
 
 function SecretValue({ value }: { value: CredentialView }) {
+  const { t } = useI18n();
   if (value.mode === "envRef")
     return (
       <span>
-        环境变量 <span className="asb-code">{value.name}</span>
+        {t("extensions.facts.envRef")} <span className="asb-code">{value.name}</span>
       </span>
     );
   return value.mode === "stored" ? (
-    <span className="asb-pill-status">已设置凭据</span>
+    <span className="asb-pill-status">{t("extensions.facts.credentialSet")}</span>
   ) : (
     <span className="asb-code">••••••••</span>
   );
 }
 
 function SecretMap({ title, values }: { title: string; values: Record<string, CredentialView> }) {
+  const { t } = useI18n();
   if (Object.keys(values).length === 0) return null;
   return (
     <div className="asb-ext-section">
@@ -38,7 +41,9 @@ function SecretMap({ title, values }: { title: string; values: Record<string, Cr
       <ul className="asb-ext-secret-list">
         {Object.entries(values).map(([key, value]) => (
           <li key={key}>
-            <span className="asb-code">{key}</span>：<SecretValue value={value} />
+            <span className="asb-code">{key}</span>
+            {t("extensions.facts.entrySeparator")}
+            <SecretValue value={value} />
           </li>
         ))}
       </ul>
@@ -47,32 +52,37 @@ function SecretMap({ title, values }: { title: string; values: Record<string, Cr
 }
 
 function SkillFacts({ item }: { item: Extract<ExtensionListItem, { kind: "skill" }> }) {
+  const { t } = useI18n();
   const rows: Array<[string, ReactNode]> = [
-    ["Skill 名称", <span className="asb-code">{item.manifest.name}</span>],
+    [t("extensions.facts.skillName"), <span className="asb-code">{item.manifest.name}</span>],
   ];
-  if (item.manifest.description) rows.push(["描述", item.manifest.description]);
-  if (item.manifest.license) rows.push(["许可", item.manifest.license]);
-  if (item.manifest.allowedTools?.length) rows.push(["允许工具", item.manifest.allowedTools.join("、")]);
+  if (item.manifest.description) rows.push([t("extensions.facts.description"), item.manifest.description]);
+  if (item.manifest.license) rows.push([t("extensions.facts.license"), item.manifest.license]);
+  if (item.manifest.allowedTools?.length)
+    rows.push([t("extensions.facts.allowedTools"), item.manifest.allowedTools.join(t("extensions.join.comma"))]);
   if (item.manifest.unparsedKeys?.length)
-    rows.push(["未识别的清单键", item.manifest.unparsedKeys.join("、")]);
-  rows.push(["内容摘要", <span className="asb-code">{item.contentDigest.slice(0, 12)}</span>]);
+    rows.push([t("extensions.facts.unparsedKeys"), item.manifest.unparsedKeys.join(t("extensions.join.comma"))]);
+  rows.push([t("extensions.facts.digest"), <span className="asb-code">{item.contentDigest.slice(0, 12)}</span>]);
   if (item.source)
     rows.push([
-      "来源",
-      `已记录来源${item.source.resolvedCommit ? ` @ ${item.source.resolvedCommit.slice(0, 12)}` : ""}`,
+      t("extensions.facts.source"),
+      item.source.resolvedCommit
+        ? t("extensions.facts.sourceCommit", { commit: item.source.resolvedCommit.slice(0, 12) })
+        : t("extensions.facts.sourceRecorded"),
     ]);
-  if (item.hostScoped) rows.push(["宿主专用", `仅 ${clientName(item.hostScoped)}`]);
+  if (item.hostScoped)
+    rows.push([t("extensions.facts.hostScoped"), t("extensions.facts.hostOnly", { client: clientName(item.hostScoped) })]);
   const dependencyLabels = {
-    bound: "已关联库内 MCP",
-    pendingConfiguration: "待配置",
-    targetUnsupported: "目标客户端不支持",
+    bound: t("extensions.deps.bound"),
+    pendingConfiguration: t("extensions.deps.pending"),
+    targetUnsupported: t("extensions.deps.unsupported"),
   };
   return (
     <>
       <Facts rows={rows} />
       {item.compatibility.length > 0 && (
         <div className="asb-ext-section">
-          <h4 className="asb-group-title">兼容诊断</h4>
+          <h4 className="asb-group-title">{t("extensions.facts.compatibility")}</h4>
           <ul className="asb-ext-secret-list">
             {item.compatibility.map((note) => (
               <li key={note.code}>{note.message}</li>
@@ -81,14 +91,17 @@ function SkillFacts({ item }: { item: Extract<ExtensionListItem, { kind: "skill"
         </div>
       )}
       <div className="asb-ext-section">
-        <h4 className="asb-group-title">依赖状态</h4>
+        <h4 className="asb-group-title">{t("extensions.facts.dependencies")}</h4>
         {item.dependencyStates.length === 0 ? (
-          <p className="asb-empty">未声明依赖</p>
+          <p className="asb-empty">{t("extensions.facts.noDependencies")}</p>
         ) : (
           <ul className="asb-ext-secret-list">
             {item.dependencyStates.map((dependency) => (
               <li key={dependency.name}>
-                {dependency.name}：{dependencyLabels[dependency.state]}
+                {t("extensions.facts.dependencyLine", {
+                  name: dependency.name,
+                  state: dependencyLabels[dependency.state],
+                })}
               </li>
             ))}
           </ul>
@@ -99,25 +112,31 @@ function SkillFacts({ item }: { item: Extract<ExtensionListItem, { kind: "skill"
 }
 
 export function ExtensionResourceFacts({ item }: { item: ExtensionListItem }) {
+  const { t } = useI18n();
   if (item.kind === "skill") return <SkillFacts item={item} />;
-  const rows: Array<[string, ReactNode]> = [["传输", TRANSPORT_LABELS[item.transport]]];
+  const rows: Array<[string, ReactNode]> = [[t("extensions.facts.transport"), t(TRANSPORT_LABELS[item.transport])]];
   if (item.transport === "stdio")
     rows.push(
-      ["命令", <span className="asb-code">{item.command}</span>],
-      ["参数", item.argumentCount > 0 ? `已配置 ${item.argumentCount} 个启动参数` : "（无）"],
+      [t("extensions.facts.command"), <span className="asb-code">{item.command}</span>],
+      [
+        t("extensions.facts.args"),
+        item.argumentCount > 0
+          ? t("extensions.facts.argsCount", { count: item.argumentCount })
+          : t("extensions.facts.none"),
+      ],
     );
-  else rows.push(["地址", <span className="asb-code">{item.url}</span>]);
+  else rows.push([t("extensions.facts.url"), <span className="asb-code">{item.url}</span>]);
   return (
     <>
       <Facts rows={rows} />
       {item.transport === "stdio" ? (
-        <SecretMap title="环境变量" values={item.env} />
+        <SecretMap title={t("extensions.facts.envVars")} values={item.env} />
       ) : (
-        <SecretMap title="请求头" values={item.headers} />
+        <SecretMap title={t("extensions.facts.headers")} values={item.headers} />
       )}
       {item.transport === "http" && item.bearer && (
         <div className="asb-ext-section">
-          <h4 className="asb-group-title">Bearer 凭据</h4>
+          <h4 className="asb-group-title">{t("extensions.facts.bearer")}</h4>
           <SecretValue value={item.bearer} />
         </div>
       )}

@@ -115,7 +115,7 @@ pub(crate) fn active_direct(
 ) -> Result<Option<String>, CommandError> {
     let document = text
         .parse::<toml_edit::DocumentMut>()
-        .map_err(|_| error("Codex 配置格式无效".into()))?;
+        .map_err(|_| CommandError::keyed("codex-state-unavailable", "errors.cfg.codexConfigInvalid", "Codex 配置格式无效"))?;
     let pointer = document
         .get("model_catalog_json")
         .and_then(|v| v.as_str())
@@ -138,7 +138,7 @@ pub(crate) fn active_direct(
     let auth = match std::fs::read_to_string(target) {
         Ok(text) => serde_json::from_str::<serde_json::Value>(&text).ok(),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(_) => return Err(error("无法读取 Codex 直连认证状态".into())),
+        Err(_) => return Err(CommandError::keyed("codex-state-unavailable", "errors.cfg.codexDirectAuthUnreadable", "无法读取 Codex 直连认证状态")),
     };
     let key = auth
         .as_ref()

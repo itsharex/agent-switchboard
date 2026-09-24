@@ -1,11 +1,34 @@
 import * as React from "react";
+import type { MessageKey, MessageParams } from "../i18n/messages";
 
 export type ToastKind = "info" | "success" | "warning" | "error";
 
+/** A not-yet-translated toast string: the Toaster resolves it through the
+ * catalog at render time, so a visible toast follows a language switch
+ * instead of freezing in the language of the moment it was raised. */
+export interface ToastMessage {
+  readonly __toastMessage: true;
+  readonly key: MessageKey;
+  readonly params?: MessageParams;
+}
+
+/** Builds a render-time-translated toast text. */
+export function toastMessage(key: MessageKey, params?: MessageParams): ToastMessage {
+  return { __toastMessage: true, key, params };
+}
+
+export function isToastMessage(content: unknown): content is ToastMessage {
+  return typeof content === "object" && content !== null && "__toastMessage" in content;
+}
+
+/** Toast copy is either ready-made React node content or a descriptor that
+ * the Toaster translates on every render. */
+export type ToastContent = React.ReactNode | ToastMessage;
+
 export interface Toast {
   id: string;
-  title?: React.ReactNode;
-  description?: React.ReactNode;
+  title?: ToastContent;
+  description?: ToastContent;
   kind: ToastKind;
   /**
    * 自动关闭时间（毫秒）。
@@ -131,7 +154,7 @@ type ToastOptions = Omit<Toast, "id" | "kind"> & {
   kind: ToastKind;
 };
 
-function hasToastContent(value: React.ReactNode): boolean {
+function hasToastContent(value: React.ReactNode | ToastMessage): boolean {
   if (value === null || value === undefined || typeof value === "boolean") return false;
   if (Array.isArray(value)) return value.some(hasToastContent);
   return typeof value !== "string" || value.trim().length > 0;

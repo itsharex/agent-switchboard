@@ -4,11 +4,14 @@ import type { UpdateChannel, UpdateCheck } from "../api/client";
 import type { UpdateDownloadProgress } from "../app/useUpdateCheck";
 import { Button } from "./Button";
 import { Time } from "./Time";
-import { toast } from "./use-toast";
+import { useI18n } from "../i18n";
+import { tr } from "../i18n/current";
+import { toast, toastMessage } from "./use-toast";
 
 const releasesUrl = "https://github.com/y4Nkk/agent-switchboard/releases/latest";
 
 function ReleaseNotes({ notes, version }: { notes: string; version: string }) {
+  const { t } = useI18n();
   const sections = notes
     .split(/\r?\n(?=### )/)
     .map((section) => {
@@ -26,7 +29,7 @@ function ReleaseNotes({ notes, version }: { notes: string; version: string }) {
     return <p className="asb-update-notes-text">{notes}</p>;
   }
   return (
-    <div className="asb-update-notes" aria-label={`${version} 更新内容`}>
+    <div className="asb-update-notes" aria-label={t("backup.update.notesAria", { version })}>
       {sections.map((section) => (
         <section key={section.title} className="asb-update-notes-section">
           <h4 className="asb-section-title">{section.title}</h4>
@@ -39,9 +42,11 @@ function ReleaseNotes({ notes, version }: { notes: string; version: string }) {
 
 function formatProgress(progress: UpdateDownloadProgress): string {
   if (progress.totalBytes === null || progress.totalBytes === 0) {
-    return `正在下载更新 ${Math.floor(progress.downloadedBytes / 1024)} KB`;
+    return tr("backup.update.progressBytes", { kb: Math.floor(progress.downloadedBytes / 1024) });
   }
-  return `正在下载更新 ${Math.min(100, Math.floor((progress.downloadedBytes / progress.totalBytes) * 100))}%`;
+  return tr("backup.update.progressPercent", {
+    percent: Math.min(100, Math.floor((progress.downloadedBytes / progress.totalBytes) * 100)),
+  });
 }
 
 /** Software-update state on the settings page. Startup checks are silent;
@@ -72,12 +77,13 @@ export function UpdateSection({
   onInstall: () => void;
   onRestart: () => void;
 }) {
+  const { t } = useI18n();
   const openReleasePage = () => {
     void openUrl(releasesUrl).catch(() => {
       toast({
         kind: "error",
-        title: "无法打开更新发布页",
-        description: "请检查默认浏览器后重试。",
+        title: toastMessage("backup.update.releasePageError"),
+        description: toastMessage("backup.update.releasePageErrorDetail"),
       });
     });
   };
@@ -86,15 +92,15 @@ export function UpdateSection({
     return (
       <section className="asb-app-settings-group" aria-labelledby="software-update">
         <h3 id="software-update" className="asb-section-title">
-          软件更新
+          {t("backup.update.title")}
         </h3>
         <div className="asb-app-setting-row">
           <div className="asb-app-setting-copy">
-            <span className="asb-checkbox-label">由 Microsoft Store 管理更新</span>
+            <span className="asb-checkbox-label">{t("backup.update.storeManaged")}</span>
             <span className="asb-app-setting-detail">
               {[
-                appVersion ? `当前版本 v${appVersion}` : null,
-                "Store 会自动检查并安装新版本",
+                appVersion ? t("backup.update.currentVersion", { version: appVersion }) : null,
+                t("backup.update.storeAuto"),
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -106,26 +112,26 @@ export function UpdateSection({
   }
   const label = restartRequired
     ? installing
-      ? "正在重新启动"
-      : "更新已安装，需要重启"
+      ? t("backup.update.restarting")
+      : t("backup.update.restartRequired")
     : result
     ? installing
       ? progress
         ? formatProgress(progress)
-        : "正在安装更新"
-      : `发现新版本 ${result.latestVersion}`
+        : t("backup.update.installing")
+      : t("backup.update.newVersion", { version: result.latestVersion })
     : busy
-      ? "正在检查新版本"
+      ? t("backup.update.checking")
       : checkedAt
-        ? "已是最新版本"
-      : "检查新版本";
+        ? t("backup.update.upToDate")
+      : t("backup.update.check");
   const detail: ReactNode = appVersion || checkedAt ? (
     <>
-      {appVersion ? `当前版本 v${appVersion}` : null}
+      {appVersion ? t("backup.update.currentVersion", { version: appVersion }) : null}
       {appVersion && checkedAt ? " · " : null}
       {checkedAt ? (
         <>
-          检查于 <Time iso={checkedAt} />
+          {t("backup.update.checkedAt")} <Time iso={checkedAt} />
         </>
       ) : null}
     </>
@@ -133,7 +139,7 @@ export function UpdateSection({
   return (
     <section className="asb-app-settings-group" aria-labelledby="software-update">
       <h3 id="software-update" className="asb-section-title">
-        软件更新
+        {t("backup.update.title")}
       </h3>
       <div className="asb-app-setting-row">
         <div className="asb-app-setting-copy">
@@ -144,7 +150,7 @@ export function UpdateSection({
         <div className="asb-panel-actions">
           {restartRequired ? (
             <Button variant="primary" disabled={installing} onClick={onRestart}>
-              重新启动
+              {t("backup.update.restart")}
             </Button>
           ) : result ? (
             <Button
@@ -152,14 +158,14 @@ export function UpdateSection({
               disabled={busy || installing}
               onClick={onInstall}
             >
-              下载并安装
+              {t("backup.update.downloadInstall")}
             </Button>
           ) : null}
           <Button variant="secondary" disabled={busy || installing || restartRequired} onClick={onCheck}>
-            检查更新
+            {t("backup.update.checkUpdate")}
           </Button>
           <Button variant="secondary" onClick={openReleasePage}>
-            更新发布页
+            {t("backup.update.releasePage")}
           </Button>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import { useMessageState } from "../i18n/use-message-state";
+import { uiMessage } from "../i18n/errors";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -7,6 +9,7 @@ import {
   type AppKind,
   type OfficialLoginStatus,
 } from "../api/client";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 
 const POLL_INTERVAL_MS = 3000;
@@ -19,18 +22,15 @@ interface Props {
   onFinished?: (completed: boolean) => void;
 }
 
-function failureMessage(caught: unknown): string {
-  return (caught as { message?: string }).message ?? "官方登录未完成";
-}
-
 /** One client's official login flow: starts the backend session, walks the
  * user through the vendor page, and polls until the credentials land in the
  * client's native cache. It never renders credential material. */
 export function OfficialLoginPanel({ app, onFinished }: Props) {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>("idle");
   const [userCode, setUserCode] = useState<string | null>(null);
   const [verificationUrl, setVerificationUrl] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useMessageState();
   const [starting, setStarting] = useState(false);
   const version = useRef(0);
   const inFlight = useRef(false);
@@ -66,7 +66,7 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
       stopPolling();
       sessionLive.current = false;
       setPhase(status.phase);
-      if (status.phase === "failed") setMessage(status.message ?? "官方登录未完成");
+      if (status.phase === "failed") setMessage(status.message ?? uiMessage("clientConfig.login.failedFallback"));
       onFinished?.(status.phase === "completed");
     },
     [onFinished, stopPolling],
@@ -84,7 +84,7 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
           })
           .catch((caught) => {
             // One dropped poll must not kill a ten-minute login.
-            if (version.current === current) setMessage(failureMessage(caught));
+            if (version.current === current) setMessage(caught);
           })
           .finally(() => {
             inFlight.current = false;
@@ -121,7 +121,7 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
         void cancelOfficialLogin(app).catch(() => undefined);
       }
       setPhase("failed");
-      setMessage(failureMessage(caught));
+      setMessage(caught);
       onFinished?.(false);
     } finally {
       if (version.current === current) setStarting(false);
@@ -141,7 +141,7 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
   if (phase === "completed") {
     return (
       <p className="asb-provider-usage-state" role="status">
-        登录完成，登录凭据已写入客户端本地文件。
+        {t("clientConfig.login.completed")}
       </p>
     );
   }
@@ -153,7 +153,7 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
         disabled={starting}
         onClick={() => void start()}
       >
-        {starting ? "正在发起登录…" : "开始官方登录"}
+        {starting ? t("clientConfig.login.starting") : t("clientConfig.login.start")}
       </Button>
     );
   }
@@ -162,26 +162,26 @@ export function OfficialLoginPanel({ app, onFinished }: Props) {
     <div className="asb-official-login">
       {userCode ? (
         <div className="asb-official-login-code" role="status">
-          <span>验证码：</span>
+          <span>{t("clientConfig.login.codeLabel")}</span>
           <code>{userCode}</code>
           <Button
             variant="secondary"
             onClick={() => void openUrl(verificationUrl).catch(() => undefined)}
           >
-            打开验证页面
+            {t("clientConfig.login.openVerification")}
           </Button>
         </div>
       ) : (
         <p className="asb-provider-usage-state" role="status">
-          已打开浏览器授权页面，请在该页面完成登录。
+          {t("clientConfig.login.browserOpened")}
         </p>
       )}
       <div className="asb-official-login-wait">
         <p className="asb-provider-usage-state" role="status">
-          等待登录结果…
+          {t("clientConfig.login.waiting")}
         </p>
         <Button variant="secondary" onClick={cancel}>
-          取消登录
+          {t("clientConfig.login.cancel")}
         </Button>
       </div>
       {message && <p className="asb-warn-text" role="alert">{message}</p>}

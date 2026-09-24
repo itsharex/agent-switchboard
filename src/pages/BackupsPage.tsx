@@ -7,6 +7,7 @@ import { CloudBackupPanel } from "../components/CloudBackupPanel";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { Tabs } from "../components/Tabs";
 import { Time } from "../components/Time";
+import { useI18n } from "../i18n";
 import { clientName } from "../lib/client-name";
 
 interface BackupsPageProps {
@@ -32,17 +33,18 @@ export function BackupsPage({
   onUndo,
   onOpenDir,
 }: BackupsPageProps) {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<BackupTab>("local");
 
   return (
-    <section className="asb-panel" aria-label="备份恢复">
+    <section className="asb-panel" aria-label={t("backup.aria")}>
       {/* 设置内容区的子页：模块级 h3 标题独占第一行，备份类型页签在第二行。 */}
       <ModuleHeader
-        title="备份恢复"
+        title={t("backup.title")}
         primary={
-          <Tabs value={activeTab} onChange={setActiveTab} scope="backup" label="备份类型"
-            tabs={[{ value: "local", label: "本地备份", controls: "backup-local-panel" },
-              { value: "cloud", label: "加密云端备份", controls: "backup-cloud-panel" }]} />
+          <Tabs value={activeTab} onChange={setActiveTab} scope="backup" label={t("backup.tabsAria")}
+            tabs={[{ value: "local", label: t("backup.tab.local"), controls: "backup-local-panel" },
+              { value: "cloud", label: t("backup.tab.cloud"), controls: "backup-cloud-panel" }]} />
         }
       />
       {/* Both tabpanels stay mounted so each tab's aria-controls always
@@ -58,21 +60,23 @@ export function BackupsPage({
           <>
             {lastSwitch && (
               <p className="asb-scope-note">
-                上次操作：{clientName(lastSwitch.app)}
+                {t("backup.lastSwitch.prefix", { app: clientName(lastSwitch.app) })}
                 {lastSwitch.operation === "projection" && lastSwitch.profileName
-                  ? ` 已投影供应商「${lastSwitch.profileName}」`
+                  ? t("backup.lastSwitch.projectionNamed", { name: lastSwitch.profileName })
                   : lastSwitch.operation === "projection"
-                    ? " 已写入客户端配置"
+                    ? t("backup.lastSwitch.projectionPlain")
                     : lastSwitch.operation === "restore"
-                      ? " 恢复了备份"
-                      : " 已修改网关监听端口"}
-                ，<Time iso={lastSwitch.at} />。
+                      ? t("backup.lastSwitch.restored")
+                      : t("backup.lastSwitch.gatewayPort")}
+                {t("backup.lastSwitch.timeBefore")}
+                <Time iso={lastSwitch.at} />
+                {t("backup.lastSwitch.timeAfter")}
               </p>
             )}
             <div className="asb-backup-toolbar">
               <div className="asb-panel-actions">
                 <Button variant="secondary" onClick={onOpenDir}>
-                  打开备份文件夹
+                  {t("backup.openFolder")}
                 </Button>
               </div>
             </div>
@@ -83,7 +87,7 @@ export function BackupsPage({
                   disabled={busy}
                   onClick={() => onUndo(lastSwitch)}
                 >
-                  {lastSwitch.profileName ? "撤回上一次切换" : "撤回上一次配置写入"}
+                  {lastSwitch.profileName ? t("backup.undoSwitch") : t("backup.undoWrite")}
                 </Button>
               </div>
             )}

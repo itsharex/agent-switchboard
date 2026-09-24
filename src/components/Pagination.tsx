@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 
 interface PaginationProps {
@@ -13,19 +14,20 @@ interface PaginationProps {
 
 /** The shared page-turn control for data tables. Hidden while one page holds
  * every row: nothing to turn is not a disabled control. */
-export function Pagination({ total, page, pageSize, onPageChange, label = "分页" }: PaginationProps) {
+export function Pagination({ total, page, pageSize, onPageChange, label }: PaginationProps) {
+  const { t } = useI18n();
   if (total <= pageSize) return null;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   return (
-    <nav className="asb-pagination" aria-label={label}>
+    <nav className="asb-pagination" aria-label={label ?? t("pagination.aria")}>
       <Button variant="secondary" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
-        上一页
+        {t("pagination.prev")}
       </Button>
       <span className="asb-pagination-status" role="status">
-        第 {page} / {pageCount} 页
+        {t("pagination.status", { page, total: pageCount })}
       </span>
       <Button variant="secondary" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>
-        下一页
+        {t("pagination.next")}
       </Button>
     </nav>
   );

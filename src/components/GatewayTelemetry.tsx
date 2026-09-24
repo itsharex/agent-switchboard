@@ -1,4 +1,5 @@
 import type { GatewayMetricsStatus, GatewaySample, UpstreamProtocol } from "../api/client";
+import { useI18n, type TFunction } from "../i18n";
 import { PROTOCOL_LABELS, isProtocolTranslation } from "../lib/protocol";
 import { Table, type TableColumn } from "./Table";
 
@@ -36,6 +37,7 @@ export function GatewayTelemetry({ metrics, profileNames }: TelemetryProps) {
 }
 
 function GatewayStrip({ metrics }: { metrics: GatewayMetricsStatus }) {
+  const { t } = useI18n();
   const { totalRequests, failedRequests, samples } = metrics;
   const completed = samples
     .filter((sample) => sample.status !== null)
@@ -49,11 +51,11 @@ function GatewayStrip({ metrics }: { metrics: GatewayMetricsStatus }) {
   const max = Math.max(...buckets, 1);
   const usage = buildProtocolUsage(samples);
   return (
-    <section className="asb-gateway-strip" aria-label="网关仪表">
+    <section className="asb-gateway-strip" aria-label={t("gateway.stripAriaLabel")}>
       <div className="asb-gateway-gauge is-trend">
-        <p className="asb-gateway-gauge-label">累计请求</p>
+        <p className="asb-gateway-gauge-label">{t("gateway.totalRequests")}</p>
         <p className="asb-gateway-gauge-value">{totalRequests}</p>
-        <p className="asb-gateway-gauge-detail">本次启动 · 近 60 分钟 {windowTotal} 次</p>
+        <p className="asb-gateway-gauge-detail">{t("gateway.totalDetail", { count: windowTotal })}</p>
         <div className="asb-gateway-trend" aria-hidden="true">
           {buckets.map((count, index) => (
             <span
@@ -65,22 +67,22 @@ function GatewayStrip({ metrics }: { metrics: GatewayMetricsStatus }) {
         </div>
       </div>
       <div className={`asb-gateway-gauge${failedRequests > 0 ? " is-warning" : ""}`}>
-        <p className="asb-gateway-gauge-label">失败请求</p>
+        <p className="asb-gateway-gauge-label">{t("gateway.failedRequests")}</p>
         <p className="asb-gateway-gauge-value">{failedRequests}</p>
-        <p className="asb-gateway-gauge-detail">已完成请求</p>
+        <p className="asb-gateway-gauge-detail">{t("gateway.completedRequests")}</p>
       </div>
       <div className="asb-gateway-gauge">
-        <p className="asb-gateway-gauge-label">请求耗时</p>
+        <p className="asb-gateway-gauge-label">{t("gateway.latencyTitle")}</p>
         <div className="asb-gateway-latency">
           <LatencyRow label="p50" ms={p50} scaleMax={p95} />
           <LatencyRow label="p95" ms={p95} scaleMax={p95} />
         </div>
-        <p className="asb-gateway-gauge-detail">{hasLatency ? "只统计已完成请求" : "暂无已完成请求"}</p>
+        <p className="asb-gateway-gauge-detail">{hasLatency ? t("gateway.latencyOnlyCompleted") : t("gateway.latencyNoCompleted")}</p>
       </div>
       <div className="asb-gateway-gauge is-protocol">
-        <p className="asb-gateway-gauge-label">上游协议分布</p>
+        <p className="asb-gateway-gauge-label">{t("gateway.protocolTitle")}</p>
         {usage.length === 0 ? (
-          <p className="asb-gateway-empty" role="status">暂无网关请求记录。</p>
+          <p className="asb-gateway-empty" role="status">{t("gateway.noRequests")}</p>
         ) : (
           <>
             <div className="asb-gateway-protocol-bar" aria-hidden="true">
@@ -160,22 +162,23 @@ function GatewayRecentRequests({ samples, profileNames }: {
   samples: GatewaySample[];
   profileNames: Map<string, string>;
 }) {
+  const { t } = useI18n();
   const recent = [...samples].slice(-RECENT_ROW_COUNT).reverse();
   return (
-    <section className="asb-gateway-recent" aria-label="最近请求">
+    <section className="asb-gateway-recent" aria-label={t("gateway.recentTitle")}>
       <header className="asb-gateway-recent-heading">
-        <h3 className="asb-section-title">最近请求</h3>
+        <h3 className="asb-section-title">{t("gateway.recentTitle")}</h3>
         <span className="asb-gateway-recent-count">
-          {samples.length > 0 ? `最近 ${recent.length} 条` : "暂无记录"}
+          {samples.length > 0 ? t("gateway.recentCount", { count: recent.length }) : t("gateway.noRecords")}
         </span>
       </header>
       {recent.length === 0 ? (
-        <p className="asb-gateway-empty" role="status">暂无网关请求记录。</p>
+        <p className="asb-gateway-empty" role="status">{t("gateway.noRequests")}</p>
       ) : (
         <div className="asb-gateway-recent-table">
           <Table
-            ariaLabel="最近经本机网关处理的请求"
-            columns={recentColumns(profileNames)}
+            ariaLabel={t("gateway.recentTableAriaLabel")}
+            columns={recentColumns(t, profileNames)}
             rows={recent}
             rowKey={(sample) =>
               `${sample.atMs}:${sample.app}:${sample.profileId ?? "-"}:${sample.routeRevision ?? "-"}`
@@ -184,31 +187,31 @@ function GatewayRecentRequests({ samples, profileNames }: {
         </div>
       )}
       <p className="asb-gateway-note">
-        遥测仅保存在内存中，重启应用后清空；缓冲区满时只保留最近 512 条请求。
+        {t("gateway.telemetryNote")}
       </p>
     </section>
   );
 }
 
-function recentColumns(profileNames: Map<string, string>): Array<TableColumn<GatewaySample>> {
+function recentColumns(t: TFunction, profileNames: Map<string, string>): Array<TableColumn<GatewaySample>> {
   return [
     {
       key: "time",
-      header: "时间",
+      header: t("gateway.colTime"),
       render: (sample) => <span className="asb-gateway-row-value asb-code">{formatClock(sample.atMs)}</span>,
     },
-    { key: "app", header: "客户端", render: (sample) => APP_LABELS[sample.app] },
+    { key: "app", header: t("gateway.client"), render: (sample) => APP_LABELS[sample.app] },
     {
       key: "profile",
-      header: "供应商",
+      header: t("gateway.colProvider"),
       render: (sample) =>
         sample.profileId === null
-          ? "未匹配路由"
-          : profileNames.get(sample.profileId) ?? "已删除的供应商",
+          ? t("gateway.noRouteMatch")
+          : profileNames.get(sample.profileId) ?? t("gateway.deletedProvider"),
     },
     {
       key: "routeRevision",
-      header: "路由修订",
+      header: t("gateway.colRouteRevision"),
       render: (sample) =>
         sample.routeRevision === null ? (
           "—"
@@ -218,21 +221,21 @@ function recentColumns(profileNames: Map<string, string>): Array<TableColumn<Gat
     },
     {
       key: "path",
-      header: "路径",
+      header: t("gateway.colPath"),
       render: (sample) => <GatewayRequestPath sample={sample} />,
     },
     {
       key: "status",
-      header: "状态",
+      header: t("gateway.colStatus"),
       render: (sample) => {
-        if (sample.status === null) return <span className="asb-fail-text">中断</span>;
+        if (sample.status === null) return <span className="asb-fail-text">{t("gateway.interrupted")}</span>;
         if (sample.status >= 400) return <span className="asb-fail-text">HTTP {sample.status}</span>;
         return <span className="asb-gateway-row-value">{sample.status}</span>;
       },
     },
     {
       key: "duration",
-      header: "耗时",
+      header: t("gateway.colDuration"),
       render: (sample) => (
         <span className="asb-gateway-row-value">{formatDuration(sample.durationMs)}</span>
       ),
@@ -241,7 +244,8 @@ function recentColumns(profileNames: Map<string, string>): Array<TableColumn<Gat
 }
 
 function GatewayRequestPath({ sample }: { sample: GatewaySample }) {
-  if (sample.upstreamProtocol === null) return "未匹配路由";
+  const { t } = useI18n();
+  if (sample.upstreamProtocol === null) return t("gateway.noRouteMatch");
   const translated = isProtocolTranslation(sample.clientProtocol, sample.upstreamProtocol);
   return (
     <span className="asb-gateway-request-path">
@@ -249,7 +253,7 @@ function GatewayRequestPath({ sample }: { sample: GatewaySample }) {
       <span aria-hidden="true">→</span>
       <span>{PROTOCOL_LABELS[sample.upstreamProtocol]}</span>
       <span className={`asb-gateway-request-mode is-${translated ? "translation" : "relay"}`}>
-        {translated ? "协议转换" : "本机转发"}
+        {translated ? t("gateway.modeTranslation") : t("gateway.modeRelay")}
       </span>
     </span>
   );

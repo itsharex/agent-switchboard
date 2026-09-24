@@ -1,3 +1,4 @@
+import { useMessageState } from "../../i18n/use-message-state";
 import { useCallback, useEffect, useState } from "react";
 import { getProviderParametersCatalog, type AppKind, type ProviderParametersCatalog, type SettingsValues } from "../../api/client";
 
@@ -9,7 +10,7 @@ export function useProviderParameters(
   seed: (defaults: SettingsValues) => void,
 ) {
   const [catalog, setCatalog] = useState<ProviderParametersCatalog | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
@@ -24,7 +25,7 @@ export function useProviderParameters(
         setCatalog(loaded);
         if (parameters === null) seed({ settings: { ...loaded.defaults.settings } });
       } catch (caught) {
-        if (active) setError((caught as { message?: string }).message ?? "参数目录不可用");
+        if (active) setError(caught);
       }
     })();
     return () => { active = false; };

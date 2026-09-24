@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderDraft, ProviderProfile, SettingsValues } from "../../api/client";
+import { tr } from "../../i18n/current";
 import { draftFrom, prepareDraft, type ProviderEditorDraft } from "../provider-editor/draft";
 import { useProviderParameters } from "../provider-editor/useProviderParameters";
 
 function officialDraft(profile: ProviderProfile | null): ProviderEditorDraft {
   if (profile) return draftFrom(profile, "codex");
   return {
-    app: "codex", routeMode: "official", name: "Codex 官方登录",
+    app: "codex", routeMode: "official", name: tr("codex.official.defaultName"),
     baseUrl: null, apiKey: "", upstreamProtocol: null, responsesOptions: null,
     maxOutputTokens: null, model: null, modelOptions: null, parameters: null,
     notes: null, websiteUrl: null, officialQuotaRefreshIntervalMinutes: null,

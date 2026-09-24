@@ -6,6 +6,7 @@ import {
   useDiscoveryRows,
 } from "../../components/extensions/DiscoverPanel";
 import { useDiscoverySelection } from "../../components/extensions/useDiscoverySelection";
+import { useI18n } from "../../i18n";
 import { ExtensionSearch } from "./ExtensionToolbar";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
@@ -15,10 +16,11 @@ interface Props {
   notice?: ReactNode;
 }
 
-/** 从本机发现 is a full-page workbench on the shared editor frame: search and
+/** Scanning existing extensions uses the shared full-page editor frame: search and
  * scan results scroll, while batch selection and the import commit stay in
  * the fixed bottom bar. */
 export function ExtensionDiscoveryView({ workspace: w, notice }: Props) {
+  const { t } = useI18n();
   const kind = w.nav.kind === "mcp" ? "mcp" : "skill";
   const [search, setSearch] = useState("");
   useEffect(() => setSearch(""), [kind]);
@@ -26,8 +28,8 @@ export function ExtensionDiscoveryView({ workspace: w, notice }: Props) {
   const selection = useDiscoverySelection(view.allRows, w.discovery.snapshot?.scanId, kind);
   return (
     <EditorFrame
-      title="从本机发现"
-      backLabel="返回扩展库"
+      title={t("extensions.discovery.title")}
+      backLabel={t("extensions.backToLibrary")}
       busy={w.busy}
       onBack={() => w.nav.setDiscoveryOpen(false)}
       footer={

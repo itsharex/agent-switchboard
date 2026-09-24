@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { CodexProviderDraft, SettingsValues } from "../../api/client";
 import type { CodexEditorSource } from "../../app/useProviders";
+import { useI18n } from "../../i18n";
 import { useProviderConnection } from "../provider-editor/useProviderConnection";
 import { useProviderParameters } from "../provider-editor/useProviderParameters";
 import { codexDraftFrom, prepareCodexDraft, validateCodexDraft, type CodexEditorDraft } from "./draft";
@@ -11,6 +12,7 @@ function codexDraftFromSource(source: CodexEditorSource | null): CodexEditorDraf
 }
 
 export function useCodexProviderEditor(source: CodexEditorSource | null, busy: boolean) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<CodexEditorDraft>(() => codexDraftFromSource(source));
   const [parametersOpen, setParametersOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -39,7 +41,7 @@ export function useCodexProviderEditor(source: CodexEditorSource | null, busy: b
     else if (lastSection.current) triggerRef.current?.focus();
     lastSection.current = parametersOpen;
   }, [parametersOpen]);
-  const problems = validateCodexDraft(draft);
+  const problems = validateCodexDraft(draft, t);
   const canSave = !busy && parameters.ready && problems.length === 0;
   const save = (onSave: (value: CodexProviderDraft) => void) => {
     if (!canSave) return;

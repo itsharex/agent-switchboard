@@ -8,7 +8,7 @@ import {
   type CloudBackupSettings,
   type CommandError,
 } from "../api/client";
-import { toast } from "../components/use-toast";
+import { toast, toastMessage } from "../components/use-toast";
 
 interface CloudBackupDeps {
   busy: boolean;
@@ -57,7 +57,7 @@ export function useCloudBackup({
       try {
         const saved = await setCloudBackupSettings(next);
         setSettings(saved);
-        toast({ kind: "success", title: "已保存云端备份连接" });
+        toast({ kind: "success", title: toastMessage("backup.cloud.savedToast") });
         return true;
       } catch (caught) {
         onError(caught as CommandError);
@@ -78,8 +78,8 @@ export function useCloudBackup({
         const result = await uploadCloudBackup(accountPassword, backupPassword, true);
         toast({
           kind: "success",
-          title: "已上传加密云端备份",
-          description: `包含 ${result.profileCount} 个供应商档案`,
+          title: toastMessage("backup.cloud.uploadedToast"),
+          description: toastMessage("backup.cloud.uploadedDetail", { count: result.profileCount }),
         });
         return true;
       } catch (caught) {
@@ -101,8 +101,8 @@ export function useCloudBackup({
         await testCloudBackupConnection(next, accountPassword);
         toast({
           kind: "success",
-          title: "Supabase 连接可用",
-          description: "已验证登录和云端备份表读取权限",
+          title: toastMessage("backup.cloud.connectionOkToast"),
+          description: toastMessage("backup.cloud.connectionOkDetail"),
         });
         return true;
       } catch (caught) {
@@ -126,8 +126,8 @@ export function useCloudBackup({
         await refresh();
         toast({
           kind: "success",
-          title: "已恢复加密云端备份",
-          description: `已恢复 ${result.profileCount} 个供应商档案`,
+          title: toastMessage("backup.cloud.restoredToast"),
+          description: toastMessage("backup.cloud.restoredDetail", { count: result.profileCount }),
         });
         return true;
       } catch (caught) {

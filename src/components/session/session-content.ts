@@ -1,29 +1,25 @@
 import type { SessionMeta } from "../../api/client";
+import type { MessageKey } from "../../i18n";
+import { tr } from "../../i18n/current";
 
 const CODEX_IDE_CONTEXT_PREFIX = "# Context from my IDE setup:";
 const CODEX_REQUEST_MARKER = "my request for codex";
 
-export function sessionMatchesSearch(session: SessionMeta, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!needle) return true;
-  return [session.sessionId, session.title, session.summary, session.projectDir]
-    .filter((value): value is string => value !== null)
-    .some((value) => value.toLocaleLowerCase().includes(needle));
-}
+export const sessionKey = (session: Pick<SessionMeta, "app" | "sessionId">) =>
+  `${session.app}:${session.sessionId}`;
+
+export const sessionTitle = (session: SessionMeta) => session.alias ?? session.title;
+
+const ROLE_MESSAGE_KEYS: Record<string, MessageKey | undefined> = {
+  user: "sessions.role.user",
+  assistant: "sessions.role.assistant",
+  system: "sessions.role.system",
+  tool: "sessions.role.tool",
+};
 
 export function messageRole(role: string): string {
-  switch (role.toLowerCase()) {
-    case "user":
-      return "用户";
-    case "assistant":
-      return "助手";
-    case "system":
-      return "系统";
-    case "tool":
-      return "工具";
-    default:
-      return role;
-  }
+  const key = ROLE_MESSAGE_KEYS[role.toLowerCase()];
+  return key === undefined ? role : tr(key);
 }
 
 export function previewLine(content: string): string {

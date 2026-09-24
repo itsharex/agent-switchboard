@@ -131,7 +131,13 @@ impl Planner<'_> {
         let new_key = binding
             .native_key
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.mcpBindingMissingKey",
+                    "MCP 绑定缺少服务键",
+                )
+            })?;
         let own = self.mcp_document(binding)?;
         for other in self.store.list_bindings().map_err(store_error)? {
             if other.id == binding.id || other.native_key.as_deref() != Some(new_key) {
@@ -142,9 +148,11 @@ impl Planner<'_> {
             };
             if other_target.path == own.path && same_mcp_namespace(&other_target.scope, &own.scope)
             {
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "extension-conflict",
+                    "errors.extops.serviceKeyOccupied",
                     format!("服务键 {new_key} 已被同一配置文档中的另一绑定占用，请换一个键"),
+                    serde_json::json!({ "key": new_key }),
                 ));
             }
         }
@@ -174,15 +182,22 @@ impl Planner<'_> {
         CommandError,
     > {
         let ExtensionPayload::Mcp(mcp) = &definition.payload else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.renameOnlyForMcp",
                 "重命名只适用于 MCP 定义",
             ));
         };
         let new_key = binding
             .native_key
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.mcpBindingMissingKey",
+                    "MCP 绑定缺少服务键",
+                )
+            })?;
         let target = self.mcp_document(binding)?;
         let document = target.path.clone();
         let doc_str = document.to_string_lossy().to_string();

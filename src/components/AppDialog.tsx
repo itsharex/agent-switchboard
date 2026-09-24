@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { CloseIcon } from "./icons";
 
@@ -33,6 +34,7 @@ export function AppDialogSuspension({ suspended, children }: {
  */
 export function AppDialog({ title, busy, onClose, children, footer, wide = false }: Props) {
   const suspended = useContext(AppDialogSuspensionContext);
+  const { t } = useI18n();
   return (
     <ModalOverlay
       isOpen
@@ -50,7 +52,7 @@ export function AppDialog({ title, busy, onClose, children, footer, wide = false
             <Heading slot="title" className="asb-dialog-title">
               {title}
             </Heading>
-            <Button variant="icon" disabled={busy} aria-label="关闭窗口" onClick={onClose}>
+            <Button variant="icon" disabled={busy} aria-label={t("window.closeDialog")} onClick={onClose}>
               <CloseIcon />
             </Button>
           </header>

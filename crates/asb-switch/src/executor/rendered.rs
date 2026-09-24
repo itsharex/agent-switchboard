@@ -38,9 +38,11 @@ where
         Ok(()) => result,
         Err(message) => match result {
             Ok(mut outcome) => {
-                outcome
-                    .warnings
-                    .push(format!("端点投影已完成，但无法释放写入锁：{message}"));
+                outcome.warnings.push(asb_core::contracts::LocalizedMessage::new(
+                    "warnings.lockReleaseAfterProjection",
+                    serde_json::json!({ "detail": message }),
+                    format!("端点投影已完成，但无法释放写入锁：{message}"),
+                ));
                 Ok(outcome)
             }
             Err(prior) => Err(SwitchError::LockReleaseFailed {

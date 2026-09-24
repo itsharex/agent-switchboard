@@ -129,8 +129,9 @@ pub(crate) async fn apply_binding_states(
         return Err(CommandError::new("extension-plan-rejected", rejected));
     }
     if outcome.rolled_back {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-plan-rolled-back",
+            "errors.extlib.planRolledBack",
             "扩展变更已回滚，客户端文件保持原状",
         ));
     }

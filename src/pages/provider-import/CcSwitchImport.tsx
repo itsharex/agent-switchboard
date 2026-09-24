@@ -1,10 +1,12 @@
 import type { CcSwitchImportOutcome, CcSwitchScan, CcSwitchScanItem } from "../../api/client";
 import { pickDirectory } from "../../api/client";
+import { CcOutcomeText, ccOutcomeNeedsAttention } from "../../app/cc-import-outcome";
 import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { Table, type TableColumn } from "../../components/Table";
 import { ModuleHeader } from "../../components/WorkspaceHeader";
 import { SearchIcon } from "../../components/icons";
+import { useI18n, type TFunction } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 
 interface CcImportRow {
@@ -29,58 +31,54 @@ interface CcSwitchImportProps {
   onImport: () => void;
 }
 
-function providerDetail(item: CcSwitchScanItem): string {
-  return [clientName(item.app), item.routeMode === "official" ? "官方登录" : null, item.model, item.baseUrl,
-    item.usageScriptUpdatesExisting ? "将补充用量查询脚本" : item.usageScriptImportable ? "将导入用量查询脚本" : null,
-    item.endpointCandidates > 0 ? `测速候选 ${item.endpointCandidates}` : null,
+function providerDetail(item: CcSwitchScanItem, t: TFunction): string {
+  return [clientName(item.app), item.routeMode === "official" ? t("importDiscovery.label.official") : null, item.model, item.baseUrl,
+    item.usageScriptUpdatesExisting ? t("importDiscovery.cc.usagePatch") : item.usageScriptImportable ? t("importDiscovery.cc.usageImport") : null,
+    item.endpointCandidates > 0 ? t("importDiscovery.cc.endpointCandidates", { count: item.endpointCandidates }) : null,
   ].filter(Boolean).join(" · ");
 }
 
-function importRows(scan: CcSwitchScan | null): CcImportRow[] {
+function importRows(scan: CcSwitchScan | null, t: TFunction): CcImportRow[] {
   if (!scan) return [];
   return [
     ...scan.providers.map((item) => ({
-      key: item.key, item, name: item.name, detail: providerDetail(item),
+      key: item.key, item, name: item.name, detail: providerDetail(item, t),
       status: item.existing
         ? item.app === "codex" && item.routeMode === "custom"
-          ? "已存在相同路由，导入将跳过"
-          : "已存在相同档案，导入将跳过"
+          ? t("importDiscovery.cc.existsRoute")
+          : t("importDiscovery.cc.existsProfile")
         : null,
       warnings: item.warnings,
     })),
     ...scan.skipped.map((skip) => ({ key: skip.key, item: null, name: skip.name, detail: null,
-      status: `无法导入：${skip.reason}`, warnings: [],
+      status: t("importDiscovery.status.skipped", { reason: skip.reason }), warnings: [],
     })),
   ];
 }
 
-function importColumns({ selected, busy, onSelect }: Omit<CcSwitchImportProps, "scan" | "result" | "onScan" | "onImport">): Array<TableColumn<CcImportRow>> {
+function importColumns({ selected, busy, onSelect }: Omit<CcSwitchImportProps, "scan" | "result" | "onScan" | "onImport">, t: TFunction): Array<TableColumn<CcImportRow>> {
   return [
-    { key: "provider", header: "供应商", render: (row) => {
+    { key: "provider", header: t("importDiscovery.label.provider"), render: (row) => {
       const item = row.item;
       if (!item) return row.name;
       return <Checkbox label={row.name} checked={Boolean(selected[item.key]) && !item.existing}
         disabled={busy || item.existing} onChange={(checked) => onSelect(item.key, checked)} />;
     } },
-    { key: "detail", header: "详情", render: (row) => row.detail },
-    { key: "status", header: "状态", render: (row) => <>{row.status}
+    { key: "detail", header: t("importDiscovery.label.detail"), render: (row) => row.detail },
+    { key: "status", header: t("importDiscovery.label.status"), render: (row) => <>{row.status}
       {row.warnings.map((warning) => <div key={warning} className="asb-warn-text">{warning}</div>)}
     </> },
   ];
 }
 
 function ImportResult({ result }: { result: CcSwitchImportOutcome | null }) {
+  const { t } = useI18n();
   if (!result) return null;
   return (
     <>
-      <div className={`asb-banner ${result.notImported.length > 0 ? "asb-banner-warning" : "asb-banner-ok"}`}
-        role="status" aria-label="导入结果">
-        <span>已导入 {result.importedCount} 项
-          {result.usageScriptImportedCount > 0 && ` · 已导入用量脚本 ${result.usageScriptImportedCount} 项`}
-          {result.endpointCandidatesImported > 0 && ` · 已导入测速候选 ${result.endpointCandidatesImported} 项`}
-          {result.skippedExisting.length > 0 && ` · 跳过已存在 ${result.skippedExisting.length} 项`}
-          {result.notImported.length > 0 && ` · 未导入 ${result.notImported.length} 项`}
-        </span>
+      <div className={`asb-banner ${ccOutcomeNeedsAttention(result) ? "asb-banner-warning" : "asb-banner-ok"}`}
+        role="status" aria-label={t("importDiscovery.result.aria")}>
+        <span><CcOutcomeText result={result} /></span>
       </div>
       {result.notImported.length > 0 && <div className="asb-ccscan">
         {result.notImported.map((skip) => <div className="asb-kv" key={skip.key}>
@@ -97,7 +95,8 @@ function ImportResult({ result }: { result: CcSwitchImportOutcome | null }) {
  * source folder defaults to the home database location and stays editable
  * through the native directory picker. */
 export function CcSwitchImport(props: CcSwitchImportProps) {
-  const rows = importRows(props.scan);
+  const { t } = useI18n();
+  const rows = importRows(props.scan, t);
   const selectedCount = rows.filter(({ item }) => item && !item.existing && props.selected[item.key]).length;
   const pickFolder = async () => {
     if (props.busy) return;
@@ -107,32 +106,32 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
   return (
     <>
       <ModuleHeader
-        title="本机数据库"
+        title={t("importDiscovery.tab.database")}
         primaryActions={
           <>
             <Button variant="secondary" disabled={props.busy} onClick={() => void pickFolder()}>
-              选择数据库文件夹
+              {t("importDiscovery.cc.pickFolder")}
             </Button>
             <Button variant="secondary" disabled={props.busy} onClick={props.onScan}>
-              {props.directory ? "扫描所选文件夹（只读）" : "扫描本机数据库（只读）"}
+              {props.directory ? t("importDiscovery.cc.scanPicked") : t("importDiscovery.cc.scanDefault")}
             </Button>
           </>
         }
       />
       {props.directory && (
         <div className="asb-kv">
-          <span className="asb-kv-label">所选文件夹</span>
+          <span className="asb-kv-label">{t("importDiscovery.cc.chosenFolder")}</span>
           <span className="asb-kv-value asb-code">{props.directory}</span>
           <div className="asb-kv-actions">
             <Button variant="secondary" disabled={props.busy} onClick={() => props.onDirectoryChange(null)}>
-              恢复默认位置
+              {t("importDiscovery.cc.resetFolder")}
             </Button>
           </div>
         </div>
       )}
       {props.scan ? <div className="asb-ccscan">
         <div className="asb-kv">
-          <span className="asb-kv-label">数据库文件</span>
+          <span className="asb-kv-label">{t("importDiscovery.cc.dbFile")}</span>
           <span className="asb-kv-value asb-code">{props.scan.dbPath}</span>
         </div>
         {rows.length === 0 ? (
@@ -140,12 +139,12 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
             <span className="asb-empty-state-icon" aria-hidden="true">
               <SearchIcon />
             </span>
-            <h3 className="asb-section-title">导入源中没有供应商。</h3>
+            <h3 className="asb-section-title">{t("importDiscovery.cc.empty")}</h3>
           </div>
-        ) : <Table columns={importColumns(props)} rows={rows} rowKey={(row) => row.key} ariaLabel="本机数据库扫描结果" />}
+        ) : <Table columns={importColumns(props, t)} rows={rows} rowKey={(row) => row.key} ariaLabel={t("importDiscovery.cc.tableAria")} />}
         <div className="asb-form-actions">
           <Button variant="primary" disabled={props.busy || selectedCount === 0} onClick={props.onImport}>
-            导入所选 {selectedCount} 项
+            {t("importDiscovery.action.importSelected", { count: selectedCount })}
           </Button>
         </div>
       </div> : (
@@ -153,7 +152,7 @@ export function CcSwitchImport(props: CcSwitchImportProps) {
           <span className="asb-empty-state-icon" aria-hidden="true">
             <SearchIcon />
           </span>
-          <h3 className="asb-section-title">扫描后选择可导入的供应商档案；默认读取本机数据库，也可选择其他包含 cc-switch.db 的文件夹。</h3>
+          <h3 className="asb-section-title">{t("importDiscovery.cc.emptyHint")}</h3>
         </div>
       )}
       <ImportResult result={props.result} />

@@ -1,7 +1,14 @@
+import { currentLanguage } from "../i18n/current.ts";
+
 export const TOKEN_UNIT = "tokens";
 
-const exactTokenFormatter = new Intl.NumberFormat("zh-CN");
-const compactTokenFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+function exactTokenFormatter(): Intl.NumberFormat {
+  return new Intl.NumberFormat(currentLanguage());
+}
+
+function compactTokenFormatter(): Intl.NumberFormat {
+  return new Intl.NumberFormat(currentLanguage(), { maximumFractionDigits: 1 });
+}
 
 const TOKEN_MAGNITUDES = [
   { divisor: 1_000_000_000, suffix: "B" },
@@ -11,7 +18,7 @@ const TOKEN_MAGNITUDES = [
 
 /** Exact, separator-delimited token value for audit-friendly detail tables. */
 export function formatTokenCount(value: number): string {
-  return Number.isFinite(value) ? exactTokenFormatter.format(value) : "—";
+  return Number.isFinite(value) ? exactTokenFormatter().format(value) : "—";
 }
 
 /** Compact K/M/B token value for scan-friendly summaries and charts. */
@@ -19,8 +26,8 @@ export function formatCompactTokenCount(value: number): string {
   if (!Number.isFinite(value)) return "—";
 
   const magnitude = tokenMagnitude(value);
-  if (!magnitude) return exactTokenFormatter.format(value);
-  return `${compactTokenFormatter.format(value / magnitude.divisor)}${magnitude.suffix}`;
+  if (!magnitude) return exactTokenFormatter().format(value);
+  return `${compactTokenFormatter().format(value / magnitude.divisor)}${magnitude.suffix}`;
 }
 
 /** Compact token value with its explicit unit for values outside a table header. */

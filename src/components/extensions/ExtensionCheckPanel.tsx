@@ -1,3 +1,5 @@
+import { uiMessage } from "../../i18n/errors";
+import { useMessageState } from "../../i18n/use-message-state";
 import { useEffect, useState } from "react";
 import {
   cancelMcpCheck,
@@ -6,9 +8,16 @@ import {
   type ExtensionTarget,
   type McpCheckResult,
 } from "../../api/client";
+import { useI18n } from "../../i18n";
+import { tr } from "../../i18n/current";
 import { Button } from "../Button";
 
-const STAGES = ["连接", "initialize", "读取目录", "完成"];
+const STAGES = [
+  "extensions.check.stage.connect",
+  "extensions.check.stage.initialize",
+  "extensions.check.stage.tools",
+  "extensions.check.stage.done",
+] as const;
 const POLL_INTERVAL_MS = 300;
 const MAX_POLLS = 90;
 const STAGE_ADVANCE_MS = 1600;
@@ -25,21 +34,30 @@ function outcomeView(result: McpCheckResult): { badge: string; tone: string; tex
   switch (outcome.kind) {
     case "passed":
       return {
-        badge: "通过",
+        badge: tr("extensions.check.passed"),
         tone: "asb-ok-text",
-        text: `协议 ${result.protocolVersion ?? "未知"} · 工具 ${outcome.tools} · 资源 ${outcome.resources} · 提示词 ${outcome.prompts}`,
+        text: tr("extensions.check.passedDetail", {
+          protocol: result.protocolVersion ?? tr("extensions.check.unknown"),
+          tools: outcome.tools,
+          resources: outcome.resources,
+          prompts: outcome.prompts,
+        }),
       };
     case "partial":
-      return { badge: "部分成功", tone: "asb-warn-text", text: outcome.error };
+      return { badge: tr("extensions.check.partial"), tone: "asb-warn-text", text: outcome.error };
     case "failed":
-      return { badge: "失败", tone: "asb-fail-text", text: `${outcome.classification}：${outcome.error}` };
+      return {
+        badge: tr("extensions.check.failed"),
+        tone: "asb-fail-text",
+        text: tr("extensions.check.failedDetail", { classification: outcome.classification, message: outcome.error }),
+      };
     case "cancelled":
-      return { badge: "已取消", tone: "", text: "检测已被取消" };
+      return { badge: tr("extensions.check.cancelled"), tone: "", text: tr("extensions.check.cancelledDetail") };
     case "needsNativeConfirmation":
       return {
-        badge: "需要客户端验证",
+        badge: tr("extensions.check.needsNativeConfirmation"),
         tone: "asb-warn-text",
-        text: "该服务需要交互式登录；请在原生 /mcp 中完成确认",
+        text: tr("extensions.check.nativeConfirmationDetail"),
       };
   }
 }
@@ -47,10 +65,11 @@ function outcomeView(result: McpCheckResult): { badge: string; tone: string; tex
 /** One bounded MCP connection probe: starts the backend check, polls until a
  * result lands, and renders the stage stepper while waiting. */
 export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
+  const { t } = useI18n();
   const [checkId, setCheckId] = useState<string | null>(null);
   const [result, setResult] = useState<McpCheckResult | null>(null);
   const [stage, setStage] = useState(0);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useMessageState();
 
   useEffect(() => {
     setCheckId(null);
@@ -75,20 +94,20 @@ export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
           return;
         }
         if (polls >= MAX_POLLS) {
-          setFailure("检测超时；请稍后重试");
+          setFailure(uiMessage("extensions.check.timeout"));
           setCheckId(null);
           return;
         }
         pollTimer = window.setTimeout(() => void tick(), POLL_INTERVAL_MS);
       } catch (caught) {
         if (stopped) return;
-        setFailure((caught as { message?: string }).message ?? "检测轮询失败");
+        setFailure(caught);
         setCheckId(null);
       }
     };
     pollTimer = window.setTimeout(() => void tick(), POLL_INTERVAL_MS);
     // Bounded stage estimate: the backend reports only the final outcome, so
-    // the stepper advances on fixed intervals and caps before 完成.
+    // the stepper advances on fixed intervals and caps before the last stage.
     const advance = window.setInterval(() => {
       setStage((current) => Math.min(current + 1, STAGES.length - 2));
     }, STAGE_ADVANCE_MS);
@@ -110,7 +129,7 @@ export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
       const started = await checkMcpConnection(definitionId, target, true);
       setCheckId(started.checkId);
     } catch (caught) {
-      setFailure((caught as { message?: string }).message ?? "无法启动连接检测");
+      setFailure(caught);
     }
   };
 
@@ -122,7 +141,7 @@ export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
     try {
       await cancelMcpCheck(id);
     } catch (caught) {
-      setFailure((caught as { message?: string }).message ?? "取消检测失败");
+      setFailure(caught);
     }
   };
 
@@ -130,25 +149,25 @@ export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
   const activeStage = finished ? STAGES.length - 1 : stage;
 
   return (
-    <div className="asb-ext-section" aria-label="连接检测">
+    <div className="asb-ext-section" aria-label={t("extensions.check.title")}>
       <div className="asb-ext-section-heading">
-        <h3 className="asb-section-title">连接检测</h3>
+        <h3 className="asb-section-title">{t("extensions.check.title")}</h3>
         <div className="asb-ext-actions">
           <Button variant="secondary" disabled={busy || !target || running} onClick={() => void start()}>
-            检测
+            {t("extensions.check.run")}
           </Button>
           {running && (
             <Button variant="secondary" onClick={() => void cancel()}>
-              取消
+              {t("confirm.cancel")}
             </Button>
           )}
         </div>
       </div>
       {(running || finished) && (
-        <ol className="asb-ext-stages" aria-label="检测阶段">
-          {STAGES.map((label, index) => (
+        <ol className="asb-ext-stages" aria-label={t("extensions.check.stagesAria")}>
+          {STAGES.map((stageKey, index) => (
             <li
-              key={label}
+              key={stageKey}
               className={[
                 "asb-ext-stage",
                 index < activeStage ? "is-done" : "",
@@ -158,7 +177,7 @@ export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
                 .filter(Boolean)
                 .join(" ")}
             >
-              {label}
+              {t(stageKey)}
             </li>
           ))}
         </ol>
@@ -174,7 +193,8 @@ export function ExtensionCheckPanel({ definitionId, target, busy }: Props) {
           <span className={outcomeView(result).tone}>{outcomeView(result).text}</span>
           <span className="asb-scope-note">
             {" "}
-            · 耗时 {result.durationMs} ms{result.truncated ? " · 目录结果被截断" : ""}
+            {t("extensions.check.duration", { duration: result.durationMs })}
+            {result.truncated ? t("extensions.check.truncated") : ""}
           </span>
         </p>
       )}

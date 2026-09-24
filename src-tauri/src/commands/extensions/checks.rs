@@ -27,8 +27,9 @@ pub async fn check_mcp_connection(
     confirm: bool,
 ) -> Result<CheckStartedDto, CommandError> {
     if !confirm {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "check-not-confirmed",
+            "errors.extops.checkRequiresConfirmation",
             "连接检测会运行服务命令或访问端点；需要明确确认",
         ));
     }
@@ -37,10 +38,17 @@ pub async fn check_mcp_connection(
     let definition = store
         .get_definition(&definition_id)
         .map_err(store_error)?
-        .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "extension-not-found",
+                "errors.extops.definitionNotFound",
+                "扩展不存在或已被删除",
+            )
+        })?;
     let ExtensionPayload::Mcp(mcp) = definition.payload else {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-invalid",
+            "errors.extops.checkOnlyForMcp",
             "连接检测只适用于 MCP 服务",
         ));
     };

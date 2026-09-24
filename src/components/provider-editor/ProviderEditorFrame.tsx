@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from "react";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { EditorFrame } from "../EditorFrame";
 
@@ -27,6 +28,7 @@ export function ProviderEditorFrame({
   canSave,
   children,
 }: Props) {
+  const { t } = useI18n();
   const canSubmit = Boolean(formId) && canSave && !busy;
   return (
     <EditorFrame
@@ -38,9 +40,9 @@ export function ProviderEditorFrame({
       className="asb-provider-editor"
       footer={
         <>
-          <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
+          <Button variant="secondary" disabled={busy} onClick={onCancel}>{t("confirm.cancel")}</Button>
           <Button type={formId ? "submit" : "button"} form={formId} variant="primary" className="asb-editor-submit" disabled={!canSubmit}>
-            保存供应商
+            {t("providers.editor.save")}
           </Button>
         </>
       }

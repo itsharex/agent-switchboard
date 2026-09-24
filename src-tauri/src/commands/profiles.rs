@@ -1,5 +1,5 @@
 use super::discovery::{codex_import_source, discovery_report};
-use super::error::{self, blocking, observe, operation_error, state, store_error, CommandError};
+use super::error::{blocking, observe, operation_error, state, store_error, CommandError};
 use super::switching;
 use crate::local_state::LocalState;
 use crate::runtime_log::RuntimeLogAction;
@@ -71,8 +71,9 @@ fn ensure_codex_profile_deletable(state: &LocalState, id: &str) -> Result<(), Co
     let (policy, _) = crate::gateway::codex::policy::load(state.root())
         .map_err(|error| CommandError::new("codex-policy-invalid", error))?;
     if policy.provider_ids.iter().any(|entry| entry == id) {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "codex-provider-in-failover-queue",
+            "errors.sw.codexInFailoverQueue",
             "请先从 Codex 故障转移队列移除该供应商，再删除档案",
         ));
     }
@@ -89,8 +90,9 @@ fn ensure_codex_profile_deletable(state: &LocalState, id: &str) -> Result<(), Co
                     .is_some_and(|route| route.profile_id == id)
         });
     if referenced_by_subagent_route {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "codex-provider-referenced-by-subagent-route",
+            "errors.sw.codexReferencedBySubagentRoute",
             "该 Codex 供应商正被其他档案的子代理路由引用；请先移除引用后再删除档案",
         ));
     }
@@ -101,15 +103,17 @@ fn ensure_codex_profile_deletable(state: &LocalState, id: &str) -> Result<(), Co
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(_) => {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "codex-profile-delete-check-failed",
+                "errors.sw.codexDeleteCheckUnreadable",
                 "无法读取 Codex 配置以确认档案未被引用",
             ))
         }
     };
     let document = text.parse::<toml_edit::DocumentMut>().map_err(|_| {
-        CommandError::new(
+        CommandError::keyed(
             "codex-profile-delete-check-failed",
+            "errors.sw.codexDeleteCheckUnparseable",
             "Codex 配置格式无效，无法确认档案是否仍被引用",
         )
     })?;
@@ -118,8 +122,9 @@ fn ensure_codex_profile_deletable(state: &LocalState, id: &str) -> Result<(), Co
         .and_then(toml_edit::Item::as_str)
         .is_some_and(|pointer| codex_catalog_references_profile(pointer, id))
     {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "codex-profile-active",
+            "errors.sw.codexStillReferenced",
             "该 Codex 供应商仍被当前客户端配置引用；请先切换后再删除",
         ));
     }
@@ -163,8 +168,9 @@ pub async fn delete_codex_profile(
         blocking(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.uses_profile(&profile_id) {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "gateway-profile-active",
+                    "errors.sw.codexGatewayActiveDelete",
                     "该 Codex 供应商正在被本机协议网关使用；请先切换到官方登录后再删除",
                 ));
             }
@@ -262,61 +268,31 @@ pub async fn reorder_codex_profiles(
 }
 
 #[tauri::command]
-pub async fn reset_profile_store(
+pub async fn repair_profile_store(
     app: tauri::AppHandle,
-    confirm_write: bool,
-) -> Result<(), CommandError> {
+) -> Result<crate::config_store::RepairReport, CommandError> {
     let refresh_app = app.clone();
-    let result = observe(RuntimeLogAction::ProfileStoreReset, async move {
-        error::require_write_confirmation(confirm_write, "重置供应商数据")?;
+    let result = observe(RuntimeLogAction::ProfileStoreRepaired, async move {
         let state = state(&app)?;
-        let gateway = app
-            .state::<crate::gateway::GatewayController>()
-            .inner()
-            .clone();
         let gate = app.state::<super::ConfigWriteGate>().inner().clone();
         blocking(move || {
             let _guard = gate
                 .lock()
                 .map_err(|e| CommandError::new("config-write-gate-unavailable", e))?;
-            // Reset is itself the recovery path for store states the typed
-            // readers reject, so recovery before the wipe is best effort: it
-            // may still reconcile real client files, but no recovery failure
-            // may block the confirmed wipe. Transaction backups survive under
-            // state/backups for a later manual restore either way.
-            if let Err(error) = switching::ensure_profile_save_recovered(&app) {
-                log::warn!("重置前配置恢复未完成：{}", error.message);
-            }
-            if gateway.has_active_routes() {
-                return Err(CommandError::new(
-                    "gateway-route-active",
-                    "本机协议网关正在使用供应商；请先切换到直连或官方登录后再重置供应商数据",
-                ));
-            }
             state
                 .configuration()
-                .reset()
-                .map_err(|error| CommandError::new("profile-store-reset-failed", error))?;
-            crate::codex_auth::clear_bindings(state.root()).map_err(|error| {
-                CommandError::new(
-                    "codex-bindings-reset-failed",
-                    format!("供应商已重置，但账号绑定清理失败：{error}"),
-                )
-            })
+                .repair()
+                .map_err(|error| CommandError::localized(
+                    "profile-store-repair-failed",
+                    "errors.sw.profileStoreRepairFailed",
+                    format!("供应商存储无法安全修复：{error}"),
+                    serde_json::json!({ "detail": error }),
+                ))
         })
         .await
     })
     .await;
     if result.is_ok() {
-        if let Ok(state) = LocalState::from_app(&refresh_app) {
-            if let Err(error) = crate::usage_cache::clear(&state) {
-                log::warn!("无法清除托盘用量缓存: {error}");
-            }
-            if let Err(error) = crate::usage_history::clear_providers(&state) {
-                log::warn!("无法清除供应商用量历史: {error}");
-            }
-        }
-        crate::codex_official_quota::clear();
         crate::tray::refresh(&refresh_app);
     }
     result
@@ -343,8 +319,9 @@ pub async fn delete_profile(
                 .map_err(|e| CommandError::new("config-write-gate-unavailable", e))?;
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.uses_profile(&profile_id) {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "gateway-profile-active",
+                    "errors.sw.gatewayActiveDelete",
                     "该供应商正在被本机协议网关使用；请先切换到直连或官方登录后再删除",
                 ));
             }
@@ -435,8 +412,9 @@ pub async fn import_discovered_claude_profile(
         blocking(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.has_active_route_for(AppKind::Claude) {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "gateway-route-active",
+                    "errors.sw.gatewayActiveImport",
                     "该客户端正在使用本机协议网关；请先切换到直连或官方登录后再导入供应商",
                 ));
             }
@@ -445,7 +423,11 @@ pub async fn import_discovered_claude_profile(
                 .into_iter()
                 .next()
                 .ok_or_else(|| {
-                    CommandError::new("import-unavailable", "当前配置没有可导入的供应商")
+                    CommandError::keyed(
+                        "import-unavailable",
+                        "errors.sw.noImportableProvider",
+                        "当前配置没有可导入的供应商",
+                    )
                 })?;
             state
                 .configuration()
@@ -483,8 +465,9 @@ pub async fn import_discovered_codex_profile(
         blocking(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.has_active_route_for(AppKind::Codex) {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "gateway-route-active",
+                    "errors.sw.codexGatewayActiveImport",
                     "Codex 当前正在使用本机协议网关；请先切换到官方登录或直连后再导入供应商",
                 ));
             }

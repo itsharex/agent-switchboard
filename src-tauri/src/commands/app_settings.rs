@@ -9,7 +9,7 @@ use tauri::Manager;
 #[serde(rename_all = "camelCase")]
 pub struct AppSettingsSnapshot {
     settings: AppSettings,
-    desktop_error: Option<String>,
+    desktop_error: Option<CommandError>,
 }
 
 /// Reads application-runtime settings. This is deliberately separate from the
@@ -22,7 +22,14 @@ pub async fn get_app_settings(app: tauri::AppHandle) -> Result<AppSettingsSnapsh
     let settings = blocking(move || {
         state
             .get_app_settings()
-            .map_err(|error| CommandError::new("app-settings-unavailable", error))
+            .map_err(|error| {
+                CommandError::localized(
+                    "app-settings-unavailable",
+                    "errors.settings.unavailable",
+                    error.clone(),
+                    serde_json::json!({ "detail": error }),
+                )
+            })
     })
     .await?;
     Ok(AppSettingsSnapshot { settings, desktop_error: desktop.error()? })
@@ -43,7 +50,10 @@ pub async fn set_app_settings(
         let current_state = state(&app)?;
         settings
             .validate()
-            .map_err(|error| CommandError::new("app-settings-invalid", error))?;
+            .map_err(|error| {
+                let (key, params) = error.parts();
+                CommandError::localized("app-settings-invalid", key, error.to_string(), params)
+            })?;
         let previous = blocking(move || {
             current_state
                 .get_app_settings()
@@ -57,7 +67,14 @@ pub async fn set_app_settings(
         let saved = blocking(move || {
             state
                 .set_app_settings(&settings)
-                .map_err(|error| CommandError::new("app-settings-save-failed", error))?;
+                .map_err(|error| {
+                    CommandError::localized(
+                        "app-settings-save-failed",
+                        "errors.settings.saveFailed",
+                        error.clone(),
+                        serde_json::json!({ "detail": error }),
+                    )
+                })?;
             // The cache is not a second setting store: it applies the
             // just-persisted threshold to this result and later events.
             crate::runtime_log::set_level(settings.runtime_log_level);
@@ -86,7 +103,14 @@ pub async fn repair_app_settings(app: tauri::AppHandle) -> Result<AppSettingsSna
         blocking(move || {
             state
                 .repair_app_settings()
-                .map_err(|error| CommandError::new("app-settings-repair-failed", error))
+                .map_err(|error| {
+                    CommandError::localized(
+                        "app-settings-repair-failed",
+                        "errors.settings.repairFailed",
+                        error.clone(),
+                        serde_json::json!({ "detail": error }),
+                    )
+                })
         })
         .await
     })
@@ -95,7 +119,7 @@ pub async fn repair_app_settings(app: tauri::AppHandle) -> Result<AppSettingsSna
         Ok(()) => desktop.set_error(None),
         Err(error) => {
             log::error!("设置文件已修复，但桌面偏好应用失败：{}", error.message);
-            desktop.set_error(Some(error.message));
+            desktop.set_error(Some(error));
         }
     }
     crate::runtime_log::set_level(repaired.runtime_log_level);
@@ -106,11 +130,14 @@ pub async fn repair_app_settings(app: tauri::AppHandle) -> Result<AppSettingsSna
 fn restore_desktop_settings(app: &tauri::AppHandle, previous: &AppSettings, error: CommandError) -> CommandError {
     let error = match apply_desktop_settings(app, previous) {
         Ok(()) => error,
-        Err(rollback) => CommandError::new("desktop-settings-rollback-failed", format!(
-            "{}；恢复原桌面偏好失败，请重启应用：{}", error.message, rollback.message,
-        )),
+        Err(rollback) => CommandError::localized(
+            "desktop-settings-rollback-failed",
+            "errors.settings.rollbackFailed",
+            format!("{}；恢复原桌面偏好失败，请重启应用：{}", error.message, rollback.message),
+            serde_json::json!({ "message": error.message, "detail": rollback.message }),
+        ),
     };
-    app.state::<DesktopSettingsState>().set_error(Some(error.message.clone()));
+    app.state::<DesktopSettingsState>().set_error(Some(error.clone()));
     error
 }
 

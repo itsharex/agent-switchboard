@@ -5,9 +5,12 @@ import type {
   ProviderDraft,
   ProviderProfile,
   UsageQuery,
+  LocalizedMessage,
 } from "../api/client";
 import type { ProviderView } from "../app/navigation";
 import type { ActivationCandidate } from "../app/useProviderSwitchFlow";
+import type { ActiveProfileRef } from "../lib/current-provider-name";
+import { useI18n } from "../i18n";
 import { ProviderEditor } from "../components/ProviderEditor";
 import { ProviderList } from "../components/ProviderList";
 import { ProviderWorkspaceShell } from "../components/ProviderWorkspaceShell";
@@ -21,11 +24,14 @@ interface ProvidersPageProps {
   profiles: ProviderProfile[];
   activeProfileId: string | null;
   statuses: ConfigFileStatus[] | null;
+  /** Every stored profile across both clients; feeds the route cards'
+   * active-profile lookups (name and website) above this page's list. */
+  relayProfiles: readonly ActiveProfileRef[];
   locks: Partial<Record<AppKind, LockStatus>>;
   /** Model read from this client's user-level configuration file. */
   userConfigModel: string | null;
   /** Known conditions that can override the user-level configuration. */
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
   /** The generic editor serves Claude only; Codex owns its specialized editor. */
   editorSession: Extract<ProviderEditorSession, { app: "claude" }> | null;
   busy: boolean;
@@ -96,15 +102,16 @@ function ProviderListView({
 }: ProvidersPageProps & {
   onConfigureUsage: (profile: ProviderProfile) => void;
 }) {
+  const { t } = useI18n();
   const { busy } = props;
   return (
     <ProviderWorkspaceShell
-      ariaLabel="供应商工作区"
+      ariaLabel={t("providers.workspace.aria")}
       app="claude"
       onSelectApp={props.onSelectApp}
       busy={busy}
       statuses={props.statuses}
-      profiles={props.profiles}
+      profiles={props.relayProfiles}
       locks={props.locks}
       onImport={props.onImport}
       onNew={props.onNew}

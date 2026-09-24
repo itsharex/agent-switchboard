@@ -51,7 +51,9 @@ pub(crate) fn build_windows(
     windows: &[tauri::utils::config::WindowConfig],
 ) -> Result<(), String> {
     let directory = local_data_directory(&app.config().identifier)?;
-    for config in windows {
+    let mut windows = windows.to_vec();
+    crate::apply_startup_hardware_acceleration(app, &mut windows);
+    for config in &windows {
         tauri::WebviewWindowBuilder::from_config(app, config)
             .map_err(|error| error.to_string())?
             .data_directory(directory.clone())

@@ -19,11 +19,9 @@
   min-height: 0;
 }
 
-/* The header's view-controls row owns search, the client filter, and the
-   refresh action; the search input stretches so long queries get real room
-   (user directive 2026-09-12: title row alone, controls on the row below).
-   The surrounding flex column's gap owns the spacing, so the header root's
-   own margin is neutralized here. */
+/* The navigation row owns client selection and page actions; search and
+   organization filters share the view-controls row. The surrounding flex
+   column owns spacing, so the header has no extra bottom margin. */
 .asb-sessions > .asb-workspace-header {
   margin-bottom: 0;
 }
@@ -31,17 +29,6 @@
 .asb-sessions .asb-header-secondary .asb-input {
   flex: 1 1 200px;
   min-width: 0;
-}
-
-/* Batch deletion pairs the count with its danger action in a bar that exists
-   only while a selection is open; the header row keeps the safe controls. */
-.asb-session-selection-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--asb-space-3);
-  color: var(--asb-text-muted);
-  font: var(--asb-text-label);
 }
 
 .asb-session-issues {
@@ -64,13 +51,13 @@
   grid-template-columns: 320px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
-  --asb-session-layout-min-height: 520px;
-  min-height: var(--asb-session-layout-min-height);
+  min-height: 0;
 }
 
 .asb-session-list,
 .asb-session-detail {
   min-width: 0;
+  min-height: 0;
   padding: var(--asb-space-3);
 }
 
@@ -85,7 +72,6 @@
 .asb-session-list-heading,
 .asb-session-item-title,
 .asb-session-detail-head,
-.asb-session-detail-head h3,
 .asb-session-client,
 .asb-session-message header {
   display: flex;
@@ -147,7 +133,6 @@
 }
 
 .asb-session-item-title span,
-.asb-session-item-summary,
 .asb-session-item-time {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -160,7 +145,6 @@
   object-fit: contain;
 }
 
-.asb-session-item-summary,
 .asb-session-item-time {
   color: var(--asb-text-muted);
   font: var(--asb-text-label);
@@ -172,9 +156,20 @@
   gap: var(--asb-space-3);
 }
 
+.asb-session-empty-detail {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-body);
+}
+
+.asb-session-empty-detail p { max-width: 34em; margin: 0; }
+
 .asb-session-detail-head {
-  justify-content: space-between;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: var(--asb-space-3);
 }
 
@@ -201,16 +196,13 @@
 
 .asb-session-actions {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-  flex-shrink: 0;
   gap: var(--asb-space-2);
 }
 
-/* Detail facts read as a labeled list so each value owns a full row: the
-   session id and project path display completely and wrap instead of
-   truncating against their neighbors. Delete lives at the end of the header
-   action cluster, so no fact row carries a destructive control. */
+/* Detail facts keep each value in its own row so the session id and project
+   path remain readable without competing with header actions. */
 .asb-session-facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -241,10 +233,14 @@
 }
 
 .asb-session-command .asb-code {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.asb-session-command .asb-btn-icon { flex: none; }
 
 /* Conversation column plus the user-message outline; the outline is a
    resident detail column at one fixed width for the whole window range
@@ -301,7 +297,7 @@
   align-items: flex-start;
   gap: var(--asb-space-2);
   width: 100%;
-  min-height: var(--asb-control-height-micro);
+  min-height: var(--asb-touch-target);
   padding: var(--asb-space-1) var(--asb-space-2);
   border: 0;
   border-radius: var(--asb-radius);
@@ -349,18 +345,6 @@
   scrollbar-gutter: stable;
 }
 
-/* Transcript loading reserves a column of message-sized rows so the region
-   keeps its footprint while reading. */
-.asb-session-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: var(--asb-space-2);
-}
-
-.asb-session-skeleton-row {
-  min-height: 44px;
-}
-
 /* Chat-bubble layout: the user reads on the right with the selected-row tint;
    every other role (assistant, system, tool) reads on the left on the plain
    content surface. Both sides share the same hairline bubble. */
@@ -388,7 +372,7 @@
   font: var(--asb-text-label);
 }
 
-.asb-session-message header span {
+.asb-session-message header > span:first-child {
   color: var(--asb-text);
   font-weight: 600;
 }
@@ -399,9 +383,26 @@
   font-weight: 400;
 }
 
+.asb-session-message-bookmark {
+  min-height: var(--asb-touch-target);
+  padding: 0 var(--asb-space-2);
+  border: 0;
+  border-radius: var(--asb-radius);
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-label);
+}
+
+.asb-session-message-bookmark:hover:not(:disabled) {
+  background: var(--asb-content-muted);
+  color: var(--asb-text);
+}
+
+.asb-session-message-saved { color: var(--asb-text-muted); font: var(--asb-text-label); }
+
 /* Per-message copy stays out of sight until hover or keyboard focus. */
 .asb-session-message-copy {
-  min-height: var(--asb-control-height-micro);
+  min-height: var(--asb-touch-target);
   padding: 0 var(--asb-space-2);
   border: 1px solid transparent;
   border-radius: var(--asb-radius);
@@ -445,110 +446,3 @@
 .asb-session-message-toggle:hover {
   color: var(--asb-text);
 }
-
-/* Transcript content renders as GitHub-flavored markdown (react-markdown +
-   remark-gfm). The body owns wrapping; block children get the token spacing
-   steps, and headings stay at the section step so a document title inside a
-   bubble never shouts over the detail's own h3. */
-.asb-session-message-body {
-  font: var(--asb-text-body);
-  overflow-wrap: anywhere;
-}
-
-/* Long messages collapse visually, never by slicing the markdown source —
-   the rendered preview is always the head of a complete, valid document. */
-.asb-session-message-body.is-collapsed {
-  max-height: 320px;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent);
-  mask-image: linear-gradient(to bottom, #000 78%, transparent);
-}
-
-.asb-session-message-body > :first-child {
-  margin-top: 0;
-}
-
-.asb-session-message-body > :last-child {
-  margin-bottom: 0;
-}
-
-.asb-session-message-body p {
-  margin: var(--asb-space-1) 0;
-}
-
-.asb-session-message-body h1,
-.asb-session-message-body h2,
-.asb-session-message-body h3,
-.asb-session-message-body h4,
-.asb-session-message-body h5,
-.asb-session-message-body h6 {
-  margin: var(--asb-space-2) 0 var(--asb-space-1);
-  font: var(--asb-text-section);
-}
-
-.asb-session-message-body ul,
-.asb-session-message-body ol {
-  margin: var(--asb-space-1) 0;
-  padding-left: calc(var(--asb-space-3) + var(--asb-space-1));
-}
-
-.asb-session-message-body li {
-  margin: var(--asb-space-hairline) 0;
-}
-
-.asb-session-message-body code {
-  padding: 0 var(--asb-space-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
-  font: var(--asb-text-code);
-}
-
-.asb-session-message-body pre {
-  margin: var(--asb-space-1) 0;
-  padding: var(--asb-space-2);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
-  overflow-x: auto;
-}
-
-.asb-session-message-body pre code {
-  padding: 0;
-  background: transparent;
-  white-space: pre;
-}
-
-.asb-session-message-body blockquote {
-  margin: var(--asb-space-1) 0;
-  padding-left: var(--asb-space-2);
-  border-left: 2px solid var(--asb-hairline-strong);
-  color: var(--asb-text-muted);
-}
-
-.asb-session-message-body table {
-  margin: var(--asb-space-1) 0;
-  border-collapse: collapse;
-  font: var(--asb-text-label);
-}
-
-.asb-session-message-body th,
-.asb-session-message-body td {
-  padding: var(--asb-space-unit) var(--asb-space-1);
-  border: 1px solid var(--asb-hairline);
-  text-align: left;
-}
-
-.asb-session-message-body a {
-  color: var(--asb-link);
-}
-
-.asb-session-message-body img {
-  max-width: 100%;
-}
-
-.asb-session-message-body hr {
-  margin: var(--asb-space-2) 0;
-  border: 0;
-  border-top: 1px solid var(--asb-hairline);
-}
-

@@ -66,7 +66,7 @@ fn read_session_usage(root: &Path, session_id: &str) -> Result<SessionTokenSumma
     let mut matched: Option<PathBuf> = None;
     for session_root in crate::local_state::codex_paths::session_roots(root) {
         if !session_root.exists() { continue; }
-        let paths = crate::session_manager::collect_session_jsonl_files(&session_root)
+        let paths = crate::session_manager::collect_session_jsonl_files(asb_core::contracts::AppKind::Codex, &session_root)
             .map_err(|_| "无法读取 Codex 会话目录".to_string())?;
         for path in paths {
             // The filename narrows the candidates; metadata establishes identity.

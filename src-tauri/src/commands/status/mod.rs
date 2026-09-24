@@ -52,7 +52,7 @@ pub async fn config_status(app: AppHandle) -> Result<Vec<ConfigFileStatus>, Comm
 #[tauri::command]
 pub async fn runtime_overview(app: AppHandle) -> Result<RuntimeOverview, CommandError> {
     let app_data_dir = crate::app_paths::data_directory(&app.config().identifier)
-        .map_err(|_| CommandError::new("runtime-path-unavailable", "无法定位应用数据目录"))?;
+        .map_err(|_| CommandError::keyed("runtime-path-unavailable", "errors.cfg.runtimeDataDirUnavailable", "无法定位应用数据目录"))?;
     Ok(runtime_overview_for(
         app.package_info().version.to_string(),
         &app_data_dir,
@@ -69,21 +69,21 @@ fn open_in_file_manager(app: &AppHandle, path: &Path) -> Result<(), CommandError
         return app
             .opener()
             .open_path(path.to_string_lossy().into_owned(), None::<&str>)
-            .map_err(|_| CommandError::new("path-open-failed", "无法打开所在文件夹"));
+            .map_err(|_| CommandError::keyed("path-open-failed", "errors.cfg.openContainingFolderFailed", "无法打开所在文件夹"));
     }
     if path.is_file() {
         return app
             .opener()
             .reveal_item_in_dir(path)
-            .map_err(|_| CommandError::new("path-open-failed", "无法在文件管理器中定位该文件"));
+            .map_err(|_| CommandError::keyed("path-open-failed", "errors.cfg.revealFileFailed", "无法在文件管理器中定位该文件"));
     }
     let folder = path
         .parent()
         .filter(|folder| folder.is_dir())
-        .ok_or_else(|| CommandError::new("path-open-failed", "文件与所在文件夹均不存在"))?;
+        .ok_or_else(|| CommandError::keyed("path-open-failed", "errors.cfg.fileAndFolderMissing", "文件与所在文件夹均不存在"))?;
     app.opener()
         .open_path(folder.to_string_lossy().into_owned(), None::<&str>)
-        .map_err(|_| CommandError::new("path-open-failed", "无法打开所在文件夹"))
+        .map_err(|_| CommandError::keyed("path-open-failed", "errors.cfg.openContainingFolderFailed", "无法打开所在文件夹"))
 }
 
 /// Reveals the client's real configuration file in its folder, reusing the
@@ -107,7 +107,7 @@ pub async fn open_config_file_location(
 #[tauri::command]
 pub async fn open_app_data_dir(app: AppHandle) -> Result<(), CommandError> {
     let path = crate::app_paths::data_directory(&app.config().identifier)
-        .map_err(|_| CommandError::new("runtime-path-unavailable", "无法定位应用数据目录"))?;
+        .map_err(|_| CommandError::keyed("runtime-path-unavailable", "errors.cfg.runtimeDataDirUnavailable", "无法定位应用数据目录"))?;
     open_in_file_manager(&app, &path)
 }
 
@@ -135,7 +135,7 @@ pub async fn recover_stale_lock(
                 .target(target)
                 .map_err(|error| CommandError::new("config-path-unavailable", error))?;
             lockfile::recover_stale(&FsIo, &target)
-                .map_err(|_| CommandError::new("lock-not-stale", "当前锁不是可恢复的遗留状态"))
+                .map_err(|_| CommandError::keyed("lock-not-stale", "errors.cfg.lockNotStale", "当前锁不是可恢复的遗留状态"))
         })
         .await
     })

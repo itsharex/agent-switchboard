@@ -7,6 +7,7 @@ import type {
   SettingsValues,
   UpstreamProtocol,
 } from "../../api/client";
+import type { MessageKey } from "../../i18n";
 import { NATIVE_PROTOCOL } from "../../lib/protocol";
 import { normalizeUsageQuery } from "../../lib/usage-query";
 
@@ -15,21 +16,18 @@ export type ProviderEditorDraft = Omit<ProviderDraft, "parameters"> & {
 };
 
 /** What each wire format means for the endpoint the user is about to enter. */
-export const PROTOCOL_NOTES: Record<UpstreamProtocol, string> = {
-  responses: "按供应商要求填写完整 API 根地址（可含 /v1、/v2 或 /openai），不会自动补 /v1。例如 https://example.com/v1 → https://example.com/v1/responses。",
-  chatCompletions: "按供应商要求填写完整 API 根地址（可含 /v1、/v2 或 /openai），不会自动补 /v1。例如 https://example.com/v2 → https://example.com/v2/chat/completions。",
-  anthropicMessages: "填写供应商的服务根地址，请求在该地址后追加 /v1/messages。",
-  geminiGenerateContent: "填写 Google API 根地址；未指定版本时使用 /v1beta，网关按所选模型生成 generateContent 或流式地址。",
+export const PROTOCOL_NOTES: Record<UpstreamProtocol, MessageKey> = {
+  responses: "providers.protocolNote.responses",
+  chatCompletions: "providers.protocolNote.chatCompletions",
+  anthropicMessages: "providers.protocolNote.anthropicMessages",
+  geminiGenerateContent: "providers.protocolNote.geminiGenerateContent",
 };
 
-export const PROTOCOL_AUTHENTICATION_NOTES: Record<UpstreamProtocol, string> = {
-  geminiGenerateContent: "Google API 密钥以 x-goog-api-key 发送；ya29 令牌或 Google OAuth JSON 使用 Bearer，JSON 中的刷新凭据不会发送到模型端点。",
-  responses:
-    "认证方式会自动使用 Bearer Token：以 Authorization: Bearer <API 密钥> 请求头发送密钥；密钥值本身不变。",
-  chatCompletions:
-    "认证方式会自动使用 Bearer Token：以 Authorization: Bearer <API 密钥> 请求头发送密钥；密钥值本身不变。",
-  anthropicMessages:
-    "认证方式会自动使用 x-api-key：以 x-api-key: <API 密钥> 请求头发送密钥；密钥值本身不变。",
+export const PROTOCOL_AUTHENTICATION_NOTES: Record<UpstreamProtocol, MessageKey> = {
+  geminiGenerateContent: "providers.protocolAuth.geminiGenerateContent",
+  responses: "providers.protocolAuth.responses",
+  chatCompletions: "providers.protocolAuth.chatCompletions",
+  anthropicMessages: "providers.protocolAuth.anthropicMessages",
 };
 
 export function defaultConnection(app: AppKind): Pick<ProviderDraft,

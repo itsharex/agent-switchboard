@@ -236,8 +236,9 @@ pub(super) struct Planner<'a> {
 impl Planner<'_> {
     fn build(&self, request: &PlanRequest) -> Result<ExtensionPlan, CommandError> {
         if request.operations.is_empty() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.batchPlanNoOperations",
                 "批量计划没有包含任何资源操作",
             ));
         }
@@ -252,17 +253,23 @@ impl Planner<'_> {
         for entry in &request.operations {
             let planned = match entry.operation {
                 PlanOperation::Install => {
-                    let definition_id = required_id(&entry.definition_id, "安装计划缺少扩展 id")?;
+                    let definition_id =
+                        required_id(&entry.definition_id, "errors.extops.installPlanMissingId", "安装计划缺少扩展 id")?;
                     self.build_install(definition_id, &entry.targets, &mut batch)?
                 }
                 PlanOperation::Update => {
-                    let definition_id = required_id(&entry.definition_id, "更新计划缺少扩展 id")?;
+                    let definition_id =
+                        required_id(&entry.definition_id, "errors.extops.updatePlanMissingId", "更新计划缺少扩展 id")?;
                     let definition = self
                         .store
                         .get_definition(definition_id)
                         .map_err(store_error)?
                         .ok_or_else(|| {
-                            CommandError::new("extension-not-found", "扩展不存在或已被删除")
+                            CommandError::keyed(
+                                "extension-not-found",
+                                "errors.extops.definitionNotFound",
+                                "扩展不存在或已被删除",
+                            )
                         })?;
                     let bindings: Vec<ExtensionBinding> = self
                         .store
@@ -274,7 +281,8 @@ impl Planner<'_> {
                     self.build_redeploy(&definition, &bindings, &mut batch)?
                 }
                 PlanOperation::Enable | PlanOperation::Disable | PlanOperation::Remove => {
-                    let binding_id = required_id(&entry.binding_id, "该操作缺少绑定 id")?;
+                    let binding_id =
+                        required_id(&entry.binding_id, "errors.extops.operationMissingBindingId", "该操作缺少绑定 id")?;
                     self.build_binding_change(
                         entry.operation,
                         binding_id,
@@ -283,14 +291,16 @@ impl Planner<'_> {
                     )?
                 }
                 PlanOperation::Restore => {
-                    return Err(CommandError::new(
+                    return Err(CommandError::keyed(
                         "extension-invalid",
+                        "errors.extops.restoreUseDedicatedCommand",
                         "恢复请使用 prepare_extension_restore",
                     ))
                 }
                 PlanOperation::Repair => {
-                    return Err(CommandError::new(
+                    return Err(CommandError::keyed(
                         "extension-invalid",
+                        "errors.extops.repairUseDedicatedCommand",
                         "修复请使用 prepare_extension_repair",
                     ))
                 }
@@ -303,8 +313,9 @@ impl Planner<'_> {
         let mut seen = BTreeSet::new();
         for operation in &operations {
             if !seen.insert(operation.definition_id.clone()) {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-conflict",
+                    "errors.extops.duplicateOperationInBatch",
                     "同一批量计划不能对同一扩展声明多个操作",
                 ));
             }
@@ -331,8 +342,9 @@ impl Planner<'_> {
         batch: &mut document::DocumentBatch,
     ) -> Result<PlannedOperation, CommandError> {
         if targets.is_empty() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.installNoTargets",
                 "安装计划没有选择任何目标",
             ));
         }
@@ -340,7 +352,13 @@ impl Planner<'_> {
             .store
             .get_definition(definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-not-found",
+                    "errors.extops.definitionNotFound",
+                    "扩展不存在或已被删除",
+                )
+            })?;
         let existing_bindings = self.store.list_bindings().map_err(store_error)?;
         let first_target = batch.targets();
         let mut operation = PlannedOperation {
@@ -351,8 +369,9 @@ impl Planner<'_> {
         };
         for (index, target) in targets.iter().enumerate() {
             if targets[..index].iter().any(|previous| previous == target) {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-conflict",
+                    "errors.extops.duplicateTargetInInstall",
                     "同一安装计划不能重复选择相同的客户端目标",
                 ));
             }
@@ -360,8 +379,9 @@ impl Planner<'_> {
                 .iter()
                 .any(|binding| binding.resource_id == definition.id && &binding.target == target)
             {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-conflict",
+                    "errors.extops.alreadyBoundToTarget",
                     "该扩展已绑定到所选目标；请使用更新、启用、停用或移除操作",
                 ));
             }

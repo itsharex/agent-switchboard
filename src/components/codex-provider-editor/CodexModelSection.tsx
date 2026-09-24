@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { CodexReasoningLevel } from "../../api/client";
+import type { CodexReasoningLevel, LocalizedMessage } from "../../api/client";
+import type { TFunction } from "../../i18n";
+import { useI18n } from "../../i18n";
+import { localizedMessageText } from "../../i18n/errors";
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
 import { ChevronDownIcon, PlusIcon, TrashIcon } from "../icons";
@@ -21,21 +24,17 @@ interface Props {
   editor: CodexEditorState;
   busy: boolean;
   userConfigModel: string | null;
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
 }
 
 type CatalogUpdate = (patch: Partial<EditableCodexCatalogEntry>) => void;
 
-function imageInputLabel(entry: EditableCodexCatalogEntry): string {
-  if (entry.imageInputEvidence === false) return "图片输入（不支持）";
-  return !entry.images && entry.imageInputEvidence === null ? "图片输入（未确认）" : "图片输入";
+function modelName(entry: EditableCodexCatalogEntry, t: TFunction): string {
+  return entry.id || t("codex.model.fallbackName");
 }
 
-function imageInputNote(entry: EditableCodexCatalogEntry): string {
-  if (entry.imageInputEvidence === false) return "模型列表已明确声明不支持图片输入。";
-  if (entry.images) return "当前档案会将此模型声明为支持图片输入。";
-  if (entry.imageInputEvidence === true) return "模型列表已声明支持图片输入；当前档案未启用。";
-  return "模型列表未返回图片输入能力；默认不发送图片。确认支持后可勾选。";
+function imageInputNote(entry: EditableCodexCatalogEntry, t: TFunction): string {
+  return entry.images ? t("codex.model.imageInputNoteProfileYes") : t("codex.model.imageInputNoteProfileNo");
 }
 
 function CatalogCapabilities({ entry, capabilities, busy, update, toggleReasoning }: {
@@ -45,32 +44,30 @@ function CatalogCapabilities({ entry, capabilities, busy, update, toggleReasonin
   update: CatalogUpdate;
   toggleReasoning: (reasoning: boolean) => void;
 }) {
-  const imageInputUnknown = !entry.images && entry.imageInputEvidence === null;
+  const { t } = useI18n();
+  const model = modelName(entry, t);
   return <>
-    <div className="asb-provider-catalog-row-flags" role="group" aria-label={`${entry.id || "模型"} 能力`}>
-      <Checkbox label="函数工具" ariaLabel={`${entry.id || "模型"} 函数工具`} checked={entry.functionTools}
+    <div className="asb-provider-catalog-row-flags" role="group" aria-label={t("codex.model.capabilitiesAria", { model })}>
+      <Checkbox label={t("codex.capability.functionTools")} ariaLabel={t("codex.model.functionToolsAria", { model })} checked={entry.functionTools}
         disabled={busy || !capabilities.functionTools}
         onChange={(checked) => update({ functionTools: checked && capabilities.functionTools })} />
-      <Checkbox label="自定义工具" ariaLabel={`${entry.id || "模型"} 自定义工具`} checked={entry.customTools}
+      <Checkbox label={t("codex.capability.customTools")} ariaLabel={t("codex.model.customToolsAria", { model })} checked={entry.customTools}
         disabled={busy || !capabilities.customTools}
         onChange={(checked) => update({ customTools: checked && capabilities.customTools })} />
-      <Checkbox label="工具搜索" ariaLabel={`${entry.id || "模型"} 工具搜索`} checked={entry.toolSearch}
+      <Checkbox label={t("codex.capability.toolSearch")} ariaLabel={t("codex.model.toolSearchAria", { model })} checked={entry.toolSearch}
         disabled={busy || !capabilities.toolSearch}
         onChange={(checked) => update({ toolSearch: checked && capabilities.toolSearch })} />
-      <Checkbox label="推理" ariaLabel={`${entry.id || "模型"} 推理`} checked={entry.reasoning}
+      <Checkbox label={t("codex.capability.reasoning")} ariaLabel={t("codex.model.reasoningAria", { model })} checked={entry.reasoning}
         disabled={busy || !capabilities.reasoning}
         onChange={(checked) => toggleReasoning(checked && capabilities.reasoning)} />
-      <Checkbox label={imageInputLabel(entry)} ariaLabel={`${entry.id || "模型"} ${imageInputLabel(entry)}`} checked={entry.images}
-        indeterminate={imageInputUnknown} disabled={busy || entry.imageInputEvidence === false}
-        onChange={(checked) => update({
-          images: checked,
-          imageInputEvidence: checked ? true : entry.imageInputEvidence,
-        })} />
-      <Checkbox label="压缩" ariaLabel={`${entry.id || "模型"} 压缩`} checked={entry.compact}
+      <Checkbox label={t("codex.model.imageInput")} ariaLabel={`${model} ${t("codex.model.imageInput")}`} checked={entry.images}
+        disabled={busy}
+        onChange={(checked) => update({ images: checked })} />
+      <Checkbox label={t("codex.model.compact")} ariaLabel={t("codex.model.compactAria", { model })} checked={entry.compact}
         disabled={busy || !capabilities.compact}
         onChange={(checked) => update({ compact: checked && capabilities.compact })} />
     </div>
-    <p className="asb-scope-note">{imageInputNote(entry)}</p>
+    <p className="asb-scope-note">{imageInputNote(entry, t)}</p>
   </>;
 }
 
@@ -88,38 +85,40 @@ function CatalogLimits({ entry, busy, defaults, update, toggleLevel }: {
   update: CatalogUpdate;
   toggleLevel: (level: CodexReasoningLevel) => void;
 }) {
+  const { t } = useI18n();
+  const model = modelName(entry, t);
   return <>
     <div className="asb-provider-field-grid">
       <label className="asb-field">
-        <span>上下文窗口</span>
-        <Input aria-label={`${entry.id || "模型"} 上下文窗口`} type="number" min="1" step="1"
-          placeholder={`默认 ${defaults.contextWindow.toLocaleString("en-US")}`}
+        <span>{t("codex.model.contextWindow")}</span>
+        <Input aria-label={t("codex.model.contextWindowAria", { model })} type="number" min="1" step="1"
+          placeholder={t("codex.model.defaultLimit", { value: defaults.contextWindow.toLocaleString("en-US") })}
           value={entry.contextWindow?.toString() ?? ""} disabled={busy}
           onChange={(event) => update({ contextWindow: parseLimitInput(event.target.value) })} />
       </label>
       <label className="asb-field">
-        <span>输出上限</span>
-        <Input aria-label={`${entry.id || "模型"} 输出上限`} type="number" min="1" step="1"
-          placeholder={`默认 ${defaults.maxOutputTokens.toLocaleString("en-US")}`}
+        <span>{t("codex.model.maxOutput")}</span>
+        <Input aria-label={t("codex.model.maxOutputAria", { model })} type="number" min="1" step="1"
+          placeholder={t("codex.model.defaultLimit", { value: defaults.maxOutputTokens.toLocaleString("en-US") })}
           value={entry.maxOutputTokens?.toString() ?? ""} disabled={busy}
           onChange={(event) => update({ maxOutputTokens: parseLimitInput(event.target.value) })} />
       </label>
       <label className="asb-field">
-        <span>默认推理档位</span>
-        <Select ariaLabel={`${entry.id || "模型"} 默认推理档位`} disabled={busy}
+        <span>{t("codex.model.defaultLevel")}</span>
+        <Select ariaLabel={t("codex.model.defaultLevelAria", { model })} disabled={busy}
           value={entry.defaultReasoningLevel}
           options={entry.supportedReasoningLevels.map((level) => ({
-            value: level, label: REASONING_LEVEL_LABELS[level],
+            value: level, label: t(REASONING_LEVEL_LABELS[level]),
           }))}
           onChange={(value) => update({ defaultReasoningLevel: value as CodexReasoningLevel })} />
       </label>
     </div>
     <div className="asb-provider-catalog-row-levels">
-      <span className="asb-catalog-levels-label">支持推理档位</span>
-      <div className="asb-catalog-levels-options" role="group" aria-label={`${entry.id || "模型"} 支持推理档位`}>
+      <span className="asb-catalog-levels-label">{t("codex.model.supportedLevels")}</span>
+      <div className="asb-catalog-levels-options" role="group" aria-label={t("codex.model.supportedLevelsAria", { model })}>
         {REASONING_LEVELS.map((level) => (
-          <Checkbox key={level} label={REASONING_LEVEL_LABELS[level]}
-            ariaLabel={`${entry.id || "模型"} 支持${REASONING_LEVEL_LABELS[level]}档位`}
+          <Checkbox key={level} label={t(REASONING_LEVEL_LABELS[level])}
+            ariaLabel={t("codex.model.levelAria", { model, level: t(REASONING_LEVEL_LABELS[level]) })}
             checked={entry.supportedReasoningLevels.includes(level)}
             disabled={busy || !entry.reasoning}
             onChange={() => toggleLevel(level)} />
@@ -135,6 +134,7 @@ function CatalogRow({ editor, busy, entry, index }: {
   entry: EditableCodexCatalogEntry;
   index: number;
 }) {
+  const { t } = useI18n();
   const { draft, setDraft } = editor;
   const { capabilities } = draft;
   const defaults = defaultModelLimits(entry.id);
@@ -158,15 +158,15 @@ function CatalogRow({ editor, busy, entry, index }: {
     ? { reasoning, defaultReasoningLevel: "medium", supportedReasoningLevels: [...REASONING_LEVELS] }
     : { reasoning, defaultReasoningLevel: "none", supportedReasoningLevels: ["none"] });
   return (
-    <div className="asb-provider-catalog-row" aria-label={`模型 ${entry.id || "未命名"}`}>
+    <div className="asb-provider-catalog-row" aria-label={t("codex.model.rowAria", { model: entry.id || t("codex.model.unnamed") })}>
       <div className="asb-provider-catalog-row-head">
         <label className="asb-field">
-          <span>模型标识</span>
-          <Input code aria-label={`模型标识 ${index + 1}`} value={entry.id} required disabled={busy}
+          <span>{t("codex.model.idLabel")}</span>
+          <Input code aria-label={t("codex.model.idAria", { index: index + 1 })} value={entry.id} required disabled={busy}
             onChange={(event) => update({ id: event.target.value })} />
         </label>
-        <Tooltip label={`删除模型 ${entry.id || index + 1}`}>
-          <Button variant="icon" aria-label={`删除模型 ${entry.id || index + 1}`} disabled={busy}
+        <Tooltip label={t("codex.model.deleteModel", { model: entry.id || index + 1 })}>
+          <Button variant="icon" aria-label={t("codex.model.deleteModel", { model: entry.id || index + 1 })} disabled={busy}
             onClick={() => setDraft((current) => ({
               ...current,
               catalog: current.catalog.filter((_, itemIndex) => itemIndex !== index),
@@ -182,13 +182,14 @@ function CatalogRow({ editor, busy, entry, index }: {
       <CatalogCapabilities entry={entry} capabilities={capabilities} busy={busy}
         update={update} toggleReasoning={toggleReasoning} />
       {entry.reasoning && !capabilities.reasoning && (
-        <p className="asb-scope-note asb-warn-text">供应商能力未声明推理。</p>
+        <p className="asb-scope-note asb-warn-text">{t("codex.model.reasoningNotDeclared")}</p>
       )}
     </div>
   );
 }
 
 function ModelMapping({ editor, busy }: { editor: CodexEditorState; busy: boolean }) {
+  const { t } = useI18n();
   const { draft, setDraft } = editor;
   const [expanded, setExpanded] = useState(() => draft.modelRoutes.length > 0);
   const update = (index: number, clientModel: string, upstreamModel: string) =>
@@ -200,21 +201,21 @@ function ModelMapping({ editor, busy }: { editor: CodexEditorState; busy: boolea
   return (
     <details className="asb-provider-disclosure" open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary><span>模型映射</span><span className="asb-provider-disclosure-value">
-        {draft.modelRoutes.length > 0 ? `${draft.modelRoutes.length} 条` : "未配置"}
+      <summary><span>{t("codex.model.mapping")}</span><span className="asb-provider-disclosure-value">
+        {draft.modelRoutes.length > 0 ? t("codex.model.mappingCount", { count: draft.modelRoutes.length }) : t("codex.model.mappingNone")}
       </span><ChevronDownIcon /></summary>
       <div className="asb-provider-disclosure-body">
-        <p className="asb-scope-note">把客户端模型映射到上游的实际模型名；未映射的模型按名称直通（Responses）或使用默认模型。</p>
+        <p className="asb-scope-note">{t("codex.model.mappingNote")}</p>
         <div className="asb-provider-mapping-list">
           {draft.modelRoutes.map((route, index) => (
-            <div className="asb-provider-mapping-row" key={index} aria-label="模型映射">
-              <Select ariaLabel={`映射客户端模型 ${index + 1}`} value={route.clientModel} disabled={busy}
+            <div className="asb-provider-mapping-row" key={index} aria-label={t("codex.model.mapping")}>
+              <Select ariaLabel={t("codex.model.mappingClientAria", { index: index + 1 })} value={route.clientModel} disabled={busy}
                 options={draft.catalog.map((entry) => ({ value: entry.id, label: entry.id }))}
                 onChange={(value) => update(index, value, route.upstreamModel)} />
               <span className="asb-provider-mapping-arrow" aria-hidden="true">→</span>
-              <Input code aria-label={`映射上游模型 ${index + 1}`} value={route.upstreamModel}
+              <Input code aria-label={t("codex.model.mappingUpstreamAria", { index: index + 1 })} value={route.upstreamModel}
                 disabled={busy} onChange={(event) => update(index, route.clientModel, event.target.value)} />
-              <Button variant="danger" aria-label={`删除映射 ${index + 1}`} disabled={busy}
+              <Button variant="danger" aria-label={t("codex.model.mappingDeleteAria", { index: index + 1 })} disabled={busy}
                 onClick={() => setDraft((current) => ({
                   ...current,
                   modelRoutes: current.modelRoutes.filter((_, routeIndex) => routeIndex !== index),
@@ -225,8 +226,8 @@ function ModelMapping({ editor, busy }: { editor: CodexEditorState; busy: boolea
           ))}
         </div>
         <div className="asb-provider-model-actions asb-provider-model-actions-end">
-          <Tooltip label="添加映射">
-            <Button variant="icon" aria-label="添加映射" disabled={busy || draft.catalog.length === 0}
+          <Tooltip label={t("codex.model.mappingAdd")}>
+            <Button variant="icon" aria-label={t("codex.model.mappingAdd")} disabled={busy || draft.catalog.length === 0}
               onClick={() => setDraft((current) => ({
                 ...current,
                 modelRoutes: [...current.modelRoutes,
@@ -243,6 +244,7 @@ function ModelMapping({ editor, busy }: { editor: CodexEditorState; busy: boolea
 
 /** Structured catalog and mapping editor; no raw JSON anywhere. */
 export function CodexModelSection({ editor, busy, userConfigModel, userConfigWarnings }: Props) {
+  const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
   const fetchIntoCatalog = async () => {
     const models = await connection.fetchModels();
@@ -252,28 +254,28 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
     }));
   };
   return (
-    <section className="asb-editor-section" aria-label="模型">
-      <h3 className="asb-section-title">模型</h3>
+    <section className="asb-editor-section" aria-label={t("codex.model.title")}>
+      <h3 className="asb-section-title">{t("codex.model.title")}</h3>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-model-toolbar">
           <label className="asb-field">
-            <span>默认模型</span>
-            <Select ariaLabel="默认模型" value={draft.defaultModel || null} disabled={busy}
-              placeholder={draft.catalog.length === 0 ? "请先添加模型" : "选择默认模型"}
+            <span>{t("codex.model.defaultModel")}</span>
+            <Select ariaLabel={t("codex.model.defaultModel")} value={draft.defaultModel || null} disabled={busy}
+              placeholder={draft.catalog.length === 0 ? t("codex.model.addFirst") : t("codex.model.chooseDefault")}
               options={draft.catalog.map((entry) => ({ value: entry.id, label: entry.id }))}
               onChange={(value) => setDraft((current) => ({ ...current, defaultModel: value }))} />
           </label>
-          <div className="asb-provider-model-actions" aria-label="模型目录操作">
-            <Tooltip label={connection.modelsBusy ? "正在获取模型" : connection.modelsEndpointError ?? "获取模型"}>
-              <Button variant="icon" aria-label={connection.modelsBusy ? "正在获取模型" : connection.modelsEndpointError ?? "获取模型"}
+          <div className="asb-provider-model-actions" aria-label={t("codex.model.catalogActions")}>
+            <Tooltip label={connection.modelsBusy ? t("codex.model.fetching") : connection.modelsEndpointError ?? t("codex.model.fetch")}>
+              <Button variant="icon" aria-label={connection.modelsBusy ? t("codex.model.fetching") : connection.modelsEndpointError ?? t("codex.model.fetch")}
                 aria-busy={connection.modelsBusy || undefined}
                 disabled={busy || connection.modelsBusy || !connection.baseUrl || !!connection.modelsEndpointError}
                 onClick={() => void fetchIntoCatalog()}>
                 <UpdateIcon />
               </Button>
             </Tooltip>
-            <Tooltip label="添加模型">
-              <Button variant="icon" aria-label="添加模型" disabled={busy}
+            <Tooltip label={t("codex.model.add")}>
+              <Button variant="icon" aria-label={t("codex.model.add")} disabled={busy}
                 onClick={() => setDraft((current) => ({
                   ...current,
                   catalog: [...current.catalog, emptyCatalogEntry(current.capabilities)],
@@ -283,14 +285,14 @@ export function CodexModelSection({ editor, busy, userConfigModel, userConfigWar
             </Tooltip>
           </div>
         </div>
-        <p className="asb-scope-note">客户端未指定模型时使用；请求映射与压缩能力都以目录为准。</p>
-        {userConfigModel && <p className="asb-scope-note">当前用户级配置模型：{userConfigModel}</p>}
+        <p className="asb-scope-note">{t("codex.model.defaultNote")}</p>
+        {userConfigModel && <p className="asb-scope-note">{t("codex.model.userConfigModel", { model: userConfigModel })}</p>}
         {userConfigWarnings.map((warning) => (
-          <p key={warning} className="asb-scope-note asb-warn-text">{warning}</p>
+          <p key={warning.key} className="asb-scope-note asb-warn-text">{localizedMessageText(warning, t)}</p>
         ))}
         {connection.modelsEndpointError && <span className="asb-warn-text">{connection.modelsEndpointError}</span>}
         {connection.modelsError && connection.modelsError !== connection.modelsEndpointError && <span className="asb-warn-text">{connection.modelsError}</span>}
-        <p className="asb-scope-note">「获取模型」按已声明的供应商能力生成目录行；仅当上游明确返回 input_modalities 时自动确认图片输入，未返回时显示“未确认”并默认关闭。上下文窗口与输出上限留空即按官方参数（无则按通用默认值）保存，能力声明本身不会被推断。</p>
+        <p className="asb-scope-note">{t("codex.model.fetchNote")}</p>
         <div className="asb-provider-catalog">
           {draft.catalog.map((entry, index) => (
             <CatalogRow key={index} editor={editor} busy={busy} entry={entry} index={index} />

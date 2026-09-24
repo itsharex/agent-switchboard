@@ -6,6 +6,7 @@ import { CodexProbePanel, type CodexProbeFormState } from "../components/CodexPr
 import { CodexResetPanel } from "../components/CodexResetPanel";
 import { useCodexOfficialReset, useCodexResetSignal } from "../components/quota-reads";
 import { useCodexProbe } from "../components/use-codex-probe";
+import { useI18n } from "../i18n";
 import { UsagePage } from "../pages/UsagePage";
 import { useModelUsageReport } from "../pages/use-model-usage-report";
 import { UsageWorkspaceHeader } from "./UsageWorkspaceHeader";
@@ -16,6 +17,7 @@ export function UsageWorkspace({ active, section, onSectionChange }: {
   section: UsageSection;
   onSectionChange: (section: UsageSection) => void;
 }) {
+  const { t } = useI18n();
   const id = useId();
   const [quotaOpened, setQuotaOpened] = useState(section === "quota");
   const [radarOpened, setRadarOpened] = useState(section === "radar");
@@ -56,7 +58,7 @@ export function UsageWorkspace({ active, section, onSectionChange }: {
   const officialReset = useCodexOfficialReset(quotaReadsVisible);
   const resetSignal = useCodexResetSignal(quotaReadsVisible);
   return (
-    <section className="asb-page-stack" aria-label="用量工作区">
+    <section className="asb-page-stack" aria-label={t("usage.workspace.aria")}>
       <div hidden={historyOpen}>
         <UsageWorkspaceHeader id={id} section={section} onSectionChange={onSectionChange}
           consumption={{ active: consumptionActive, range, onRangeChange: setRange, usage }}

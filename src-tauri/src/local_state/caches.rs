@@ -12,21 +12,19 @@ impl LocalState {
         match fs::read_to_string(self.settings_path()) {
             Ok(text) => {
                 let settings = serde_json::from_str::<AppSettings>(&text)
-                    .map_err(|error| format!("应用设置格式无效：{error}"))?;
-                settings
-                    .validate()
-                    .map_err(|error| format!("应用设置无效：{error}"))?;
+                    .map_err(|error| error.to_string())?;
+                settings.validate().map_err(|error| error.to_string())?;
                 Ok(settings)
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Ok(AppSettings::default())
             }
-            Err(error) => Err(format!("应用设置不可读：{error}")),
+            Err(error) => Err(error.to_string()),
         }
     }
 
     pub fn set_app_settings(&self, settings: &AppSettings) -> Result<(), String> {
-        settings.validate()?;
+        settings.validate().map_err(|error| error.to_string())?;
         let content =
             serde_json::to_string_pretty(settings).map_err(|error| format!("应用设置序列化失败：{error}"))?;
         fs::create_dir_all(&self.root).map_err(|error| format!("无法创建应用数据目录：{error}"))?;
@@ -192,14 +190,6 @@ impl LocalState {
             return Err("无法原子保存托盘用量缓存".to_string());
         }
         Ok(())
-    }
-
-    pub(crate) fn clear_usage_cache(&self) -> Result<(), String> {
-        match fs::remove_file(self.usage_cache_path()) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(_) => Err("无法清除托盘用量缓存".to_string()),
-        }
     }
 
     /// The last successful local-session usage reports. It contains only

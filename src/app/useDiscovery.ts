@@ -1,4 +1,6 @@
+import type { MessageKey } from "../i18n";
 import { useCallback, useEffect, useState } from "react";
+import type { LocalizedMessage } from "../api/client";
 import {
   discoverCached,
   discoverLocal,
@@ -8,7 +10,7 @@ import {
   type CommandError,
   type DiscoveryReport,
 } from "../api/client";
-import { toast } from "../components/use-toast";
+import { toast, toastMessage } from "../components/use-toast";
 import type { ProviderInventory } from "./useConfigSnapshot";
 
 interface DiscoveryDeps {
@@ -21,7 +23,7 @@ interface DiscoveryDeps {
   refresh: () => Promise<ProviderInventory | undefined>;
   setTargetProfile: (profileId: string) => Promise<void> | void;
   setAppFilter: (app: AppKind) => void;
-  setPage: (page: "供应商切换") => void;
+  setPage: (page: "providers") => void;
 }
 
 /**
@@ -64,12 +66,12 @@ export function useDiscovery({
    * failed. The write still succeeded, so a failure is a warning, not an
    * error. */
   const refreshDiscoveryOrAppend = useCallback(
-    async (warnings: string[], failureNote: string): Promise<string[]> => {
+    async (warnings: readonly LocalizedMessage[], failureNote: MessageKey): Promise<LocalizedMessage[]> => {
       try {
         setDiscovery(await discoverLocal());
-        return warnings;
+        return [...warnings];
       } catch {
-        return [...warnings, failureNote];
+        return [...warnings, { key: failureNote, text: "" }];
       }
     },
     [],
@@ -99,11 +101,11 @@ export function useDiscovery({
           ? await importDiscoveredCodexProfile()
           : await importDiscoveredClaudeProfile();
         setDiscovery(null);
-        toast({ kind: "success", title: `已导入供应商「${"profile" in result ? result.profile.name : result.name}」` });
+        toast({ kind: "success", title: toastMessage("importDiscovery.toast.importedProvider", { name: "profile" in result ? result.profile.name : result.name }) });
         const refreshed = await refresh();
         if (!refreshed) return false;
         setAppFilter(app);
-        setPage("供应商切换");
+        setPage("providers");
         await setTargetProfile("profile" in result ? result.profile.id : result.id);
         return true;
       } catch (caught) {

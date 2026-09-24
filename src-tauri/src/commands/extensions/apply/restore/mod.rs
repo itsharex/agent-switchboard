@@ -25,13 +25,20 @@ pub async fn prepare_extension_restore(
         let snapshot = store
             .get_snapshot(&operation_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "操作记录不存在"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-not-found",
+                    "errors.extops.operationRecordNotFound",
+                    "操作记录不存在",
+                )
+            })?;
         let record = &snapshot.record;
         if snapshot.schema_version != EXTENSIONS_SCHEMA_VERSION
             || record.schema_version != EXTENSIONS_SCHEMA_VERSION
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-unsupported-history",
+                "errors.extops.unsupportedHistoryFormat",
                 "该操作记录不是当前扩展格式，不能恢复",
             ));
         }
@@ -45,8 +52,9 @@ pub async fn prepare_extension_restore(
                 })
             })
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-not-restorable",
+                "errors.extops.operationNotFullyApplied",
                 "该操作没有完整应用，不能再次恢复",
             ));
         }
@@ -122,8 +130,9 @@ pub async fn prepare_extension_restore(
                     adopts_native_entry: false,
                 });
             } else {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-not-restorable",
+                    "errors.extops.nothingRestorable",
                     "该操作没有可恢复的客户端或库状态",
                 ));
             }

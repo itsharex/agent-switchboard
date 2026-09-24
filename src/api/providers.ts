@@ -298,8 +298,13 @@ export function reorderCodexProfiles(
   });
 }
 
-export function resetProfileStore(confirmWrite: boolean): Promise<void> {
-  return invoke<void>("reset_profile_store", { confirmWrite });
+export interface ProfileStoreRepairReport {
+  repairedFiles: string[];
+  backupPath: string | null;
+}
+
+export function repairProfileStore(): Promise<ProfileStoreRepairReport> {
+  return invoke<ProfileStoreRepairReport>("repair_profile_store");
 }
 
 export function prepareProfileSave(
@@ -388,13 +393,10 @@ export function resolveProviderEndpoints(
   });
 }
 
-/** One model from the provider's configured models endpoint. `imageInput` is
- * true or false only when the source explicitly reports `input_modalities`;
- * null means the source provided no image-input fact. */
+/** One model from the provider's configured models endpoint. */
 export interface ProviderModel {
   id: string;
   ownedBy: string | null;
-  imageInput: boolean | null;
 }
 /** Models from the provider's configured API root. */
 export function fetchProviderModels(

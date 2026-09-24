@@ -7,8 +7,9 @@ impl TryFrom<&ProviderProfile> for ProviderRequestConnection {
 
     fn try_from(profile: &ProviderProfile) -> Result<Self, Self::Error> {
         if profile.route_mode != RouteMode::Custom {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "provider-request-custom-only",
+                "errors.misc.providerRequestCustomOnly",
                 "真实请求仅适用于自定义供应商（API 密钥或托管账号）",
             ));
         }
@@ -47,8 +48,9 @@ impl ProviderRequestConnection {
             || url.fragment().is_some()
             || self.base_url.chars().any(char::is_control)
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "provider-request-endpoint-invalid",
+                "errors.misc.endpointUrlCredentialsForbidden",
                 "真实请求要求服务地址不含 URL 凭据、片段或控制字符",
             ));
         }
@@ -78,8 +80,9 @@ impl ProviderRequestConnection {
 }
 
 fn invalid() -> CommandError {
-    CommandError::new(
+    CommandError::keyed(
         "provider-request-connection-invalid",
+        "errors.misc.providerRequestConnectionInvalid",
         "请检查服务地址、API 密钥、API 格式和 Responses 请求模式",
     )
 }

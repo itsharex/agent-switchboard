@@ -11,11 +11,30 @@ struct Prepared {
     auth_current: Option<(String, bool)>,
     auth_pre: Option<BackupRecord>,
 }
+
+fn check_expected(expected: Option<&crate::RestoreExpectation>, current: &str, existed: bool, auth: Option<&(String, bool)>) -> Result<(), SwitchError> {
+    let Some(expected) = expected else { return Ok(()); };
+    if expected.content_hash != sha256_hex(current) || expected.target_existed != existed {
+        return Err(SwitchError::ExternalChange {
+            expected_hash: expected.content_hash.clone(), found_hash: sha256_hex(current),
+        });
+    }
+    if let Some((hash, existed)) = &expected.auth {
+        let Some((current, current_existed)) = auth else {
+            return Err(SwitchError::ExternalChange { expected_hash: hash.clone(), found_hash: "unavailable".into() });
+        };
+        if hash != &sha256_hex(current) || existed != current_existed {
+            return Err(SwitchError::ExternalChange { expected_hash: hash.clone(), found_hash: sha256_hex(current) });
+        }
+    }
+    Ok(())
+}
 fn prepare<Io: SwitchIo>(
     io: &Io,
     backup: &BackupRecord,
     target: &Path,
     projected: Option<&str>,
+    expected: Option<&crate::RestoreExpectation>,
 ) -> Result<Prepared, SwitchError> {
     let original = read_verified_restore_source(io, backup)?;
     let content = projected.unwrap_or(&original).to_string();
@@ -40,6 +59,10 @@ fn prepare<Io: SwitchIo>(
         read_current_or_empty(io, target, backup.app).map_err(|e| SwitchError::ReadCurrent {
             message: e.to_string(),
         })?;
+    let guarded_auth = if expected.is_some_and(|guard| guard.auth.is_some()) && auth_current.is_none() {
+        Some(read_optional_file(io, &target.with_file_name("auth.json"))?)
+    } else { auth_current.clone() };
+    check_expected(expected, &current, target_existed, guarded_auth.as_ref())?;
     let pre = snapshot_before_restore(io, backup, target, &current, target_existed)?;
     let auth_pre = match (&auth_backup, &auth_current) {
         (Some(record), Some((current, existed))) => {
@@ -74,12 +97,13 @@ pub(crate) fn restore_locked<Io: SwitchIo, Commit>(
     backup: &BackupRecord,
     target: &Path,
     projected: Option<&str>,
+    expected: Option<&crate::RestoreExpectation>,
     commit: Commit,
 ) -> Result<RestoreOutcome, SwitchError>
 where
     Commit: FnOnce(&RestoreOutcome) -> Result<(), String>,
 {
-    let prepared = prepare(io, backup, target, projected)?;
+    let prepared = prepare(io, backup, target, projected, expected)?;
     let pending = crate::PendingConfigWrite {
         version: 1,
         app: backup.app,

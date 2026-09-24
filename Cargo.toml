@@ -3,10 +3,17 @@ resolver = "2"
 members = ["crates/asb-core", "crates/asb-switch", "src-tauri"]
 
 [workspace.package]
-version = "0.2.9"
+version = "0.3.1"
 edition = "2021"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
+
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.dev.package."*"]
+debug = false

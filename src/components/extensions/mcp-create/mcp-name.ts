@@ -1,5 +1,7 @@
+import { uiMessage } from "../../../i18n/errors";
+
 export function validateUniqueName(name: string, existing: readonly string[], initial?: string) {
-  if (name !== initial && existing.includes(name)) throw new Error("服务名称已存在，请使用其他名称");
+  if (name !== initial && existing.includes(name)) throw uiMessage("mcp.error.nameExists");
 }
 
 export function uniquePresetName(base: string, existing: readonly string[]): string {

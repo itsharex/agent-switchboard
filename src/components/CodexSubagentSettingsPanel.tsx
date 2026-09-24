@@ -1,6 +1,9 @@
+import { commandErrorText } from "../i18n/errors";
 import { useId } from "react";
 import type { CodexSubagentSettings, SettingValue } from "../api/client";
 import type { CodexSubagentSettingsEditorState } from "../app/useCodexSubagentSettings";
+import type { MessageKey, TFunction } from "../i18n";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { RadioOption } from "./RadioOption";
@@ -24,24 +27,24 @@ function numericValue(value: SettingValue): string {
   return value.mode === "explicit" ? String(value.value) : "";
 }
 
-function actualValueLabel(value: SettingValue): string {
-  if (value.mode === "automatic") return "自动";
-  if (typeof value.value === "boolean") return value.value ? "开启" : "关闭";
+function actualValueLabel(value: SettingValue, t: TFunction): string {
+  if (value.mode === "automatic") return t("codex.subagent.auto");
+  if (typeof value.value === "boolean") return value.value ? t("codex.subagentPanel.on") : t("codex.subagentPanel.off");
   return String(value.value);
 }
 
-function draftIssue(settings: CodexSubagentSettings): string | null {
+function draftIssue(settings: CodexSubagentSettings, t: TFunction): string | null {
   const concurrency = settings.maxConcurrentThreadsPerSession;
   if (concurrency.mode === "explicit" &&
     (typeof concurrency.value !== "number" || !Number.isSafeInteger(concurrency.value) || concurrency.value < 1)) {
-    return "最大并发必须是可准确表示且不小于 1 的整数，或改回自动。";
+    return t("codex.subagentPanel.concurrentInvalid");
   }
-  for (const [label, value] of [
-    ["启用子 agent", settings.enabled],
-    ["中断消息", settings.interruptMessage],
+  for (const [labelKey, value] of [
+    ["codex.subagentPanel.enabledLabel", settings.enabled],
+    ["codex.subagentPanel.interruptLabel", settings.interruptMessage],
   ] as const) {
     if (value.mode === "explicit" && typeof value.value !== "boolean") {
-      return `${label}只能设为开启、关闭或自动。`;
+      return t("codex.subagentPanel.booleanInvalid", { label: t(labelKey as MessageKey) });
     }
   }
   return null;
@@ -64,6 +67,7 @@ function BooleanRow({
   disabled: boolean;
   onChange: Props["onChange"];
 }) {
+  const { t } = useI18n();
   const groupName = `${field}-subagent-setting`;
   return (
     <div className="asb-toggle-row asb-choice-row">
@@ -72,16 +76,16 @@ function BooleanRow({
           <span className="asb-checkbox-label">{label}</span>
           <span className="asb-app-setting-detail">{detail}</span>
         </div>
-        <span className="asb-setting-actual" aria-live="polite">当前配置：{actualValueLabel(actualValue)}</span>
+        <span className="asb-setting-actual" aria-live="polite">{t("codex.subagentPanel.currentConfig", { value: actualValueLabel(actualValue, t) })}</span>
       </div>
       <div className="asb-choice-controls">
         <div className="asb-segments" role="radiogroup" aria-label={label}>
           <RadioOption name={groupName} checked={value.mode === "automatic"} disabled={disabled}
-            label="自动" onChange={() => onChange(field, automatic)} />
+            label={t("codex.subagent.auto")} onChange={() => onChange(field, automatic)} />
           <RadioOption name={groupName} checked={value.mode === "explicit" && value.value === true}
-            disabled={disabled} label="开启" onChange={() => onChange(field, explicit(true))} />
+            disabled={disabled} label={t("codex.subagentPanel.on")} onChange={() => onChange(field, explicit(true))} />
           <RadioOption name={groupName} checked={value.mode === "explicit" && value.value === false}
-            disabled={disabled} label="关闭" onChange={() => onChange(field, explicit(false))} />
+            disabled={disabled} label={t("codex.subagentPanel.off")} onChange={() => onChange(field, explicit(false))} />
         </div>
       </div>
     </div>
@@ -89,9 +93,10 @@ function BooleanRow({
 }
 
 function SubagentModuleHeader({ headingId }: { headingId: string }) {
+  const { t } = useI18n();
   return (
     <header className="asb-subagent-heading">
-      <h3 id={headingId} className="asb-section-title">子 agent 运行</h3>
+      <h3 id={headingId} className="asb-section-title">{t("codex.subagentPanel.title")}</h3>
     </header>
   );
 }
@@ -107,6 +112,7 @@ function NumberRow({
   disabled: boolean;
   onChange: Props["onChange"];
 }) {
+  const { t } = useI18n();
   const modeName = "maxConcurrentThreadsPerSession-subagent-mode";
   const current = numericValue(value);
   const custom = value.mode === "explicit";
@@ -115,23 +121,23 @@ function NumberRow({
     <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
-          <span className="asb-checkbox-label">最大并发子 agent 线程数</span>
-          <span className="asb-app-setting-detail">不设时由 Codex 决定本会话可同时运行的子 agent 数。</span>
+          <span className="asb-checkbox-label">{t("codex.subagentPanel.concurrentLabel")}</span>
+          <span className="asb-app-setting-detail">{t("codex.subagentPanel.concurrentDetail")}</span>
         </div>
-        <span className="asb-setting-actual" aria-live="polite">当前配置：{actualValueLabel(actualValue)}</span>
+        <span className="asb-setting-actual" aria-live="polite">{t("codex.subagentPanel.currentConfig", { value: actualValueLabel(actualValue, t) })}</span>
       </div>
       <div className="asb-choice-controls">
-        <div className="asb-segments" role="radiogroup" aria-label="最大并发子 agent 线程数配置方式">
-          <RadioOption name={modeName} checked={!custom} disabled={disabled} label="自动"
+        <div className="asb-segments" role="radiogroup" aria-label={t("codex.subagentPanel.concurrentModeAria")}>
+          <RadioOption name={modeName} checked={!custom} disabled={disabled} label={t("codex.subagent.auto")}
             onChange={() => onChange("maxConcurrentThreadsPerSession", automatic)} />
-          <RadioOption name={modeName} checked={custom} disabled={disabled} label="指定"
+          <RadioOption name={modeName} checked={custom} disabled={disabled} label={t("codex.subagentPanel.specifyValue")}
             onChange={() => onChange("maxConcurrentThreadsPerSession", explicit(current))} />
         </div>
         {custom && (
           <div className="asb-subagent-input">
             <Input
               aria-invalid={invalid || undefined}
-              aria-label="最大并发子 agent 线程数值"
+              aria-label={t("codex.subagentPanel.concurrentValueAria")}
               autoComplete="off"
               inputMode="numeric"
               disabled={disabled}
@@ -158,15 +164,16 @@ export function CodexSubagentSettingsPanel({
   onChange,
   onRetryLoad,
 }: Props) {
+  const { t } = useI18n();
   const headingId = useId();
   const working = busy;
-  const issue = state.draft ? draftIssue(state.draft) : null;
+  const issue = state.draft ? draftIssue(state.draft, t) : null;
 
   if (state.phase === "idle" || state.phase === "loading") {
     return (
       <section className="asb-subagent-settings" aria-labelledby={headingId}>
         <SubagentModuleHeader headingId={headingId} />
-        <div className="asb-settings-skeleton" role="status" aria-label="正在读取">
+        <div className="asb-settings-skeleton" role="status" aria-label={t("codex.loading")}>
           <div className="asb-skeleton" />
           <div className="asb-skeleton" />
           <div className="asb-skeleton" />
@@ -180,8 +187,8 @@ export function CodexSubagentSettingsPanel({
       <section className="asb-subagent-settings" aria-labelledby={headingId}>
         <SubagentModuleHeader headingId={headingId} />
         <div className="asb-empty" role="alert">
-          <p>无法读取子 agent 运行配置：{state.error?.message ?? "用户级配置不可用"}</p>
-          <Button variant="secondary" disabled={busy} onClick={onRetryLoad}>重新读取</Button>
+          <p>{t("codex.subagentPanel.loadError", { error: state.error ? commandErrorText(state.error, t) : t("codex.subagentPanel.configUnavailable") })}</p>
+          <Button variant="secondary" disabled={busy} onClick={onRetryLoad}>{t("codex.subagentPanel.retryLoad")}</Button>
         </div>
       </section>
     );
@@ -194,8 +201,8 @@ export function CodexSubagentSettingsPanel({
 
       <div className="asb-subagent-setting-list">
         <BooleanRow
-          label="启用子 agent"
-          detail="控制 Codex 是否允许主 agent 创建子 agent。"
+          label={t("codex.subagentPanel.enabledLabel")}
+          detail={t("codex.subagentPanel.enabledDetail")}
           field="enabled"
           value={state.draft.enabled}
           actualValue={state.snapshot.settings.enabled}
@@ -210,8 +217,8 @@ export function CodexSubagentSettingsPanel({
         />
         {issue && <p className="asb-field-error" role="alert">{issue}</p>}
         <BooleanRow
-          label="中断时发送消息"
-          detail="控制主 agent 中断子 agent 时是否发送中断说明。"
+          label={t("codex.subagentPanel.interruptRowLabel")}
+          detail={t("codex.subagentPanel.interruptDetail")}
           field="interruptMessage"
           value={state.draft.interruptMessage}
           actualValue={state.snapshot.settings.interruptMessage}

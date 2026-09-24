@@ -1,4 +1,7 @@
 import type { AppKind, KeyChange, SettingSpec, SettingValue } from "../api/client";
+import { useI18n } from "../i18n";
+import { catalogText } from "../i18n/errors";
+import type { TFunction } from "../i18n";
 import { Button } from "./Button";
 import { DiffView } from "./DiffView";
 import { RadioOption } from "./RadioOption";
@@ -32,8 +35,10 @@ function choiceIndex(spec: SettingSpec, value: SettingValue): number {
   return value.mode === "automatic" ? 0 : spec.options.findIndex((option) => option.value === value.value) + 1;
 }
 
-export function choiceLabel(spec: SettingSpec, value: SettingValue): string {
-  return value.mode === "automatic" ? "自动" : spec.options.find((option) => option.value === value.value)?.label ?? String(value.value);
+export function choiceLabel(spec: SettingSpec, value: SettingValue, t: TFunction): string {
+  return value.mode === "automatic"
+    ? t("clientConfig.settings.automatic")
+    : catalogText(spec.options.find((option) => option.value === value.value)?.label ?? "", t) || String(value.value);
 }
 
 export function sameSettingValue(left: SettingValue, right: SettingValue): boolean {
@@ -45,9 +50,9 @@ function diffValue(value: SettingValue): string | null {
   return value.mode === "automatic" ? null : String(value.value);
 }
 
-function actualValueLabel(spec: SettingSpec, value: SettingValue | undefined): string {
-  if (!value) return "真实文件：不可读取";
-  return `真实文件：${choiceLabel(spec, value)}`;
+function actualValueLabel(spec: SettingSpec, value: SettingValue | undefined, t: TFunction): string {
+  if (!value) return t("clientConfig.settings.actualUnreadable");
+  return t("clientConfig.settings.actualValue", { value: choiceLabel(spec, value, t) });
 }
 
 function settingChange(
@@ -80,56 +85,62 @@ type SettingControlProps = Pick<ControlProps, "spec" | "value" | "busy" | "onCha
 type ProviderParameterRowProps = Pick<ControlProps, "spec" | "value" | "baselineValue" | "busy" | "onChange">;
 
 function SettingControl({ spec, value, busy, onChange }: SettingControlProps) {
+  const { t } = useI18n();
   if (spec.control === "slider") {
     return (
       <div className="asb-slider-control">
-        <span className="asb-choice-current" aria-live="polite">当前推理：{choiceLabel(spec, value)}</span>
+        <span className="asb-choice-current" aria-live="polite">{t("clientConfig.settings.currentEffort", { value: choiceLabel(spec, value, t) })}</span>
         <Slider value={choiceIndex(spec, value)} min={0} max={spec.options.length} step={1}
-          ariaLabel={spec.label} ariaValueText={`${spec.label} ${choiceLabel(spec, value)}`} disabled={busy}
+          ariaLabel={catalogText(spec.label, t)} ariaValueText={`${catalogText(spec.label, t)} ${choiceLabel(spec, value, t)}`} disabled={busy}
           onValueChange={(index) => onChange(index === 0 ? automatic : explicit(spec.options[index - 1].value))} />
       </div>
     );
   }
   const options = spec.control === "toggle"
-    ? [{ value: true, label: "开启" }, { value: false, label: "关闭" }]
+    ? [{ value: true, label: t("clientConfig.settings.on") }, { value: false, label: t("clientConfig.settings.off") }]
     : spec.options;
   return (
-    <div className="asb-segments" role="radiogroup" aria-label={spec.label}>
+    <div className="asb-segments" role="radiogroup" aria-label={catalogText(spec.label, t)}>
       <RadioOption name={`${spec.key}-setting`} checked={value.mode === "automatic"} disabled={busy}
-        label="自动" onChange={() => onChange(automatic)} />
+        label={t("clientConfig.settings.automatic")} onChange={() => onChange(automatic)} />
       {options.map((option) => (
         <RadioOption key={String(option.value)} name={`${spec.key}-setting`}
           checked={value.mode === "explicit" && value.value === option.value}
-          disabled={busy} label={option.label} onChange={() => onChange(explicit(option.value))} />
+          disabled={busy} label={catalogText(option.label, t)} onChange={() => onChange(explicit(option.value))} />
       ))}
     </div>
   );
 }
 
-function preferenceDetail(spec: SettingSpec): string {
-  if (spec.control === "toggle") return "自动时不写入此项；开启或关闭会在预览确认后写入客户端配置。";
-  if (spec.control === "slider") return "自动时遵循客户端默认等级；选择等级后会在预览确认后写入客户端配置。";
-  return "自动时不写入此项；选择具体模式后会在预览确认后写入客户端配置。";
+function preferenceDetail(spec: SettingSpec, t: TFunction): string {
+  if (spec.control === "toggle") return t("clientConfig.settings.preferenceDetailToggle");
+  if (spec.control === "slider") return t("clientConfig.settings.preferenceDetailSlider");
+  return t("clientConfig.settings.preferenceDetailChoice");
 }
 
-function providerParameterDetail(spec: SettingSpec): string {
-  if (spec.control === "toggle") return "自动时遵循此供应商默认行为；开启或关闭会随供应商一起保存。";
-  if (spec.control === "slider") return "自动时遵循此供应商默认等级；选择等级后会随供应商一起保存。";
-  return "自动时遵循此供应商默认模式；选择具体模式后会随供应商一起保存。";
+function providerParameterDetail(spec: SettingSpec, t: TFunction): string {
+  if (spec.control === "toggle") return t("clientConfig.settings.parameterDetailToggle");
+  if (spec.control === "slider") return t("clientConfig.settings.parameterDetailSlider");
+  return t("clientConfig.settings.parameterDetailChoice");
 }
 
-function pendingSettingMessage(spec: SettingSpec, value: SettingValue, action: "应用" | "保存"): string {
-  return value.mode === "automatic"
-    ? `待${action}：移除此项，恢复默认值`
-    : `待${action}：${spec.control === "toggle" ? `设为${choiceLabel(spec, value)}` : `写入「${choiceLabel(spec, value)}」`}`;
+function pendingSettingMessage(spec: SettingSpec, value: SettingValue, apply: boolean, t: TFunction): string {
+  if (value.mode === "automatic") {
+    return apply ? t("clientConfig.settings.pendingApplyRemoved") : t("clientConfig.settings.pendingSaveRemoved");
+  }
+  const setValue = choiceLabel(spec, value, t);
+  if (spec.control === "toggle") {
+    return apply ? t("clientConfig.settings.pendingApplyToggle", { value: setValue }) : t("clientConfig.settings.pendingSaveToggle", { value: setValue });
+  }
+  return apply ? t("clientConfig.settings.pendingApplyWrite", { value: setValue }) : t("clientConfig.settings.pendingSaveWrite", { value: setValue });
 }
 
 function scalarCode(value: boolean | string | number): string {
   return typeof value === "string" ? JSON.stringify(value) : String(value);
 }
 
-function settingCode(app: AppKind, key: string, value: SettingValue | undefined): string {
-  if (!value || value.mode === "automatic") return `# 未设置 ${key}`;
+function settingCode(app: AppKind, key: string, value: SettingValue | undefined, t: TFunction): string {
+  if (!value || value.mode === "automatic") return t("clientConfig.settings.codeNotSet", { key });
   const path = key.split(".");
   if (app === "codex") {
     const property = path.at(-1)!;
@@ -166,15 +177,16 @@ function SettingCodeDisclosure({
   changed: boolean;
   available: boolean;
 }) {
-  const actualCode = available ? settingCode(app, spec.key, actualValue) : `# 无法读取 ${spec.key}`;
-  const draftCode = settingCode(app, spec.key, draftValue);
+  const { t } = useI18n();
+  const actualCode = available ? settingCode(app, spec.key, actualValue, t) : t("clientConfig.settings.codeUnreadable", { key: spec.key });
+  const draftCode = settingCode(app, spec.key, draftValue, t);
   const showDiff = changed && actualCode !== draftCode;
   return (
     <details className="asb-client-setting-code">
-      <summary>{showDiff ? "查看待应用代码差异" : "查看当前配置代码"}</summary>
+      <summary>{showDiff ? t("clientConfig.settings.viewPendingDiff") : t("clientConfig.settings.viewCurrentCode")}</summary>
       <div className="asb-client-setting-code-body">
         {showDiff ? (
-          <code aria-label={`${spec.label} 待应用代码差异`}>
+          <code aria-label={t("clientConfig.settings.pendingDiffAria", { label: catalogText(spec.label, t) })}>
             <span className="asb-client-setting-code-old">{prefixedCode("-", actualCode)}</span>
             {"\n"}
             <span className="asb-client-setting-code-new">{prefixedCode("+", draftCode)}</span>
@@ -188,24 +200,25 @@ function SettingCodeDisclosure({
 }
 
 function ClientPreferenceRow({ spec, value, baselineValue, actualValue, showActual, busy, onChange, clientApp }: ControlProps) {
+  const { t } = useI18n();
   const change = settingChange(spec, baselineValue, value);
   if (!clientApp) throw new Error("Client preference rows require a client application.");
-  const actualLabel = showActual ? choiceLabel(spec, actualValue ?? automatic) : "不可读取";
+  const actualLabel = showActual ? choiceLabel(spec, actualValue ?? automatic, t) : t("clientConfig.settings.unreadable");
   return (
     <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
-          <span className="asb-checkbox-label">{spec.label}</span>
-          <span className="asb-app-setting-detail">{preferenceDetail(spec)}</span>
+          <span className="asb-checkbox-label">{catalogText(spec.label, t)}</span>
+          <span className="asb-app-setting-detail">{preferenceDetail(spec, t)}</span>
         </div>
-        <span className="asb-setting-actual" aria-live="polite">当前配置：{actualLabel}</span>
+        <span className="asb-setting-actual" aria-live="polite">{t("clientConfig.settings.currentConfig", { value: actualLabel })}</span>
       </div>
       <div className="asb-choice-controls">
         <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
       </div>
       {change && (
         <p className="asb-setting-pending" role="status">
-          {pendingSettingMessage(spec, value, "应用")}
+          {pendingSettingMessage(spec, value, true, t)}
         </p>
       )}
       <SettingCodeDisclosure app={clientApp} spec={spec} actualValue={actualValue}
@@ -215,21 +228,22 @@ function ClientPreferenceRow({ spec, value, baselineValue, actualValue, showActu
 }
 
 function ProviderParameterRow({ spec, value, baselineValue, busy, onChange }: ProviderParameterRowProps) {
+  const { t } = useI18n();
   const baseline = baselineValue ?? automatic;
   const changed = !sameSettingValue(baseline, value);
   return (
     <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
         <div className="asb-app-setting-copy">
-          <span className="asb-checkbox-label">{spec.label}</span>
-          <span className="asb-app-setting-detail">{providerParameterDetail(spec)}</span>
+          <span className="asb-checkbox-label">{catalogText(spec.label, t)}</span>
+          <span className="asb-app-setting-detail">{providerParameterDetail(spec, t)}</span>
         </div>
-        <span className="asb-setting-actual" aria-live="polite">当前设置：{choiceLabel(spec, baseline)}</span>
+        <span className="asb-setting-actual" aria-live="polite">{t("clientConfig.settings.currentSetting", { value: choiceLabel(spec, baseline, t) })}</span>
       </div>
       <div className="asb-choice-controls">
         <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
       </div>
-      {changed && <p className="asb-setting-pending" role="status">{pendingSettingMessage(spec, value, "保存")}</p>}
+      {changed && <p className="asb-setting-pending" role="status">{pendingSettingMessage(spec, value, false, t)}</p>}
     </div>
   );
 }
@@ -246,6 +260,7 @@ export function SettingsRow({
   presentation,
   clientApp,
 }: ControlProps) {
+  const { t } = useI18n();
   if (presentation === "client") return <ClientPreferenceRow spec={spec} value={value} baselineValue={baselineValue}
     actualValue={actualValue} showActual={showActual} busy={busy} onChange={onChange} clientApp={clientApp} />;
   if (presentation === "provider") return <ProviderParameterRow spec={spec} value={value}
@@ -254,13 +269,13 @@ export function SettingsRow({
   return (
     <div className="asb-toggle-row asb-choice-row">
       <div className="asb-choice-head">
-        <span className="asb-checkbox-label">{spec.label}</span>
-        {showActual && <span className="asb-setting-actual" aria-live="polite">{actualValueLabel(spec, actualValue)}</span>}
+        <span className="asb-checkbox-label">{catalogText(spec.label, t)}</span>
+        {showActual && <span className="asb-setting-actual" aria-live="polite">{actualValueLabel(spec, actualValue, t)}</span>}
       </div>
       <SettingControl spec={spec} value={value} busy={busy} onChange={onChange} />
       {change && (
         <div className="asb-setting-diff">
-          <DiffView changes={[change]} label={`${spec.label} 未保存差异`} />
+          <DiffView changes={[change]} label={t("clientConfig.settings.unsavedDiff", { label: catalogText(spec.label, t) })} />
         </div>
       )}
     </div>
@@ -281,6 +296,7 @@ export function SettingsFields({
   presentation,
   clientApp,
 }: Props) {
+  const { t } = useI18n();
   return (
     <div className="asb-toggle-list">
       {groups.map((group) => {
@@ -289,9 +305,9 @@ export function SettingsFields({
         return (
           <section className="asb-toggle-group" key={group}>
             <div className="asb-toggle-group-head">
-              <h3 className="asb-section-title">{group}</h3>
+              <h3 className="asb-section-title">{catalogText(group, t)}</h3>
               {showGroupReset && onResetGroup && (
-                <Button variant="secondary" disabled={busy} onClick={() => onResetGroup(group)}>恢复默认值</Button>
+                <Button variant="secondary" disabled={busy} onClick={() => onResetGroup(group)}>{t("clientConfig.settings.resetGroup")}</Button>
               )}
             </div>
             {groupSpecs.map((spec) => (

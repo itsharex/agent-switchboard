@@ -1,16 +1,19 @@
 import type { ObservedExtension } from "../../api/client";
 import { discoveryImportMode } from "../../app/extensions/useDiscoveryImport";
 import { clientName } from "../../lib/client-name";
+import { useI18n, type TFunction } from "../../i18n";
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
 import { ClientLogo } from "../ClientLogo";
 import { Eye } from "lucide-react";
 
-export function discoveryOrigin(item: ObservedExtension, projects: ReadonlyMap<string, string>) {
-  if (item.origin.origin === "projectRoot") return "项目 " + (projects.get(item.origin.projectId) ?? "已登记项目");
-  if (item.origin.origin === "legacyRoot") return "历史目录（只读）";
-  if (item.origin.origin === "managed") return "托管安装（只读）";
-  return clientName(item.client) + " 用户级目录";
+export function discoveryOrigin(item: ObservedExtension, projects: ReadonlyMap<string, string>, t: TFunction) {
+  if (item.origin.origin === "projectRoot") {
+    return t("importDiscovery.origin.project", { name: projects.get(item.origin.projectId) ?? t("importDiscovery.origin.registeredProject") });
+  }
+  if (item.origin.origin === "legacyRoot") return t("importDiscovery.origin.legacyRoot");
+  if (item.origin.origin === "managed") return t("importDiscovery.origin.managed");
+  return t("importDiscovery.origin.userScope", { client: clientName(item.client) });
 }
 
 interface Props {
@@ -25,6 +28,7 @@ interface Props {
 }
 
 function ImportRow({ item, props }: { item: ObservedExtension; props: Props }) {
+  const { t } = useI18n();
   const mode = discoveryImportMode(item);
   const warningCount = props.warnings.get(item.observationId) ?? 0;
   const reason = !mode && !item.managed && !item.actions.import.inLibrary
@@ -32,32 +36,33 @@ function ImportRow({ item, props }: { item: ObservedExtension; props: Props }) {
   return (
     <li className="asb-ext-import-row">
       <div className="asb-ext-import-identity">
-        <Checkbox label={item.name} ariaLabel={"选择 " + item.name + " 的 " + clientName(item.client) + " 安装"}
+        <Checkbox label={item.name} ariaLabel={t("importDiscovery.row.selectAria", { name: item.name, client: clientName(item.client) })}
           checked={props.selected.has(item.observationId)} disabled={props.busy || mode === null}
           onChange={(checked) => props.onSelect(item.observationId, checked)} />
         {item.description && <p className="asb-ext-import-description">{item.description}</p>}
         <p className="asb-ext-import-origin">
           <ClientLogo app={item.client} className="asb-ext-clienttoggle-logo" />
-          {discoveryOrigin(item, props.projects)}
+          {discoveryOrigin(item, props.projects, t)}
           {item.transport && <span>{item.transport}</span>}
         </p>
         {reason && <p className="asb-warn-text asb-ext-import-description">{reason}</p>}
       </div>
       <div className="asb-ext-import-status">
-        {item.managed ? <span>已管理</span> : mode === "copy" ? <span>仅复制</span>
-          : mode === "manage" ? <span>保留现有安装</span> : item.actions.import.inLibrary ? <span>已在扩展库</span> : null}
+        {item.managed ? <span>{t("importDiscovery.row.managed")}</span> : mode === "copy" ? <span>{t("importDiscovery.row.copyOnly")}</span>
+          : mode === "manage" ? <span>{t("importDiscovery.row.keepInstall")}</span> : item.actions.import.inLibrary ? <span>{t("importDiscovery.row.inLibrary")}</span> : null}
         {warningCount > 0 && <Button variant="unstyled" className="asb-warn-text"
-          aria-label={"查看 " + item.name + " 的 " + warningCount + " 条警告"}
-          onClick={() => props.onWarning(item.observationId)}>{warningCount} 条警告</Button>}
+          aria-label={t("importDiscovery.row.warningsAria", { name: item.name, count: warningCount })}
+          onClick={() => props.onWarning(item.observationId)}>{t("importDiscovery.row.warnings", { count: warningCount })}</Button>}
         {item.actions.managedDefinitionId && <Button variant="icon" className="asb-ext-import-details"
-          aria-label={"查看 " + item.name + " 的管理详情"} onClick={() => props.onViewDetails(item)}><Eye /></Button>}
+          aria-label={t("importDiscovery.row.detailsAria", { name: item.name })} onClick={() => props.onViewDetails(item)}><Eye /></Button>}
       </div>
     </li>
   );
 }
 
 export function DiscoveryImportList(props: Props) {
-  return <ul className="asb-ext-import-list" aria-label="本机发现的扩展">
+  const { t } = useI18n();
+  return <ul className="asb-ext-import-list" aria-label={t("importDiscovery.row.listAria")}>
     {props.rows.map((item) => <ImportRow key={item.observationId} item={item} props={props} />)}
   </ul>;
 }

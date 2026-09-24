@@ -8,6 +8,7 @@ import { Select } from "../components/Select";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { RuntimeOverviewPanel } from "../components/RuntimeOverviewPanel";
 import { Tabs } from "../components/Tabs";
+import { useI18n } from "../i18n";
 import { LogsPage } from "./LogsPage";
 import { LEVEL_FILTERS, LOG_LEVEL_OPTIONS, useRuntimeLogs } from "./use-runtime-logs";
 
@@ -22,6 +23,7 @@ interface DiagnosticsPageProps extends ConfigStatusPanelProps {
 
 export function DiagnosticsPage(props: DiagnosticsPageProps) {
   const { active, section, onSectionChange, profiles, busy } = props;
+  const { t } = useI18n();
   const [visited, setVisited] = useState<DiagnosticSection[]>([]);
   useEffect(() => {
     if (active) setVisited((current) => current.includes(section) ? current : [...current, section]);
@@ -30,52 +32,52 @@ export function DiagnosticsPage(props: DiagnosticsPageProps) {
   const logsOpened = opened("logs");
   const logs = useRuntimeLogs(logsOpened);
   return (
-    <section className="asb-diagnostics" aria-label="诊断" hidden={!active}>
+    <section className="asb-diagnostics" aria-label={t("backup.diagnostics.aria")} hidden={!active}>
       {/* 设置内容区的子页：模块级 h3 标题独占第一行；第二行是分类页签与
       页签级动作，视图控制行只挂当前页签自己的控制项。 */}
       <ModuleHeader
-        title="诊断"
+        title={t("backup.diagnostics.title")}
         primary={
-          <Tabs value={section} onChange={onSectionChange} scope="diagnostics" label="诊断内容"
-            tabs={DIAGNOSTIC_SECTIONS.map((tab) => ({ ...tab, controls: `diagnostics-${tab.value}-panel` }))} />
+          <Tabs value={section} onChange={onSectionChange} scope="diagnostics" label={t("backup.diagnostics.tabsAria")}
+            tabs={DIAGNOSTIC_SECTIONS.map((tab) => ({ value: tab.value, label: t(tab.labelKey), controls: `diagnostics-${tab.value}-panel` }))} />
         }
         primaryActions={section === "configuration" ? (
-          <Button variant="secondary" disabled={busy} onClick={props.onRefresh}>刷新状态</Button>
+          <Button variant="secondary" disabled={busy} onClick={props.onRefresh}>{t("backup.diagnostics.refreshStatus")}</Button>
         ) : undefined}
         secondary={section === "logs" ? (
           <>
             <div className="asb-runtime-log-level-control">
-              <span className="asb-runtime-log-level-label">记录级别</span>
+              <span className="asb-runtime-log-level-label">{t("backup.diagnostics.recordLevel")}</span>
               <Select
                 value={props.logLevel}
-                options={LOG_LEVEL_OPTIONS}
-                ariaLabel="记录级别"
-                placeholder="加载中"
+                options={LOG_LEVEL_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                ariaLabel={t("backup.diagnostics.recordLevel")}
+                placeholder={t("backup.diagnostics.loading")}
                 disabled={busy || props.logLevel === null}
                 onChange={(level) => props.onLogLevelChange(level as RuntimeLogLevel)}
               />
             </div>
-            <div className="asb-segments" role="radiogroup" aria-label="日志级别筛选">
+            <div className="asb-segments" role="radiogroup" aria-label={t("backup.diagnostics.levelFilterAria")}>
               {LEVEL_FILTERS.map((option) => (
                 <RadioOption
                   key={option.value}
                   name="runtime-log-level-filter"
                   checked={logs.filter === option.value}
                   disabled={false}
-                  label={option.label}
+                  label={t(option.labelKey)}
                   onChange={() => logs.setFilter(option.value)}
                 />
               ))}
             </div>
             <Button variant="secondary" disabled={logs.loading} onClick={() => void logs.refresh()}>
-              {logs.loading ? "刷新中" : "刷新"}
+              {logs.loading ? t("backup.diagnostics.refreshing") : t("backup.diagnostics.refresh")}
             </Button>
             <Button
               variant="secondary"
               disabled={logs.openingFolder}
               onClick={() => void logs.openLogDirectory()}
             >
-              {logs.openingFolder ? "打开中" : "打开日志文件夹"}
+              {logs.openingFolder ? t("backup.diagnostics.opening") : t("backup.diagnostics.openFolder")}
             </Button>
           </>
         ) : undefined}

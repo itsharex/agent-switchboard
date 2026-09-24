@@ -100,10 +100,3 @@ pub(crate) fn invalidate_provider(state: &LocalState, profile_id: &str) -> Resul
             .retain(|point| point.profile_id != profile_id);
     })
 }
-
-/// Drops all provider-query history when the application-owned profile store
-/// is reset. It deliberately does not alter the independently logged-in
-/// Codex official-account trend.
-pub(crate) fn clear_providers(state: &LocalState) -> Result<(), String> {
-    mutate(state, |ledger| ledger.providers.clear())
-}

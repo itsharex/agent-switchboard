@@ -3,12 +3,12 @@ import {
   importDiscoveredMcp, importDiscoveredSkill, takeoverDiscoveredExtension,
   type ObservedExtension,
 } from "../../api/client";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
 import type { ExclusiveRunner, WorkspaceRefresher } from "./extension-ops";
 
 export interface DiscoveryImportResult {
   importedIds: string[];
-  failed: Array<{ name: string; message: string }>;
+  failed: Array<{ name: string; error: unknown }>;
 }
 
 export function discoveryImportMode(item: ObservedExtension): "manage" | "copy" | null {
@@ -32,9 +32,7 @@ async function importBatch(items: ObservedExtension[]): Promise<DiscoveryImportR
       await importOne(item);
       result.importedIds.push(item.observationId);
     } catch (caught) {
-      const message = caught && typeof caught === "object" && "message" in caught
-        ? String(caught.message) : String(caught);
-      result.failed.push({ name: item.name, message });
+      result.failed.push({ name: item.name, error: caught });
     }
   }
   return result;
@@ -54,8 +52,8 @@ export function useDiscoveryImport({ refresh, scan, runExclusive }: {
       const scanned = await scan();
       toast({
         kind: refreshed && scanned ? "success" : "warning",
-        title: refreshed && scanned ? "已导入本机扩展" : "导入已完成，列表未完全更新",
-        description: String(result.importedIds.length) + " 项；客户端原有文件保持不变",
+        title: refreshed && scanned ? toastMessage("importDiscovery.extToast.imported") : toastMessage("importDiscovery.extToast.partial"),
+        description: toastMessage("importDiscovery.extToast.description", { count: result.importedIds.length }),
       });
     }
     return result;

@@ -1,4 +1,5 @@
 import type { AppKind, ExtensionListItem, ExtensionMutation, SkillCandidateDto } from "../../api/client";
+import { tr } from "../../i18n/current";
 
 export interface SkillSourceActions {
   onScanLocal: (root: string) => Promise<SkillCandidateDto[] | null>;
@@ -45,6 +46,6 @@ export function sourceErrorMessage(error: unknown, fallback: string) {
     try {
       const url = new URL(value);
       return `${url.protocol}//${url.host}${url.pathname}`;
-    } catch { return "[来源地址已隐藏]"; }
+    } catch { return tr("extensions.sources.urlHidden"); }
   });
 }

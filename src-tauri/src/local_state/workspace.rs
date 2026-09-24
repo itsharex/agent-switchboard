@@ -34,7 +34,32 @@ impl LocalState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::local_state::AppSettings;
+    use crate::local_state::{AppSettings, LanguagePreference};
+
+    /// The shipped v0.2 file (the current contract minus `language`) upgrades
+    /// once at startup: every preference is kept, the language pins to Chinese,
+    /// and the file is atomically rewritten into the current contract.
+    #[test]
+    fn legacy_preferences_upgrade_in_place_with_language_chinese() {
+        let root = tempfile::tempdir().unwrap();
+        let state = LocalState::from_root(root.path().to_path_buf());
+        let mut legacy = serde_json::to_value(AppSettings::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("language");
+        let original = serde_json::to_vec(&legacy).unwrap();
+        fs::write(state.settings_path(), &original).unwrap();
+        assert!(state.get_app_settings().is_err());
+        assert_eq!(fs::read(state.settings_path()).unwrap(), original);
+        state.upgrade_app_settings().unwrap();
+        let expected = AppSettings { language: LanguagePreference::ZhCn, ..AppSettings::default() };
+        assert_eq!(state.get_app_settings().unwrap(), expected);
+        // The upgrade rewrote the file into the current contract, so the next
+        // read takes the daily path instead of upgrading again.
+        assert_ne!(fs::read(state.settings_path()).unwrap(), original);
+        assert_eq!(state.get_app_settings().unwrap(), expected);
+        let stored: serde_json::Value =
+            serde_json::from_slice(&fs::read(state.settings_path()).unwrap()).unwrap();
+        assert_eq!(stored["language"], "zh-CN");
+    }
 
     #[test]
     fn browsing_position_does_not_race_with_preference_snapshots() {

@@ -107,7 +107,7 @@ pub fn restore<Io: SwitchIo, Commit>(
 where
     Commit: FnOnce(&RestoreOutcome) -> Result<(), String>,
 {
-    restore_projected(io, backup, target, None, commit)
+    restore_projected(io, backup, target, None, None, commit)
 }
 
 /// Restores a verified backup with a current typed endpoint projection.
@@ -117,6 +117,7 @@ pub fn restore_projected<Io: SwitchIo, Commit>(
     backup: &BackupRecord,
     target: &Path,
     projected: Option<&str>,
+    expected: Option<&super::RestoreExpectation>,
     commit: Commit,
 ) -> Result<RestoreOutcome, SwitchError>
 where
@@ -137,14 +138,16 @@ where
     match lockfile::acquire(io, target, PROCESS_NAME) {
         AcquireOutcome::Busy(status) => Err(SwitchError::BlockedByLock { status }),
         AcquireOutcome::Acquired => {
-            let result = restore_locked(io, backup, target, projected, commit);
+            let result = restore_locked(io, backup, target, projected, expected, commit);
             match lockfile::release(io, target) {
                 Ok(()) => result,
                 Err(message) => match result {
                     Ok(mut outcome) => {
-                        outcome
-                            .warnings
-                            .push(format!("配置已恢复，但写入锁释放失败：{message}"));
+                        outcome.warnings.push(asb_core::contracts::LocalizedMessage::new(
+                            "warnings.lockReleaseAfterRestore",
+                            serde_json::json!({ "detail": message }),
+                            format!("配置已恢复，但写入锁释放失败：{message}"),
+                        ));
                         Ok(outcome)
                     }
                     Err(prior) => Err(SwitchError::LockReleaseFailed {
@@ -461,9 +464,11 @@ fn finish_execution<Io: SwitchIo>(
         Ok(()) => result,
         Err(message) => match result {
             Ok(mut outcome) => {
-                outcome
-                    .warnings
-                    .push(format!("写入已完成，但无法释放写入锁：{message}"));
+                outcome.warnings.push(asb_core::contracts::LocalizedMessage::new(
+                    "warnings.lockReleaseAfterWrite",
+                    serde_json::json!({ "detail": message }),
+                    format!("写入已完成，但无法释放写入锁：{message}"),
+                ));
                 Ok(outcome)
             }
             Err(prior) => Err(SwitchError::LockReleaseFailed {

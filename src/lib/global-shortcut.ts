@@ -1,3 +1,5 @@
+import { tr } from "../i18n/current.ts";
+
 /** Mirrors the native shortcut validator; the desktop remains authoritative. */
 export function captureGlobalShortcut(event: Pick<KeyboardEvent, "code" | "ctrlKey" | "altKey" | "metaKey" | "shiftKey">): string | null {
   if (!event.ctrlKey && !event.altKey && !event.metaKey) return null;
@@ -7,7 +9,7 @@ export function captureGlobalShortcut(event: Pick<KeyboardEvent, "code" | "ctrlK
 }
 
 export function globalShortcutLabel(chord: string): string {
-  if (!chord) return "未设置";
-  const labels: Record<string, string> = { shift: "Shift", control: "Ctrl", alt: "Alt", super: "⌘ / Win", Space: "空格" };
+  if (!chord) return tr("settings.shortcut.notSet");
+  const labels: Record<string, string> = { shift: "Shift", control: "Ctrl", alt: "Alt", super: "⌘ / Win", Space: tr("settings.shortcut.space") };
   return chord.split("+").map((part) => labels[part] ?? part.replace(/^(Key|Digit)/, "")).join(" + ");
 }

@@ -3,6 +3,8 @@ import type { ExtensionDiagnostic } from "../../api/client";
 import { Button } from "../Button";
 import { ChevronDownIcon, ChevronUpIcon } from "../icons";
 import { clientName } from "../../lib/client-name";
+import { useI18n, type TFunction } from "../../i18n";
+import { catalogText } from "../../i18n/errors";
 import { DIAGNOSTIC_CODE_LABELS, REMEDIATION_LABELS } from "./labels";
 import type { BindingViewInfo } from "./discovery-view";
 
@@ -32,25 +34,26 @@ function subjectLabel(
   diagnostic: ExtensionDiagnostic,
   observationNames: ReadonlyMap<string, string>,
   bindingInfo: ReadonlyMap<string, BindingViewInfo>,
+  t: TFunction,
 ): string {
   switch (diagnostic.subject.kind) {
     case "discoveryEntry":
-      return observationNames.get(diagnostic.subject.observationId) ?? "已发现的条目";
+      return observationNames.get(diagnostic.subject.observationId) ?? t("importDiscovery.warn.subjectEntry");
     case "managedBinding":
-      return bindingInfo.get(diagnostic.subject.bindingId)?.name ?? "已托管的扩展";
+      return bindingInfo.get(diagnostic.subject.bindingId)?.name ?? t("importDiscovery.warn.subjectManaged");
     case "scanLocation":
       return diagnostic.subject.label;
   }
 }
 
-function remediationText(diagnostic: ExtensionDiagnostic): string {
+function remediationText(diagnostic: ExtensionDiagnostic, t: TFunction): string {
   switch (diagnostic.remediation.kind) {
     case "auto":
-      return `${REMEDIATION_LABELS.auto}：${diagnostic.remediation.reason}`;
+      return t("importDiscovery.warn.remediationLine", { label: t(REMEDIATION_LABELS.auto), reason: diagnostic.remediation.reason });
     case "manual":
-      return `${REMEDIATION_LABELS.manual}：${diagnostic.remediation.reason}`;
+      return t("importDiscovery.warn.remediationLine", { label: t(REMEDIATION_LABELS.manual), reason: diagnostic.remediation.reason });
     case "info":
-      return REMEDIATION_LABELS.info;
+      return t(REMEDIATION_LABELS.info);
   }
 }
 
@@ -72,6 +75,7 @@ export function DiscoveryWarnings({
   onOpenChange,
   onRepair,
 }: Props) {
+  const { t } = useI18n();
   const detailsId = useId();
   const summaryTextId = useId();
   const lastScanIdRef = useRef(scanId);
@@ -95,12 +99,11 @@ export function DiscoveryWarnings({
   const repairable = warnings.filter(
     (diagnostic) => diagnostic.remediation.kind === "auto",
   ).length;
-  const summary = `当前结果有 ${warnings.length} 条警告，${repairable} 条可修复${
-    informationCount > 0 ? `，${informationCount} 条提示` : ""
-  }`;
+  const summary = t("importDiscovery.warn.summary", { warnings: warnings.length, repairable }) +
+    (informationCount > 0 ? t("importDiscovery.warn.summaryInfo", { count: informationCount }) : "");
 
   return (
-    <section className="asb-discovery-warnings" aria-label="发现警告">
+    <section className="asb-discovery-warnings" aria-label={t("importDiscovery.warn.aria")}>
       <div className="asb-banner asb-banner-warning asb-discovery-summary">
         <Button
           variant="unstyled"
@@ -108,13 +111,13 @@ export function DiscoveryWarnings({
           aria-expanded={open}
           aria-controls={detailsId}
           aria-describedby={summaryTextId}
-          aria-label={open ? "收起警告详情" : `展开警告详情：${summary}`}
+          aria-label={open ? t("importDiscovery.warn.collapseAria") : t("importDiscovery.warn.expandAria", { summary })}
           onClick={() => onOpenChange(!open)}
         >
           {open ? <ChevronUpIcon /> : <ChevronDownIcon />}
           <span id={summaryTextId} className="asb-discovery-summary-text">
             {summary}
-            {stale && "（上次扫描未更新）"}
+            {stale && t("importDiscovery.warn.staleSuffix")}
           </span>
         </Button>
         <div className="asb-discovery-summary-actions">
@@ -122,19 +125,19 @@ export function DiscoveryWarnings({
             <Button
               variant="primary"
               disabled={busy || repairPreparing}
-              aria-label={`修复这 ${repairable} 项可修复警告`}
+              aria-label={t("importDiscovery.warn.repairAria", { count: repairable })}
               onClick={onRepair}
             >
-              {repairPreparing ? "正在准备…" : `修复这 ${repairable} 项`}
+              {repairPreparing ? t("importDiscovery.warn.preparing") : t("importDiscovery.warn.repair", { count: repairable })}
             </Button>
           ) : warnings.length > 0 ? (
-            <span className="asb-scope-note">没有可自动修复项，展开查看各项处理方式</span>
+            <span className="asb-scope-note">{t("importDiscovery.warn.noAuto")}</span>
           ) : null}
         </div>
       </div>
       {stale && scannedAt && (
         <p className="asb-scope-note" role="status">
-          上次扫描结果生成于 {scannedAt}；本次扫描失败，结果未更新。
+          {t("importDiscovery.warn.staleNote", { time: scannedAt })}
         </p>
       )}
       {open && (
@@ -153,13 +156,13 @@ export function DiscoveryWarnings({
               >
                 <p className="asb-discovery-diagnostic-head">
                   <span className="asb-pill-status">
-                    {DIAGNOSTIC_CODE_LABELS[diagnostic.code] ?? diagnostic.code}
+                    {catalogText(DIAGNOSTIC_CODE_LABELS[diagnostic.code] ?? diagnostic.code, t)}
                   </span>
-                  <strong>{subjectLabel(diagnostic, observationNames, bindingInfo)}</strong>
+                  <strong>{subjectLabel(diagnostic, observationNames, bindingInfo, t)}</strong>
                   <span className="asb-scope-note">{clientName(diagnostic.client)}</span>
                 </p>
                 <p>{diagnostic.message}</p>
-                <p className="asb-scope-note">{remediationText(diagnostic)}</p>
+                <p className="asb-scope-note">{remediationText(diagnostic, t)}</p>
               </li>
             );
           })}

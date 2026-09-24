@@ -227,15 +227,28 @@ impl Planner<'_> {
             .map_err(store_error)?
             .into_iter()
             .find(|binding| binding.id == binding_id)
-            .ok_or_else(|| CommandError::new("extension-not-found", "绑定不存在或已被移除"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-not-found",
+                    "errors.extops.bindingNotFound",
+                    "绑定不存在或已被移除",
+                )
+            })?;
         let definition = self
             .store
             .get_definition(&binding.resource_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展定义不存在"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-not-found",
+                    "errors.extops.definitionRecordMissing",
+                    "扩展定义不存在",
+                )
+            })?;
         if binding.desired != DesiredState::Enabled {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.disabledBindingNothingToRepair",
                 "已停用的绑定没有需要修复的部署；请重新扫描",
             ));
         }
@@ -274,8 +287,9 @@ impl Planner<'_> {
                 _ => None,
             })
         }) else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-baseline",
+                "errors.extops.skillBaselineMissingForRepair",
                 "该 Skill 绑定缺少可验证的部署基线，不能自动修复",
             ));
         };
@@ -289,18 +303,21 @@ impl Planner<'_> {
         if let Some(existing) = &current_entries {
             let current_digest = content_digest(existing);
             if current_digest == last_digest {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-conflict",
+                    "errors.extops.alreadyMatchesLastDeploy",
                     "该目录已与最后一次部署一致；请重新扫描",
                 ));
             }
             if !is_unmodified_subset(existing, &last_files) {
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "extension-external-change",
+                    "errors.extops.unknownModificationsForRepair",
                     format!(
                         "{} 存在未知修改或新增内容；请先处理外部变更",
                         target_dir.display()
                     ),
+                    serde_json::json!({ "path": target_dir.display().to_string() }),
                 ));
             }
         }
@@ -355,18 +372,26 @@ impl Planner<'_> {
         // remediation promises: the document exists, parses, the owned
         // position is free, and the baseline carries the value to restore.
         if !document.exists() {
-            return Err(CommandError::new(
+            return Err(CommandError::localized(
                 "extension-baseline",
+                "errors.extops.docMissingUseHistoryRestore",
                 format!(
                     "{} 已缺失；请使用历史恢复流程，而不是修复单个条目",
                     document.display()
                 ),
+                serde_json::json!({ "path": document.display().to_string() }),
             ));
         }
         let key = binding
             .native_key
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.mcpBindingMissingKey",
+                    "MCP 绑定缺少服务键",
+                )
+            })?;
         let pointer = match &target.scope {
             McpScope::CodexServers => format!("mcp_servers.{key}"),
             McpScope::ClaudeUserServers => format!("mcpServers.{key}"),
@@ -388,8 +413,9 @@ impl Planner<'_> {
                 _ => None,
             })
         }) else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-baseline",
+                "errors.extops.entryMissingRestorableBaseline",
                 "该服务条目缺少可恢复的基线值；请重新部署该扩展",
             ));
         };
@@ -397,8 +423,9 @@ impl Planner<'_> {
         let document_key = document.to_string_lossy().to_string();
         if !documents.contains_key(&document_key) {
             let text = read_document(&document)?.ok_or_else(|| {
-                CommandError::new(
+                CommandError::keyed(
                     "extension-baseline",
+                    "errors.extops.configDocMissingUseHistoryRestore",
                     "配置文档已缺失；请使用历史恢复流程，而不是修复单个条目",
                 )
             })?;
@@ -420,8 +447,9 @@ impl Planner<'_> {
         // text, so same-document repairs compose instead of clobbering.
         let base = work.rendered.clone();
         if entry_present(&base, client, &target.scope, key)? {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-conflict",
+                "errors.extops.entryAlreadyPresentRescan",
                 "该服务条目已在配置中；请重新扫描",
             ));
         }

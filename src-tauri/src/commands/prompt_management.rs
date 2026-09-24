@@ -15,26 +15,37 @@ use tauri::{AppHandle, Manager};
 
 fn prompt_error(error: SwitchError) -> CommandError {
     match error {
-        SwitchError::ReadCurrent { .. } => {
-            CommandError::new("prompt-document-unreadable", "无法读取全局提示词文档")
-        }
-        SwitchError::BlockedByLock { .. } => CommandError::new(
+        SwitchError::ReadCurrent { .. } => CommandError::keyed(
+            "prompt-document-unreadable",
+            "errors.cfg.promptDocumentUnreadable",
+            "无法读取全局提示词文档",
+        ),
+        SwitchError::BlockedByLock { .. } => CommandError::keyed(
             "prompt-document-locked",
+            "errors.cfg.promptDocumentLocked",
             "全局提示词文档正被其他写入操作占用",
         ),
-        SwitchError::ExternalChange { .. } => CommandError::new(
+        SwitchError::ExternalChange { .. } => CommandError::keyed(
             "prompt-document-changed",
+            "errors.cfg.promptDocumentChanged",
             "全局提示词文档已在读取后被外部修改，请重新读取后再保存",
         ),
         SwitchError::CommitFailed { recovery, .. } => {
-            let message = match recovery {
-                RecoveryOutcome::NotNeeded => "保存全局提示词文档失败，原文未被替换",
-                RecoveryOutcome::Restored { .. } => "保存全局提示词文档失败，已恢复保存前的内容",
-                RecoveryOutcome::RestoreFailed { .. } => {
-                    "保存全局提示词文档失败，且无法自动恢复；请从应用备份恢复"
-                }
+            let (key, message) = match recovery {
+                RecoveryOutcome::NotNeeded => (
+                    "errors.cfg.promptSaveNotReplaced",
+                    "保存全局提示词文档失败，原文未被替换",
+                ),
+                RecoveryOutcome::Restored { .. } => (
+                    "errors.cfg.promptSaveRestored",
+                    "保存全局提示词文档失败，已恢复保存前的内容",
+                ),
+                RecoveryOutcome::RestoreFailed { .. } => (
+                    "errors.cfg.promptSaveRestoreFailed",
+                    "保存全局提示词文档失败，且无法自动恢复；请从应用备份恢复",
+                ),
             };
-            CommandError::new("prompt-document-save-failed", message)
+            CommandError::keyed("prompt-document-save-failed", key, message)
         }
         other => CommandError::from(other),
     }

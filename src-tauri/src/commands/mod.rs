@@ -29,6 +29,7 @@ mod discovery;
 mod profiles;
 mod query;
 mod quota;
+mod sessions;
 pub(crate) mod quota_refresh;
 
 
@@ -46,6 +47,7 @@ pub(crate) mod official_login;
 pub(crate) mod prompt_management;
 pub(crate) mod provider_endpoints;
 pub(crate) mod provider_request;
+pub(crate) mod provider_diagnostics;
 pub(crate) mod runtime_log;
 pub(crate) mod status;
 pub(crate) mod subagent_settings;
@@ -85,3 +87,4 @@ pub use discovery::*;
 pub use profiles::*;
 pub use query::*;
 pub use quota::*;
+pub use sessions::*;

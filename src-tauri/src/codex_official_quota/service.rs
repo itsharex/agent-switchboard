@@ -125,18 +125,10 @@ pub(crate) fn query_login(auth_path: &Path) -> (CodexOfficialQuota, Option<Strin
     fetch(auth_path)
 }
 
-/// Removes a profile's last successful official-quota result after deletion
-/// or profile reset.
+/// Removes a profile's last successful official-quota result after deletion.
 pub(crate) fn invalidate(profile_id: &str) {
     if let Ok(mut entries) = cache().lock() {
         entries.remove(profile_id);
-    }
-}
-
-/// Drops all in-memory official quota reads with the profile store.
-pub(crate) fn clear() {
-    if let Ok(mut entries) = cache().lock() {
-        entries.clear();
     }
 }
 

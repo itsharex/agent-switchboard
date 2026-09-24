@@ -3,7 +3,7 @@ use crate::{commands::error::CommandError, local_state::LocalState};
 use asb_core::{AppKind, BackupRecord};
 use asb_switch::{FsIo, SwitchIo};
 use std::path::Path;
-pub(super) fn intent(
+pub(in crate::commands) fn intent(
     state: &LocalState,
     record: &BackupRecord,
     target: &Path,
@@ -23,16 +23,36 @@ pub(super) fn intent(
             return Ok(None);
         }
         [source] => source,
-        _ => return Err(error("Codex 配置备份关联多个认证来源，已拒绝恢复")),
+        _ => {
+            return Err(CommandError::keyed(
+                "codex-auth-restore-invalid",
+                "errors.sw.codexBackupMultipleAuthSources",
+                "Codex 配置备份关联多个认证来源，已拒绝恢复",
+            ))
+        }
     };
     if Path::new(&source.target_path) != path || source.reason != "codex-auth-projection" {
-        return Err(error("Codex 认证备份目标或版本不匹配"));
+        return Err(CommandError::keyed(
+            "codex-auth-restore-invalid",
+            "errors.sw.codexAuthBackupTargetMismatch",
+            "Codex 认证备份目标或版本不匹配",
+        ));
     }
     let after = FsIo
         .read_file(Path::new(&source.backup_path))
-        .map_err(|_| error("Codex 认证备份不可读"))?;
+        .map_err(|_| {
+            CommandError::keyed(
+                "codex-auth-restore-invalid",
+                "errors.sw.codexAuthBackupUnreadable",
+                "Codex 认证备份不可读",
+            )
+        })?;
     if asb_switch::sha256_hex(&after) != source.content_hash {
-        return Err(error("Codex 认证备份哈希不匹配"));
+        return Err(CommandError::keyed(
+            "codex-auth-restore-invalid",
+            "errors.sw.codexAuthBackupHashMismatch",
+            "Codex 认证备份哈希不匹配",
+        ));
     }
     validate_direct_auth(
         candidate_config,
@@ -43,7 +63,13 @@ pub(super) fn intent(
     let (before, existed) = match FsIo.read_file(&path) {
         Ok(content) => (content, true),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (String::new(), false),
-        Err(_) => return Err(error("Codex 当前认证文件不可读")),
+        Err(_) => {
+            return Err(CommandError::keyed(
+                "codex-auth-restore-invalid",
+                "errors.sw.codexCurrentAuthUnreadable",
+                "Codex 当前认证文件不可读",
+            ))
+        }
     };
     Ok(Some(super::transaction::AuthIntent {
         before_hash: asb_switch::sha256_hex(&before),
@@ -60,7 +86,13 @@ pub(super) fn validate_current_auth(target: &Path, config: &str) -> Result<(), C
     let current = match FsIo.read_file(&target.with_file_name("auth.json")) {
         Ok(text) => Some(text),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(_) => return Err(error("Codex 当前认证文件不可读")),
+        Err(_) => {
+            return Err(CommandError::keyed(
+                "codex-auth-restore-invalid",
+                "errors.sw.codexCurrentAuthUnreadable",
+                "Codex 当前认证文件不可读",
+            ))
+        }
     };
     validate_direct_auth(config, current.as_deref())
 }
@@ -68,7 +100,13 @@ pub(super) fn validate_current_auth(target: &Path, config: &str) -> Result<(), C
 fn validate_direct_auth(config: &str, auth: Option<&str>) -> Result<(), CommandError> {
     let document = config
         .parse::<toml_edit::DocumentMut>()
-        .map_err(|_| error("Codex 备份配置格式无效"))?;
+        .map_err(|_| {
+            CommandError::keyed(
+                "codex-auth-restore-invalid",
+                "errors.sw.codexBackupConfigInvalid",
+                "Codex 备份配置格式无效",
+            )
+        })?;
     let endpoint = document
         .get("openai_base_url")
         .and_then(|value| value.as_str());
@@ -87,7 +125,9 @@ fn validate_direct_auth(config: &str, auth: Option<&str>) -> Result<(), CommandE
                 .is_none_or(|mode| mode == "apikey")
     });
     if !usable {
-        return Err(error(
+        return Err(CommandError::keyed(
+            "codex-auth-restore-invalid",
+            "errors.sw.directBackupMissingApiKey",
             "此直连备份没有配套的 API-key 认证，恢复可能误用官方登录；请重新应用目标 Codex 供应商",
         ));
     }

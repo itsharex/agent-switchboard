@@ -1,13 +1,16 @@
+import { useMessageState } from "../../i18n/use-message-state";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "../../i18n";
 import { sourceErrorMessage } from "./skill-source-model";
 
 export function useSkillSourceRequests<T>(busy: boolean) {
+  const { t } = useI18n();
   const generation = useRef(0);
   const active = useRef<number | null>(null);
   const latest = useRef<T | null>(null);
   const [result, setResult] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   useEffect(() => () => { generation.current += 1; active.current = null; }, []);
 
   const cancel = () => {
@@ -34,14 +37,13 @@ export function useSkillSourceRequests<T>(busy: boolean) {
       if (next !== null) update(() => next);
       return next;
     } catch (reason) {
-      if (current()) {
-        const message = sourceErrorMessage(reason, "无法读取来源，请检查地址和网络后重试");
-        setError(latest.current !== null ? `${message}；仍显示上次结果` : message);
-      }
+      if (current()) setError(reason);
       return null;
     } finally {
       if (current()) { active.current = null; setLoading(false); }
     }
   };
-  return { result, loading, error, setError, clear, cancel, update, run };
+  const detail = error ? sourceErrorMessage(error, t("extensions.sources.readFailedRetry")) : null;
+  const message = detail && result !== null ? `${detail}${t("extensions.sources.staleResults")}` : detail;
+  return { result, loading, error: message, setError, clear, cancel, update, run };
 }

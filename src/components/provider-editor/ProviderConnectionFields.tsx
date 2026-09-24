@@ -1,5 +1,6 @@
 import { usesClaudeManagedAuth } from "../../api/claude-accounts";
 import type { UpstreamProtocol } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
 import { requiresGateway } from "../../lib/protocol";
 import { Input } from "../Input";
@@ -11,11 +12,12 @@ import type { ProviderEditorState } from "./useProviderEditor";
 interface Props { editor: ProviderEditorState; busy: boolean }
 
 function ProtocolField({ editor, busy }: Props) {
+  const { t } = useI18n();
   const { draft, setDraft } = editor;
   return (
     <label className="asb-field">
-      <span>API 格式</span>
-      <Select ariaLabel="API 格式" value={draft.upstreamProtocol} disabled={busy}
+      <span>{t("providers.label.apiFormat")}</span>
+      <Select ariaLabel={t("providers.label.apiFormat")} value={draft.upstreamProtocol} disabled={busy}
         options={[
           { value: "anthropicMessages", label: "Anthropic Messages (/v1/messages)" },
           { value: "chatCompletions", label: "Chat Completions (/chat/completions)" },
@@ -38,21 +40,23 @@ function ProtocolField({ editor, busy }: Props) {
 }
 
 function RouteNotice({ editor }: Pick<Props, "editor">) {
+  const { t } = useI18n();
   const { draft, connection } = editor;
   return (
     <div className="asb-provider-route-note">
-      {draft.connection?.claudeNative ? <p className="asb-scope-note">使用 Claude 原生 {draft.connection.claudeNative.kind} SDK；认证在“Claude 本地功能”中配置，不经过本机 HTTP 网关。</p> : requiresGateway(draft)
+      {draft.connection?.claudeNative ? <p className="asb-scope-note">{t("providers.editor.route.claudeNative", { kind: draft.connection.claudeNative.kind })}</p> : requiresGateway(draft)
         ? <p className="asb-scope-note asb-warn-text">{connection.gatewayRouteWarning}</p>
-        : <p className="asb-scope-note">{`与 ${clientName(draft.app)} 原生协议一致，切换后客户端直连所填服务地址。`}</p>}
+        : <p className="asb-scope-note">{t("providers.editor.route.direct", { client: clientName(draft.app) })}</p>}
     </div>
   );
 }
 
 export function ProviderConnectionFields({ editor, busy }: Props) {
+  const { t } = useI18n();
   const { draft, setDraft, connection } = editor;
   return (
-    <section className="asb-editor-section" aria-label="连接配置">
-      <h3 className="asb-section-title">连接配置</h3>
+    <section className="asb-editor-section" aria-label={t("providers.editor.section.connection")}>
+      <h3 className="asb-section-title">{t("providers.editor.section.connection")}</h3>
       <div className="asb-editor-section-fields">
         <div className="asb-provider-connection-choice">
           <ProtocolField editor={editor} busy={busy || !!draft.connection?.claudeNative} />
@@ -67,14 +71,14 @@ export function ProviderConnectionFields({ editor, busy }: Props) {
           required={!usesClaudeManagedAuth(draft.connection) && !draft.connection?.claudeNative}
           onChange={(value) => setDraft((current) => ({ ...current, apiKey: value }))} />
         {!draft.connection?.claudeNative && !usesClaudeManagedAuth(draft.connection) && <label className="asb-field">
-          <span>模型列表 URL</span>
+          <span>{t("providers.editor.modelsUrl")}</span>
           <Input type="url" value={draft.connection?.modelsUrl ?? ""} disabled={busy}
-            placeholder={draft.connection?.isFullUrl ? "完整请求 URL 必填" : "（可选）"}
+            placeholder={draft.connection?.isFullUrl ? t("providers.editor.modelsUrlRequired") : t("providers.editor.optional")}
             onChange={(event) => setDraft((current) => ({
               ...current,
               connection: { ...current.connection, modelsUrl: event.target.value.trim() || null },
             }))} />
-          <p className="asb-scope-note">仅用于“获取模型”。完整请求 URL 必须填写；不会改变实际请求地址。</p>
+          <p className="asb-scope-note">{t("providers.editor.modelsUrlNote")}</p>
         </label>}
         <RouteNotice editor={editor} />
       </div>

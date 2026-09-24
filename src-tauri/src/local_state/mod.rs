@@ -8,11 +8,16 @@ mod caches;
 pub(crate) mod codex_paths;
 mod paths;
 mod settings;
+mod settings_upgrade;
 mod workspace;
 
 
 pub(crate) use paths::user_home_dir;
-pub use settings::{AppSettings, CloseBehavior, CloudBackupSettings, StartupPage, WorkspacePage};
+pub(crate) use settings::DesktopSettingsError;
+#[allow(unused_imports)] // public contract mirror of the frontend settings type
+pub use settings::{
+    AppSettings, CloseBehavior, CloudBackupSettings, LanguagePreference, StartupPage, WorkspacePage,
+};
 
 use crate::config_store::ConfigStore;
 use asb_core::contracts::AppKind;
@@ -44,12 +49,14 @@ impl LocalState {
     #[cfg(test)]
     #[allow(dead_code)] // verification harness
     pub(crate) fn initialize_schemas(&self) -> Result<(), String> {
-        self.initialize_configuration_schema()?;
+        self.initialize_configuration_store()?;
         self.initialize_extension_schema()
     }
 
-    pub(crate) fn initialize_configuration_schema(&self) -> Result<(), String> {
-        self.configuration().upgrade_if_needed().map(|_| ())
+    pub(crate) fn initialize_configuration_store(&self) -> Result<(), String> {
+        self.configuration()
+            .initialize_current_layout()
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn initialize_extension_schema(&self) -> Result<(), String> {

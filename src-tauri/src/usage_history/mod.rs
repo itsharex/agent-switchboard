@@ -11,4 +11,4 @@ mod record;
 
 
 pub(crate) use query::{official_series, provider_series};
-pub(crate) use record::{clear_providers, invalidate_provider, record_official, record_provider};
+pub(crate) use record::{invalidate_provider, record_official, record_provider};

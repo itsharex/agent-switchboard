@@ -1,3 +1,5 @@
+import { uiMessage } from "../i18n/errors";
+import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   testUsageQuery,
@@ -14,6 +16,7 @@ import { Textarea } from "./Textarea";
 import { Button } from "./Button";
 import { EditorFrame } from "./EditorFrame";
 import { UsageIcon } from "./icons";
+import { useI18n } from "../i18n";
 import { UsageReadingsTable } from "./UsageReadingsTable";
 import { normalizeUsageQuery } from "../lib/usage-query";
 
@@ -82,11 +85,12 @@ export function UsageQueryWorkspace({
   onSave,
   onClose,
 }: Props) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<UsageQuery | null>(() => value);
   const [querying, setQuerying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const queryVersion = useRef(0);
   const firstRun = useRef(true);
 
@@ -99,7 +103,7 @@ export function UsageQueryWorkspace({
   const run = async () => {
     if (!draft || querying || saving) return;
     if (!upstreamProtocol) {
-      setError("供应商缺少 API 格式，无法查询用量");
+      setError(uiMessage("usage.query.missingProtocol"));
       return;
     }
     const version = ++queryVersion.current;
@@ -118,7 +122,7 @@ export function UsageQueryWorkspace({
     } catch (caught) {
       if (queryVersion.current === version) {
         setSummary(null);
-        setError((caught as { message?: string }).message ?? "查询失败");
+        setError(caught);
       }
     } finally {
       if (queryVersion.current === version) setQuerying(false);
@@ -195,25 +199,25 @@ export function UsageQueryWorkspace({
   const modeScope = useId();
 
   return (
-    <EditorFrame className="asb-usage-editor" title="用量查询" backLabel="返回供应商" busy={controlsDisabled} onBack={onClose}
+    <EditorFrame className="asb-usage-editor" title={t("usage.query.title")} backLabel={t("usage.query.back")} busy={controlsDisabled} onBack={onClose}
       primary={
         <>
-          <p className="asb-usage-provider">{providerName.trim() || "未命名供应商"}</p>
-          <Tabs value={kind} onChange={selectKind} scope={modeScope} label="查询方式"
+          <p className="asb-usage-provider">{providerName.trim() || t("usage.query.unnamedProvider")}</p>
+          <Tabs value={kind} onChange={selectKind} scope={modeScope} label={t("usage.query.modeAria")}
             tabs={[
-              { value: "declarative" as const, label: "字段提取", disabled: controlsDisabled,
+              { value: "declarative" as const, label: t("usage.query.modeDeclarative"), disabled: controlsDisabled,
                 controls: `${modeScope}-declarative-panel` },
-              { value: "script" as const, label: "自编脚本", disabled: controlsDisabled,
+              { value: "script" as const, label: t("usage.query.modeScript"), disabled: controlsDisabled,
                 controls: `${modeScope}-script-panel` },
             ]} />
         </>
       }
       footer={
         <Button variant="primary" className="asb-editor-submit" disabled={controlsDisabled} onClick={() => void save()}>
-          {saving ? "保存中…" : "保存查询"}
+          {saving ? t("usage.query.saving") : t("usage.query.save")}
         </Button>
       }>
-      <section className="asb-usage-workspace" aria-label="用量查询"
+      <section className="asb-usage-workspace" aria-label={t("usage.query.title")}
         onKeyDown={(event) => {
           if (event.key === "Escape" && !querying && !saving && !busy) onClose();
         }}>
@@ -228,12 +232,12 @@ export function UsageQueryWorkspace({
         >
           {kind === "declarative" && (
             <>
-              <h3 className="asb-section-title">查询配置</h3>
+              <h3 className="asb-section-title">{t("usage.query.configTitle")}</h3>
               <div className="asb-editor-section-fields">
                 <label className="asb-field">
-                  <span>查询地址</span>
+                  <span>{t("usage.query.urlLabel")}</span>
                   <Input
-                    aria-label="用量查询地址"
+                    aria-label={t("usage.query.urlAria")}
                     value={declarative.url}
                     disabled={controlsDisabled}
                     placeholder="{{baseUrl}}/user/balance"
@@ -242,10 +246,10 @@ export function UsageQueryWorkspace({
                 </label>
                 <div className="asb-usage-paths">
                   <label className="asb-field">
-                    <span>余额路径</span>
+                    <span>{t("usage.query.remainingPath")}</span>
                     <Input
                       code
-                      aria-label="余额提取路径"
+                      aria-label={t("usage.query.remainingPathAria")}
                       value={declarative.remainingPath ?? ""}
                       disabled={controlsDisabled}
                       placeholder="data/balance"
@@ -253,10 +257,10 @@ export function UsageQueryWorkspace({
                     />
                   </label>
                   <label className="asb-field">
-                    <span>已用路径</span>
+                    <span>{t("usage.query.usedPath")}</span>
                     <Input
                       code
-                      aria-label="已用提取路径"
+                      aria-label={t("usage.query.usedPathAria")}
                       value={declarative.usedPath ?? ""}
                       disabled={controlsDisabled}
                       placeholder="data/used"
@@ -264,10 +268,10 @@ export function UsageQueryWorkspace({
                     />
                   </label>
                   <label className="asb-field">
-                    <span>总量路径</span>
+                    <span>{t("usage.query.totalPath")}</span>
                     <Input
                       code
-                      aria-label="总量提取路径"
+                      aria-label={t("usage.query.totalPathAria")}
                       value={declarative.totalPath ?? ""}
                       disabled={controlsDisabled}
                       placeholder="data/total"
@@ -275,9 +279,9 @@ export function UsageQueryWorkspace({
                     />
                   </label>
                   <label className="asb-field">
-                    <span>单位</span>
+                    <span>{t("usage.query.unit")}</span>
                     <Input
-                      aria-label="用量单位"
+                      aria-label={t("usage.query.unitAria")}
                       value={declarative.unit ?? ""}
                       disabled={controlsDisabled}
                       placeholder="USD"
@@ -286,11 +290,10 @@ export function UsageQueryWorkspace({
                   </label>
                 </div>
                 <p className="asb-scope-note">
-                  以一次 GET 请求读取 JSON；地址可使用 {"{{baseUrl}}"} 与 {"{{apiKey}}"}。
+                  {t("usage.query.declarativeNote", { baseUrl: "{{baseUrl}}", apiKey: "{{apiKey}}" })}
                 </p>
                 <p className="asb-scope-note">
-                  每组可包含 planName、remaining、used、total、unit，以及 resetsAt（含时区的 RFC 3339 时间）、
-                  isValid、invalidMessage（仅失效时）、extra（说明）。缺失数值保留 null，不用零代替未知。
+                  {t("usage.query.fieldsNote")}
                 </p>
               </div>
             </>
@@ -305,13 +308,13 @@ export function UsageQueryWorkspace({
         >
           {kind === "script" && (
             <>
-              <h3 className="asb-section-title">查询配置</h3>
+              <h3 className="asb-section-title">{t("usage.query.configTitle")}</h3>
               <div className="asb-editor-section-fields">
                 <label className="asb-field">
-                  <span>用量查询脚本</span>
+                  <span>{t("usage.query.scriptLabel")}</span>
                   <Textarea
                     code
-                    aria-label="用量查询脚本"
+                    aria-label={t("usage.query.scriptLabel")}
                     rows={16}
                     value={draft?.kind === "script" ? draft.source : ""}
                     disabled={controlsDisabled}
@@ -321,30 +324,30 @@ export function UsageQueryWorkspace({
                   />
                 </label>
                 <div className="asb-usage-script-contract">
-                  <span>输入</span>
+                  <span>{t("usage.query.input")}</span>
                   <code>{"request({ baseUrl, apiKey })"}</code>
-                  <span>输出</span>
+                  <span>{t("usage.query.output")}</span>
                   <code>{"extract({ body, status })"}</code>
                 </div>
                 <p className="asb-scope-note">
-                  脚本生成一次 GET / POST 请求。extract 返回一组读数或读数数组；百分比请使用 % 单位。
+                  {t("usage.query.scriptNote")}
                 </p>
               </div>
             </>
           )}
         </div>
 
-        <section className="asb-editor-section" aria-label="自动刷新">
-          <h3 className="asb-section-title">自动刷新</h3>
+        <section className="asb-editor-section" aria-label={t("usage.query.autoRefresh")}>
+          <h3 className="asb-section-title">{t("usage.query.autoRefresh")}</h3>
           <div className="asb-editor-section-fields">
             <label className="asb-field is-narrow">
-              <span>间隔（分钟，0 为关闭）</span>
+              <span>{t("usage.query.intervalLabel")}</span>
               <Input
                 type="number"
                 min={0}
                 max={1440}
                 step={1}
-                aria-label="自动刷新间隔（分钟，0 为关闭）"
+                aria-label={t("usage.query.intervalAria")}
                 value={intervalText}
                 disabled={controlsDisabled}
                 onChange={(event) => setIntervalText(event.target.value)}
@@ -360,8 +363,8 @@ export function UsageQueryWorkspace({
         {/* The run action stays in the module area (DESIGN.md: the commit
             action alone lives in the frame's fixed bar); its error sits in the
             same card, directly under the trigger it explains. */}
-        <section className="asb-editor-section" aria-label="查询测试">
-          <h3 className="asb-section-title">查询测试</h3>
+        <section className="asb-editor-section" aria-label={t("usage.query.testTitle")}>
+          <h3 className="asb-section-title">{t("usage.query.testTitle")}</h3>
           <div className="asb-editor-section-fields">
             <div className="asb-editor-action-row">
               <Button
@@ -371,10 +374,10 @@ export function UsageQueryWorkspace({
                 onClick={() => void run()}
               >
                 <UsageIcon />
-                {querying ? "查询中…" : "查询用量"}
+                {querying ? t("usage.query.running") : t("usage.query.run")}
               </Button>
               <span className="asb-field-help">
-                {querying ? "正在查询" : canRun(draft) ? "准备就绪" : "请先完成查询配置"}
+                {querying ? t("usage.query.querying") : canRun(draft) ? t("usage.query.ready") : t("usage.query.needConfig")}
               </span>
             </div>
             {error && <p className="asb-warn-text" role="alert">{error}</p>}
@@ -382,13 +385,13 @@ export function UsageQueryWorkspace({
         </section>
 
         {summary && (
-          <section className="asb-editor-section" aria-label="本次用量结果">
-            <h3 className="asb-section-title">本次结果</h3>
+          <section className="asb-editor-section" aria-label={t("usage.query.resultAria")}>
+            <h3 className="asb-section-title">{t("usage.query.resultTitle")}</h3>
             <div className="asb-editor-section-fields">
               <div className="asb-usage-readout-head">
                 <Time iso={summary.at} />
               </div>
-              <UsageReadingsTable readings={summary.readings} ariaLabel="本次用量读数" />
+              <UsageReadingsTable readings={summary.readings} ariaLabel={t("usage.query.readingsAria")} />
             </div>
           </section>
         )}

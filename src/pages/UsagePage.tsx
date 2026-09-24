@@ -10,6 +10,7 @@ import { StatCards } from "../components/charts/stat-cards";
 import { Table, type TableColumn } from "../components/Table";
 import { ModuleHeader } from "../components/WorkspaceHeader";
 import { UsageIcon } from "../components/icons";
+import { useI18n, type TFunction } from "../i18n";
 import { clientName } from "../lib/client-name";
 import { TOKEN_UNIT, formatCompactTokenCount, formatTokenCount } from "../lib/token-format";
 import { useModelUsageReport } from "./use-model-usage-report";
@@ -22,17 +23,17 @@ function reportTotal(report: ModelUsageReport, selector: (group: ModelUsageGroup
   return report.groups.reduce((total, group) => total + selector(group), 0);
 }
 
-function dailyTrend(report: ModelUsageReport) {
+function dailyTrend(report: ModelUsageReport, t: TFunction) {
   return [
     {
       id: "fresh-input",
-      label: "新输入",
+      label: t("usage.label.freshInput"),
       unit: TOKEN_UNIT,
       points: report.days.map((day) => ({ at: `${day.date}T12:00:00`, value: day.inputTokens })),
     },
     {
       id: "cache",
-      label: "缓存",
+      label: t("usage.label.cache"),
       unit: TOKEN_UNIT,
       points: report.days.map((day) => ({
         at: `${day.date}T12:00:00`,
@@ -41,59 +42,61 @@ function dailyTrend(report: ModelUsageReport) {
     },
     {
       id: "output",
-      label: "输出",
+      label: t("usage.label.output"),
       unit: TOKEN_UNIT,
       points: report.days.map((day) => ({ at: `${day.date}T12:00:00`, value: day.outputTokens })),
     },
   ];
 }
 
-function modelComposition(report: ModelUsageReport) {
+function modelComposition(report: ModelUsageReport, t: TFunction) {
   return report.groups.map((group, index) => ({
     id: `${group.app}-${group.model ?? "unknown"}-${index}`,
-    label: `${clientName(group.app)} · ${group.model ?? "未记录"}`,
+    label: `${clientName(group.app)} · ${group.model ?? t("usage.model.unrecorded")}`,
     value: group.totalTokens,
   }));
 }
 
-const USAGE_COLUMNS: Array<TableColumn<ModelUsageGroup>> = [
-  {
-    key: "app",
-    header: "客户端",
-    render: (group) => clientName(group.app),
-  },
-  {
-    key: "model",
-    header: "模型",
-    cellClassName: "asb-code",
-    render: (group) => group.model ?? "未记录",
-  },
-  {
-    key: "input",
-    header: "输入（tokens）",
-    render: (group) => formatTokenCount(group.inputTokens),
-  },
-  {
-    key: "cache",
-    header: "缓存（tokens）",
-    render: (group) => formatTokenCount(cachedTokenCount(group)),
-  },
-  {
-    key: "output",
-    header: "输出（tokens）",
-    render: (group) => formatTokenCount(group.outputTokens),
-  },
-  {
-    key: "total",
-    header: "总计（tokens）",
-    render: (group) => formatTokenCount(group.totalTokens),
-  },
-  {
-    key: "sessions",
-    header: "会话",
-    render: (group) => formatTokenCount(group.sessionCount),
-  },
-];
+function usageColumns(t: TFunction): Array<TableColumn<ModelUsageGroup>> {
+  return [
+    {
+      key: "app",
+      header: t("usage.column.client"),
+      render: (group) => clientName(group.app),
+    },
+    {
+      key: "model",
+      header: t("usage.column.model"),
+      cellClassName: "asb-code",
+      render: (group) => group.model ?? t("usage.model.unrecorded"),
+    },
+    {
+      key: "input",
+      header: t("usage.column.input"),
+      render: (group) => formatTokenCount(group.inputTokens),
+    },
+    {
+      key: "cache",
+      header: t("usage.column.cache"),
+      render: (group) => formatTokenCount(cachedTokenCount(group)),
+    },
+    {
+      key: "output",
+      header: t("usage.column.output"),
+      render: (group) => formatTokenCount(group.outputTokens),
+    },
+    {
+      key: "total",
+      header: t("usage.column.totalTokens"),
+      render: (group) => formatTokenCount(group.totalTokens),
+    },
+    {
+      key: "sessions",
+      header: t("usage.column.sessions"),
+      render: (group) => formatTokenCount(group.sessionCount),
+    },
+  ];
+}
 
 /** Read-only local session token totals. Provider quota remains in provider panels.
  * Range selection, refresh and the snapshot status line live in the page header;
@@ -101,6 +104,7 @@ const USAGE_COLUMNS: Array<TableColumn<ModelUsageGroup>> = [
 export function UsagePage({ usage }: {
   usage: ReturnType<typeof useModelUsageReport>;
 }) {
+  const { t } = useI18n();
   const { read, loading, error } = usage;
   const report = read?.report ?? null;
 
@@ -111,66 +115,66 @@ export function UsagePage({ usage }: {
   const undated = report?.unassignedTokens.totalTokens ?? 0;
 
   return (
-    <section className="asb-panel asb-model-usage" aria-label="模型消耗">
-      <ModuleHeader title="模型消耗" />
+    <section className="asb-panel asb-model-usage" aria-label={t("usage.consumption")}>
+      <ModuleHeader title={t("usage.consumption")} />
       {error && <p className="asb-model-usage-notice" role="alert">{error}</p>}
       {read?.cacheWarning && <p className="asb-warn-text" role="alert">{read.cacheWarning}</p>}
       {report?.issues.length ? (
-        <ul className="asb-model-usage-issues" aria-label="模型消耗提示">
+        <ul className="asb-model-usage-issues" aria-label={t("usage.issues.aria")}>
           {report.issues.map((issue) => (
             <li key={`${issue.app}-${issue.message}`} className="asb-warn-text">
-              {clientName(issue.app)}：{issue.message}
+              {t("usage.issues.entry", { client: clientName(issue.app), message: issue.message })}
             </li>
           ))}
         </ul>
       ) : null}
       {loading && report === null ? (
         <p className="asb-empty asb-model-usage-empty" role="status">
-          正在汇总本地会话记录…
+          {t("usage.loading")}
         </p>
       ) : report?.groups.length ? (
         <div className="asb-model-usage-content">
           <div className="asb-model-usage-summary">
-            <div role="group" aria-label="模型消耗汇总">
+            <div role="group" aria-label={t("usage.summary.groupAria")}>
               <StatCards
                 stats={[
-                  { label: "总计", value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
-                  { label: "新输入", value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
-                  { label: "缓存", value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
-                  { label: "输出", value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
+                  { label: t("usage.label.total"), value: formatCompactTokenCount(total), unit: TOKEN_UNIT },
+                  { label: t("usage.label.freshInput"), value: formatCompactTokenCount(freshInput), unit: TOKEN_UNIT },
+                  { label: t("usage.label.cache"), value: formatCompactTokenCount(cachedInput), unit: TOKEN_UNIT },
+                  { label: t("usage.label.output"), value: formatCompactTokenCount(output), unit: TOKEN_UNIT },
                 ]}
               />
             </div>
             {undated > 0 && (
               <p className="asb-model-usage-undated" role="status">
-                {formatTokenCount(undated)} tokens 未记录时间，已保留在明细总计中，但未纳入日趋势。
+                {t("usage.undated", { count: formatTokenCount(undated) })}
               </p>
             )}
           </div>
           <div className="asb-model-usage-analysis">
-            <section className="asb-model-usage-distribution" aria-label="模型构成">
+            <section className="asb-model-usage-distribution" aria-label={t("usage.composition.title")}>
               <ModelUsageDistributionChart
-                items={modelComposition(report)}
-                ariaLabel="模型消耗构成"
-                emptyMessage="当前范围内没有可比较的模型消耗记录。"
+                items={modelComposition(report, t)}
+                ariaLabel={t("usage.composition.chartAria")}
+                emptyMessage={t("usage.composition.empty")}
               />
             </section>
-            <section className="asb-model-usage-trend" aria-label="每日 Token 趋势">
+            <section className="asb-model-usage-trend" aria-label={t("usage.trend.title")}>
               <UsageTrendChart
-                series={dailyTrend(report)}
-                ariaLabel="模型消耗日趋势"
-                title="每日 Token 趋势"
-                emptyMessage="当前范围内没有带时间的模型消耗记录。"
+                series={dailyTrend(report, t)}
+                ariaLabel={t("usage.trend.chartAria")}
+                title={t("usage.trend.title")}
+                emptyMessage={t("usage.trend.empty")}
                 valueKind="local-token"
               />
             </section>
           </div>
           <div className="asb-model-usage-table-wrap">
             <Table
-              columns={USAGE_COLUMNS}
+              columns={usageColumns(t)}
               rows={report.groups}
               rowKey={(group, index) => `${group.app}-${group.model ?? "unknown"}-${index}`}
-              ariaLabel="模型消耗"
+              ariaLabel={t("usage.consumption")}
               className="asb-model-usage-table"
             />
           </div>
@@ -180,7 +184,7 @@ export function UsagePage({ usage }: {
           <span className="asb-empty-state-icon" aria-hidden="true">
             <UsageIcon />
           </span>
-          <h3 className="asb-section-title">当前范围内没有可用的模型消耗记录。</h3>
+          <h3 className="asb-section-title">{t("usage.empty")}</h3>
         </div>
       ) : null}
     </section>

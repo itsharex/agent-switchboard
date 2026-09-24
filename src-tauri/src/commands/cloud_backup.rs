@@ -93,9 +93,11 @@ pub async fn restore_cloud_backup(
         blocking(move || {
             super::switching::ensure_profile_save_recovered(&app)?;
             if gateway.has_active_routes() {
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "gateway-route-active",
+                    "errors.cfg.gatewayRouteActiveForRestore",
                     "本机协议网关正在使用供应商；请先切换到直连或官方登录后再恢复云端备份",
+                    serde_json::json!({}),
                 ));
             }
             cloud_backup::restore(&state, &account_password, &backup_password)

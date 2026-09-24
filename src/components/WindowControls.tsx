@@ -6,6 +6,7 @@ import {
   onWindowResized,
   toggleMaximizeWindow,
 } from "../api/client";
+import { useI18n } from "../i18n";
 import { CloseIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from "./icons";
 import { Button } from "./Button";
 
@@ -15,6 +16,7 @@ import { Button } from "./Button";
  * windowed, overlapping squares while maximized. */
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     let active = true;
@@ -38,7 +40,7 @@ export function WindowControls() {
       <Button
         variant="unstyled"
         className="asb-winbtn"
-        aria-label="最小化"
+        aria-label={t("window.minimize")}
         onClick={() => void minimizeWindow().catch(() => {})}
       >
         <MinimizeIcon />
@@ -46,7 +48,7 @@ export function WindowControls() {
       <Button
         variant="unstyled"
         className="asb-winbtn"
-        aria-label={maximized ? "还原" : "最大化"}
+        aria-label={maximized ? t("window.restore") : t("window.maximize")}
         onClick={() => void toggleMaximizeWindow().catch(() => {})}
       >
         {maximized ? <RestoreIcon /> : <MaximizeIcon />}
@@ -54,7 +56,7 @@ export function WindowControls() {
       <Button
         variant="unstyled"
         className="asb-winbtn asb-winbtn-close"
-        aria-label="关闭"
+        aria-label={t("window.close")}
         onClick={() => void closeWindow().catch(() => {})}
       >
         <CloseIcon />

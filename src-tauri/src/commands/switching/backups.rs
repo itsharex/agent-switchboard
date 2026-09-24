@@ -24,9 +24,11 @@ pub(in crate::commands) fn validate_client_configuration_backup(
         }
         Ok(())
     };
-    validate().map_err(|message| CommandError::new(
+    validate().map_err(|message| CommandError::localized(
         "client-configuration-not-restorable",
+        "errors.sw.resetPrecheckFailed",
         format!("当前配置无法通过备份恢复校验，尚未重置：{message}"),
+        serde_json::json!({ "message": message }),
     ))
 }
 
@@ -53,29 +55,37 @@ pub(super) fn local_backups(
         .collect())
 }
 
-pub(super) fn find_backup(
+pub(in crate::commands) fn find_backup(
     state: &crate::local_state::LocalState,
     backup_id: &str,
 ) -> Result<BackupRecord, CommandError> {
     local_backups(state)?
         .into_iter()
         .find(|record| record.id == backup_id)
-        .ok_or_else(|| CommandError::new("backup-not-found", "找不到指定备份"))
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "backup-not-found",
+                "errors.sw.backupNotFound",
+                "找不到指定备份",
+            )
+        })
 }
 
 /// Shared restore path: validates the target, restores, and records the
 /// operation in the switch log so it can be undone in turn.
-pub(super) fn run_restore(
+pub(in crate::commands) fn run_restore(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
     record: &BackupRecord,
+    expected: Option<&asb_switch::RestoreExpectation>,
 ) -> Result<RestoreOutcome, CommandError> {
     if matches!(
         record.reason.as_str(),
         "gateway-port-change" | "gateway-port-rollback"
     ) {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "gateway-port-restore-unavailable",
+            "errors.sw.restoreGatewayPortUnsupported",
             "网关端口修改涉及全部客户端与监听器，请在网关页修改端口，不能恢复单个客户端配置",
         ));
     }
@@ -83,8 +93,9 @@ pub(super) fn run_restore(
         .target(record.app)
         .map_err(|error| CommandError::new("config-path-unavailable", error))?;
     if PathBuf::from(&record.target_path) != target {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "backup-target-invalid",
+            "errors.sw.backupTargetInvalid",
             "备份不属于当前本机配置路径，已拒绝恢复",
         ));
     }
@@ -114,7 +125,7 @@ pub(super) fn run_restore(
         settings.as_ref().unwrap_or(&before.settings),
     )?;
     super::transaction::stage_catalog(state, gateway, catalog.as_ref())?;
-    let execution = restore_projected(&FsIo, record, &target, Some(&candidate), |outcome| {
+    let execution = restore_projected(&FsIo, record, &target, Some(&candidate), expected, |outcome| {
         gateway.reconcile_restored(state, app, || {
             super::transaction::commit_client_settings(state, &outcome.pre_restore_backup)?;
             state
@@ -134,7 +145,7 @@ pub(super) fn run_restore(
     super::transaction::finish(state, gateway, execution)
 }
 
-fn validate_restore_source(
+pub(in crate::commands) fn validate_restore_source(
     state: &crate::local_state::LocalState,
     gateway: &crate::gateway::GatewayController,
     record: &BackupRecord,
@@ -148,17 +159,25 @@ fn validate_restore_source(
                     && candidate.reason != "codex-auth-projection"
             })
     {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "backup-contract-retired",
+            "errors.sw.legacyAuthBackupRetired",
             "旧版认证联动备份只能查看或导出，当前切换器不会恢复登录缓存",
         ));
     }
     let candidate = FsIo
         .read_file(PathBuf::from(&record.backup_path).as_path())
-        .map_err(|_| CommandError::new("backup-unreadable", "无法读取备份"))?;
+        .map_err(|_| {
+            CommandError::keyed(
+                "backup-unreadable",
+                "errors.sw.backupUnreadable",
+                "无法读取备份",
+            )
+        })?;
     if asb_switch::sha256_hex(&candidate) != record.content_hash {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "backup-hash-mismatch",
+            "errors.sw.backupHashMismatch",
             "备份内容与记录不一致",
         ));
     }

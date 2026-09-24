@@ -40,7 +40,13 @@ pub async fn apply_extension_plan(
             .lock()
             .expect("plans")
             .remove(&plan_id)
-            .ok_or_else(|| CommandError::new("plan-expired", "计划不存在或已应用；请重新预览"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "plan-expired",
+                    "errors.extops.planMissingOrApplied",
+                    "计划不存在或已应用；请重新预览",
+                )
+            })?;
 
         // Re-verify the plan's library preconditions before anything runs:
         // the generation must be unchanged since preparation, and every

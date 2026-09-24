@@ -156,7 +156,13 @@ fn build_request(
     .to_string()
     .into_bytes();
     crate::upstream_overrides::apply_body_override(&mut body, &profile.connection)
-        .map_err(|_| CommandError::new("provider-request-invalid", "请求 body 覆盖无效"))?;
+        .map_err(|_| {
+            CommandError::keyed(
+                "provider-request-invalid",
+                "errors.misc.requestBodyOverrideInvalid",
+                "请求 body 覆盖无效",
+            )
+        })?;
     if let Some(account) = &profile.claude_account {
         crate::claude_auth::request::body(account, protocol, &mut body)
             .map_err(|message| CommandError::new("provider-request-invalid", message))?;
@@ -184,8 +190,9 @@ fn build_request(
         request = request.header("anthropic-version", "2023-06-01");
     }
     let mut request = request.build().map_err(|_| {
-        CommandError::new(
+        CommandError::keyed(
             "provider-request-invalid",
+            "errors.misc.requestBuildFailed",
             "无法构造请求，请检查供应商服务地址与 API 密钥格式",
         )
     })?;

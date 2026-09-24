@@ -56,7 +56,7 @@ pub(crate) async fn apply_claude_integration(
         let gate = app
             .try_state::<super::ConfigWriteGate>()
             .map(|gate| gate.inner().clone())
-            .ok_or_else(|| CommandError::new("app-state-unavailable", "写入闸门尚未初始化"))?;
+            .ok_or_else(|| CommandError::keyed("app-state-unavailable", "errors.cfg.writeGateNotInitialized", "写入闸门尚未初始化"))?;
         let _gate = gate
             .lock()
             .map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;

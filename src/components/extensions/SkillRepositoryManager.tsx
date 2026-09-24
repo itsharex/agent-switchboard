@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { SkillRepository } from "../../api/extensions/skill-sources";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { Checkbox } from "../Checkbox";
 import { Tooltip } from "../Tooltip";
@@ -15,58 +16,60 @@ function RepositoryRow({ repo, count, failed, busy, removing, onEdit, onSave, on
   onEdit: () => void; onSave: (enabled: boolean) => void; onRemove: () => void;
   onConfirm: () => void; onCancel: () => void;
 }) {
-  const name = skillRepositoryName(repo.repo) ?? "GitHub 仓库";
+  const { t } = useI18n();
+  const name = skillRepositoryName(repo.repo) ?? t("extensions.repo.fallbackName");
   return (
     <li className="asb-skill-repository-row" aria-label={name}>
       <div className="asb-skill-repository-info">
         <h3 className="asb-group-title">{name}</h3>
         <p className="asb-skill-source-origin">
-          <span>{repo.refName || "默认分支"} · {repo.subpath || "整个仓库"}</span>
-          <span className="asb-num">{count === null ? "未扫描" : `${count} 个 Skills`}</span>
-          {failed && <span className="asb-warn-text">刷新失败</span>}
+          <span>{repo.refName || t("extensions.repo.defaultRef")} · {repo.subpath || t("extensions.repo.wholeRepo")}</span>
+          <span className="asb-num">{count === null ? t("extensions.repo.notScanned") : t("extensions.repo.skillCount", { count })}</span>
+          {failed && <span className="asb-warn-text">{t("extensions.repo.refreshFailed")}</span>}
         </p>
       </div>
       <div className="asb-skill-repository-actions">
-        <Checkbox label="启用" ariaLabel={`启用仓库 ${name}`} checked={repo.enabled} disabled={busy} onChange={onSave} />
-        <SkillSourceLink url={skillSourceUrl(repo.repo)} label={`查看仓库 ${name}`} />
-        <Tooltip label={`编辑仓库 ${name}`}>
-          <Button variant="icon" disabled={busy} aria-label={`编辑仓库 ${name}`} onClick={onEdit}><Pencil size={16} /></Button>
+        <Checkbox label={t("extensions.repo.enableShort")} ariaLabel={t("extensions.repo.enableAria", { name })} checked={repo.enabled} disabled={busy} onChange={onSave} />
+        <SkillSourceLink url={skillSourceUrl(repo.repo)} label={t("extensions.repo.viewAria", { name })} />
+        <Tooltip label={t("extensions.repo.editAria", { name })}>
+          <Button variant="icon" disabled={busy} aria-label={t("extensions.repo.editAria", { name })} onClick={onEdit}><Pencil size={16} /></Button>
         </Tooltip>
-        <Tooltip label={`移除仓库 ${name}`}>
-          <Button variant="icon" disabled={busy} aria-label={`移除仓库 ${name}`} onClick={onRemove}><Trash2 size={16} /></Button>
+        <Tooltip label={t("extensions.repo.removeAria", { name })}>
+          <Button variant="icon" disabled={busy} aria-label={t("extensions.repo.removeAria", { name })} onClick={onRemove}><Trash2 size={16} /></Button>
         </Tooltip>
       </div>
       {removing && <div className="asb-skill-repository-remove">
-        <p>仅移除发现来源，已安装的 Skill 保持不变。</p>
-        <Button variant="secondary" disabled={busy} onClick={onCancel}>取消移除</Button>
-        <Button variant="danger" disabled={busy} onClick={onConfirm}><Trash2 size={16} />确认移除仓库</Button>
+        <p>{t("extensions.repo.removeNote")}</p>
+        <Button variant="secondary" disabled={busy} onClick={onCancel}>{t("extensions.repo.cancelRemove")}</Button>
+        <Button variant="danger" disabled={busy} onClick={onConfirm}><Trash2 size={16} />{t("extensions.repo.confirmRemove")}</Button>
       </div>}
     </li>
   );
 }
 
 export function SkillRepositoryManager({ state, busy }: { state: SkillSourceState; busy: boolean }) {
+  const { t } = useI18n();
   const [editing, setEditing] = useState<SkillRepository | null>(null);
   const [formOpen, setFormOpen] = useState(state.repositories.ready && state.repositories.items.length === 0);
   const [removing, setRemoving] = useState<string | null>(null);
   const { repositories, catalog } = state;
   const disabled = busy || !repositories.ready || repositories.loading || state.loading || state.imports.busy;
   return (
-    <section className="asb-skill-repository-manager" aria-label="Skill 仓库">
+    <section className="asb-skill-repository-manager" aria-label={t("extensions.repo.title")}>
       <ModuleHeader
-        title="Skill 仓库"
+        title={t("extensions.repo.title")}
         primary={
           <p className="asb-scope-note">
-            管理发现来源，已安装的 Skill 不会被移除。共 <span className="asb-num">{repositories.items.length}</span> 个仓库
+            {t("extensions.repo.summaryLead")}<span className="asb-num">{repositories.items.length}</span>{t("extensions.repo.summaryTail")}
           </p>
         }
         primaryActions={
           <>
             <Button variant="secondary" disabled={disabled} onClick={() => { setEditing(null); setFormOpen(true); }}>
-              <Plus size={16} />添加仓库
+              <Plus size={16} />{t("extensions.repo.add")}
             </Button>
             <Button variant="secondary" disabled={repositories.loading} onClick={() => state.setManagerOpen(false)}>
-              返回发现
+              {t("extensions.repo.backToSearch")}
             </Button>
           </>
         }
@@ -75,15 +78,15 @@ export function SkillRepositoryManager({ state, busy }: { state: SkillSourceStat
         <span>{repositories.error}</span>
         <Button variant="secondary" disabled={busy || repositories.loading || state.imports.busy}
           onClick={() => void repositories.reload()}>
-          <RefreshCw size={16} />重试加载仓库
+          <RefreshCw size={16} />{t("extensions.repo.retryLoad")}
         </Button>
       </div>}
       {formOpen && <SkillRepositoryForm key={editing?.id ?? "new"} initial={editing} busy={disabled}
         onSave={repositories.save} onCancel={() => { setFormOpen(false); setEditing(null); }} />}
-      {repositories.loading && <p className="asb-skill-source-count" role="status">正在更新仓库列表…</p>}
+      {repositories.loading && <p className="asb-skill-source-count" role="status">{t("extensions.repo.loading")}</p>}
       {!repositories.loading && repositories.ready && repositories.items.length === 0 &&
-        <div className="asb-skill-source-empty"><p>尚未添加仓库</p></div>}
-      <ul className="asb-skill-repository-list" aria-label="已保存的 Skill 仓库">
+        <div className="asb-skill-source-empty"><p>{t("extensions.repo.none")}</p></div>}
+      <ul className="asb-skill-repository-list" aria-label={t("extensions.repo.listAria")}>
         {repositories.items.map((repo) => <RepositoryRow key={repo.id} repo={repo} count={catalog.count(repo.id)}
           failed={catalog.result?.failures.some((failure) => failure.repositoryId === repo.id) ?? false}
           busy={disabled} removing={removing === repo.id}

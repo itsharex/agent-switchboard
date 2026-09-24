@@ -1,5 +1,7 @@
+import { uiMessage } from "../../../i18n/errors";
 import type { CreateCredential, CreateServer, CreateSource, McpType } from "./mcp-json";
 import type { CodexServerOptions } from "../../../api/client";
+import type { MessageKey } from "../../../i18n/messages";
 
 export interface ArgumentRow { id: number; value: string }
 export interface CredentialRow { id: number; name: string; value: CreateCredential; storedName?: string }
@@ -24,11 +26,11 @@ export function initializeWizard(server: CreateServer): WizardServer {
   return { ...server, headers: credentialRows(server.headers) };
 }
 
-function credentialsMap(rows: CredentialRow[], label: string) {
+function credentialsMap(rows: CredentialRow[], labelKey: MessageKey) {
   const seen = new Set<string>();
   for (const row of rows) {
-    if (!row.name) throw new Error(`${label}名称不能为空`);
-    if (seen.has(row.name)) throw new Error(`${label} ${row.name} 重复`);
+    if (!row.name) throw uiMessage("mcp.error.slotNameRequired", { labelKey });
+    if (seen.has(row.name)) throw uiMessage("mcp.error.slotNameDuplicate", { labelKey, name: row.name });
     seen.add(row.name);
   }
   return Object.fromEntries(rows.map(({ name, value }) => [name, value]));
@@ -37,10 +39,10 @@ function credentialsMap(rows: CredentialRow[], label: string) {
 export function wizardSource(name: string, server: WizardServer): CreateSource {
   if (server.type === "stdio") {
     return { name: name.trim(), server: {
-      ...server, args: server.args.map(({ value }) => value), env: credentialsMap(server.env, "环境变量"),
+      ...server, args: server.args.map(({ value }) => value), env: credentialsMap(server.env, "mcp.error.labelEnv"),
     } };
   }
-  return { name: name.trim(), server: { ...server, headers: credentialsMap(server.headers, "请求头") } };
+  return { name: name.trim(), server: { ...server, headers: credentialsMap(server.headers, "mcp.error.labelHeaders") } };
 }
 
 export function changeTransport(server: WizardServer, type: McpType): WizardServer {

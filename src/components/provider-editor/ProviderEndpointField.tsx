@@ -1,5 +1,6 @@
 import { useId } from "react";
 import type { ProviderEndpoints, UpstreamProtocol } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { Input } from "../Input";
 import { PROTOCOL_NOTES } from "./draft";
 
@@ -17,24 +18,25 @@ interface Props {
 export function ProviderEndpointField({
   baseUrl, protocol, endpoints, endpointError, resolvingEndpoint, busy, onChange, required = true,
 }: Props) {
+  const { t } = useI18n();
   const urlId = useId();
   const helpId = `${urlId}-help`;
   const resultId = `${urlId}-result`;
   return (
     <div className="asb-field asb-provider-endpoint">
-      <label htmlFor={urlId}>服务地址</label>
+      <label htmlFor={urlId}>{t("providers.label.serviceAddress")}</label>
       <Input id={urlId} code type="url" required={required} value={baseUrl ?? ""}
         disabled={busy} aria-describedby={`${helpId} ${resultId}`}
         aria-invalid={endpointError ? true : undefined}
         onChange={(event) => onChange(event.target.value)} />
       {protocol && <p className="asb-scope-note" id={helpId}>
-        {PROTOCOL_NOTES[protocol]}
+        {t(PROTOCOL_NOTES[protocol])}
       </p>}
       <div id={resultId} aria-live="polite">
-        {resolvingEndpoint && <p className="asb-scope-note">正在解析请求地址…</p>}
+        {resolvingEndpoint && <p className="asb-scope-note">{t("providers.editor.resolvingEndpoint")}</p>}
         {endpointError && <p className="asb-scope-note asb-warn-text" role="alert">{endpointError}</p>}
         {endpoints && <dl className="asb-provider-resolved-endpoint">
-          <dt>请求地址</dt><dd>{endpoints.requestUrl}</dd>
+          <dt>{t("providers.label.requestUrl")}</dt><dd>{endpoints.requestUrl}</dd>
         </dl>}
       </div>
     </div>

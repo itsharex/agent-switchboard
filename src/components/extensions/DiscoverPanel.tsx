@@ -9,6 +9,8 @@ import { DiscoveryWarnings } from "./DiscoveryWarnings";
 import { DiscoveryImportList } from "./DiscoveryImportList";
 import { ExtensionLoading } from "./ExtensionLoading";
 import { useDiscoverySelection } from "./useDiscoverySelection";
+import { errorText } from "../../i18n/errors";
+import { useI18n } from "../../i18n";
 import { diagnosticInView, observationInView, type BindingViewInfo } from "./discovery-view";
 
 type DiscoverScan = ScanState & { repairPreparing: boolean };
@@ -43,11 +45,12 @@ export function useDiscoveryRows({ discovery, kindTab, search, bindingInfo }: Di
 export type DiscoveryRows = ReturnType<typeof useDiscoveryRows>;
 
 function ScanToolbar({ discovery, busy }: { discovery: DiscoverScan; busy: boolean }) {
+  const { t } = useI18n();
   return <div className="asb-ext-import-scan">
-    <span role="status" className="asb-scope-note">{discovery.scanning ? "正在扫描…" : discovery.stale
-      ? "上次扫描失败，结果未更新" : discovery.snapshot ? "扫描于 " + new Date(discovery.snapshot.scannedAt)
-        .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "读取本机扩展"}</span>
-    <Button variant="icon" aria-label="重新扫描" title="重新扫描" disabled={busy || discovery.scanning}
+    <span role="status" className="asb-scope-note">{discovery.scanning ? t("importDiscovery.scan.scanning") : discovery.stale
+      ? t("importDiscovery.scan.stale") : discovery.snapshot ? t("importDiscovery.scan.scannedAt", { time: new Date(discovery.snapshot.scannedAt)
+        .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }) : t("importDiscovery.scan.idle")}</span>
+    <Button variant="icon" aria-label={t("importDiscovery.scan.rescan")} title={t("importDiscovery.scan.rescan")} disabled={busy || discovery.scanning}
       onClick={() => void discovery.scan()}><RefreshCw /></Button>
   </div>;
 }
@@ -60,6 +63,7 @@ export function DiscoveryImportBar({ discovery, busy, selection, rows }: {
   selection: DiscoverySelection;
   rows: ObservedExtension[];
 }) {
+  const { t } = useI18n();
   const selectable = rows.filter((item) => discoveryImportMode(item));
   const all = selectable.length > 0 && selectable.every((item) => selection.selected.has(item.observationId));
   const importing = async () => {
@@ -68,17 +72,18 @@ export function DiscoveryImportBar({ discovery, busy, selection, rows }: {
     if (result) selection.setResult(result);
   };
   return <div className="asb-ext-import-footer">
-    <Checkbox label="全选" checked={all} disabled={busy || selectable.length === 0}
+    <Checkbox label={t("importDiscovery.importBar.selectAll")} checked={all} disabled={busy || selectable.length === 0}
       onChange={(checked) => selection.selectAll(rows, checked)} />
-    <span className="asb-scope-note">已选 {selection.selectedItems.length} 项</span>
+    <span className="asb-scope-note">{t("importDiscovery.importBar.selected", { count: selection.selectedItems.length })}</span>
     <Button variant="primary" disabled={busy || selection.selectedItems.length === 0}
-      onClick={() => void importing()}><Download />导入所选（{selection.selectedItems.length}）</Button>
+      onClick={() => void importing()}><Download />{t("importDiscovery.importBar.importSelected", { count: selection.selectedItems.length })}</Button>
   </div>;
 }
 
 /** Native imports retain each detected client installation and its recovery baseline. */
 export function DiscoverPanel(props: Props) {
   const { discovery, view, selection } = props;
+  const { t } = useI18n();
   const { snapshot, ensureInitialScan } = discovery;
   const [open, setOpen] = useState(false);
   const [focusDiagnosticId, setFocusDiagnosticId] = useState<string | null>(null);
@@ -88,7 +93,7 @@ export function DiscoverPanel(props: Props) {
     const first = view.diagnostics.find((item) => item.subject.kind === "discoveryEntry" && item.subject.observationId === id);
     if (first) { setFocusDiagnosticId(first.id); setOpen(true); }
   };
-  return <div className="asb-ext-import" aria-label="从本机发现">
+  return <div className="asb-ext-import" aria-label={t("importDiscovery.panel.aria")}>
     <ScanToolbar discovery={discovery} busy={props.busy} />
     {snapshot && <DiscoveryWarnings diagnostics={view.diagnostics} scanId={snapshot.scanId}
       scannedAt={snapshot.scannedAt} stale={discovery.stale} busy={props.busy}
@@ -97,10 +102,10 @@ export function DiscoverPanel(props: Props) {
       focusDiagnosticId={focusDiagnosticId} open={open} onOpenChange={setOpen}
       onRepair={() => props.onRepair(view.diagnostics.filter((item) => item.remediation.kind === "auto").map((item) => item.id))} />}
     {selection.result && selection.result.failed.length > 0 && <ul className="asb-ext-import-errors" role="alert">
-      {selection.result.failed.map((item, index) => <li key={index}>{item.name}：{item.message}</li>)}
+      {selection.result.failed.map((item, index) => <li key={index}>{t("importDiscovery.panel.failedItem", { name: item.name, message: errorText(item.error, t) })}</li>)}
     </ul>}
     {view.rows.length === 0 ? (discovery.scanning ? <ExtensionLoading /> : <p className="asb-empty">
-      {props.search ? "没有符合搜索条件的本机扩展" : "没有发现本机扩展"}
+      {props.search ? t("importDiscovery.panel.emptyFiltered") : t("importDiscovery.panel.empty")}
     </p>) : <DiscoveryImportList rows={view.rows} selected={selection.selected} busy={props.busy}
       projects={props.projectNames} warnings={view.warnings} onSelect={selection.select}
       onWarning={surfaceWarning} onViewDetails={props.onViewDetails} />}

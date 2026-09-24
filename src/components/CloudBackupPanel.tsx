@@ -1,3 +1,4 @@
+import { CommandErrorLines } from "../app/notifications";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import {
@@ -9,7 +10,8 @@ import { Button } from "./Button";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { Input } from "./Input";
 import { Textarea } from "./Textarea";
-import { toast } from "./use-toast";
+import { useI18n } from "../i18n";
+import { toast, toastMessage } from "./use-toast";
 
 type PendingOperation = "upload" | "restore" | null;
 
@@ -68,6 +70,7 @@ export function CloudBackupPanel({
   onUpload,
   onRestore,
 }: Props) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<CloudBackupSettings>({
     projectUrl: "",
     publishableKey: "",
@@ -94,7 +97,7 @@ export function CloudBackupPanel({
       .then(setSetupSql)
       .catch((caught) => {
         const error = caught as CommandError;
-        toast({ kind: "error", title: "无法读取初始化 SQL", description: error.message });
+        toast({ kind: "error", title: toastMessage("backup.cloud.setupSqlError"), description: <CommandErrorLines error={error} /> });
       });
   };
 
@@ -127,9 +130,9 @@ export function CloudBackupPanel({
     if (setupSql === null) return;
     try {
       await navigator.clipboard.writeText(setupSql);
-      toast({ kind: "success", title: "已复制初始化 SQL" });
+      toast({ kind: "success", title: toastMessage("backup.cloud.setupSqlCopied") });
     } catch {
-      toast({ kind: "error", title: "无法复制初始化 SQL" });
+      toast({ kind: "error", title: toastMessage("backup.cloud.setupSqlCopyFailed") });
     }
   };
 
@@ -143,7 +146,7 @@ export function CloudBackupPanel({
       <section className="asb-cloud-backup-guide" aria-labelledby="cloud-backup-guide-title">
         <div className="asb-cloud-backup-guide-heading">
           <h3 id="cloud-backup-guide-title" className="asb-cloud-backup-guide-title">
-            从零配置 Supabase
+            {t("backup.cloud.guideTitle")}
           </h3>
           <Button
             variant="secondary"
@@ -151,52 +154,76 @@ export function CloudBackupPanel({
             aria-controls="cloud-backup-guide-content"
             onClick={() => setGuideOpen((open) => !open)}
           >
-            {guideOpen ? "收起配置教程" : "展开配置教程"}
+            {guideOpen ? t("backup.cloud.guideCollapse") : t("backup.cloud.guideExpand")}
           </Button>
         </div>
         <div id="cloud-backup-guide-content" hidden={!guideOpen}>
           <ol className="asb-cloud-backup-guide-list">
             <li>
-              <h4 className="asb-group-title">创建项目</h4>
+              <h4 className="asb-group-title">{t("backup.cloud.guide.create.title")}</h4>
               <p>
-                在 <a className="asb-cloud-backup-guide-link" href={SUPABASE_DASHBOARD_URL} onClick={openGuideLink}>Supabase Dashboard</a> 新建项目，等待项目状态变为 Healthy。创建项目时设置的数据库密码只用于数据库连接，不填入本应用。
+                {t("backup.cloud.guide.create.before")}
+                <a className="asb-cloud-backup-guide-link" href={SUPABASE_DASHBOARD_URL} onClick={openGuideLink}>Supabase Dashboard</a>
+                {t("backup.cloud.guide.create.after")}
               </p>
             </li>
             <li>
-              <h4 className="asb-group-title">复制项目连接信息</h4>
+              <h4 className="asb-group-title">{t("backup.cloud.guide.connect.title")}</h4>
               <p>
-                在 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.project} onClick={openGuideLink}>项目 Dashboard</a> 点击 <code className="asb-code">Connect</code>，复制 <code className="asb-code">Project URL</code> 和 <code className="asb-code">Publishable key</code>。不要使用 Account 的 <code className="asb-code">Access Token</code>、项目 <code className="asb-code">Secret key</code>、<code className="asb-code">service_role</code> 或数据库密码。
+                {t("backup.cloud.guide.connect.before")}
+                <a className="asb-cloud-backup-guide-link" href={dashboardLinks.project} onClick={openGuideLink}>{t("backup.cloud.guide.connect.projectLink")}</a>
+                {t("backup.cloud.guide.connect.mid1")}
+                <code className="asb-code">Connect</code>
+                {t("backup.cloud.guide.connect.mid2")}
+                <code className="asb-code">Project URL</code>
+                {t("backup.cloud.guide.connect.mid3")}
+                <code className="asb-code">Publishable key</code>
+                {t("backup.cloud.guide.connect.mid4")}
+                <code className="asb-code">Access Token</code>
+                {t("backup.cloud.guide.connect.mid5")}
+                <code className="asb-code">Secret key</code>
+                {t("backup.cloud.guide.connect.mid6")}
+                <code className="asb-code">service_role</code>
+                {t("backup.cloud.guide.connect.after")}
               </p>
             </li>
             <li>
-              <h4 className="asb-group-title">启用 Data API 并创建备份表</h4>
+              <h4 className="asb-group-title">{t("backup.cloud.guide.dataApi.title")}</h4>
               <p>
-                在 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.dataApi} onClick={openGuideLink}>Integrations → Data API</a> 保持 <code className="asb-code">Enable Data API</code> 开启；再点击下方「显示初始化 SQL」，将全部 SQL 粘贴到 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.sqlEditor} onClick={openGuideLink}>SQL Editor</a> 新查询中，并执行一次。
+                {t("backup.cloud.guide.dataApi.before")}
+                <a className="asb-cloud-backup-guide-link" href={dashboardLinks.dataApi} onClick={openGuideLink}>Integrations → Data API</a>
+                {t("backup.cloud.guide.dataApi.mid1")}
+                <code className="asb-code">Enable Data API</code>
+                {t("backup.cloud.guide.dataApi.mid2")}
+                <a className="asb-cloud-backup-guide-link" href={dashboardLinks.sqlEditor} onClick={openGuideLink}>SQL Editor</a>
+                {t("backup.cloud.guide.dataApi.after")}
               </p>
             </li>
             <li>
-              <h4 className="asb-group-title">创建项目 Auth 用户</h4>
+              <h4 className="asb-group-title">{t("backup.cloud.guide.auth.title")}</h4>
               <p>
-                打开 <a className="asb-cloud-backup-guide-link" href={dashboardLinks.authUsers} onClick={openGuideLink}>Authentication → Users</a>，点击 <code className="asb-code">Add user → Create new user</code>，填写邮箱和新密码并保持 <code className="asb-code">Auto Confirm User</code> 勾选。可使用自己的 Supabase 登录邮箱；Dashboard 或 GitHub 的原有登录密码不能使用。
+                {t("backup.cloud.guide.auth.before")}
+                <a className="asb-cloud-backup-guide-link" href={dashboardLinks.authUsers} onClick={openGuideLink}>Authentication → Users</a>
+                {t("backup.cloud.guide.auth.mid1")}
+                <code className="asb-code">Add user → Create new user</code>
+                {t("backup.cloud.guide.auth.mid2")}
+                <code className="asb-code">Auto Confirm User</code>
+                {t("backup.cloud.guide.auth.after")}
               </p>
             </li>
             <li>
-              <h4 className="asb-group-title">填写并测试</h4>
-              <p>
-                在下方填写项目地址、Publishable key、项目 Auth 邮箱和新密码，然后点击「测试连接」。测试只验证登录和备份表读取权限；成功后会在当前窗口保留项目 Auth 密码，上传或恢复成功后才清空。
-              </p>
+              <h4 className="asb-group-title">{t("backup.cloud.guide.fill.title")}</h4>
+              <p>{t("backup.cloud.guide.fill.body")}</p>
             </li>
             <li>
-              <h4 className="asb-group-title">保存并备份</h4>
-              <p>
-                测试成功后点击「保存连接」。首次备份会加密完整的供应商档案（含运行参数、API 格式和最大输出 token）、客户端设置和切换记录；认证请求头会在使用时按 API 格式自动推导。设置至少 8 位的备份密码，恢复必须使用同一条密码，应用不会保存它。
-              </p>
+              <h4 className="asb-group-title">{t("backup.cloud.guide.save.title")}</h4>
+              <p>{t("backup.cloud.guide.save.body")}</p>
             </li>
           </ol>
         </div>
       </section>
       {!loaded ? (
-        <div className="asb-cloud-backup-loading" role="status" aria-label="正在读取云端备份设置">
+        <div className="asb-cloud-backup-loading" role="status" aria-label={t("backup.cloud.loadingAria")}>
           <div className="asb-skeleton" />
           <div className="asb-skeleton" />
           <div className="asb-skeleton" />
@@ -206,14 +233,14 @@ export function CloudBackupPanel({
           <form
             ref={connectionForm}
             className="asb-form"
-            aria-label="Supabase 云端备份设置"
+            aria-label={t("backup.cloud.formAria")}
             onSubmit={(event) => {
               event.preventDefault();
               void onSave(draft);
             }}
           >
             <label className="asb-field">
-              <span>Supabase 项目地址</span>
+              <span>{t("backup.cloud.projectUrl")}</span>
               <Input
                 type="url"
                 required
@@ -239,7 +266,7 @@ export function CloudBackupPanel({
               />
             </label>
             <label className="asb-field">
-              <span>项目 Auth 登录邮箱</span>
+              <span>{t("backup.cloud.authEmail")}</span>
               <Input
                 type="email"
                 required
@@ -252,7 +279,7 @@ export function CloudBackupPanel({
               />
             </label>
             <label className="asb-field">
-              <span>项目 Auth 登录密码</span>
+              <span>{t("backup.cloud.authPassword")}</span>
               <Input
                 type="password"
                 autoComplete="current-password"
@@ -263,11 +290,11 @@ export function CloudBackupPanel({
             </label>
             <div className="asb-form-actions">
               <Button variant="secondary" disabled={busy} onClick={revealSetupSql}>
-                {setupSql === null ? "显示初始化 SQL" : "收起初始化 SQL"}
+                {setupSql === null ? t("backup.cloud.showSetupSql") : t("backup.cloud.hideSetupSql")}
               </Button>
               {setupSql !== null && (
                 <Button variant="secondary" disabled={busy} onClick={() => void copySetupSql()}>
-                  复制初始化 SQL
+                  {t("backup.cloud.copySetupSql")}
                 </Button>
               )}
               <Button
@@ -275,27 +302,27 @@ export function CloudBackupPanel({
                 disabled={busy || accountPassword.length === 0}
                 onClick={() => void testConnection()}
               >
-                测试连接
+                {t("backup.cloud.testConnection")}
               </Button>
               <Button type="submit" variant="primary" disabled={busy}>
-                保存连接
+                {t("backup.cloud.saveConnection")}
               </Button>
             </div>
           </form>
           {setupSql !== null && (
             <label className="asb-field">
-              <span>在 Supabase SQL Editor 执行一次</span>
+              <span>{t("backup.cloud.setupSqlLabel")}</span>
               <Textarea
                 readOnly
-                aria-label="Supabase 初始化 SQL"
+                aria-label={t("backup.cloud.setupSqlAria")}
                 value={setupSql}
               />
             </label>
           )}
           <fieldset className="asb-fieldset">
-            <legend>备份或恢复</legend>
+            <legend>{t("backup.cloud.backupOrRestore")}</legend>
             <label className="asb-field">
-              <span>备份密码（自行设置）</span>
+              <span>{t("backup.cloud.backupPassword")}</span>
               <Input
                 type="password"
                 autoComplete="new-password"
@@ -311,7 +338,7 @@ export function CloudBackupPanel({
                 disabled={busy || settings === null}
                 onClick={() => setPending("upload")}
               >
-                备份到云端
+                {t("backup.cloud.upload")}
               </Button>
             </div>
             <div className="asb-backup-danger-row">
@@ -320,7 +347,7 @@ export function CloudBackupPanel({
                 disabled={busy || settings === null}
                 onClick={() => setPending("restore")}
               >
-                从云端恢复
+                {t("backup.cloud.restore")}
               </Button>
             </div>
           </fieldset>
@@ -328,30 +355,30 @@ export function CloudBackupPanel({
       )}
       {pending === "upload" && (
         <ConfirmSheet
-          title="确认上传加密云端备份"
-          confirmLabel="确认备份"
+          title={t("backup.cloud.uploadConfirmTitle")}
+          confirmLabel={t("backup.cloud.uploadConfirmConfirm")}
           onConfirm={() => void confirm()}
           onCancel={() => setPending(null)}
         >
           <ul className="asb-dialog-details">
-            <li>将加密当前供应商档案、客户端设置和切换记录。</li>
-            <li>将替换此 Supabase 账户已有的云端备份。</li>
-            <li>项目 Auth 登录密码和备份密码不会保存。</li>
+            <li>{t("backup.cloud.uploadConfirm1")}</li>
+            <li>{t("backup.cloud.uploadConfirm2")}</li>
+            <li>{t("backup.cloud.uploadConfirm3")}</li>
           </ul>
         </ConfirmSheet>
       )}
       {pending === "restore" && (
         <ConfirmSheet
-          title="确认从云端恢复"
-          confirmLabel="确认恢复"
+          title={t("backup.cloud.restoreConfirmTitle")}
+          confirmLabel={t("backup.confirmRestore")}
           destructive
           onConfirm={() => void confirm()}
           onCancel={() => setPending(null)}
         >
           <ul className="asb-dialog-details">
-            <li>将以云端加密备份替换本机供应商档案、客户端设置和切换记录，包含运行参数、API 格式和最大输出 token；认证请求头会按 API 格式自动推导。</li>
-            <li>不会修改 Codex 或 Claude Code 当前实际配置，也不会删除本地文件备份。</li>
-            <li>恢复后需要重新预览，才能把任一档案应用到客户端配置。</li>
+            <li>{t("backup.cloud.restoreConfirm1")}</li>
+            <li>{t("backup.cloud.restoreConfirm2")}</li>
+            <li>{t("backup.cloud.restoreConfirm3")}</li>
           </ul>
         </ConfirmSheet>
       )}

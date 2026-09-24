@@ -16,6 +16,7 @@ import type {
   UsageQuery,
 } from "../../api/client";
 import { normalizeUsageQuery } from "../../lib/usage-query";
+import type { MessageKey, TFunction } from "../../i18n";
 
 /** The editable shape of one third-party Codex profile. `parameters` stays
  * null until the parameter catalog has seeded it, exactly like the Claude
@@ -41,13 +42,10 @@ export interface CodexEditorDraft {
 
 /** One editor catalog row. The two limits may stay empty (null): empty means
  * "use the model's default" and is materialized with a concrete number only
- * when the draft is prepared for save. `imageInputEvidence` belongs only to
- * the editor: it records whether the current model discovery supplied an
- * explicit input-modality fact and never reaches the persisted profile. */
+ * when the draft is prepared for save. */
 export type EditableCodexCatalogEntry = Omit<CodexCatalogEntry, "contextWindow" | "maxOutputTokens"> & {
   contextWindow: number | null;
   maxOutputTokens: number | null;
-  imageInputEvidence: boolean | null;
 };
 
 /** Explicit starting capability declaration; the catalog generator only ever
@@ -69,15 +67,15 @@ export const DEFAULT_CODEX_CAPABILITIES: CodexCapabilities = {
 
 export const REASONING_LEVELS: readonly CodexReasoningLevel[] = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
-export const REASONING_LEVEL_LABELS: Record<CodexReasoningLevel, string> = {
-  none: "无",
-  minimal: "极低",
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "超高",
-  max: "最高",
-  ultra: "超极高",
+export const REASONING_LEVEL_LABELS: Record<CodexReasoningLevel, MessageKey> = {
+  none: "codex.level.none",
+  minimal: "codex.level.minimal",
+  low: "codex.level.low",
+  medium: "codex.level.medium",
+  high: "codex.level.high",
+  xhigh: "codex.level.xhigh",
+  max: "codex.level.max",
+  ultra: "codex.level.ultra",
 };
 
 /** Generic positive fallbacks for models with neither a source-stated nor an
@@ -132,7 +130,7 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
     upstream: record.profile.upstream,
     requestMode: record.profile.requestMode,
     defaultModel: record.profile.defaultModel,
-    catalog: record.profile.catalog.map((entry) => ({ ...entry, supportedReasoningLevels: [...entry.supportedReasoningLevels], imageInputEvidence: null })),
+    catalog: record.profile.catalog.map((entry) => ({ ...entry, images: true, supportedReasoningLevels: [...entry.supportedReasoningLevels] })),
     modelRoutes: record.profile.modelRoutes.map((route) => ({ ...route })),
     subagentRoute: record.profile.subagentRoute
       ? { ...record.profile.subagentRoute }
@@ -142,6 +140,37 @@ export function codexDraftFrom(record: CodexProviderRecord | null): CodexEditorD
     notes: record.notes ?? "",
     websiteUrl: record.websiteUrl ?? "",
     usageQuery: record.usageQuery ?? null,
+  };
+}
+
+/** Builds a metadata-only save draft without applying editor defaults. The
+ * persisted catalog is copied exactly; only the usage query may change. */
+export function codexUsageDraftFrom(
+  record: CodexProviderRecord,
+  usageQuery: UsageQuery | null,
+): CodexProviderDraft {
+  return {
+    name: record.profile.name,
+    endpoint: record.profile.endpoint,
+    apiKey: record.profile.apiKey,
+    authentication: record.profile.authentication ?? null,
+    connection: record.profile.connection,
+    upstream: record.profile.upstream,
+    requestMode: record.profile.requestMode,
+    defaultModel: record.profile.defaultModel,
+    catalog: record.profile.catalog.map((entry) => ({
+      ...entry,
+      supportedReasoningLevels: [...entry.supportedReasoningLevels],
+    })),
+    modelRoutes: record.profile.modelRoutes.map((route) => ({ ...route })),
+    subagentRoute: record.profile.subagentRoute
+      ? { ...record.profile.subagentRoute }
+      : null,
+    capabilities: { ...record.profile.capabilities },
+    parameters: record.parameters,
+    notes: record.notes ?? null,
+    websiteUrl: record.websiteUrl ?? null,
+    usageQuery,
   };
 }
 
@@ -170,7 +199,6 @@ export function prepareCodexDraft(draft: CodexEditorDraft): CodexProviderDraft |
 function prepareCatalogEntry({
   contextWindow,
   maxOutputTokens,
-  imageInputEvidence: _imageInputEvidence,
   ...entry
 }: EditableCodexCatalogEntry): CodexCatalogEntry {
   const limits = defaultModelLimits(entry.id);
@@ -188,72 +216,72 @@ function optional(value: string): string | null {
 
 /** Client-side mirror of `contracts::codex::validate`. The backend stays the
  * authority; this only blocks obviously invalid saves with readable reasons. */
-export function validateCodexDraft(draft: CodexEditorDraft): string[] {
+export function validateCodexDraft(draft: CodexEditorDraft, t: TFunction): string[] {
   const problems: string[] = [];
-  if (!draft.name.trim()) problems.push("供应商名称不能为空");
-  if (!draft.apiKey.trim()) problems.push("API 密钥不能为空");
+  if (!draft.name.trim()) problems.push(t("codex.validate.nameRequired"));
+  if (!draft.apiKey.trim()) problems.push(t("codex.validate.apiKeyRequired"));
   const endpoint = draft.endpoint.trim();
   if (!endpoint) {
-    problems.push("服务地址不能为空");
+    problems.push(t("codex.validate.endpointRequired"));
   } else {
     try {
       const parsed = new URL(endpoint);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        problems.push("服务地址必须使用 HTTP 或 HTTPS");
+        problems.push(t("codex.validate.endpointProtocol"));
       }
     } catch {
-      problems.push("服务地址不是有效 URL");
+      problems.push(t("codex.validate.endpointInvalid"));
     }
   }
   const { capabilities } = draft;
-  if (!capabilities.responses) problems.push("Codex 能力必须声明 responses");
+  if (!capabilities.responses) problems.push(t("codex.validate.responsesRequired"));
   const chatReasoningConfigured = capabilities.chatReasoning.kind === "configured";
   if (!capabilities.reasoning && chatReasoningConfigured) {
-    problems.push("未启用推理时不能配置 Chat 推理参数");
+    problems.push(t("codex.validate.chatReasoningNeedsReasoning"));
   }
   if (draft.upstream !== "chatCompletions" && chatReasoningConfigured) {
-    problems.push("仅 Chat Completions 上游可以配置 Chat 推理参数");
+    problems.push(t("codex.validate.chatReasoningUpstream"));
   }
   if (draft.catalog.length === 0) {
-    problems.push("模型目录不能为空；请获取模型或手动添加");
+    problems.push(t("codex.validate.catalogEmpty"));
   } else {
     const ids = new Set<string>();
     for (const entry of draft.catalog) {
-      if (!entry.id.trim()) problems.push("模型标识不能为空");
-      if (ids.has(entry.id)) problems.push(`模型目录含有重复模型：${entry.id}`);
+      if (!entry.id.trim()) problems.push(t("codex.validate.modelIdRequired"));
+      if (ids.has(entry.id)) problems.push(t("codex.validate.modelDuplicate", { id: entry.id }));
       ids.add(entry.id);
-      if (entry.functionTools && !capabilities.functionTools) problems.push(`模型函数工具超出供应商能力：${entry.id}`);
-      if (entry.customTools && !capabilities.customTools) problems.push(`模型自定义工具超出供应商能力：${entry.id}`);
-      if (entry.toolSearch && !capabilities.toolSearch) problems.push(`模型工具搜索超出供应商能力：${entry.id}`);
-      if (entry.compact && !capabilities.compact) problems.push(`模型压缩超出供应商能力：${entry.id}`);
-      if (entry.reasoning && !capabilities.reasoning) problems.push(`模型推理超出供应商能力：${entry.id}`);
+      if (entry.functionTools && !capabilities.functionTools) problems.push(t("codex.validate.functionToolsExceed", { id: entry.id }));
+      if (entry.customTools && !capabilities.customTools) problems.push(t("codex.validate.customToolsExceed", { id: entry.id }));
+      if (entry.toolSearch && !capabilities.toolSearch) problems.push(t("codex.validate.toolSearchExceed", { id: entry.id }));
+      if (entry.compact && !capabilities.compact) problems.push(t("codex.validate.compactExceed", { id: entry.id }));
+      if (entry.reasoning && !capabilities.reasoning) problems.push(t("codex.validate.reasoningExceed", { id: entry.id }));
       const levels = new Set(entry.supportedReasoningLevels);
-      if (entry.supportedReasoningLevels.length === 0) problems.push(`模型未声明推理档位：${entry.id}`);
-      if (levels.size !== entry.supportedReasoningLevels.length) problems.push(`模型含有重复推理档位：${entry.id}`);
-      if (!levels.has(entry.defaultReasoningLevel)) problems.push(`模型默认推理档位未声明：${entry.id}`);
+      if (entry.supportedReasoningLevels.length === 0) problems.push(t("codex.validate.levelsMissing", { id: entry.id }));
+      if (levels.size !== entry.supportedReasoningLevels.length) problems.push(t("codex.validate.levelsDuplicate", { id: entry.id }));
+      if (!levels.has(entry.defaultReasoningLevel)) problems.push(t("codex.validate.defaultLevelMissing", { id: entry.id }));
       if (!entry.reasoning && (entry.defaultReasoningLevel !== "none"
         || entry.supportedReasoningLevels.length !== 1 || !levels.has("none"))) {
-        problems.push(`不支持推理的模型只能声明“无”档位：${entry.id}`);
+        problems.push(t("codex.validate.nonReasoningLevels", { id: entry.id }));
       }
     }
-    if (!draft.defaultModel.trim()) problems.push("默认模型不能为空");
-    else if (!ids.has(draft.defaultModel)) problems.push("默认模型必须存在于模型目录");
+    if (!draft.defaultModel.trim()) problems.push(t("codex.validate.defaultModelRequired"));
+    else if (!ids.has(draft.defaultModel)) problems.push(t("codex.validate.defaultModelMissing"));
   }
   const catalogIds = new Set(draft.catalog.map((entry) => entry.id));
   const routeSources = new Set<string>();
   for (const route of draft.modelRoutes) {
-    if (!route.clientModel.trim() || !route.upstreamModel.trim()) problems.push("模型映射的两端不能为空");
-    if (!catalogIds.has(route.clientModel)) problems.push(`模型映射引用了目录外客户端模型：${route.clientModel}`);
-    if (routeSources.has(route.clientModel)) problems.push(`模型映射含有重复客户端模型：${route.clientModel}`);
+    if (!route.clientModel.trim() || !route.upstreamModel.trim()) problems.push(t("codex.validate.mappingEmpty"));
+    if (!catalogIds.has(route.clientModel)) problems.push(t("codex.validate.mappingUnknownClient", { model: route.clientModel }));
+    if (routeSources.has(route.clientModel)) problems.push(t("codex.validate.mappingDuplicate", { model: route.clientModel }));
     routeSources.add(route.clientModel);
   }
   const subagentRoute = draft.subagentRoute;
   if (subagentRoute) {
     if (!UUID_PATTERN.test(subagentRoute.profileId)) {
-      problems.push("子代理路由的供应商标识无效；请从列表重新选择");
+      problems.push(t("codex.validate.routeProfileInvalid"));
     }
     if (!subagentRoute.model.trim()) {
-      problems.push("子代理路由的模型不能为空；请从列表重新选择");
+      problems.push(t("codex.validate.routeModelRequired"));
     }
   }
   return problems;
@@ -267,7 +295,6 @@ const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
  * never inferred. */
 export interface CatalogSeedFacts {
   contextWindow?: number | null;
-  imageInput?: boolean | null;
   defaultReasoningLevel?: CodexReasoningLevel | null;
   reasoningLevels?: readonly CodexReasoningLevel[] | null;
 }
@@ -306,38 +333,27 @@ export function catalogEntryFromModel(
     reasoning,
     defaultReasoningLevel,
     supportedReasoningLevels: levels,
-    images: facts.imageInput === true,
-    imageInputEvidence: facts.imageInput ?? null,
+    images: true,
     compact: capabilities.compact,
   };
 }
 
 /** A blank editable row for manual entry, narrowed to the declared capabilities. */
 export function emptyCatalogEntry(capabilities: CodexCapabilities): EditableCodexCatalogEntry {
-  return catalogEntryFromModel({ id: "", ownedBy: null, imageInput: null }, capabilities);
+  return catalogEntryFromModel({ id: "", ownedBy: null }, capabilities);
 }
 
-/** Merges explicit image-input facts from discovery without guessing from
- * model names. A source-confirmed unsupported model is disabled immediately;
- * a source-confirmed supported model preserves any user choice to keep image
- * input off. Newly discovered models inherit the same evidence. */
+/** Adds discovered models while keeping image input enabled by default. */
 export function mergeFetchedCatalog(
   current: EditableCodexCatalogEntry[],
   models: ProviderModel[],
   capabilities: CodexCapabilities,
 ): EditableCodexCatalogEntry[] {
-  const discovered = new Map(models.map((model) => [model.id, model.imageInput]));
-  const refreshed = current.map((entry) => {
-    const imageInput = discovered.get(entry.id);
-    if (imageInput === undefined || imageInput === null) return entry;
-    return imageInput
-      ? { ...entry, imageInputEvidence: true }
-      : { ...entry, images: false, imageInputEvidence: false };
-  });
+  const refreshed = [...current];
   const known = new Set(refreshed.map((entry) => entry.id));
   const added = models
     .filter((model) => !known.has(model.id))
-    .map((model) => catalogEntryFromModel(model, capabilities, { imageInput: model.imageInput }));
+    .map((model) => catalogEntryFromModel(model, capabilities));
   return [...refreshed, ...added];
 }
 

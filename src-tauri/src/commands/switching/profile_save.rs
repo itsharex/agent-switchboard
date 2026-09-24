@@ -1,5 +1,5 @@
 use super::plan::{build_plan_for_profile, execute_projection, preview_projection};
-use crate::commands::error::{operation_error, require_write_confirmation, CommandError};
+use crate::commands::error::{operation_error, require_write_confirmation, validation_error, CommandError};
 use crate::config_store::PendingProfileSave;
 use asb_core::contracts::{
     classify_profile_save, ProfileSaveKind, ProviderDraft, ProviderProfile, ProviderRecord,
@@ -23,20 +23,22 @@ pub(crate) fn classify_existing_profile_save(
 ) -> Result<(ProviderRecord, ProfileSaveKind), CommandError> {
     draft
         .validate()
-        .map_err(|error| CommandError::new("profile-save-invalid", error.to_string()))?;
+        .map_err(|error| validation_error("profile-save-invalid", error))?;
     let record = state
         .configuration()
         .find_provider_record(profile_id)
         .map_err(|error| operation_error("profile-not-found", error))?;
     if record.profile.app != draft.app {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "profile-save-invalid",
+            "validate.save.clientMismatch",
             "供应商不能变更所属客户端",
         ));
     }
     if record.file_hash != expected_file_hash {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "profile-save-stale",
+            "validate.save.staleFile",
             "供应商文件已被外部修改，请重新读取后再保存",
         ));
     }
@@ -86,7 +88,11 @@ pub(super) struct PreparedProfileSave {
 impl ProfileSavePreparations {
     pub(super) fn issue(&self, prepared: PreparedProfileSave) -> Result<String, CommandError> {
         let mut entries = self.inner.entries.lock().map_err(|_| {
-            CommandError::new("profile-save-unavailable", "供应商保存准备状态不可用")
+            CommandError::keyed(
+                "profile-save-unavailable",
+                "errors.sw.preparationStateUnavailable",
+                "供应商保存准备状态不可用",
+            )
         })?;
         let now = Instant::now();
         entries.retain(|_, entry| {
@@ -108,19 +114,25 @@ impl ProfileSavePreparations {
 
     pub(super) fn take(&self, preparation_id: &str) -> Result<PreparedProfileSave, CommandError> {
         let mut entries = self.inner.entries.lock().map_err(|_| {
-            CommandError::new("profile-save-unavailable", "供应商保存准备状态不可用")
+            CommandError::keyed(
+                "profile-save-unavailable",
+                "errors.sw.preparationStateUnavailable",
+                "供应商保存准备状态不可用",
+            )
         })?;
         let prepared = entries.remove(preparation_id).ok_or_else(|| {
-            CommandError::new(
+            CommandError::keyed(
                 "profile-save-stale",
+                "errors.sw.savePreviewStale",
                 "保存预览已失效，请重新保存并查看最新差异",
             )
         })?;
         if Instant::now().saturating_duration_since(prepared.created_at)
             > PROFILE_SAVE_PREPARATION_TTL
         {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "profile-save-stale",
+                "errors.sw.savePreviewExpired",
                 "保存预览已过期，请重新保存并查看最新差异",
             ));
         }
@@ -131,7 +143,13 @@ impl ProfileSavePreparations {
         self.inner
             .commit_lock
             .lock()
-            .map_err(|_| CommandError::new("profile-save-unavailable", "供应商保存事务锁不可用"))
+            .map_err(|_| {
+                CommandError::keyed(
+                    "profile-save-unavailable",
+                    "errors.sw.saveCommitLockUnavailable",
+                    "供应商保存事务锁不可用",
+                )
+            })
     }
 }
 
@@ -154,15 +172,17 @@ pub(super) fn prepare_profile_save_data(
         (None, None) => {
             draft
                 .validate()
-                .map_err(|error| CommandError::new("profile-save-invalid", error.to_string()))?;
+                .map_err(|error| validation_error("profile-save-invalid", error))?;
             Ok((ProfileSaveKind::Create, None))
         }
-        (None, Some(_)) => Err(CommandError::new(
+        (None, Some(_)) => Err(CommandError::keyed(
             "profile-save-invalid",
+            "validate.save.createCannotCarryVersion",
             "新建供应商不能携带已有档案版本",
         )),
-        (Some(_), None) => Err(CommandError::new(
+        (Some(_), None) => Err(CommandError::keyed(
             "profile-save-invalid",
+            "validate.save.editRequiresVersion",
             "编辑供应商必须携带当前档案版本",
         )),
         (Some(profile_id), Some(expected_file_hash)) => {
@@ -293,17 +313,21 @@ fn rollback_profile_save(
             .and_then(|_| super::profile_rollback::clear(state))
         {
             Ok(()) => command,
-            Err(clear_error) => CommandError::new(
+            Err(clear_error) => CommandError::localized(
                 "profile-save-recovery-required",
+                "errors.sw.profileRolledBackClearFailed",
                 format!("{}；供应商档案已回滚，但{clear_error}", command.message),
+                serde_json::json!({ "detail": command.message, "error": clear_error }),
             ),
         },
-        Err(restore_error) => CommandError::new(
+        Err(restore_error) => CommandError::localized(
             "profile-save-recovery-required",
+            "errors.sw.profileRollbackFailedRecoveryKept",
             format!(
                 "{}；供应商档案未能回滚：{restore_error}；已保留恢复记录以继续完成已确认的保存",
                 command.message
             ),
+            serde_json::json!({ "detail": command.message, "error": restore_error }),
         ),
     }
 }
@@ -322,7 +346,7 @@ pub(super) fn commit_prepared_profile_save(
             prepared
                 .draft
                 .validate()
-                .map_err(|error| CommandError::new("profile-save-invalid", error.to_string()))?;
+                .map_err(|error| validation_error("profile-save-invalid", error))?;
             (None, ProfileSaveKind::Create)
         }
         (Some(profile_id), Some(expected_file_hash)) => {
@@ -336,15 +360,17 @@ pub(super) fn commit_prepared_profile_save(
             (Some(record), kind)
         }
         _ => {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "profile-save-stale",
+                "errors.sw.savePreviewVersionInvalid",
                 "保存预览的档案版本无效，请重新保存",
             ));
         }
     };
     if actual_kind != prepared.kind {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "profile-save-stale",
+            "errors.sw.saveContextChanged",
             "供应商、客户端设置或当前客户端配置已变更，请重新保存并查看最新差异",
         ));
     }
@@ -369,7 +395,11 @@ pub(super) fn commit_prepared_profile_save(
             require_write_confirmation(confirm_write, "保存并应用供应商")?;
             let stored = stored.expect("active preparation has a record");
             let preview = prepared.preview.as_ref().ok_or_else(|| {
-                CommandError::new("profile-save-stale", "保存预览缺失，请重新保存")
+                CommandError::keyed(
+                    "profile-save-stale",
+                    "errors.sw.savePreviewMissing",
+                    "保存预览缺失，请重新保存",
+                )
             })?;
             apply_prepared_profile_save(state, gateway, stored, &prepared.draft, preview)
         }

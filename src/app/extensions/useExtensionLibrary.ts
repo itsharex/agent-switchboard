@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { createElement, useCallback } from "react";
 import {
   deleteExtension,
   getMcpEditView,
@@ -13,7 +13,8 @@ import {
   type McpEditViewEnvelope,
   type ProjectRegistration,
 } from "../../api/client";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
+import { ToastMessageList } from "../../components/Toaster";
 import type {
   EditPreparation,
   ExclusiveRunner,
@@ -33,7 +34,7 @@ function useDefinitionMutations({ refresh, runExclusive }: LibraryDeps) {
     (draft: ExtensionDraft) =>
       runExclusive(async () => {
         const definition = await saveExtension(draft);
-        await refreshLibraryWrite(refresh, { kind: "info", title: "已保存扩展定义" });
+        await refreshLibraryWrite(refresh, { kind: "info", title: toastMessage("extensions.libraryOp.saved") });
         return definition;
       }),
     [refresh, runExclusive],
@@ -52,7 +53,7 @@ function useDefinitionMutations({ refresh, runExclusive }: LibraryDeps) {
     (id: string) =>
       runExclusive(async () => {
         await deleteExtension(id, true);
-        await refreshLibraryWrite(refresh, { title: "已删除扩展定义" });
+        await refreshLibraryWrite(refresh, { title: toastMessage("extensions.libraryOp.deleted") });
         return true;
       }),
     [refresh, runExclusive],
@@ -68,11 +69,12 @@ function useExtensionMaintenance({ refresh, runExclusive }: LibraryDeps) {
       toast({
         kind: workspace !== null && workspace.recoveryRequired.length === 0 ? "success" : "warning",
         title: workspace === null
-          ? "恢复检查已执行，状态刷新失败"
+          ? toastMessage("extensions.libraryOp.recoverRefreshFailed")
           : workspace.recoveryRequired.length > 0
-            ? "仍有扩展事务需要恢复"
-            : "已完成扩展事务恢复检查",
-        description: results.join("；") || "没有需要恢复的事务",
+            ? toastMessage("extensions.libraryOp.recoverRemaining")
+            : toastMessage("extensions.libraryOp.recoverDone"),
+        description: results.length > 0 ? createElement(ToastMessageList, { items: results })
+          : toastMessage("extensions.libraryOp.nothingToRecover"),
       });
       return results;
     }),
@@ -83,10 +85,10 @@ function useExtensionMaintenance({ refresh, runExclusive }: LibraryDeps) {
       runExclusive(async () => {
         await setBindingLock(bindingId, locked);
         await refreshLibraryWrite(refresh, {
-          title: locked ? "已固定该目标的 Skill 版本" : "已解除版本固定",
+          title: locked ? toastMessage("extensions.libraryOp.locked") : toastMessage("extensions.libraryOp.unlocked"),
           description: locked
-            ? "来源或内容更新不再影响该目标，直至解除固定。"
-            : "该目标重新跟随扩展库的当前内容版本。",
+            ? toastMessage("extensions.libraryOp.lockedBody")
+            : toastMessage("extensions.libraryOp.unlockedBody"),
         });
         return true;
       }),
@@ -98,7 +100,7 @@ function useExtensionMaintenance({ refresh, runExclusive }: LibraryDeps) {
       runExclusive(async (): Promise<ProjectRegistration> => {
         const project = await registerProject(root);
         await refreshLibraryWrite(refresh, {
-          title: "已注册项目目录",
+          title: toastMessage("extensions.libraryOp.projectRegistered"),
           description: project.displayName,
         });
         return project;

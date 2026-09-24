@@ -27,7 +27,7 @@ pub(super) fn read(
             "SELECT provider_id, url, added_at FROM provider_endpoints \
              WHERE app_type = 'claude' ORDER BY added_at ASC, url ASC",
         )
-        .map_err(|error| format!("无法读取 Claude 测速候选: {error}"))?;
+        .map_err(|error| format!("无法读取 Claude 备选服务地址: {error}"))?;
     let rows = statement
         .query_map([], |row| {
             Ok((
@@ -36,11 +36,11 @@ pub(super) fn read(
                 row.get::<_, Option<i64>>(2)?,
             ))
         })
-        .map_err(|error| format!("无法读取 Claude 测速候选: {error}"))?;
+        .map_err(|error| format!("无法读取 Claude 备选服务地址: {error}"))?;
     let mut map = BTreeMap::new();
     for row in rows {
         let (provider_id, url, added_at) =
-            row.map_err(|error| format!("Claude 测速候选格式无效: {error}"))?;
+            row.map_err(|error| format!("Claude 备选服务地址格式无效: {error}"))?;
         let (provider_id, url) = (provider_id.trim().to_string(), url.trim().to_string());
         if provider_id.is_empty() || url.is_empty() {
             continue;

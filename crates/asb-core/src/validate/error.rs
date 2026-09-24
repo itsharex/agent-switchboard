@@ -110,6 +110,76 @@ pub enum ValidationError {
     },
 }
 
+impl ValidationError {
+    /// Renderer translation coordinates: the catalog key plus structured
+    /// parameters (`serde_json::Value` object). The `Display` text stays the
+    /// scrubbed diagnostic detail. Variants that wrap free-form messages
+    /// from delegated validators pass them through `{detail}` until those
+    /// producers adopt structured messages.
+    pub fn message_parts(&self) -> (&'static str, serde_json::Value) {
+        match self {
+            Self::CodexOptionsRequireCodex => ("validate.codexOptionsRequireCodex", serde_json::json!({})),
+            Self::ClaudeProviderOptions(detail) | Self::CodexProviderOptions(detail) | Self::ClaudeCommonOptions(detail) | Self::ClaudeFragmentInvalid(detail) => {
+                ("validate.freeformDetail", serde_json::json!({ "detail": detail }))
+            }
+            Self::EmptyName => ("validate.emptyName", serde_json::json!({})),
+            Self::EmptyId => ("validate.emptyId", serde_json::json!({})),
+            Self::CustomRequiresBaseUrl => ("validate.customRequiresBaseUrl", serde_json::json!({})),
+            Self::BadBaseUrl(detail) => ("validate.badBaseUrl", serde_json::json!({ "detail": detail })),
+            Self::BadFullUrl(detail) => ("validate.badFullUrl", serde_json::json!({ "detail": detail })),
+            Self::EmptyApiKey => ("validate.emptyApiKey", serde_json::json!({})),
+            Self::XaiManagedCardRejectsStaticKey => ("validate.xaiManagedCardRejectsStaticKey", serde_json::json!({})),
+            Self::InvalidApiKeyCharacters => ("validate.invalidApiKeyCharacters", serde_json::json!({})),
+            Self::CustomRequiresProtocol => ("validate.customRequiresProtocol", serde_json::json!({})),
+            Self::ResponsesRequiresOptions => ("validate.responsesRequiresOptions", serde_json::json!({})),
+            Self::UnexpectedResponsesOptions => ("validate.unexpectedResponsesOptions", serde_json::json!({})),
+            Self::CodexAnthropicRequiresMaxOutputTokens => ("validate.codexAnthropicRequiresMaxOutputTokens", serde_json::json!({})),
+            Self::UnexpectedMaxOutputTokens => ("validate.unexpectedMaxOutputTokens", serde_json::json!({})),
+            Self::ApiKeyTooLong(max) => ("validate.apiKeyTooLong", serde_json::json!({ "max": max })),
+            Self::InvalidCustomUserAgent => ("validate.invalidCustomUserAgent", serde_json::json!({})),
+            Self::InvalidConnectionHeader(detail) => ("validate.invalidConnectionHeader", serde_json::json!({ "detail": detail })),
+            Self::InvalidConnectionBody => ("validate.invalidConnectionBody", serde_json::json!({})),
+            Self::OfficialRouteHasCustomFields => ("validate.officialRouteHasCustomFields", serde_json::json!({})),
+            Self::ModelOptionsMismatch { options_kind, app } => (
+                "validate.modelOptionsMismatch",
+                serde_json::json!({ "optionsKind": options_kind, "app": app }),
+            ),
+            Self::UnknownSettingKey { app, key } => (
+                "validate.unknownSettingKey",
+                serde_json::json!({ "key": key, "app": app }),
+            ),
+            Self::RetiredSubagentModelParameter => ("validate.retiredSubagentModelParameter", serde_json::json!({})),
+            Self::MissingSettingKey { key } => ("validate.missingSettingKey", serde_json::json!({ "key": key })),
+            Self::BadSettingValue { key, value, allowed } => (
+                "validate.badSettingValue",
+                serde_json::json!({ "key": key, "value": value, "allowed": allowed }),
+            ),
+            Self::BadContextWindow => ("validate.badContextWindow", serde_json::json!({})),
+            Self::EmptyAvailableModel => ("validate.emptyAvailableModel", serde_json::json!({})),
+            Self::InvalidModelDisplayName => ("validate.invalidModelDisplayName", serde_json::json!({})),
+            Self::InlineOneMMarker { field } => ("validate.inlineOneMMarker", serde_json::json!({ "field": field })),
+            Self::OneMRequiresModel { field } => ("validate.oneMRequiresModel", serde_json::json!({ "field": field })),
+            Self::NonFiniteNumber { key } => ("validate.nonFiniteNumber", serde_json::json!({ "key": key })),
+            Self::BadWebsiteUrl(value) => ("validate.badWebsiteUrl", serde_json::json!({ "value": value })),
+            Self::NotesTooLong(max) => ("validate.notesTooLong", serde_json::json!({ "max": max })),
+            Self::EmptyUsageQueryUrl => ("validate.emptyUsageQueryUrl", serde_json::json!({})),
+            Self::BadUsageQueryUrl => ("validate.badUsageQueryUrl", serde_json::json!({})),
+            Self::UsageQueryExtractsNothing => ("validate.usageQueryExtractsNothing", serde_json::json!({})),
+            Self::EmptyUsageQueryField { field } => ("validate.emptyUsageQueryField", serde_json::json!({ "field": field })),
+            Self::EmptyUsageQueryScript => ("validate.emptyUsageQueryScript", serde_json::json!({})),
+            Self::UsageQueryScriptTooLong(max) => ("validate.usageQueryScriptTooLong", serde_json::json!({ "max": max })),
+            Self::UsageQueryRefreshIntervalTooLarge(max) => ("validate.usageQueryRefreshIntervalTooLarge", serde_json::json!({ "max": max })),
+            Self::QuotaIntervalRequiresOfficialCodex => ("validate.quotaIntervalRequiresOfficialCodex", serde_json::json!({})),
+            Self::OfficialQuotaRefreshIntervalOutOfRange(max) => ("validate.officialQuotaRefreshIntervalOutOfRange", serde_json::json!({ "max": max })),
+            Self::ClaudeFragmentRequiresClaude => ("validate.claudeFragmentRequiresClaude", serde_json::json!({})),
+            Self::SubagentBadValue { field, allowed, value } => (
+                "validate.subagentBadValue",
+                serde_json::json!({ "field": field, "allowed": allowed, "value": value }),
+            ),
+        }
+    }
+}
+
 /// Metadata fields shared by draft and profile; kept short and local-only.
 pub(super) const MAX_NOTES_LEN: usize = 500;
 /// Upper bound of every auto-refresh interval contract, in whole minutes

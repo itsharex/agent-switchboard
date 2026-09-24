@@ -1,13 +1,18 @@
+import { toastMessage } from "../components/use-toast";
 import { useCallback, useEffect, useState } from "react";
 import {
   executeSwitch, reorderCodexProfiles,
   type AppKind, type CodexProviderDraft, type CodexProviderRecord, type CommandError,
   type ConfigFileStatus, type LockStatus, type ProviderDraft, type ProviderProfile,
-  type ProviderRecord, type UsageQuery,
+  type ProviderRecord,
+  type UsageQuery,
+  type LocalizedMessage,
 } from "../api/client";
 import type { CodexEditorSource } from "../app/useProviders";
 import { useProviderSwitchFlow } from "../app/useProviderSwitchFlow";
 import { notifyWriteOutcome } from "../app/notifications";
+import type { ActiveProfileRef } from "../lib/current-provider-name";
+import { useI18n } from "../i18n";
 import { CodexOfficialRow, CodexProviderRow, ConfiguredCodexProviderRow } from "../components/CodexProviderRows";
 import { CodexProviderEditor } from "../components/codex-provider-editor/CodexProviderEditor";
 import { ProviderWorkspaceShell, SortableProviderRows } from "../components/ProviderWorkspaceShell";
@@ -57,10 +62,12 @@ interface Props {
    * official login is ready; owned by the config snapshot refresh. */
   loginBlocker: string | null;
   statuses: ConfigFileStatus[] | null;
-  profiles: ProviderProfile[];
+  /** Every stored profile across both clients; feeds the route cards'
+   * active-profile lookups (name and website) above this page's list. */
+  relayProfiles: readonly ActiveProfileRef[];
   locks: Partial<Record<AppKind, LockStatus>>;
   userConfigModel: string | null;
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
 }
 
 function useCodexProvidersState(props: Props) {
@@ -88,7 +95,7 @@ function useCodexProvidersState(props: Props) {
       const outcome = await executeSwitch(candidate.profileId, candidate.file.contentHash,
         candidate.file.renderedHash, true, candidate.file);
       clearCandidates();
-      notifyWriteOutcome("已切换 Codex 供应商", "codex", outcome.warnings);
+      notifyWriteOutcome(toastMessage("codex.page.switchedToast"), "codex", outcome.warnings);
       await props.onRefresh();
     });
   };
@@ -113,6 +120,7 @@ function useCodexProvidersState(props: Props) {
 type PageState = ReturnType<typeof useCodexProvidersState>;
 
 function CodexProvidersList({ props, state }: { props: Props; state: PageState }) {
+  const { t } = useI18n();
   const { activationCandidate } = state;
   const official = props.officialRecord;
   const rows = [
@@ -137,8 +145,8 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
         ids={rows.map((row) => row.record.profile.id)}
         onReorder={(orderedIds) => state.reorder(orderedIds,
           Object.fromEntries(rows.map((row) => [row.record.profile.id, row.record.fileHash])))}
-        ariaLabel="Codex 供应商列表"
-        emptyLabel="尚无 Codex 供应商"
+        ariaLabel={t("codex.page.listAria")}
+        emptyLabel={t("codex.page.empty")}
       >
         {rows.map((row) => {
           if (row.kind === "official") {
@@ -171,6 +179,7 @@ function CodexProvidersList({ props, state }: { props: Props; state: PageState }
 }
 
 export function CodexProvidersPage(props: Props) {
+  const { t } = useI18n();
   const state = useCodexProvidersState(props);
   if (props.editorSession) return (
     <div className="asb-editor-route" hidden={!props.active}>
@@ -205,8 +214,8 @@ export function CodexProvidersPage(props: Props) {
   );
   if (!props.active) return null;
   return (
-      <ProviderWorkspaceShell ariaLabel="Codex 供应商" app="codex" onSelectApp={props.onSelectApp}
-      busy={props.busy} statuses={props.statuses} profiles={props.profiles} locks={props.locks}
+      <ProviderWorkspaceShell ariaLabel={t("codex.page.providersAria")} app="codex" onSelectApp={props.onSelectApp}
+      busy={props.busy} statuses={props.statuses} profiles={props.relayProfiles} locks={props.locks}
       onImport={() => { state.clearCandidates(); props.onImport(); }}
       onNew={() => { state.clearCandidates(); props.onNew(); }}>
       <CodexProvidersList props={props} state={state} />

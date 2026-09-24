@@ -344,7 +344,7 @@ pub(crate) struct ApplyPlan {
     pub(crate) skills_toggles: Vec<(String, bool)>,
     /// 需要激活的指令预设 id（已激活时为 None）。
     pub(crate) prompt_activate: Option<String>,
-    pub(crate) warnings: Vec<String>,
+    pub(crate) warnings: Vec<asb_core::contracts::LocalizedMessage>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -359,10 +359,11 @@ pub(crate) fn compute_apply_plan(
 ) -> ApplyPlan {
     let mut warnings = Vec::new();
     if !slot.scope_captured() {
-        warnings.push(
-            "该项目方案尚未拍过 Codex 快照；已标记为当前项目且未改动任何配置，切走时会自动补拍。"
-                .into(),
-        );
+        warnings.push(asb_core::contracts::LocalizedMessage::new(
+            "errors.cfg.planNeverCaptured",
+            serde_json::json!({}),
+            "该项目方案尚未拍过 Codex 快照；已标记为当前项目且未改动任何配置，切走时会自动补拍。",
+        ));
         return ApplyPlan {
             provider_switch: None,
             mcp_toggles: Vec::new(),
@@ -378,7 +379,11 @@ pub(crate) fn compute_apply_plan(
         // 存在性先于「已指向」判定，与 CC 的检查顺序一致：
         // 目标档案已消失时必须具名告警，而不是静默当作已对齐。
         Some(target) if !provider_exists => {
-            warnings.push(format!("供应商 {target} 已不存在，已跳过供应商切换"));
+            warnings.push(asb_core::contracts::LocalizedMessage::new(
+                "errors.cfg.planProviderGone",
+                serde_json::json!({ "target": target }),
+                format!("供应商 {target} 已不存在，已跳过供应商切换"),
+            ));
             None
         }
         Some(target) if provider_active == Some(target) => None,
@@ -390,14 +395,22 @@ pub(crate) fn compute_apply_plan(
         None => (Vec::new(), Vec::new()),
     };
     for id in &mcp_dangling {
-        warnings.push(format!("MCP {id} 已不存在，已跳过"));
+        warnings.push(asb_core::contracts::LocalizedMessage::new(
+                "errors.cfg.planMcpGone",
+                serde_json::json!({ "id": id }),
+                format!("MCP {id} 已不存在，已跳过"),
+            ));
     }
     let (skills_toggles, skills_dangling) = match &slot.skills {
         Some(ids) => CodexProjectSlot::plan_toggles(skills_current, ids),
         None => (Vec::new(), Vec::new()),
     };
     for id in &skills_dangling {
-        warnings.push(format!("Skill {id} 已不存在，已跳过"));
+        warnings.push(asb_core::contracts::LocalizedMessage::new(
+                "errors.cfg.planSkillGone",
+                serde_json::json!({ "id": id }),
+                format!("Skill {id} 已不存在，已跳过"),
+            ));
     }
 
     let prompt_activate = match slot.prompts.as_deref() {
@@ -405,7 +418,11 @@ pub(crate) fn compute_apply_plan(
         None | Some("") => None,
         // 同样先判存在性：预设已删除但槽位仍记录它时必须具名告警。
         Some(id) if !prompt_exists => {
-            warnings.push(format!("指令预设 {id} 已不存在，已跳过"));
+            warnings.push(asb_core::contracts::LocalizedMessage::new(
+                "errors.cfg.planPromptGone",
+                serde_json::json!({ "id": id }),
+                format!("指令预设 {id} 已不存在，已跳过"),
+            ));
             None
         }
         Some(id) if prompt_active == Some(id) => None,

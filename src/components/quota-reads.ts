@@ -1,3 +1,5 @@
+import { uiMessage } from "../i18n/errors";
+import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useRef, useState } from "react";
 import {
   checkCodexResetStatus,
@@ -10,18 +12,14 @@ import {
 } from "../api/client";
 import { useUsageHistory } from "./use-usage-history";
 
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : "未提供具体原因";
-}
-
-function statusCopy(status: Exclude<CodexOfficialQuotaStatus, "available">): string {
+function statusCopy(status: Exclude<CodexOfficialQuotaStatus, "available">) {
   switch (status) {
     case "signInRequired":
-      return "未检测到可用的 Codex 官方登录。请完成登录后刷新。";
+      return uiMessage("clientConfig.quota.statusSignIn");
     case "reauthenticationRequired":
-      return "Codex 官方登录已失效。请重新登录后刷新。";
+      return uiMessage("clientConfig.quota.statusReauth");
     case "unavailable":
-      return "暂时无法读取官方额度，请稍后刷新。";
+      return uiMessage("clientConfig.quota.statusUnavailable");
   }
 }
 
@@ -33,10 +31,10 @@ export function useCodexOfficialReset(enabled: boolean) {
   const [snapshot, setSnapshot] = useState<CodexOfficialQuota | null>(null);
   const [freshness, setFreshness] = useState<"cached" | "live">("cached");
   const [cacheLoading, setCacheLoading] = useState(true);
-  const [cacheError, setCacheError] = useState<string | null>(null);
+  const [cacheError, setCacheError] = useMessageState();
   const [loading, setLoading] = useState(false);
-  const [readError, setReadError] = useState<string | null>(null);
-  const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [readError, setReadError] = useMessageState();
+  const [statusNotice, setStatusNotice] = useMessageState();
   const requestRef = useRef<Promise<CodexOfficialQuota> | null>(null);
   const cacheRevisionRef = useRef(0);
 
@@ -50,7 +48,7 @@ export function useCodexOfficialReset(enabled: boolean) {
         const cached = await getCachedCodexOfficialReset();
         if (active && cacheRevisionRef.current === revision) setSnapshot(cached);
       } catch (reason) {
-        if (active && cacheRevisionRef.current === revision) setCacheError(errorMessage(reason));
+        if (active && cacheRevisionRef.current === revision) setCacheError(reason);
       } finally {
         if (active && cacheRevisionRef.current === revision) setCacheLoading(false);
       }
@@ -84,7 +82,7 @@ export function useCodexOfficialReset(enabled: boolean) {
         setStatusNotice(statusCopy(next.status));
       }
     } catch (reason) {
-      setReadError(errorMessage(reason));
+      setReadError(reason);
     } finally {
       if (requestRef.current === request) requestRef.current = null;
       setLoading(false);
@@ -111,9 +109,9 @@ export function useCodexOfficialReset(enabled: boolean) {
 export function useCodexResetSignal(enabled: boolean) {
   const [snapshot, setSnapshot] = useState<CodexResetRead | null>(null);
   const [cacheLoading, setCacheLoading] = useState(true);
-  const [cacheError, setCacheError] = useState<string | null>(null);
+  const [cacheError, setCacheError] = useMessageState();
   const [loading, setLoading] = useState(false);
-  const [readError, setReadError] = useState<string | null>(null);
+  const [readError, setReadError] = useMessageState();
   const requestRef = useRef<Promise<CodexResetRead> | null>(null);
   const cacheRevisionRef = useRef(0);
 
@@ -127,7 +125,7 @@ export function useCodexResetSignal(enabled: boolean) {
         const cached = await getCachedCodexResetStatus();
         if (active && cacheRevisionRef.current === revision) setSnapshot(cached);
       } catch (reason) {
-        if (active && cacheRevisionRef.current === revision) setCacheError(errorMessage(reason));
+        if (active && cacheRevisionRef.current === revision) setCacheError(reason);
       } finally {
         if (active && cacheRevisionRef.current === revision) setCacheLoading(false);
       }
@@ -153,7 +151,7 @@ export function useCodexResetSignal(enabled: boolean) {
     try {
       setSnapshot(await request);
     } catch (reason) {
-      setReadError(errorMessage(reason));
+      setReadError(reason);
     } finally {
       if (requestRef.current === request) requestRef.current = null;
       setLoading(false);

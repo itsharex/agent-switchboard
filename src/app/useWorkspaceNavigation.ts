@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getStartupPage, rememberWorkspacePage, type CommandError } from "../api/client";
-import { WORKSPACE_PAGE_LABELS, workspacePageId } from "./navigation";
 import type { DiagnosticSection, ExtensionSection, Page, ProviderView, SettingsSection, UsageSection } from "./navigation";
 
 export function useWorkspaceNavigation(settingsReady: boolean, settingsError: string | null, onError: (error: CommandError) => void) {
-  const [page, changePage] = useState<Page>("供应商切换");
+  const [page, changePage] = useState<Page>("providers");
   const [navigationReady, setNavigationReady] = useState(false);
   const initialized = useRef(false);
   const userNavigated = useRef(false);
@@ -18,7 +17,7 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
     }
     let disposed = false;
     void getStartupPage().then((saved) => {
-      if (!disposed && !userNavigated.current) changePage(WORKSPACE_PAGE_LABELS[saved]);
+      if (!disposed && !userNavigated.current) changePage(saved);
     }).catch((error: CommandError) => {
       if (!disposed) onError(error);
     }).finally(() => {
@@ -29,7 +28,7 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
   useEffect(() => {
     if (!navigationReady || !userNavigated.current) return;
     // Serialize explicit visits so a slower earlier save cannot replace a newer page.
-    writes.current = writes.current.then(() => rememberWorkspacePage(workspacePageId(page))).catch(onError);
+    writes.current = writes.current.then(() => rememberWorkspacePage(page)).catch(onError);
   }, [navigationReady, page, onError]);
   const [providerView, setProviderView] = useState<ProviderView>({ kind: "list" });
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("application");
@@ -44,15 +43,15 @@ export function useWorkspaceNavigation(settingsReady: boolean, settingsError: st
   }, []);
   const openSettings = useCallback((section: SettingsSection, diagnostic?: DiagnosticSection) => {
     userNavigated.current = true;
-    setSettingsReturnToProviders(page === "供应商切换");
+    setSettingsReturnToProviders(page === "providers");
     setSettingsSection(section);
     if (diagnostic) setDiagnosticSection(diagnostic);
-    changePage("设置");
+    changePage("settings");
   }, [page]);
-  const returnToProviders = useCallback(() => setPage("供应商切换"), [setPage]);
+  const returnToProviders = useCallback(() => setPage("providers"), [setPage]);
   const openQuota = useCallback(() => {
     setUsageSection("quota");
-    setPage("用量监控");
+    setPage("usage");
   }, [setPage]);
   return { page, setPage, navigationReady, providerView, setProviderView, settingsSection, setSettingsSection, diagnosticSection, setDiagnosticSection,
     extensionSection, setExtensionSection, usageSection, setUsageSection, settingsReturnToProviders,

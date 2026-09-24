@@ -1,0 +1,105 @@
+/* Transcript content renders as GitHub-flavored markdown (react-markdown +
+   remark-gfm). The body owns wrapping; block children get the token spacing
+   steps, and headings stay at the section step so a document title inside a
+   bubble never shouts over the detail's own h3. */
+.asb-session-message-body {
+  font: var(--asb-text-body);
+  overflow-wrap: anywhere;
+}
+
+/* Long messages collapse visually, never by slicing the markdown source —
+   the rendered preview is always the head of a complete, valid document. */
+.asb-session-message-body.is-collapsed {
+  max-height: 320px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent);
+  mask-image: linear-gradient(to bottom, #000 78%, transparent);
+}
+
+.asb-session-message-body > :first-child {
+  margin-top: 0;
+}
+
+.asb-session-message-body > :last-child {
+  margin-bottom: 0;
+}
+
+.asb-session-message-body p {
+  margin: var(--asb-space-1) 0;
+}
+
+.asb-session-message-body h1,
+.asb-session-message-body h2,
+.asb-session-message-body h3,
+.asb-session-message-body h4,
+.asb-session-message-body h5,
+.asb-session-message-body h6 {
+  margin: var(--asb-space-2) 0 var(--asb-space-1);
+  font: var(--asb-text-section);
+}
+
+.asb-session-message-body ul,
+.asb-session-message-body ol {
+  margin: var(--asb-space-1) 0;
+  padding-left: calc(var(--asb-space-3) + var(--asb-space-1));
+}
+
+.asb-session-message-body li {
+  margin: var(--asb-space-hairline) 0;
+}
+
+.asb-session-message-body code {
+  padding: 0 var(--asb-space-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-code-bg);
+  font: var(--asb-text-code);
+}
+
+.asb-session-message-body pre {
+  margin: var(--asb-space-1) 0;
+  padding: var(--asb-space-2);
+  border: 1px solid var(--asb-hairline);
+  border-radius: var(--asb-radius);
+  background: var(--asb-code-bg);
+  overflow-x: auto;
+}
+
+.asb-session-message-body pre code {
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.asb-session-message-body blockquote {
+  margin: var(--asb-space-1) 0;
+  padding-left: var(--asb-space-2);
+  border-left: 2px solid var(--asb-hairline-strong);
+  color: var(--asb-text-muted);
+}
+
+.asb-session-message-body table {
+  margin: var(--asb-space-1) 0;
+  border-collapse: collapse;
+  font: var(--asb-text-label);
+}
+
+.asb-session-message-body th,
+.asb-session-message-body td {
+  padding: var(--asb-space-unit) var(--asb-space-1);
+  border: 1px solid var(--asb-hairline);
+  text-align: left;
+}
+
+.asb-session-message-body a {
+  color: var(--asb-link);
+}
+
+.asb-session-message-body img {
+  max-width: 100%;
+}
+
+.asb-session-message-body hr {
+  margin: var(--asb-space-2) 0;
+  border: 0;
+  border-top: 1px solid var(--asb-hairline);
+}

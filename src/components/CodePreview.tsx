@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { useI18n } from "../i18n";
 
 /**
  * The single owner of code-preview file rendering (DESIGN.md §8): the
@@ -60,12 +61,13 @@ interface CodePreviewProps {
     coloring, near-solid code backdrop (DESIGN.md §6 — config text stays
     high-contrast without blur). */
 export function CodePreview({ target, content }: CodePreviewProps) {
+  const { t } = useI18n();
   const lines = content.replace(/\n$/, "").split("\n");
   return (
-    <div className="asb-filepreview" aria-label={`${target} 配置预览`}>
+    <div className="asb-filepreview" aria-label={t("providers.code.previewAria", { target })}>
       <div className="asb-filepreview-head">
         <span className="asb-code">{target}</span>
-        <span className="asb-filepreview-meta">{lines.length} 行</span>
+        <span className="asb-filepreview-meta">{t("providers.code.lines", { count: lines.length })}</span>
       </div>
       <pre className="asb-filepreview-body">
         {lines.map((line, index) => (

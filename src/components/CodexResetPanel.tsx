@@ -5,6 +5,8 @@ import {
   type ResetSignal,
   type ResetType,
 } from "../api/client";
+import type { MessageKey, TFunction } from "../i18n";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { Time } from "./Time";
 import { relativeLabel } from "../lib/time";
@@ -14,16 +16,11 @@ import { useCodexResetSignal } from "./quota-reads";
 
 const DAY_MS = 86_400_000;
 
-function resetTypeLabel(type: ResetType): string {
-  switch (type) {
-    case "global":
-      return "全局重置";
-    case "banked":
-      return "重置卡";
-    case "other":
-      return "重置";
-  }
-}
+const RESET_TYPE_LABELS: Record<ResetType, MessageKey> = {
+  global: "codex.reset.typeGlobal",
+  banked: "codex.reset.typeBanked",
+  other: "codex.reset.typeOther",
+};
 
 function resetTypeBadgeClass(type: ResetType): string {
   switch (type) {
@@ -36,13 +33,13 @@ function resetTypeBadgeClass(type: ResetType): string {
   }
 }
 
-function scheduleDescription(signal: ResetSignal): string {
-  if (signal.effectiveAt === null) return "已公告，但未提供预计时间";
-  return signal.schedulePrecision === "date" ? "日期级预告" : "精确时间预告";
+function scheduleDescription(signal: ResetSignal, t: TFunction): string {
+  if (signal.effectiveAt === null) return t("codex.reset.noTimeAnnounced");
+  return signal.schedulePrecision === "date" ? t("codex.reset.datePrecision") : t("codex.reset.exactPrecision");
 }
 
-function confidenceLabel(confidence: number): string {
-  return `信心 ${Math.round(confidence * 100)}%`;
+function confidenceLabel(confidence: number, t: TFunction): string {
+  return t("codex.reset.confidence", { value: Math.round(confidence * 100) });
 }
 
 /** The site buckets a schedule's confidence down to the nearest ten percent:
@@ -69,9 +66,10 @@ function forecastWindow(signal: ResetSignal): ForecastWindow | null {
 }
 
 function Badge({ type }: { type: ResetType }) {
+  const { t } = useI18n();
   return (
     <span className={`asb-codex-reset-badge${resetTypeBadgeClass(type)}`}>
-      {resetTypeLabel(type)}
+      {t(RESET_TYPE_LABELS[type])}
     </span>
   );
 }
@@ -80,6 +78,7 @@ function Badge({ type }: { type: ResetType }) {
  * on the newest known day (a scheduled future day included) and always spans
  * the feed's week count; days after the anchor stay invisible placeholders. */
 function ResetHeatmap({ heatmap }: { heatmap: CodexResetHeatmap }) {
+  const { t } = useI18n();
   const levels = new Map(heatmap.days.map((day) => [day.date, day]));
   const todayKey = new Date().toISOString().slice(0, 10);
   const anchorKey = heatmap.days.reduce(
@@ -102,12 +101,12 @@ function ResetHeatmap({ heatmap }: { heatmap: CodexResetHeatmap }) {
     <div
       className="asb-codex-reset-heatmap"
       role="img"
-      aria-label={`Codex 重置热力图：近 ${weeks} 周共 ${heatmap.total} 条公开重置信号（${heatmap.timezone} 时区）`}
+      aria-label={t("codex.reset.heatmapAria", { weeks, total: heatmap.total, timezone: heatmap.timezone })}
     >
       <div className="asb-codex-reset-heatmap-head">
-        <p className="asb-codex-reset-heatmap-title">Codex 重置热力图</p>
+        <p className="asb-codex-reset-heatmap-title">{t("codex.reset.heatmapTitle")}</p>
         <p className="asb-codex-reset-heatmap-total">
-          共 {heatmap.total} 条重置信号 · 近 {weeks} 周 · {heatmap.timezone}
+          {t("codex.reset.heatmapTotal", { total: heatmap.total, weeks, timezone: heatmap.timezone })}
         </p>
       </div>
       <div className="asb-codex-reset-heatmap-grid" aria-hidden="true">
@@ -117,18 +116,18 @@ function ResetHeatmap({ heatmap }: { heatmap: CodexResetHeatmap }) {
             className={`asb-codex-reset-heatmap-cell${cell.day ? ` is-level-${cell.day.level}` : ""}${
               cell.hidden ? " is-hidden" : ""
             }`}
-            title={cell.day ? `${cell.key}：${cell.day.count} 条信号` : undefined}
+            title={cell.day ? t("codex.reset.heatmapCellTitle", { date: cell.key, count: cell.day.count }) : undefined}
           />
         ))}
       </div>
       <div className="asb-codex-reset-heatmap-legend" aria-hidden="true">
-        <span>少</span>
+        <span>{t("codex.reset.few")}</span>
         <span className="asb-codex-reset-heatmap-cell" />
         <span className="asb-codex-reset-heatmap-cell is-level-1" />
         <span className="asb-codex-reset-heatmap-cell is-level-2" />
         <span className="asb-codex-reset-heatmap-cell is-level-3" />
         <span className="asb-codex-reset-heatmap-cell is-level-4" />
-        <span>多</span>
+        <span>{t("codex.reset.many")}</span>
       </div>
     </div>
   );
@@ -137,6 +136,7 @@ function ResetHeatmap({ heatmap }: { heatmap: CodexResetHeatmap }) {
 /** An explicit, read-only view of public reset signals; the refresh action
  * and freshness state live in the usage page header. */
 export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexResetSignal> }) {
+  const { t } = useI18n();
   const { snapshot, cacheLoading, cacheError, readError } = read;
 
   const status = snapshot?.status ?? null;
@@ -148,36 +148,36 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
 
   return (
     <section className="asb-panel asb-codex-reset" aria-labelledby="codex-reset-heading">
-      <ModuleHeader id="codex-reset-heading" title="Codex 重置信号" />
-      {cacheLoading && status === null && <p className="asb-empty" role="status">正在读取本地缓存</p>}
+      <ModuleHeader id="codex-reset-heading" title={t("codex.reset.title")} />
+      {cacheLoading && status === null && <p className="asb-empty" role="status">{t("codex.reset.loadingCache")}</p>}
       {status === null && !cacheLoading && readError === null && (
         <div className="asb-empty-state">
           <span className="asb-empty-state-icon" aria-hidden="true">
             <UpdateIcon />
           </span>
-          <h3 className="asb-section-title">尚无本地缓存。手动刷新以读取公开重置信号。</h3>
+          <h3 className="asb-section-title">{t("codex.reset.empty")}</h3>
         </div>
       )}
-      {cacheError && <p className="asb-warn-text" role="alert">本地缓存不可用：{cacheError}</p>}
+      {cacheError && <p className="asb-warn-text" role="alert">{t("codex.reset.cacheUnavailable", { error: cacheError })}</p>}
       {readError && (
         <p className="asb-warn-text" role="alert">
-          无法刷新公开重置信号：{readError}
-          {status !== null ? "；仍在显示上次成功读取的数据。" : ""}
+          {t("codex.reset.readFailed", { error: readError })}
+          {status !== null ? t("codex.reset.showingStale") : ""}
         </p>
       )}
       {status !== null && (
         <>
           <div className="asb-codex-reset-board">
-            <article className="asb-codex-reset-summary" aria-label="下一次 Codex 重置预告">
-              <p className="asb-codex-reset-question">接下来会有 Codex 重置吗？</p>
+            <article className="asb-codex-reset-summary" aria-label={t("codex.reset.forecastAria")}>
+              <p className="asb-codex-reset-question">{t("codex.reset.question")}</p>
               {forecast !== null ? (
                 <>
                   <strong className="asb-codex-reset-answer is-forecast">
-                    {probabilityLabel(forecast.confidence)} 是
+                    {t("codex.reset.answerYes", { probability: probabilityLabel(forecast.confidence) })}
                   </strong>
                   {forecastResult !== null ? (
                     <p className="asb-codex-reset-detail">
-                      高概率到账预告：<Time iso={forecastResult.start} />
+                      {t("codex.reset.highConfidenceArrival")}<Time iso={forecastResult.start} />
                       {forecastResult.end !== null && (
                         <>
                           {" ~ "}
@@ -194,18 +194,18 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
                       ）
                     </p>
                   ) : (
-                    <p className="asb-codex-reset-detail">{scheduleDescription(forecast)}。</p>
+                    <p className="asb-codex-reset-detail">{scheduleDescription(forecast, t)}。</p>
                   )}
                 </>
               ) : (
                 <>
-                  <strong className="asb-codex-reset-answer is-none">否</strong>
-                  <p className="asb-codex-reset-detail">公开 feed 尚未预告下一次重置。</p>
+                  <strong className="asb-codex-reset-answer is-none">{t("codex.reset.answerNo")}</strong>
+                  <p className="asb-codex-reset-detail">{t("codex.reset.noForecast")}</p>
                 </>
               )}
               {status.latestRelevantTiboPost && (
                 <div className="asb-codex-reset-post-summary">
-                  <p className="asb-codex-reset-label">Tibo 最近相关动态</p>
+                  <p className="asb-codex-reset-label">{t("codex.reset.tiboLabel")}</p>
                   <p className="asb-codex-reset-post">{status.latestRelevantTiboPost.text}</p>
                   <div className="asb-codex-reset-post-actions">
                     <span className="asb-codex-reset-detail">
@@ -215,15 +215,15 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
                       variant="secondary"
                       onClick={() => void openUrl(status.latestRelevantTiboPost!.url)}
                     >
-                      查看原帖
+                      {t("codex.reset.viewPost")}
                     </Button>
                   </div>
                 </div>
               )}
             </article>
-            <dl className="asb-codex-reset-facts" aria-label="公开信号详情">
+            <dl className="asb-codex-reset-facts" aria-label={t("codex.reset.factsAria")}>
               <div className="asb-codex-reset-fact">
-                <dt>最近一次已完成重置</dt>
+                <dt>{t("codex.reset.lastCompleted")}</dt>
                 <dd>
                   {latestCompleted !== null ? (
                     <>
@@ -236,12 +236,12 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
                       </span>
                     </>
                   ) : (
-                    "暂无"
+                    t("codex.reset.none")
                   )}
                 </dd>
               </div>
               <div className="asb-codex-reset-fact">
-                <dt>最近检查</dt>
+                <dt>{t("codex.reset.lastCheck")}</dt>
                 <dd>
                   <span>
                     <Time iso={status.lastSuccessfulCheckAt} />
@@ -252,7 +252,7 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
                 </dd>
               </div>
               <div className="asb-codex-reset-fact">
-                <dt>预计下次重置</dt>
+                <dt>{t("codex.reset.nextForecast")}</dt>
                 <dd>
                   {forecast !== null ? (
                     <>
@@ -267,11 +267,11 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
                         )}
                       </span>
                       <span className="asb-codex-reset-detail">
-                        {scheduleDescription(forecast)} · {confidenceLabel(forecast.confidence)}
+                        {scheduleDescription(forecast, t)} · {confidenceLabel(forecast.confidence, t)}
                       </span>
                     </>
                   ) : (
-                    "暂无公告预计"
+                    t("codex.reset.noAnnouncement")
                   )}
                 </dd>
               </div>
@@ -281,10 +281,10 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
           {status.sourceWarning && <p className="asb-warn-text">{status.sourceWarning}</p>}
           {cacheWarning && <p className="asb-warn-text">{cacheWarning}</p>}
           <p className="asb-codex-reset-source">
-            公开 feed 生成于 <Time iso={status.generatedAt} /> · 最近成功检查 <Time iso={status.lastSuccessfulCheckAt} /> · {isCachedRead ? "缓存于" : "本次读取"} <Time iso={status.checkedAt} />
+            {t("codex.reset.feedGenerated")} <Time iso={status.generatedAt} /> · {t("codex.reset.lastSuccessCheck")} <Time iso={status.lastSuccessfulCheckAt} /> · {isCachedRead ? t("codex.reset.cachedAt") : t("codex.reset.readThisTime")} <Time iso={status.checkedAt} />
           </p>
           <p className="asb-codex-reset-note">
-            数据来自 Codex Runway 公开 feed：{" "}
+            {t("codex.reset.sourceNoteLead")}{" "}
             <a
               className="asb-codex-reset-source-link"
               href={status.sourceUrl}
@@ -295,7 +295,7 @@ export function CodexResetPanel({ read }: { read: ReturnType<typeof useCodexRese
             >
               {status.sourceUrl}
             </a>
-            ，非 OpenAI 官方，不代表你的账号额度。
+            {t("codex.reset.sourceNoteTail")}
           </p>
         </>
       )}

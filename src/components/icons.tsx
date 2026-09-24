@@ -25,6 +25,7 @@ import {
   Send,
   Square,
   Trash2,
+  Upload,
   Wifi,
   X,
 } from "lucide-react";
@@ -54,6 +55,7 @@ export const PinIcon = icon(Pin, 16);
 export const GripIcon = icon(GripVertical, 18);
 export const PlayIcon = icon(Play, 16);
 export const UpdateIcon = icon(Download, 16);
+export const ExportIcon = icon(Upload, 16);
 export const UsageIcon = icon(ChartColumnIncreasing, 16);
 export const ConnectivityIcon = icon(Wifi, 16);
 export const RequestIcon = icon(Send, 16);

@@ -1,5 +1,7 @@
 import type { ExtensionListItem, ProjectRegistration } from "../../api/client";
 import { EXTENSION_CLIENTS, itemSupportsClient } from "../../app/extensions/deployment-state";
+import { useI18n } from "../../i18n";
+import { tr } from "../../i18n/current";
 import { Button } from "../Button";
 import { ConnectivityIcon, PinIcon, TrashIcon } from "../icons";
 import { Tooltip } from "../Tooltip";
@@ -17,12 +19,12 @@ function installOptions(item: ExtensionListItem, projects: ProjectRegistration[]
     if (item.kind === "skill" && itemSupportsClient(item, "codex"))
       options.push({
         value: `projectShared:codex:${project.id}`,
-        label: `${project.displayName} · Codex 项目共享`,
+        label: tr("extensions.install.projectSharedCodex", { project: project.displayName }),
       });
     if (itemSupportsClient(item, "claude"))
       options.push(
-        { value: `projectShared:claude:${project.id}`, label: `${project.displayName} · Claude 项目共享` },
-        { value: `projectPrivate:claude:${project.id}`, label: `${project.displayName} · Claude 项目私有` },
+        { value: `projectShared:claude:${project.id}`, label: tr("extensions.install.projectSharedClaude", { project: project.displayName }) },
+        { value: `projectPrivate:claude:${project.id}`, label: tr("extensions.install.projectPrivateClaude", { project: project.displayName }) },
       );
   }
   const existing = new Set(item.bindings.map((binding) => targetValue(binding.target)));
@@ -37,15 +39,16 @@ export function ExtensionBindings({
   onToggleLock,
   onRemoveBinding,
 }: ExtensionManagementProps) {
+  const { t } = useI18n();
   return (
     <section className="asb-ext-section">
-      <h4 className="asb-section-title">已安装到</h4>
+      <h4 className="asb-section-title">{t("extensions.bindings.title")}</h4>
       {item.bindings.length === 0 ? (
         <div className="asb-empty-state">
           <span className="asb-empty-state-icon" aria-hidden="true">
             <ConnectivityIcon />
           </span>
-          <h3 className="asb-section-title">尚未部署到任何客户端</h3>
+          <h3 className="asb-section-title">{t("extensions.bindings.empty")}</h3>
         </div>
       ) : (
         <ul className="asb-ext-binding-list">
@@ -54,14 +57,14 @@ export function ExtensionBindings({
               <Checkbox
                 checked={binding.desired === "enabled"}
                 label={targetLabel(binding.target, projectNames)}
-                ariaLabel={`${binding.desired === "enabled" ? "停用" : "启用"} ${targetLabel(binding.target, projectNames)}`}
+                ariaLabel={`${t(binding.desired === "enabled" ? "extensions.bindings.disableAction" : "extensions.bindings.enableAction")} ${targetLabel(binding.target, projectNames)}`}
                 disabled={busy}
                 onChange={(checked) => onChangeBinding(binding, checked)}
               />
-              <span className="asb-pill-status">{FILE_STATE_LABELS[binding.fileState]}</span>
-              {binding.desired === "disabled" && <span className="asb-pill-status">已停用</span>}
+              <span className="asb-pill-status">{t(FILE_STATE_LABELS[binding.fileState])}</span>
+              {binding.desired === "disabled" && <span className="asb-pill-status">{t("extensions.bindings.disabled")}</span>}
               {binding.lockedDigest && (
-                <span className="asb-pill-status">已固定 {binding.lockedDigest.slice(0, 12)}</span>
+                <span className="asb-pill-status">{t("extensions.bindings.pinned", { digest: binding.lockedDigest.slice(0, 12) })}</span>
               )}
               {binding.warnings.map((warning) => (
                 <span key={warning} className="asb-warn-text">
@@ -70,24 +73,24 @@ export function ExtensionBindings({
               ))}
               <div className="asb-ext-binding-actions">
                 {item.kind === "skill" && (
-                  <Tooltip label={binding.lockedDigest ? "解除固定版本" : "固定当前版本"}>
+                  <Tooltip label={t(binding.lockedDigest ? "extensions.bindings.unpin" : "extensions.bindings.pin")}>
                     <Button
                       variant="icon"
                       className="asb-ext-binding-action"
                       disabled={busy || (!binding.lockedDigest && binding.fileState !== "inSync")}
-                      aria-label={`${binding.lockedDigest ? "解除固定版本" : "固定当前版本"} ${targetLabel(binding.target, projectNames)}`}
+                      aria-label={`${t(binding.lockedDigest ? "extensions.bindings.unpinAction" : "extensions.bindings.pinAction")} ${targetLabel(binding.target, projectNames)}`}
                       onClick={() => onToggleLock(binding, binding.lockedDigest == null)}
                     >
                       <PinIcon />
                     </Button>
                   </Tooltip>
                 )}
-                <Tooltip label="从客户端移除">
+                <Tooltip label={t("extensions.bindings.remove")}>
                   <Button
                     variant="icon"
                     className="asb-ext-binding-action is-danger"
                     disabled={busy}
-                    aria-label={`从客户端移除 ${targetLabel(binding.target, projectNames)}`}
+                    aria-label={`${t("extensions.bindings.remove")} ${targetLabel(binding.target, projectNames)}`}
                     onClick={() => onRemoveBinding(binding)}
                   >
                     <TrashIcon />
@@ -110,23 +113,24 @@ export function ExtensionInstallTargets({
   onInstallTargetsChange,
   onInstall,
 }: ExtensionManagementProps) {
+  const { t } = useI18n();
   const options = installOptions(item, projects);
   if (options.length === 0) return null;
   return (
     <section className="asb-ext-section">
       <details className="asb-ext-disclosure asb-ext-install-targets">
         <summary>
-          <span className="asb-section-title">安装到其他位置</span>
-          <span className="asb-scope-note">{options.length} 个可用目标</span>
+          <span className="asb-section-title">{t("extensions.install.title")}</span>
+          <span className="asb-scope-note">{t("extensions.install.count", { count: options.length })}</span>
         </summary>
         <div className="asb-ext-disclosure-content">
-          <div className="asb-ext-target-list" aria-label="安装目标">
+          <div className="asb-ext-target-list" aria-label={t("extensions.install.listAria")}>
             {options.map((option) => (
               <Checkbox
                 key={option.value}
                 checked={installTargets.includes(option.value)}
                 label={option.label}
-                ariaLabel={`安装目标 ${option.label}`}
+                ariaLabel={`${t("extensions.install.listAria")} ${option.label}`}
                 disabled={busy}
                 onChange={(checked) =>
                   onInstallTargetsChange(
@@ -139,7 +143,7 @@ export function ExtensionInstallTargets({
             ))}
           </div>
           <Button variant="primary" disabled={busy || installTargets.length === 0} onClick={onInstall}>
-            安装所选
+            {t("extensions.install.selected")}
           </Button>
         </div>
       </details>

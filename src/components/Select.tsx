@@ -5,6 +5,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
 export interface SelectOption {
   value: string;
   label: string;
+  title?: string;
 }
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
   /** Accessible name of the combobox trigger. */
   ariaLabel: string;
   disabled?: boolean;
+  contentClassName?: string;
 }
 
 /**
@@ -26,7 +28,7 @@ interface Props {
  * the chosen item marked by a right-aligned check. Rendering contract and
  * visuals are owned here; all values come from styles/tokens.css.
  */
-export function Select({ value, options, onChange, placeholder, ariaLabel, disabled = false }: Props) {
+export function Select({ value, options, onChange, placeholder, ariaLabel, disabled = false, contentClassName }: Props) {
   const trigger = useRef<HTMLButtonElement>(null);
   const [container, setContainer] = useState<HTMLElement>();
   return (
@@ -47,7 +49,7 @@ export function Select({ value, options, onChange, placeholder, ariaLabel, disab
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal container={container}>
         <SelectPrimitive.Content
-          className="asb-select-content"
+          className={["asb-select-content", contentClassName].filter(Boolean).join(" ")}
           position="popper"
           sideOffset={4}
           onEscapeKeyDown={(event) => event.stopPropagation()}
@@ -56,8 +58,9 @@ export function Select({ value, options, onChange, placeholder, ariaLabel, disab
             <ChevronUpIcon />
           </SelectPrimitive.ScrollUpButton>
           <SelectPrimitive.Viewport className="asb-select-viewport">
-            {options.map(({ value: optionValue, label }) => (
-              <SelectPrimitive.Item key={optionValue} value={optionValue} className="asb-select-item">
+            {options.map(({ value: optionValue, label, title }) => (
+              <SelectPrimitive.Item key={optionValue} value={optionValue} title={title ?? label}
+                aria-label={title ?? label} className="asb-select-item">
                 <SelectPrimitive.ItemText>{label}</SelectPrimitive.ItemText>
                 <span className="asb-select-check" aria-hidden="true">
                   <SelectPrimitive.ItemIndicator>

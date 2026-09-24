@@ -76,7 +76,7 @@ pub enum RuntimeLogAction {
     AppSettingsSaved,
     OutboundProxySaved,
     AppSettingsRepaired,
-    ProfileStoreReset,
+    ProfileStoreRepaired,
     ProfileCreated,
     ProfileUpdated,
     ProfileDeleted,
@@ -361,7 +361,7 @@ mod tests {
         let warn = entry(
             "2026-08-31T02:03:04.000Z",
             RuntimeLogSeverity::Warn,
-            RuntimeLogAction::ProfileStoreReset,
+            RuntimeLogAction::ProfileStoreRepaired,
         );
         fs::write(
             directory.path().join("agent-switchboard.log"),

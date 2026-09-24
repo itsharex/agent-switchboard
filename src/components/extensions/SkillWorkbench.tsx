@@ -5,6 +5,7 @@ import type {
   SkillEditorView,
   SkillVersion,
 } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { Input } from "../Input";
 import { ExtensionLoading } from "./ExtensionLoading";
@@ -47,6 +48,7 @@ function formatBytes(size: number): string {
  * version history, and dependency links. Binary files are carried over
  * verbatim on save; nothing here executes skill content. */
 export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handlers }: Props) {
+  const { t } = useI18n();
   const [editor, setEditor] = useState<SkillEditorView | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [newPath, setNewPath] = useState("");
@@ -117,17 +119,17 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
   };
 
   const mcpSelectOptions: SelectOption[] = [
-    { value: "", label: "（未关联）" },
+    { value: "", label: t("extensions.workbench.unlinked") },
     ...mcpOptions.map((option) => ({ value: option.id, label: option.name })),
   ];
 
   return (
-    <section className="asb-skill-workbench" aria-label={`Skill 编辑 ${item.name}`}>
+    <section className="asb-skill-workbench" aria-label={t("extensions.workbench.aria", { name: item.name })}>
       <div className="asb-skill-workbench-main">
         <header className="asb-skill-workbench-head">
-          <h3 className="asb-section-title">编辑 Skill：{item.name}</h3>
+          <h3 className="asb-section-title">{t("extensions.workbench.title", { name: item.name })}</h3>
           <Button variant="secondary" onClick={handlers.onClose}>
-            关闭编辑器
+            {t("extensions.workbench.close")}
           </Button>
         </header>
 
@@ -136,22 +138,21 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
         ) : !editable ? (
           <div className="asb-ext-section">
             <p className="asb-scope-note">
-              该 Skill 带来源记录或宿主限定，不能直接编辑；创建本地副本后即可修改，
-              副本不再跟随来源更新。
+              {t("extensions.workbench.forkNote")}
             </p>
             <Button variant="primary" disabled={busy} onClick={() => handlers.onFork(item.id)}>
-              创建本地副本
+              {t("extensions.workbench.fork")}
             </Button>
           </div>
         ) : (
           <>
             <p className="asb-scope-note">
-              修订 r{editor.revision} · 内容摘要{" "}
-              <span className="asb-code">{editor.contentDigest.slice(0, 12)}</span> ·
-              每次保存生成新的不可变版本，旧版本可随时恢复。
+              {t("extensions.workbench.revisionLead", { revision: editor.revision })}
+              <span className="asb-code">{editor.contentDigest.slice(0, 12)}</span>
+              {t("extensions.workbench.revisionTail")}
             </p>
             <div className="asb-ext-section">
-              <h4 className="asb-section-title">文件</h4>
+              <h4 className="asb-section-title">{t("extensions.workbench.files")}</h4>
               <ul className="asb-ext-binding-list">
                 {allPaths.map((path) => {
                   const stored = editor.files.find((file) => file.relativePath === path);
@@ -168,7 +169,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
                       </Button>
                       {isBinary && (
                         <span className="asb-pill-status">
-                          二进制文件（{formatBytes(stored.size)}），保存时按原样保留
+                          {t("extensions.workbench.binary", { size: formatBytes(stored.size) })}
                         </span>
                       )}
                     </li>
@@ -178,19 +179,19 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
               <div className="asb-ext-actions">
                 <Input
                   value={newPath}
-                  placeholder="新文件路径，如 references/style.md"
-                  aria-label="新文件路径"
+                  placeholder={t("extensions.workbench.newPathPlaceholder")}
+                  aria-label={t("extensions.workbench.newPathAria")}
                   disabled={busy}
                   onChange={(event) => setNewPath(event.target.value)}
                 />
                 <Button variant="secondary" disabled={busy || newPath.trim() === ""} onClick={addFile}>
-                  添加文件
+                  {t("extensions.workbench.addFile")}
                 </Button>
               </div>
               {activeFile !== null && drafts[activeFile] !== undefined && (
                 <Textarea
                   value={drafts[activeFile]}
-                  aria-label={`编辑 ${activeFile}`}
+                  aria-label={t("extensions.workbench.editFileAria", { file: activeFile })}
                   rows={18}
                   disabled={busy}
                   onChange={(event) =>
@@ -201,7 +202,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
               {/* The save follows the content it commits: directly below the editor. */}
               <div className="asb-ext-actions">
                 <Button variant="primary" disabled={busy} onClick={save}>
-                  保存为新版本
+                  {t("extensions.workbench.saveVersion")}
                 </Button>
               </div>
             </div>
@@ -209,9 +210,9 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
         )}
 
         <div className="asb-ext-section">
-          <h4 className="asb-section-title">版本历史</h4>
+          <h4 className="asb-section-title">{t("extensions.workbench.versions")}</h4>
           <Button variant="secondary" disabled={busy} onClick={reloadVersions}>
-            加载版本列表
+            {t("extensions.workbench.loadVersions")}
           </Button>
           {versions !== null && (
             <ul className="asb-ext-binding-list">
@@ -219,17 +220,20 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
                 <li key={version.digest} className="asb-ext-binding">
                   <span className="asb-code">{version.digest.slice(0, 12)}</span>
                   <span>
-                    {version.fileCount} 个文件 · {formatBytes(version.totalBytes)}
+                    {t("extensions.workbench.versionMeta", {
+                      count: version.fileCount,
+                      size: formatBytes(version.totalBytes),
+                    })}
                   </span>
                   {version.isCurrent ? (
-                    <span className="asb-pill-status">当前版本</span>
+                    <span className="asb-pill-status">{t("extensions.workbench.currentVersion")}</span>
                   ) : (
                     <Button
                       variant="secondary"
                       disabled={busy}
                       onClick={() => handlers.onRestoreVersion(item.id, version.digest)}
                     >
-                      回滚到此版本
+                      {t("extensions.workbench.restoreVersion")}
                     </Button>
                   )}
                 </li>
@@ -239,16 +243,16 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
         </div>
 
         <div className="asb-ext-section">
-          <h4 className="asb-section-title">依赖关联</h4>
+          <h4 className="asb-section-title">{t("extensions.workbench.dependencies")}</h4>
           <p className="asb-scope-note">
-            依赖指向库内 MCP 定义；部署该 Skill 时可在同一预览中选择是否一并部署。
+            {t("extensions.workbench.depsNote")}
           </p>
           <ul className="asb-ext-binding-list">
             {dependencies.map((dependency, index) => (
               <li key={index} className="asb-ext-binding">
                 <Input
                   value={dependency.name}
-                  aria-label="依赖名称"
+                  aria-label={t("extensions.workbench.depNameAria")}
                   disabled={busy}
                   onChange={(event) =>
                     setDependencies((previous) =>
@@ -261,7 +265,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
                 <Select
                   value={dependency.resourceId ?? ""}
                   options={mcpSelectOptions}
-                  ariaLabel={`依赖第 ${index + 1} 行关联的 MCP`}
+                  ariaLabel={t("extensions.workbench.depSelectAria", { row: index + 1 })}
                   disabled={busy}
                   onChange={(value) =>
                     setDependencies((previous) =>
@@ -280,7 +284,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
                     setDependencies((previous) => previous.filter((_, position) => position !== index))
                   }
                 >
-                  移除依赖
+                  {t("extensions.workbench.removeDep")}
                 </Button>
               </li>
             ))}
@@ -291,7 +295,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
               disabled={busy}
               onClick={() => setDependencies((previous) => [...previous, { name: "", resourceId: null }])}
             >
-              添加依赖
+              {t("extensions.workbench.addDep")}
             </Button>
             <Button
               variant="primary"
@@ -304,7 +308,7 @@ export function SkillWorkbench({ item, mcpOptions, busy, onLoadEditor, ...handle
                 });
               }}
             >
-              保存依赖
+              {t("extensions.workbench.saveDeps")}
             </Button>
           </div>
         </div>

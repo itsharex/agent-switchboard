@@ -4,7 +4,8 @@ use super::*;
 use crate::gateway::GatewayController;
 use crate::local_state::LocalState;
 use asb_core::contracts::ConfigWriteRecord;
-use asb_switch::{execute_rendered, RenderedWriteOutcome, RenderedWriteRequest};
+use asb_core::{adapter, KeyChange};
+use asb_switch::{execute_rendered, sha256_hex, FsIo, RenderedWriteOutcome, RenderedWriteRequest};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
@@ -29,13 +30,24 @@ fn candidate(
 ) -> Result<(ClaudeGatewayStopPreview, String), CommandError> {
     let target = local.target(AppKind::Claude).map_err(failure)?;
     let current =
-        fs::read_to_string(&target).map_err(|e| failure(format!("无法读取 Claude 配置：{e}")))?;
+        fs::read_to_string(&target).map_err(|e| {
+            CommandError::localized(
+                "claude-gateway-restore-failed",
+                "errors.sw.claudeConfigUnreadable",
+                format!("无法读取 Claude 配置：{e}"),
+                serde_json::json!({ "error": e.to_string() }),
+            )
+        })?;
     if gateway
         .active_profile_id(AppKind::Claude, &current)
         .map_err(failure)?
         .is_none()
     {
-        return Err(failure("当前 Claude 配置已不属于活动接管路由；未修改任何文件，请先重新应用供应商或在切换历史中恢复"));
+        return Err(CommandError::keyed(
+            "claude-gateway-restore-failed",
+            "errors.sw.claudeNotOnTakeoverRoute",
+            "当前 Claude 配置已不属于活动接管路由；未修改任何文件，请先重新应用供应商或在切换历史中恢复",
+        ));
     }
     let mut records = local_backups(local)?;
     records.sort_by(|left, right| {
@@ -47,10 +59,20 @@ fn candidate(
     for record in records.into_iter().filter(|record| {
         record.app == AppKind::Claude && backup_id.is_none_or(|id| record.id == id)
     }) {
-        let before = fs::read_to_string(&record.backup_path)
-            .map_err(|e| failure(format!("接管前备份不可读：{e}")))?;
+        let before = fs::read_to_string(&record.backup_path).map_err(|e| {
+            CommandError::localized(
+                "claude-gateway-restore-failed",
+                "errors.sw.preTakeoverBackupUnreadable",
+                format!("接管前备份不可读：{e}"),
+                serde_json::json!({ "error": e.to_string() }),
+            )
+        })?;
         if sha256_hex(&before) != record.content_hash {
-            return Err(failure("接管前备份校验失败，已拒绝恢复"));
+            return Err(CommandError::keyed(
+                "claude-gateway-restore-failed",
+                "errors.sw.preTakeoverBackupHashMismatch",
+                "接管前备份校验失败，已拒绝恢复",
+            ));
         }
         let before = if before.is_empty() && !record.target_existed {
             "{}"
@@ -76,7 +98,9 @@ fn candidate(
             rendered,
         ));
     }
-    Err(failure(
+    Err(CommandError::keyed(
+        "claude-gateway-restore-failed",
+        "errors.sw.preTakeoverBackupMissing",
         "找不到接管前的 Claude 直连/官方配置备份；请在供应商页明确切换到官方登录或直连供应商",
     ))
 }
@@ -91,7 +115,11 @@ pub(crate) fn stop(
         || current.rendered_hash != preview.rendered_hash
         || current.target != preview.target
     {
-        return Err(failure("Claude 配置或备份在预览后改变，请重新预览"));
+        return Err(CommandError::keyed(
+            "claude-gateway-restore-failed",
+            "errors.sw.claudePreviewChanged",
+            "Claude 配置或备份在预览后改变，请重新预览",
+        ));
     }
     let target = PathBuf::from(&current.target);
     let backup_dir = local.backup_dir();
@@ -149,7 +177,7 @@ pub(crate) async fn preview_claude_gateway_stop(
 pub(crate) struct ClaudeGatewayStopOutcome {
     backup: BackupRecord,
     final_hash: String,
-    warnings: Vec<String>,
+    warnings: Vec<asb_core::contracts::LocalizedMessage>,
 }
 
 #[tauri::command]
@@ -199,4 +227,3 @@ pub(crate) fn restore_on_exit(app: &AppHandle) -> Result<(), String> {
         .map(|_| ())
         .map_err(|e| e.message)
 }
-

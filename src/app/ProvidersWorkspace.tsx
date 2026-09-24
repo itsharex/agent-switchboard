@@ -51,10 +51,11 @@ export function ProvidersWorkspace({ model, active }: { model: SwitchboardModel;
         onToggleUsage={(profileId) => appSettingsState.toggleUsageExpanded(profileId)}
         onSaveUsageQuery={providers.saveCodexProfileUsageQuery}
         loginBlocker={snapshot.loginBlocker}
-        statuses={snapshot.statuses} profiles={snapshot.profiles} locks={snapshot.locks}
+        statuses={snapshot.statuses} relayProfiles={snapshot.relayProfiles} locks={snapshot.locks}
         userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []} />
     <ProvidersPage active={active && !importing && appFilter === "claude"} view={model.providerView} onViewChange={model.setProviderView}
       profiles={snapshot.profiles}
+      relayProfiles={snapshot.relayProfiles}
       activeProfileId={activeProfileId("claude")} statuses={snapshot.statuses} locks={snapshot.locks}
       userConfigModel={userConfigRoute?.model ?? null} userConfigWarnings={userConfigRoute?.scopeWarnings ?? []}
       editorSession={claudeEditorSession}

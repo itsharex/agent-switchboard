@@ -1,16 +1,18 @@
 import type {
   CodexProbeBatch, CodexProbeBatchStatus, CodexProbeRun, CodexProbeRunStatus,
 } from "../api/client";
+import type { MessageKey, TFunction } from "../i18n";
+import { useI18n } from "../i18n";
 import { formatCompactTokenCount, formatTokenCount, TOKEN_UNIT } from "../lib/token-format";
 import { Table, type TableColumn } from "./Table";
 
-export const BATCH_STATUS_LABEL: Record<CodexProbeBatchStatus, string> = {
-  running: "进行中",
-  completed: "已完成",
-  cancelled: "已取消",
-  failed: "失败",
-  interrupted: "已中断",
-  "config-changed": "配置已变化",
+export const BATCH_STATUS_LABEL: Record<CodexProbeBatchStatus, MessageKey> = {
+  running: "codex.probe.statusRunning",
+  completed: "codex.probe.statusCompleted",
+  cancelled: "codex.probe.statusCancelled",
+  failed: "codex.probe.statusFailed",
+  interrupted: "codex.probe.statusInterrupted",
+  "config-changed": "codex.probe.statusConfigChanged",
 };
 
 export const BATCH_STATUS_CLASS: Record<CodexProbeBatchStatus, string> = {
@@ -22,11 +24,11 @@ export const BATCH_STATUS_CLASS: Record<CodexProbeBatchStatus, string> = {
   "config-changed": "asb-warn-text",
 };
 
-export const RUN_STATUS_LABEL: Record<CodexProbeRunStatus, string> = {
-  running: "执行中",
-  passed: "通过",
-  failed: "未通过",
-  undetermined: "未判定",
+export const RUN_STATUS_LABEL: Record<CodexProbeRunStatus, MessageKey> = {
+  running: "codex.probe.runRunning",
+  passed: "codex.probe.runPassed",
+  failed: "codex.probe.runFailed",
+  undetermined: "codex.probe.runUndetermined",
 };
 
 export const RUN_STATUS_CLASS: Record<CodexProbeRunStatus, string> = {
@@ -36,25 +38,29 @@ export const RUN_STATUS_CLASS: Record<CodexProbeRunStatus, string> = {
   undetermined: "asb-warn-text",
 };
 
-export function formatDuration(totalMs: number): string {
+export function formatDuration(totalMs: number, t: TFunction): string {
   const seconds = Math.round(totalMs / 1000);
-  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 60) return t("codex.duration.seconds", { count: seconds });
   const minutes = Math.floor(seconds / 60);
   const restSeconds = seconds % 60;
-  if (minutes < 60) return restSeconds ? `${minutes} 分 ${restSeconds} 秒` : `${minutes} 分`;
+  if (minutes < 60) return restSeconds
+    ? t("codex.duration.minutesSeconds", { minutes, seconds: restSeconds })
+    : t("codex.duration.minutes", { minutes });
   const hours = Math.floor(minutes / 60);
   const restMinutes = minutes % 60;
-  return restMinutes ? `${hours} 时 ${restMinutes} 分` : `${hours} 时`;
+  return restMinutes
+    ? t("codex.duration.hoursMinutes", { hours, minutes: restMinutes })
+    : t("codex.duration.hours", { hours });
 }
 
 /** The configuration the batch ran against, as one compact line. */
-export function configSummary(batch: CodexProbeBatch): string {
-  const profile = batch.config.profileName ?? "未关联档案";
-  const model = batch.config.profileModel ?? "模型未知";
+export function configSummary(batch: CodexProbeBatch, t: TFunction): string {
+  const profile = batch.config.profileName ?? t("codex.probe.unlinkedProfile");
+  const model = batch.config.profileModel ?? t("codex.probe.unknownModel");
   const effort = batch.config.reasoningEffort
-    ? `推理 ${batch.config.reasoningEffort}`
-    : "推理自动";
-  const connection = batch.config.connectionIdentity ?? "连接未知";
+    ? t("codex.probe.effortValue", { value: batch.config.reasoningEffort })
+    : t("codex.probe.effortAuto");
+  const connection = batch.config.connectionIdentity ?? t("codex.probe.unknownConnection");
   return `${profile} · ${model} · ${effort} · ${connection}`;
 }
 
@@ -93,83 +99,87 @@ export function summarizeRuns(runs: CodexProbeRun[]): ProbeRunSummary {
   };
 }
 
-const RUN_COLUMNS: Array<TableColumn<CodexProbeRun>> = [
-  {
-    key: "seq",
-    header: "序号",
-    render: (run) => `${run.seq}`,
-  },
-  {
-    key: "result",
-    header: "判分",
-    cellClassName: "asb-codex-probe-detail",
-    render: (run) => run.executionError ? (
-      <span className={RUN_STATUS_CLASS[run.status]}>
-        {RUN_STATUS_LABEL[run.status]} · {run.executionError}
-      </span>
-    ) : (
-      <span className={RUN_STATUS_CLASS[run.status]}>{RUN_STATUS_LABEL[run.status]}</span>
-    ),
-  },
-  {
-    key: "answer",
-    header: "最终回答",
-    render: (run) => run.finalAnswer ?? "—",
-  },
-  {
-    key: "reasoning",
-    header: `Reasoning（${TOKEN_UNIT}）`,
-    render: (run) =>
-      run.reasoningTokens === null ? "—" : formatTokenCount(run.reasoningTokens),
-  },
-  {
-    key: "total",
-    header: `总计（${TOKEN_UNIT}）`,
-    cellClassName: "asb-codex-probe-detail",
-    render: (run) => <>
-      {run.totalTokens === null ? "—" : formatTokenCount(run.totalTokens)}
-      {run.usageError && <p className="asb-codex-probe-meta">用量不可用：{run.usageError}</p>}
-    </>,
-  },
-  {
-    key: "model",
-    header: "模型",
-    cellClassName: "asb-code",
-    render: (run) => run.reportedModel ?? "—",
-  },
-  {
-    key: "duration",
-    header: "耗时",
-    render: (run) => run.durationMs === null ? "—" : formatDuration(run.durationMs),
-  },
-];
+function runColumns(t: TFunction): Array<TableColumn<CodexProbeRun>> {
+  return [
+    {
+      key: "seq",
+      header: t("codex.probe.colSeq"),
+      render: (run) => `${run.seq}`,
+    },
+    {
+      key: "result",
+      header: t("codex.probe.colGrading"),
+      cellClassName: "asb-codex-probe-detail",
+      render: (run) => run.executionError ? (
+        <span className={RUN_STATUS_CLASS[run.status]}>
+          {t(RUN_STATUS_LABEL[run.status])} · {run.executionError}
+        </span>
+      ) : (
+        <span className={RUN_STATUS_CLASS[run.status]}>{t(RUN_STATUS_LABEL[run.status])}</span>
+      ),
+    },
+    {
+      key: "answer",
+      header: t("codex.probe.colAnswer"),
+      render: (run) => run.finalAnswer ?? "—",
+    },
+    {
+      key: "reasoning",
+      header: t("codex.probe.colReasoning", { unit: TOKEN_UNIT }),
+      render: (run) =>
+        run.reasoningTokens === null ? "—" : formatTokenCount(run.reasoningTokens),
+    },
+    {
+      key: "total",
+      header: t("codex.probe.colTotal", { unit: TOKEN_UNIT }),
+      cellClassName: "asb-codex-probe-detail",
+      render: (run) => <>
+        {run.totalTokens === null ? "—" : formatTokenCount(run.totalTokens)}
+        {run.usageError && <p className="asb-codex-probe-meta">{t("codex.probe.usageUnavailable", { error: run.usageError })}</p>}
+      </>,
+    },
+    {
+      key: "model",
+      header: t("codex.probe.colModel"),
+      cellClassName: "asb-code",
+      render: (run) => run.reportedModel ?? "—",
+    },
+    {
+      key: "duration",
+      header: t("codex.probe.colDuration"),
+      render: (run) => run.durationMs === null ? "—" : formatDuration(run.durationMs, t),
+    },
+  ];
+}
 
 /** The per-run detail table shared by the live panel and history detail. */
 export function ProbeRunsTable({ batch }: { batch: CodexProbeBatch }) {
+  const { t } = useI18n();
+  const columns = runColumns(t);
   return (
     <div className="asb-codex-probe-table-wrap">
-      <Table columns={RUN_COLUMNS} rows={batch.runs} rowKey={(run) => `probe-run-${batch.batchId}-${run.seq}`}
-        ariaLabel="降智雷达每次运行明细" className="asb-codex-probe-table" />
+      <Table columns={columns} rows={batch.runs} rowKey={(run) => `probe-run-${batch.batchId}-${run.seq}`}
+        ariaLabel={t("codex.probe.runsTableAria")} className="asb-codex-probe-table" />
     </div>
   );
 }
 
 /** The summary card band shared by the live panel and history detail. */
-export function probeSummaryCards(batch: CodexProbeBatch) {
+export function probeSummaryCards(batch: CodexProbeBatch, t: TFunction) {
   const summary = summarizeRuns(batch.runs);
   return [
-    { label: "通过", value: `${summary.passedCount}/${summary.judgedCount}` },
+    { label: t("codex.probe.cardPassed"), value: `${summary.passedCount}/${summary.judgedCount}` },
     {
       label: summary.recordedRuns === summary.runCount && summary.runCount > 0
-        ? "实测消耗" : "已记录消耗",
+        ? t("codex.probe.cardMeasuredUsage") : t("codex.probe.cardRecordedUsage"),
       value: summary.totalTokens === null ? "—" : formatCompactTokenCount(summary.totalTokens),
       unit: TOKEN_UNIT,
     },
     {
-      label: "平均 reasoning",
+      label: t("codex.probe.cardAvgReasoning"),
       value: summary.averageReasoning === null ? "—" : formatCompactTokenCount(summary.averageReasoning),
       unit: TOKEN_UNIT,
     },
-    { label: "总耗时", value: summary.totalDurationMs === null ? "—" : formatDuration(summary.totalDurationMs) },
+    { label: t("codex.probe.cardTotalTime"), value: summary.totalDurationMs === null ? "—" : formatDuration(summary.totalDurationMs, t) },
   ];
 }

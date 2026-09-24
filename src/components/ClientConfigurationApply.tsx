@@ -1,3 +1,6 @@
+import { errorText, uiMessage } from "../i18n/errors";
+import type { CommandError } from "../api/client";
+import { useMessageState } from "../i18n/use-message-state";
 import { useState } from "react";
 
 import {
@@ -15,6 +18,8 @@ import {
 } from "../api/client";
 import { clientSettingsPayload } from "../app/claude-common-settings";
 import type { ClientSettingsEditorState } from "../app/useClientSettings";
+import { useI18n } from "../i18n";
+import { localizedMessageText } from "../i18n/errors";
 import { Button } from "./Button";
 import { Checkbox } from "./Checkbox";
 import { ConfirmSheet } from "./ConfirmSheet";
@@ -37,30 +42,32 @@ function visibleResetChanges(
 }
 
 function NativeResetScope({ app, advanced }: { app: AppKind; advanced: boolean }) {
+  const { t } = useI18n();
   return (
     <div className="asb-client-settings-reset-scope">
-      <span className="asb-client-settings-reset-scope-label">将恢复</span>
+      <span className="asb-client-settings-reset-scope-label">{t("clientConfig.reset.scopeWillRestore")}</span>
       <ul>
-        <li>ASB 管理的标准客户端通用设置</li>
-        {app === "codex" && <li>Codex 的 3 项子 agent 全局运行设置</li>}
-        {advanced && <li>真实配置中未管理、且未标记为“仅保留”的字段</li>}
+        <li>{t("clientConfig.reset.scopeStandardSettings")}</li>
+        {app === "codex" && <li>{t("clientConfig.reset.scopeCodexSubagent")}</li>}
+        {advanced && <li>{t("clientConfig.reset.scopeUnmanaged")}</li>}
       </ul>
       <p className="asb-field-help">
         {advanced
-          ? "保留官方设置目录中的“仅保留”字段，以及供应商参数、全局指令、登录与凭据、扩展和额外通用配置。通过备份恢复校验后才允许重置。"
-          : "不会影响供应商参数、全局指令、登录与凭据、扩展配置、未管理字段或额外通用配置。"}
+          ? t("clientConfig.reset.advancedHelp")
+          : t("clientConfig.reset.basicHelp")}
       </p>
     </div>
   );
 }
 
 function ExtraResetScope({ extraConfigurationCount }: { extraConfigurationCount: number }) {
+  const { t } = useI18n();
   return (
     <div className="asb-client-settings-reset-scope">
-      <span className="asb-client-settings-reset-scope-label">将清空</span>
-      <p>通过配置草稿由 ASB 管理的 {extraConfigurationCount} 项额外配置。</p>
+      <span className="asb-client-settings-reset-scope-label">{t("clientConfig.reset.scopeWillClear")}</span>
+      <p>{t("clientConfig.reset.extraScopeLine", { count: extraConfigurationCount })}</p>
       <p className="asb-field-help">
-        不会影响标准通用设置、供应商参数、全局指令、登录与凭据、扩展配置或未管理字段。
+        {t("clientConfig.reset.extraScopeHelp")}
       </p>
     </div>
   );
@@ -88,22 +95,23 @@ export function ClientConfigurationResetPreview({
   const deep = resetKind === "nativeDefaultsWithUnmanaged";
   const native = resetKind !== "clearExtraConfiguration";
   const changes = visibleResetChanges(resetKind, preview);
-  const title = native ? "恢复为客户端原生默认值" : "清空 ASB 管理的额外通用配置";
+  const { t } = useI18n();
+  const title = native ? t("clientConfig.reset.nativeTitle") : t("clientConfig.reset.extraTitle");
   const changeLabel = native
-    ? deep ? "将移除的字段" : "将移除的标准设置"
-    : "将移除的额外配置";
+    ? deep ? t("clientConfig.reset.changeFields") : t("clientConfig.reset.changeStandard")
+    : t("clientConfig.reset.changeExtra");
   const confirmLabel = !native
-    ? `确认清空 ${extraConfigurationCount} 项额外配置`
-    : deep ? "确认恢复默认并移除界面外字段" : "确认恢复原生默认值";
+    ? t("clientConfig.reset.confirmExtra", { count: extraConfigurationCount })
+    : deep ? t("clientConfig.reset.confirmDeep") : t("clientConfig.reset.confirmNative");
   return (
-    <section className="asb-client-settings-reset-preview" aria-label={`${title}预览`}>
+    <section className="asb-client-settings-reset-preview" aria-label={t("clientConfig.reset.previewAria", { title })}>
       <h3 className="asb-section-title">{title}</h3>
       <p className="asb-client-settings-reset-lead">
         {!native
-          ? "移除通过配置草稿由 ASB 明确管理的额外字段。"
+          ? t("clientConfig.reset.extraLead")
           : deep
-            ? "清除 ASB 管理的标准通用配置覆盖，并移除真实配置中界面未拥有的字段。"
-            : "清除 ASB 管理的标准通用配置覆盖，让客户端按其原生默认行为运行。"}
+            ? t("clientConfig.reset.deepLead")
+            : t("clientConfig.reset.nativeLead")}
       </p>
       {native ? (
         <>
@@ -112,12 +120,12 @@ export function ClientConfigurationResetPreview({
               <Checkbox
                 checked={deep}
                 disabled={busy}
-                label="同时移除界面外字段（高级范围）"
+                label={t("clientConfig.reset.advancedCheckbox")}
                 onChange={(checked) =>
                   onScopeChange(checked ? "nativeDefaultsWithUnmanaged" : "nativeDefaults")}
               />
               <p className="asb-field-help">
-                开启后额外移除真实配置中界面未拥有的字段，包括第三方工具或手动添加的内容；移除项会先创建备份，可从历史备份恢复。
+                {t("clientConfig.reset.advancedCheckboxHelp")}
               </p>
             </div>
           )}
@@ -127,7 +135,7 @@ export function ClientConfigurationResetPreview({
         <ExtraResetScope extraConfigurationCount={extraConfigurationCount} />
       )}
       <p className="asb-client-settings-reset-target">
-        <span>目标文件</span>
+        <span>{t("clientConfig.reset.targetFile")}</span>
         <code>{preview.file.preview.target}</code>
       </p>
       {changes.length > 0 ? (
@@ -136,19 +144,19 @@ export function ClientConfigurationResetPreview({
         </div>
       ) : (
         <p className="asb-field-help">
-          真实客户端文件当前没有需要修改的字段；确认后仍会更新 ASB 已保存的配置，避免下次应用重新写入覆盖。
+          {t("clientConfig.reset.noChanges")}
         </p>
       )}
       {preview.file.preview.warnings.map((warning) => (
-        <p key={warning} className="asb-field-error" role="alert">{warning}</p>
+        <p key={warning.key} className="asb-field-error" role="alert">{localizedMessageText(warning, t)}</p>
       ))}
       <p className="asb-field-help">
-        文件或已保存配置需要变更时，都会备份当前文件及 ASB 设置；恢复备份会同时还原两者。
+        {t("clientConfig.reset.backupHelp")}
       </p>
       <div className="asb-client-settings-reset-actions">
         {onBack && (
           <Button variant="secondary" className="asb-client-settings-reset-back" disabled={busy} onClick={onBack}>
-            返回恢复设置
+            {t("clientConfig.reset.backToSettings")}
           </Button>
         )}
         <Button variant="danger" disabled={busy} onClick={onConfirm}>
@@ -180,11 +188,6 @@ interface UseClientConfigurationApplyProps {
   onApplied: () => void;
 }
 
-interface ConfigurationStatus {
-  message: string;
-  error: boolean;
-}
-
 function extraConfigurationCount(extra: Record<string, unknown> | undefined): number {
   if (!extra) return 0;
   const count = (value: unknown): number => {
@@ -212,7 +215,7 @@ interface UseClientConfigurationResetsProps {
   extraConfigurationCount: number;
   onStart: () => void;
   onFinish: () => void;
-  onSuccess: (message: string) => void;
+  onSuccess: (message: CommandError) => void;
 }
 
 function useClientConfigurationResets({
@@ -224,15 +227,16 @@ function useClientConfigurationResets({
   onFinish,
   onSuccess,
 }: UseClientConfigurationResetsProps) {
+  const { t } = useI18n();
   const [pending, setPending] = useState<ResetState<PendingClientConfigurationReset | null>>(
     () => emptyResetState(null),
   );
-  const [errors, setErrors] = useState<ResetState<string | null>>(() => emptyResetState(null));
+  const [errors, setErrors] = useState<ResetState<unknown>>(() => emptyResetState(null));
   const [resetView, setResetView] = useState<ClientConfigurationResetKind>("nativeDefaults");
   const setPendingFor = (kind: ClientConfigurationResetKind, value: PendingClientConfigurationReset | null) => {
     setPending((current) => ({ ...current, [kind]: value }));
   };
-  const setErrorFor = (kind: ClientConfigurationResetKind, value: string | null) => {
+  const setErrorFor = (kind: ClientConfigurationResetKind, value: unknown) => {
     setErrors((current) => ({ ...current, [kind]: value }));
   };
   const prepare = (resetKind: ClientConfigurationResetKind) => {
@@ -241,10 +245,10 @@ function useClientConfigurationResets({
     void previewClientConfigurationReset(app, resetKind).then((preview) => {
       setPendingFor(resetKind, { preview, resetKind });
     }).catch((error: { message?: string }) => {
-      setErrorFor(resetKind, error.message ?? "无法生成配置预览");
+      setErrorFor(resetKind, error);
     }).finally(onFinish);
   };
-  const commit = (resetKind: ClientConfigurationResetKind, successMessage: string) => {
+  const commit = (resetKind: ClientConfigurationResetKind, successMessage: CommandError) => {
     const current = pending[resetKind];
     if (!current || busy || !canReset) return;
     setErrorFor(resetKind, null); onStart();
@@ -252,26 +256,26 @@ function useClientConfigurationResets({
       setPending(emptyResetState(null));
       onSuccess(successMessage);
     }).catch((error: { message?: string }) => {
-      setErrorFor(resetKind, error.message ?? "应用客户端配置操作失败");
+      setErrorFor(resetKind, error);
     }).finally(onFinish);
   };
   const inNativeView = resetView !== "clearExtraConfiguration";
   const commitNativeReset = () => {
     if (!inNativeView) return;
     commit(resetView, resetView === "nativeDefaults"
-      ? "已恢复为客户端原生默认值。"
-      : "已恢复为客户端原生默认值，并移除界面外字段。");
+      ? uiMessage("clientConfig.status.nativeRestored")
+      : uiMessage("clientConfig.status.nativeRestoredDeep"));
   };
   return {
     resetView,
     pendingNativeReset: inNativeView ? pending[resetView] : null,
     pendingExtraClear: pending.clearExtraConfiguration,
-    nativeResetError: inNativeView ? errors[resetView] : null,
-    extraClearError: errors.clearExtraConfiguration,
+    nativeResetError: inNativeView && errors[resetView] != null ? errorText(errors[resetView], t) : null,
+    extraClearError: errors.clearExtraConfiguration == null ? null : errorText(errors.clearExtraConfiguration, t),
     prepareNativeReset: (resetKind: NativeConfigurationResetKind) => prepare(resetKind),
     prepareExtraClear: () => prepare("clearExtraConfiguration"),
     commitNativeReset,
-    commitExtraClear: () => commit("clearExtraConfiguration", `已清空 ${extraConfigurationCount} 项 ASB 管理的额外通用配置。`),
+    commitExtraClear: () => commit("clearExtraConfiguration", uiMessage("clientConfig.status.extraCleared", { count: extraConfigurationCount })),
     showNativeReset: () => setResetView("nativeDefaults"),
   };
 }
@@ -281,16 +285,17 @@ export function useClientConfigurationApply(
   onCommitted: () => void,
 ) {
   const { editorState: state, app, busy } = props;
+  const { t } = useI18n();
   const [pendingApply, setPendingApply] = useState<PendingClientConfiguration | null>(null);
-  const [applyError, setApplyError] = useState<string | null>(null);
-  const [status, setStatus] = useState<ConfigurationStatus | null>(null);
+  const [applyError, setApplyError] = useMessageState();
+  const [statusMessage, setStatus] = useMessageState();
   const [applying, setApplying] = useState(false);
   const settings: SettingsValues | null = state.editor && state.draft
     ? clientSettingsPayload(app, state.draft, state.claudeExtra) : null;
   const subagentSettings = app === "codex" ? props.subagentDraft : undefined;
   const fileIsWritable = !props.configStatus?.exists || props.configStatus.syntaxOk;
   const recoveryBlocker = state.phase === "dirty" || props.hasUnsavedConfigurationDraft
-    ? "存在未保存的配置草稿。请先保存，或重新加载以放弃草稿后，再执行恢复或清空操作。"
+    ? t("clientConfig.apply.unsavedBlocker")
     : null;
   const recoveryReady = fileIsWritable && state.phase === "clean" && !recoveryBlocker;
   const extraCount = app === "claude" ? extraConfigurationCount(state.editor?.settings.claudeExtra) : 0;
@@ -303,7 +308,7 @@ export function useClientConfigurationApply(
     extraConfigurationCount: extraCount,
     onStart: start,
     onFinish: finish,
-    onSuccess: (message) => { setStatus({ message, error: false }); onCommitted(); props.onApplied(); },
+    onSuccess: (message) => { setStatus(message); onCommitted(); props.onApplied(); },
   });
   const prepareApply = () => {
     if (!settings || busy || applying) return;
@@ -311,7 +316,7 @@ export function useClientConfigurationApply(
     void previewClientConfigurationApply(app, settings, subagentSettings).then((preview) => {
       setPendingApply({ preview, settings, subagentSettings });
     }).catch((error: { message?: string }) => {
-      setApplyError(error.message ?? "无法生成配置预览");
+      setApplyError(error);
     }).finally(finish);
   };
   const commitApply = () => {
@@ -320,17 +325,17 @@ export function useClientConfigurationApply(
     void commitClientConfigurationApply(app, pendingApply.settings, pendingApply.preview, pendingApply.subagentSettings)
       .then(() => {
         setPendingApply(null);
-        setStatus({ message: "已应用客户端配置。", error: false });
+        setStatus(uiMessage("clientConfig.status.applied"));
         onCommitted(); props.onApplied();
       })
-      .catch((error: { message?: string }) => setApplyError(error.message ?? "应用客户端配置失败"))
+      .catch((error: { message?: string }) => setApplyError(error))
       .finally(finish);
   };
   return {
     ...reset,
     applyError,
     applying,
-    status,
+    status: statusMessage === null ? null : { message: statusMessage, error: false },
     recoveryBlocker,
     extraConfigurationCount: extraCount,
     hasExtraConfiguration: extraCount > 0,
@@ -357,11 +362,12 @@ function ResetFailure({
   onRetry: () => void;
   onBack?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="asb-client-settings-reset-error" role="alert">
       <p className="asb-field-error">{error}</p>
-      {onBack && <Button variant="secondary" disabled={busy} onClick={onBack}>返回恢复设置</Button>}
-      <Button variant="secondary" disabled={busy} onClick={onRetry}>重新生成预览</Button>
+      {onBack && <Button variant="secondary" disabled={busy} onClick={onBack}>{t("clientConfig.reset.backToSettings")}</Button>}
+      <Button variant="secondary" disabled={busy} onClick={onRetry}>{t("clientConfig.reset.regeneratePreview")}</Button>
     </div>
   );
 }
@@ -373,13 +379,14 @@ function ExtraConfigurationAction({
   configuration: ClientConfigurationActionState;
   busy: boolean;
 }) {
+  const { t } = useI18n();
   if (!configuration.hasExtraConfiguration) return null;
   return (
-    <section className="asb-client-extra-configuration" aria-label="额外通用配置">
+    <section className="asb-client-extra-configuration" aria-label={t("clientConfig.extra.title")}>
       <div>
-        <h3 className="asb-section-title">额外通用配置</h3>
+        <h3 className="asb-section-title">{t("clientConfig.extra.title")}</h3>
         <p className="asb-field-help">
-          这些字段来自配置草稿，不包含在上方的原生默认值恢复中。当前管理 {configuration.extraConfigurationCount} 项额外配置。
+          {t("clientConfig.extra.actionHelp", { count: configuration.extraConfigurationCount })}
         </p>
       </div>
       <Button
@@ -387,7 +394,7 @@ function ExtraConfigurationAction({
         disabled={!configuration.canClearExtra || busy || configuration.applying}
         onClick={configuration.prepareExtraClear}
       >
-        清空 ASB 管理的额外通用配置
+        {t("clientConfig.reset.extraTitle")}
       </Button>
     </section>
   );
@@ -402,6 +409,7 @@ export function ClientConfigurationResetPanel({
   busy: boolean;
   configuration: ClientConfigurationActionState;
 }) {
+  const { t } = useI18n();
   const working = busy || configuration.applying;
   const nativeView: NativeConfigurationResetKind | null =
     configuration.resetView === "clearExtraConfiguration"
@@ -424,7 +432,7 @@ export function ClientConfigurationResetPanel({
     if (configuration.extraClearError) {
       return <ResetFailure error={configuration.extraClearError} busy={working} onRetry={configuration.prepareExtraClear} onBack={configuration.showNativeReset} />;
     }
-    return <p className="asb-field-help" role="status">正在生成清空预览。</p>;
+    return <p className="asb-field-help" role="status">{t("clientConfig.reset.generatingClear")}</p>;
   }
   if (configuration.pendingNativeReset) {
     return <>
@@ -449,7 +457,7 @@ export function ClientConfigurationResetPanel({
       />
     );
   }
-  return <p className="asb-field-help" role="status">正在生成恢复预览。</p>;
+  return <p className="asb-field-help" role="status">{t("clientConfig.reset.generatingNative")}</p>;
 }
 
 export function ClientConfigurationConfirmation({
@@ -467,21 +475,22 @@ export function ClientConfigurationConfirmation({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useI18n();
   if (!pending) return null;
   return (
     <ConfirmSheet
-      title="确认应用客户端配置"
-      confirmLabel="确认应用"
+      title={t("clientConfig.apply.confirmTitle")}
+      confirmLabel={t("clientConfig.apply.confirmButton")}
       confirmDisabled={busy || applying}
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
       <ul className="asb-dialog-details">
-        <li>将写入 {pending.preview.file.preview.target}</li>
+        <li>{t("clientConfig.apply.willWrite", { target: pending.preview.file.preview.target })}</li>
         <li><PreviewInspector filePreview={pending.preview.file} userConfigModel={null} userConfigWarnings={[]} /></li>
         <li>{app === "codex"
-          ? "写入前会创建备份，并在同一可恢复事务中提交通用配置与子 agent 运行设置。"
-          : "写入前会创建备份，并在同一可恢复事务中提交客户端配置。"}</li>
+          ? t("clientConfig.apply.confirmCodexNote")
+          : t("clientConfig.apply.confirmNote")}</li>
       </ul>
     </ConfirmSheet>
   );

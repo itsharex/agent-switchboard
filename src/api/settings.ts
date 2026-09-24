@@ -1,5 +1,5 @@
 import { invoke } from "./client";
-import type { AppKind } from "./shared";
+import type { AppKind, CommandError } from "./shared";
 import type { RuntimeLogLevel } from "./status";
 import type { CodexSubagentSettings } from "./subagent-settings";
 
@@ -288,6 +288,9 @@ export function saveGlobalPromptDocument(
 export type CloseBehavior = "hideToTray" | "exit";
 export type ThemePreference = "system" | "light" | "dark";
 export type MotionPreference = "system" | "reduce";
+/** Interface language. "system" resolves against the desktop locale at render
+ * time; the explicit values are the BCP-47 tags both webviews resolve. */
+export type LanguagePreference = "system" | "zh-CN" | "en-US";
 export type InterfaceScale = 90 | 100 | 110 | 125;
 export type StartupPage = "providers" | "lastVisited";
 export type WorkspacePage = "providers" | "clientConfiguration" | "extensions" | "sessions" | "usage" | "settings";
@@ -313,6 +316,8 @@ export interface AppSettings {
   runtimeLogLevel: RuntimeLogLevel;
   /** Provider ids whose usage details are explicitly expanded. */
   expandedUsageIds: string[];
+  /** Interface language for the main window and tray webviews. */
+  language: LanguagePreference;
 }
 
 /** Public connection coordinates for a user-owned Supabase project. The
@@ -331,7 +336,7 @@ export interface CloudBackupResult {
 
 export interface AppSettingsSnapshot {
   settings: AppSettings;
-  desktopError: string | null;
+  desktopError: CommandError | null;
 }
 
 export function getAppSettings(): Promise<AppSettingsSnapshot> {

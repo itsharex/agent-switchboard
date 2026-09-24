@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { PinIcon } from "./icons";
 import { Button } from "./Button";
 import { Tooltip } from "./Tooltip";
@@ -14,7 +15,8 @@ export function PinTopButton({
   disabled: boolean;
   onToggle: () => void;
 }) {
-  const label = active ? "取消置顶" : "置顶窗口";
+  const { t } = useI18n();
+  const label = active ? t("pin.unpin") : t("pin.pin");
   return (
     <Tooltip label={label} side="bottom">
       <span className="asb-tooltip-anchor">

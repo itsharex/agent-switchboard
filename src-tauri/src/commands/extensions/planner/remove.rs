@@ -74,22 +74,30 @@ impl Planner<'_> {
     > {
         let target = self.mcp_document(binding)?;
         let McpScope::ClaudeProjectPrivate { project_path } = target.scope else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.mcpBindingNotClaudePrivate",
                 "该 MCP 绑定不是 Claude 项目私有目标",
             ));
         };
         let document = target.path;
         if !self.document_baseline_is_current(binding, &document)? {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-baseline",
+                "errors.extops.mcpBaselineMissingForRemove",
                 "MCP 绑定缺少可验证的部署基线，不能安全移除",
             ));
         }
         let key = binding
             .native_key
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.mcpBindingMissingKey",
+                    "MCP 绑定缺少服务键",
+                )
+            })?;
         let pointer = format!("projects.{project_path}.mcpServers.{key}");
         // A takeover baseline carries the native entry it adopted: removal
         // restores that text verbatim instead of deleting the entry.
@@ -170,15 +178,22 @@ impl Planner<'_> {
         let client = binding.target.client();
         let document = target.path.clone();
         if !self.document_baseline_is_current(binding, &document)? {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-baseline",
+                "errors.extops.mcpBaselineMissingForRemove",
                 "MCP 绑定缺少可验证的部署基线，不能安全移除",
             ));
         }
         let key = binding
             .native_key
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "MCP 绑定缺少服务键"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.mcpBindingMissingKey",
+                    "MCP 绑定缺少服务键",
+                )
+            })?;
         let pointer = match &target.scope {
             McpScope::CodexServers => format!("mcp_servers.{key}"),
             McpScope::ClaudeUserServers => format!("mcpServers.{key}"),
@@ -312,12 +327,14 @@ impl Planner<'_> {
         };
         let current_digest = asb_core::extensions::skill::content_digest(&entries);
         if current_digest != last_digest {
-            return Err(CommandError::new(
+            return Err(CommandError::localized(
                 "extension-external-change",
+                "errors.extops.skillContentMismatchForRemove",
                 format!(
                     "{} 与本应用记录的 Skill 内容不一致，不能安全移除",
                     target_dir.display()
                 ),
+                serde_json::json!({ "path": target_dir.display().to_string() }),
             ));
         }
         if let Some(original_digest) = original_digest {
@@ -327,8 +344,9 @@ impl Planner<'_> {
                 .load_skill_version(&definition.id, &original_digest)
                 .map_err(store_error)?;
             if asb_core::extensions::skill::content_digest(&original_entries) != original_digest {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-store",
+                    "errors.extops.takeoverOriginalDigestMismatch",
                     "库中的接管原始版本与记录摘要不一致，不能恢复",
                 ));
             }

@@ -1,16 +1,18 @@
 //! Profile-switch, backup, restore, and undo commands. Each write walks the
 //! executor transaction and records an audit entry so it can be undone.
 
-mod backups;
+pub(in crate::commands) mod backups;
+mod backup_views;
+pub use backup_views::*;
 mod client_settings_backup;
 pub(in crate::commands) use backups::validate_client_configuration_backup;
 pub(crate) mod claude_gateway;
 mod codex_backfill;
 pub(crate) mod codex_policy;
 mod codex_profile_save;
-mod codex_restore_auth;
+pub(in crate::commands) mod codex_restore_auth;
 mod internal;
-mod plan;
+pub(in crate::commands) mod plan;
 mod profile_rollback;
 mod profile_save;
 mod projection_transaction;
@@ -30,13 +32,11 @@ use crate::commands::error::{
 };
 use crate::commands::ConfigWriteGate;
 use crate::runtime_log::RuntimeLogAction;
-use asb_core::adapter;
 use asb_core::contracts::{
-    AppKind, BackupRecord, KeyChange, ProfileSaveKind, ProviderDraft, ProviderRecord,
+    AppKind, BackupRecord, ProfileSaveKind, ProviderDraft, ProviderRecord,
     WriteOperation,
 };
-use asb_switch::io::{FsIo, SwitchIo};
-use asb_switch::{sha256_hex, RestoreOutcome, SwitchOutcome};
+use asb_switch::{RestoreOutcome, SwitchOutcome};
 use backups::{find_backup, local_backups, run_restore};
 use codex_profile_save::{
     commit as commit_codex_profile_save_data, prepare_data as prepare_codex_profile_save_data,
@@ -47,10 +47,8 @@ use profile_save::{
     commit_prepared_profile_save, invalidate_provider_readings, prepare_profile_save_data,
     PreparedProfileSave,
 };
-use std::path::PathBuf;
 use std::time::Instant;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
 pub async fn cancel_codex_profile_save(
@@ -78,7 +76,11 @@ pub async fn prepare_profile_save(
     let preparations = app
         .try_state::<ProfileSavePreparations>()
         .ok_or_else(|| {
-            CommandError::new("profile-save-unavailable", "供应商保存准备状态尚未初始化")
+            CommandError::keyed(
+                "profile-save-unavailable",
+                "errors.sw.preparationStateUninitialized",
+                "供应商保存准备状态尚未初始化",
+            )
         })?
         .inner()
         .clone();
@@ -119,7 +121,11 @@ pub async fn commit_profile_save(
     let preparations = app
         .try_state::<ProfileSavePreparations>()
         .ok_or_else(|| {
-            CommandError::new("profile-save-unavailable", "供应商保存准备状态尚未初始化")
+            CommandError::keyed(
+                "profile-save-unavailable",
+                "errors.sw.preparationStateUninitialized",
+                "供应商保存准备状态尚未初始化",
+            )
         })?
         .inner()
         .clone();
@@ -189,8 +195,9 @@ pub async fn prepare_codex_profile_save(
     let preparations = app
         .try_state::<CodexProfileSavePreparations>()
         .ok_or_else(|| {
-            CommandError::new(
+            CommandError::keyed(
                 "codex-profile-save-unavailable",
+                "errors.sw.codexPreparationStateUninitialized",
                 "Codex 供应商保存准备状态尚未初始化",
             )
         })?
@@ -231,8 +238,9 @@ pub async fn commit_codex_profile_save(
     let preparations = app
         .try_state::<CodexProfileSavePreparations>()
         .ok_or_else(|| {
-            CommandError::new(
+            CommandError::keyed(
                 "codex-profile-save-unavailable",
+                "errors.sw.codexPreparationStateUninitialized",
                 "Codex 供应商保存准备状态尚未初始化",
             )
         })?
@@ -267,7 +275,13 @@ pub async fn commit_codex_profile_save(
 fn write_gate(app: &AppHandle) -> Result<ConfigWriteGate, CommandError> {
     app.try_state::<ConfigWriteGate>()
         .map(|gate| gate.inner().clone())
-        .ok_or_else(|| CommandError::new("app-state-unavailable", "写入闸门尚未初始化"))
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "app-state-unavailable",
+                "errors.sw.writeGateUninitialized",
+                "写入闸门尚未初始化",
+            )
+        })
 }
 
 #[tauri::command]
@@ -336,9 +350,11 @@ async fn execute_switch_core(
                 state.root(),
                 projection.plan.profile.route_mode,
             ) {
-                outcome
-                    .warnings
-                    .push(format!("Claude 插件集成标记未同步：{message}"));
+                outcome.warnings.push(asb_core::contracts::LocalizedMessage::new(
+                    "warnings.claude.pluginMarkerUnsynced",
+                    serde_json::json!({ "detail": message }),
+                    format!("Claude 插件集成标记未同步：{message}"),
+                ));
             }
         }
         crate::tray::refresh(&app);
@@ -379,7 +395,7 @@ pub async fn restore_backup(
             }
             ensure_profile_save_recovered(&app)?;
             let record = find_backup(&state, &backup_id)?;
-            let outcome = run_restore(&state, &gateway, &record)?;
+            let outcome = run_restore(&state, &gateway, &record, None)?;
             crate::tray::refresh(&app);
             Ok(outcome)
         })
@@ -414,73 +430,25 @@ pub async fn undo_last_switch(
                 .latest_config_write(target)
                 .map_err(store_error)?
                 .ok_or_else(|| {
-                    CommandError::new("undo-unavailable", "该客户端没有可撤回的切换记录")
+                    CommandError::keyed(
+                        "undo-unavailable",
+                        "errors.sw.noUndoRecord",
+                        "该客户端没有可撤回的切换记录",
+                    )
                 })?;
             if last.operation == WriteOperation::GatewayPortChange {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "undo-unavailable",
+                    "errors.sw.undoGatewayPortUnsupported",
                     "网关端口修改涉及全部客户端与监听器，请在网关页修改端口，不能撤回单个客户端配置",
                 ));
             }
             let record = find_backup(&state, &last.backup_id)?;
-            let outcome = run_restore(&state, &gateway, &record)?;
+            let outcome = run_restore(&state, &gateway, &record, None)?;
             crate::tray::refresh(&app);
             Ok(outcome)
         })
         .await
-    })
-    .await
-}
-
-/// Complete file and saved preference difference from one backup. `before` is
-/// the backup value, `after` the current one.
-#[tauri::command]
-pub async fn backup_diff(
-    app: AppHandle,
-    backup_id: String,
-) -> Result<Vec<KeyChange>, CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let record = find_backup(&state, &backup_id)?;
-        let target = state
-            .target(record.app)
-            .map_err(|error| CommandError::new("config-path-unavailable", error))?;
-        let current = match FsIo.read_file(&target) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound =>
-                if record.app == AppKind::Claude { "{}".into() } else { String::new() },
-            Err(_) => return Err(CommandError::new("read-current", "无法读取当前配置文件，无法生成差异")),
-        };
-        let backup_text = FsIo
-            .read_file(PathBuf::from(&record.backup_path).as_path())
-            .map_err(|_| CommandError::new("backup-unreadable", "备份文件不可读，无法生成差异"))?;
-        if sha256_hex(&backup_text) != record.content_hash {
-            return Err(CommandError::new(
-                "backup-hash-mismatch",
-                "备份内容与记录哈希不符，拒绝生成差异",
-            ));
-        }
-        let mut changes = adapter::full_diff(record.app, &current, &backup_text)
-            .map_err(|error| CommandError::new("diff-failed", error.to_string()))?;
-        changes.extend(client_settings_backup::diff(&state, &record)
-            .map_err(|error| CommandError::new("backup-settings-invalid", error))?);
-        Ok(changes)
-    })
-    .await
-}
-
-/// Opens the app-owned backup directory in the system file manager. The
-/// directory is created on demand so an empty history still opens cleanly.
-#[tauri::command]
-pub async fn open_backup_dir(app: AppHandle) -> Result<(), CommandError> {
-    let state = state(&app)?;
-    blocking(move || {
-        let dir = state.backup_dir();
-        std::fs::create_dir_all(&dir)
-            .map_err(|_| CommandError::new("backup-dir-unavailable", "无法创建备份目录"))?;
-        app.opener()
-            .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
-            .map_err(|_| CommandError::new("backup-dir-open-failed", "无法打开备份文件夹"))
     })
     .await
 }

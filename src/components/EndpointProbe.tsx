@@ -1,5 +1,7 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useRef, useState } from "react";
 import { probeEndpoint, type ProbeResult } from "../api/client";
+import { useI18n } from "../i18n";
 import { Time } from "./Time";
 
 interface FeedbackProps {
@@ -11,7 +13,7 @@ interface FeedbackProps {
 export function useEndpointProbe(url: string | null) {
   const [result, setResult] = useState<ProbeResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   const requestVersion = useRef(0);
 
   useEffect(() => {
@@ -32,7 +34,7 @@ export function useEndpointProbe(url: string | null) {
       if (requestVersion.current === version) setResult(nextResult);
     } catch (caught) {
       if (requestVersion.current === version) {
-        setError((caught as { message?: string }).message ?? "检测失败");
+        setError(caught);
       }
     } finally {
       if (requestVersion.current === version) setBusy(false);
@@ -44,6 +46,7 @@ export function useEndpointProbe(url: string | null) {
 
 /** One result presentation for editor and supplier-card probe controls. */
 export function ProbeFeedback({ result, error }: FeedbackProps) {
+  const { t } = useI18n();
   if (!result && !error) return null;
 
   return (
@@ -59,8 +62,12 @@ export function ProbeFeedback({ result, error }: FeedbackProps) {
           }`}
         >
           {result.grade === "unreachable"
-            ? `无法连通 · ${result.error ?? "网络请求失败"}`
-            : `${result.grade === "ok" ? "连通正常" : "连通但较慢"} · HTTP ${result.status ?? "?"} · ${result.latencyMs ?? "?"} 毫秒`}
+            ? t("providers.probe.unreachable", { detail: result.error ?? t("providers.probe.networkFailed") })
+            : t("providers.probe.result", {
+              grade: result.grade === "ok" ? t("providers.probe.ok") : t("providers.probe.slow"),
+              status: result.status ?? "?",
+              latency: result.latencyMs ?? "?",
+            })}
           {" · "}
           <Time iso={result.at} />
         </span>
@@ -70,7 +77,7 @@ export function ProbeFeedback({ result, error }: FeedbackProps) {
       ) : (
         result && (
           <p className="asb-scope-note">
-            检测仅确认服务地址可达，不发送模型请求，也不验证密钥是否有效。
+            {t("providers.probe.note")}
           </p>
         )
       )}

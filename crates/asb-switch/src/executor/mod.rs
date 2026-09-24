@@ -26,6 +26,12 @@ use crate::io::SwitchIo;
 
 pub use crate::restore::RestoreOutcome;
 pub const PROCESS_NAME: &str = "agent-switchboard";
+/// Optional confirmation-time guard for a restore initiated from a reviewed repair.
+pub struct RestoreExpectation {
+    pub content_hash: String,
+    pub target_existed: bool,
+    pub auth: Option<(String, bool)>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FilePreview {
@@ -69,7 +75,7 @@ pub struct SwitchOutcome {
     pub lock: LockStatus,
     pub acquired_at: String,
     pub changed: Vec<String>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<asb_core::contracts::LocalizedMessage>,
     pub backup: BackupRecord,
     pub preview: SwitchPreview,
     pub recovery: RecoveryOutcome,
@@ -290,7 +296,11 @@ pub fn preview_repair_rendered(
             app,
             target: target.to_string_lossy().into_owned(),
             changes: vec![],
-            warnings: vec!["已生成可安全自动修复的配置候选；确认后会先备份原文件。".to_string()],
+            warnings: vec![asb_core::contracts::LocalizedMessage::new(
+                "warnings.repair.candidate",
+                serde_json::json!({}),
+                "已生成可安全自动修复的配置候选；确认后会先备份原文件。",
+            )],
             backup_dir: backup_dir.to_string_lossy().into_owned(),
         },
         content_hash: sha256_hex(current),
@@ -317,7 +327,7 @@ pub struct RenderedWriteRequest<'a> {
 pub struct RenderedWriteOutcome {
     pub backup: BackupRecord,
     pub final_hash: String,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<asb_core::contracts::LocalizedMessage>,
 }
 
 pub(crate) fn metadata_path(backup_path: &Path) -> PathBuf {

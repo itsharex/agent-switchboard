@@ -105,8 +105,9 @@ fn check_one_skill_update(
     definition: &ExtensionDefinition,
 ) -> Result<SkillUpdateOutcome, CommandError> {
     let ExtensionPayload::Skill(skill) = &definition.payload else {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-invalid",
+            "errors.extlib.updateCheckOnlySkill",
             "更新检查只适用于 Skill",
         ));
     };
@@ -176,8 +177,9 @@ pub async fn check_skill_updates(
     definition_ids: Vec<String>,
 ) -> Result<Vec<SkillUpdateReport>, CommandError> {
     if definition_ids.is_empty() {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-invalid",
+            "errors.extlib.updateCheckNoSelection",
             "更新检查没有选择任何 Skill",
         ));
     }
@@ -239,7 +241,7 @@ pub async fn update_skill_definition(
         let mut definition = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         // A stored version wins: rolling back to library history must not
         // require a live source scan, and only fresh source candidates may
         // advance the recorded commit. A present-but-corrupt version is a
@@ -266,8 +268,9 @@ pub async fn update_skill_definition(
                     .get(&new_digest)
                     .cloned()
                     .ok_or_else(|| {
-                        CommandError::new(
+                        CommandError::keyed(
                             "candidate-expired",
+                            "errors.extlib.candidateExpiredPickHistory",
                             "候选内容已过期；请重新检查更新或从版本历史选择",
                         )
                     })?,
@@ -282,15 +285,16 @@ pub async fn update_skill_definition(
             .expect("entries from one of the two sources");
         let previous_revision = definition.revision;
         let ExtensionPayload::Skill(skill) = &mut definition.payload else {
-            return Err(CommandError::new("extension-invalid", "更新只适用于 Skill"));
+            return Err(CommandError::keyed("extension-invalid", "errors.extlib.updateOnlySkill", "更新只适用于 Skill"));
         };
         if let (Some(source), Some(candidate)) = (&skill.source, &candidate) {
             if source.source_id != candidate.source_identity
                 || source.subpath != candidate.subpath
                 || source.ref_name != candidate.ref_name
             {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "candidate-source-conflict",
+                    "errors.extlib.candidateSourceConflict",
                     "候选内容来自不同来源；未更新当前 Skill 的来源绑定",
                 ));
             }
@@ -349,8 +353,9 @@ pub async fn create_local_skill(
         })
         .map_err(|error| CommandError::new("extension-invalid", error.message))?;
         if description.is_empty() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.localSkillRequiresDescription",
                 "通用 Skill 必须提供 description",
             ));
         }
@@ -367,8 +372,9 @@ pub async fn create_local_skill(
         let manifest = match asb_core::extensions::skill::extract_manifest(&skill_md) {
             asb_core::extensions::skill::ManifestExtraction::Parsed(manifest) => manifest,
             _ => {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-invalid",
+                    "errors.extlib.templateSkillMdUnparsable",
                     "模板生成的 SKILL.md 无法解析，请重试",
                 ))
             }
@@ -417,16 +423,18 @@ pub async fn fork_local_skill(
         let source = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         let ExtensionPayload::Skill(skill) = &source.payload else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.notSkillCannotFork",
                 "该扩展不是 Skill，无法创建本地副本",
             ));
         };
         if skill.source.is_none() && skill.host_scoped.is_none() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.alreadyLocalEditable",
                 "该 Skill 已是本地内容，可直接编辑",
             ));
         }
@@ -453,9 +461,11 @@ pub async fn fork_local_skill(
             }),
         };
         validate_definition(&definition).map_err(|error| {
-            CommandError::new(
+            CommandError::localized(
                 "extension-invalid",
+                "errors.extlib.forkMissingCommonFields",
                 format!("该内容缺少通用字段，无法创建本地副本：{}", error.message),
+                serde_json::json!({ "detail": error.message }),
             )
         })?;
         store

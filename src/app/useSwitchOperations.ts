@@ -1,3 +1,4 @@
+import type { MessageKey } from "../i18n";
 import { useCallback, useRef, useState } from "react";
 import {
   backupDiff,
@@ -10,9 +11,9 @@ import {
   type ConfigFileStatus,
   type KeyChange,
   type ProviderProfile,
-  type ConfigWriteRecord,
-} from "../api/client";
+  type ConfigWriteRecord, type LocalizedMessage } from "../api/client";
 import { notifyWriteOutcome } from "./notifications";
+import { toastMessage } from "../components/use-toast";
 import type { ActivationCandidate } from "./useProviderSwitchFlow";
 
 interface SwitchOperationDeps {
@@ -27,7 +28,7 @@ interface SwitchOperationDeps {
   targetProfileId: string | null;
   targetProfile: ProviderProfile | null;
   refresh: () => Promise<void>;
-  refreshDiscoveryOrAppend: (warnings: string[], failureNote: string) => Promise<string[]>;
+  refreshDiscoveryOrAppend: (warnings: readonly LocalizedMessage[], failureNote: MessageKey) => Promise<LocalizedMessage[]>;
 }
 
 /**
@@ -53,7 +54,7 @@ export function useSwitchOperations({
   const [undoDiff, setUndoDiff] = useState<
     | { state: "idle" | "loading" }
     | { state: "ready"; changes: KeyChange[] }
-    | { state: "error"; message: string }
+    | { state: "error"; error: CommandError }
   >({ state: "idle" });
   const [recoverLockPending, setRecoverLockPending] = useState<AppKind | null>(null);
   const undoDiffVersion = useRef(0);
@@ -71,7 +72,7 @@ export function useSwitchOperations({
         },
         (caught: CommandError) => {
           if (undoDiffVersion.current === version) {
-            setUndoDiff({ state: "error", message: caught.message ?? "无法生成撤回差异" });
+            setUndoDiff({ state: "error", error: caught });
           }
         },
       );
@@ -102,9 +103,9 @@ export function useSwitchOperations({
       await setTargetProfile(targetProfileId);
       const warnings = await refreshDiscoveryOrAppend(
         result.warnings,
-        "配置已写入，但无法刷新本机配置发现结果。",
+        "operations.notify.discoveryStale.written",
       );
-      notifyWriteOutcome(`已切换到「${targetProfile.name}」`, targetProfile.app, warnings);
+      notifyWriteOutcome(toastMessage("operations.notify.switched", { name: targetProfile.name }), targetProfile.app, warnings);
     } catch (caught) {
       const commandError = caught as CommandError;
       onError(commandError);
@@ -142,9 +143,9 @@ export function useSwitchOperations({
         if (targetProfileId) await setTargetProfile(targetProfileId);
         const warnings = await refreshDiscoveryOrAppend(
           result.warnings,
-          "配置已恢复，但无法刷新本机配置发现结果。",
+          "operations.notify.discoveryStale.restored",
         );
-        notifyWriteOutcome("已恢复备份", result.preRestoreBackup.app, warnings);
+        notifyWriteOutcome(toastMessage("operations.notify.restored"), result.preRestoreBackup.app, warnings);
       } catch (caught) {
         onError(caught as CommandError);
       } finally {
@@ -177,9 +178,9 @@ export function useSwitchOperations({
       if (targetProfileId) await setTargetProfile(targetProfileId);
       const warnings = await refreshDiscoveryOrAppend(
         result.warnings,
-        "配置已撤回，但无法刷新本机配置发现结果。",
+        "operations.notify.discoveryStale.undone",
       );
-      notifyWriteOutcome("已撤回上一次切换", target.app, warnings);
+      notifyWriteOutcome(toastMessage("operations.notify.undone"), target.app, warnings);
     } catch (caught) {
       onError(caught as CommandError);
     } finally {

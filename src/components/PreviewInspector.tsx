@@ -1,4 +1,6 @@
-import type { FilePreview } from "../api/client";
+import type { FilePreview, LocalizedMessage } from "../api/client";
+import { useI18n } from "../i18n";
+import { localizedMessageText } from "../i18n/errors";
 import { CodePreview } from "./CodePreview";
 import { DiffView } from "./DiffView";
 import { PreviewIcon } from "./icons";
@@ -8,7 +10,7 @@ interface Props {
   /** Model read from the client's user-level configuration file. */
   userConfigModel: string | null;
   /** Known conditions that can override the user-level configuration. */
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
 }
 
 /**
@@ -22,13 +24,14 @@ export function PreviewInspector({
   userConfigModel,
   userConfigWarnings,
 }: Props) {
+  const { t } = useI18n();
   if (!filePreview) {
     return (
       <div className="asb-empty-state">
         <span className="asb-empty-state-icon" aria-hidden="true">
           <PreviewIcon />
         </span>
-        <h3 className="asb-section-title">选择供应商后生成预览</h3>
+        <h3 className="asb-section-title">{t("providers.preview.empty")}</h3>
       </div>
     );
   }
@@ -36,30 +39,30 @@ export function PreviewInspector({
   return (
     <div className="asb-inspector">
       <div className="asb-kv">
-        <span className="asb-kv-label">当前用户级配置模型</span>
-        <span className="asb-kv-value asb-code">{userConfigModel ?? "默认模型"}</span>
+        <span className="asb-kv-label">{t("providers.preview.userConfigModel")}</span>
+        <span className="asb-kv-value asb-code">{userConfigModel ?? t("providers.label.defaultModel")}</span>
       </div>
       {userConfigWarnings.length > 0 && (
-        <ul className="asb-warnings" aria-label="范围警告">
+        <ul className="asb-warnings" aria-label={t("providers.preview.scopeWarningsAria")}>
           {userConfigWarnings.map((warning) => (
-            <li key={warning}>{warning}</li>
+            <li key={warning.key}>{localizedMessageText(warning, t)}</li>
           ))}
         </ul>
       )}
       {/* Warnings precede the diff: the gateway rewrite is explained before
           the 127.0.0.1 endpoint change is seen. */}
       {preview.warnings.length > 0 && (
-        <ul className="asb-warnings" aria-label="警告">
+        <ul className="asb-warnings" aria-label={t("providers.preview.warningsAria")}>
           {preview.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
+            <li key={warning.key}>{localizedMessageText(warning, t)}</li>
           ))}
         </ul>
       )}
-      {preview.changes.length === 0 && <p className="asb-empty">无变更</p>}
-      <DiffView changes={preview.changes} label="变更键" />
+      {preview.changes.length === 0 && <p className="asb-empty">{t("providers.preview.noChanges")}</p>}
+      <DiffView changes={preview.changes} label={t("providers.preview.changesLabel")} />
       <CodePreview target={preview.target} content={filePreview.content} />
       <div className="asb-kv">
-        <span className="asb-kv-label">备份位置</span>
+        <span className="asb-kv-label">{t("providers.preview.backupDir")}</span>
         <span className="asb-kv-value asb-code">{preview.backupDir}</span>
       </div>
     </div>

@@ -16,6 +16,7 @@ import {
   type ProviderRecord,
 } from "../api/client";
 import { codexLoginBlocker } from "../api/official-login";
+import type { ActiveProfileRef } from "../lib/current-provider-name";
 
 interface SnapshotDeps {
   onError: (error: CommandError) => void;
@@ -44,6 +45,19 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
   const refreshVersion = useRef(0);
 
   const profiles = useMemo(() => records.map((record) => record.profile), [records]);
+
+  /** The route cards' lookup source: every stored profile across both
+   * clients. The generic store carries websiteUrl on the profile, while
+   * Codex third-party files carry it at record level. */
+  const relayProfiles = useMemo<ActiveProfileRef[]>(() => [
+    ...records.map((record) => record.profile),
+    ...codexOfficialRecords.map((record) => record.profile),
+    ...codexRecords.map((record) => ({
+      ...record.profile,
+      app: "codex" as const,
+      websiteUrl: record.websiteUrl,
+    })),
+  ], [records, codexOfficialRecords, codexRecords]);
 
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
@@ -158,6 +172,9 @@ export function useConfigSnapshot({ onError }: SnapshotDeps) {
     setCodexRecords,
     /** Display projections of the stored provider files. */
     profiles,
+    /** Every stored profile flattened for the route cards' active-profile
+     * lookups, across both clients and all three stores. */
+    relayProfiles,
     backups,
     locks,
     /** Why third-party Codex switching is currently blocked, or null. */

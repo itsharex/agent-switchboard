@@ -46,9 +46,11 @@ pub async fn start_codex_probe(
     request: StartCodexProbeRequest,
 ) -> Result<(), CommandError> {
     if request.run_count == 0 || request.run_count > MAX_RUN_COUNT {
-        return Err(CommandError::new(
+        return Err(CommandError::localized(
             "codex-probe-invalid-count",
+            "errors.misc.probeInvalidCount",
             format!("检测次数必须在 1 到 {MAX_RUN_COUNT} 之间"),
+            serde_json::json!({ "max": MAX_RUN_COUNT }),
         ));
     }
     let question = codex_probe::resolve_question(
@@ -128,7 +130,12 @@ pub async fn list_codex_probe_history(
     let status = match request.status.as_deref() {
         None | Some("all") => None,
         Some(value) => Some(ProbeBatchStatus::parse(value).ok_or_else(|| {
-            CommandError::new("codex-probe-history-invalid", format!("未知的检测状态：{value}"))
+            CommandError::localized(
+                "codex-probe-history-invalid",
+                "errors.misc.probeUnknownStatus",
+                format!("未知的检测状态：{value}"),
+                serde_json::json!({ "status": value }),
+            )
         })?),
     };
     let profile = match request.profile {

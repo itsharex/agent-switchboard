@@ -1,0 +1,76 @@
+import type { MessageEntry } from "../types";
+
+/** Application preferences (外观 / 窗口与托盘 / 性能 / 日志 / 语言), the
+ * settings page chrome, and the settings load/save failure states. */
+export const messages = {
+  "settings.page.backToProviders": ["返回供应商", "Back to providers"],
+  "settings.page.categories.aria": ["设置分类", "Settings categories"],
+  "settings.page.loading": ["正在读取设置", "Reading settings"],
+
+  "settings.loadFailed": ["设置加载失败：{detail}", "Failed to load settings: {detail}"],
+  "settings.loadFailedDetail": ["读取失败期间，外观与关闭行为使用默认值", "While loading fails, appearance and close behavior use defaults"],
+  "settings.retry": ["重试", "Retry"],
+
+  "settings.about.tagline": ["Codex 与 Claude Code 的本地配置控制台。", "A local configuration console for Codex and Claude Code."],
+
+  "settings.group.appearance": ["外观", "Appearance"],
+  "settings.appearance.theme": ["界面主题", "Theme"],
+  "settings.appearance.theme.system": ["跟随系统", "Follow system"],
+  "settings.appearance.theme.light": ["浅色", "Light"],
+  "settings.appearance.theme.dark": ["深色", "Dark"],
+  "settings.appearance.font": ["界面字体", "Interface font"],
+  "settings.appearance.scale": ["主界面缩放", "Interface scale"],
+  "settings.appearance.scale.detail": ["同步调整文字与控件大小，立即生效。", "Scales text and controls together; applies immediately."],
+  "settings.appearance.motion": ["动态效果", "Motion"],
+  "settings.appearance.motion.system": ["跟随系统", "Follow system"],
+  "settings.appearance.motion.reduce": ["减少动态效果", "Reduce motion"],
+
+  "settings.language": ["界面语言", "Interface language"],
+  "settings.language.detail": ["保存后主窗口与托盘立即切换，重启后保持。", "Applies to the main window and tray immediately after saving, and persists across restarts."],
+  "settings.language.system": ["跟随系统", "Follow system"],
+  "settings.language.zh": ["简体中文", "简体中文"],
+  "settings.language.en": ["English", "English"],
+
+  "settings.group.window": ["窗口与托盘", "Window & Tray"],
+  "settings.window.closeAction": ["点击关闭按钮时", "When the close button is clicked"],
+  "settings.window.close.hideToTray": ["最小化到托盘", "Minimize to tray"],
+  "settings.window.close.exit": ["退出应用", "Quit the app"],
+  "settings.window.alwaysOnTop": ["窗口始终置顶", "Always keep the window on top"],
+  "settings.window.launchAtLogin": ["开机自动启动", "Launch at login"],
+  "settings.window.startMinimized": ["启动时最小化到托盘", "Start minimized to tray"],
+  "settings.window.startMinimized.detail": ["应用启动后保留在系统托盘，不显示主窗口。", "The app stays in the system tray at startup without showing the main window."],
+  "settings.window.startupPage": ["启动页面", "Startup page"],
+  "settings.window.startupPage.detail": ["下次启动生效。上次访问页面仅恢复顶层页面，不恢复草稿或待确认操作。", "Takes effect next launch. Last visited restores the top-level page only, not drafts or pending confirmations."],
+  "settings.window.startupPage.providers": ["供应商切换", "Providers"],
+  "settings.window.startupPage.lastVisited": ["上次访问页面", "Last visited page"],
+  "settings.shortcut.label": ["全局唤起快捷键", "Global shortcut"],
+  "settings.shortcut.detail": ["打开并聚焦主窗口；窗口已在前台时隐藏到托盘。", "Opens and focuses the main window; hides it to the tray when already in front."],
+  "settings.shortcut.recordAria": ["录入全局快捷键，当前{current}", "Record a global shortcut; current {current}"],
+  "settings.shortcut.recordAriaRecording": ["按下快捷键，Esc 取消", "Press the shortcut; Esc cancels"],
+  "settings.shortcut.preparing": ["准备录入…", "Preparing…"],
+  "settings.shortcut.recording": ["按下快捷键…", "Press the shortcut…"],
+  "settings.shortcut.notSet": ["未设置", "Not set"],
+  "settings.shortcut.space": ["空格", "Space"],
+  "settings.shortcut.invalidChord": ["请按 Ctrl、Alt 或 Command/Win 与字母、数字、空格或 F1–F12 的组合", "Press Ctrl, Alt, or Command/Win combined with a letter, digit, Space, or F1–F12"],
+  "settings.shortcut.clear": ["清除", "Clear"],
+
+  "settings.font.pickerAria": ["选择界面字体", "Choose interface font"],
+  "settings.font.searchAria": ["搜索字体", "Search fonts"],
+  "settings.font.searchPlaceholder": ["搜索字体", "Search fonts"],
+  "settings.font.listAria": ["可选字体", "Available fonts"],
+  "settings.font.empty": ["没有找到相关字体", "No matching fonts"],
+
+  "settings.group.log": ["日志", "Logs"],
+  "settings.log.level": ["运行事件记录级别", "Runtime event level"],
+  "settings.log.level.detail": ["低于该级别的新事件不再写入日志文件，保存后立即生效。", "New events below this level are no longer written to the log file; applies immediately after saving."],
+  "settings.log.level.debug": ["调试", "Debug"],
+  "settings.log.level.info": ["信息", "Info"],
+  "settings.log.level.warn": ["警告", "Warn"],
+  "settings.log.level.error": ["错误", "Error"],
+  "settings.log.level.silent": ["静默", "Silent"],
+
+  "settings.group.performance": ["性能", "Performance"],
+  "settings.performance.hardwareAcceleration": ["启用硬件加速", "Enable hardware acceleration"],
+  "settings.performance.restartRequired": ["重启以应用硬件加速", "Restart to apply hardware acceleration"],
+  "settings.performance.restart": ["重启应用", "Restart app"],
+} as const satisfies Record<string, MessageEntry>;

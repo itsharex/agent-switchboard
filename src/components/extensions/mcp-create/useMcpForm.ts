@@ -1,3 +1,4 @@
+import { uiMessage } from "../../../i18n/errors";
 import { useState } from "react";
 import type { AppKind, ExtensionDraft } from "../../../api/client";
 import { materializeMcpDraft, validateMcpSource, type PutSecret } from "./mcp-draft";
@@ -26,7 +27,7 @@ async function saveNewMcp(props: NewMcpFormProps, document: EditorDocument, clie
   const mcpMetadata = buildMetadata(metadata);
   const draft = await materializeMcpDraft(source, props.onPutSecret);
   if (!await props.onSave({ ...draft, ...(mcpMetadata ? { mcpMetadata } : {}) }, [...clients])) {
-    throw new Error("保存未完成，配置已保留，请检查错误后重试");
+    throw uiMessage("mcp.error.saveIncomplete");
   }
 }
 
@@ -69,7 +70,7 @@ export function useMcpForm(props: NewMcpFormProps) {
       setWizard(document.json.trim() ? parseMcpJson(document.json, document.name)
         : { name: document.name, server: emptyServer("stdio") });
       setError(null);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "JSON 配置无法解析"); }
+    } catch (caught) { setError(caught); }
   };
   const closeWizard = () => { setWizard(null); setFocusJson(true); };
   const applyWizard = (source: CreateSource) => {

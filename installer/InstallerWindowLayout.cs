@@ -15,8 +15,9 @@ namespace AgentSwitchboard.Installer
 {
     internal sealed partial class InstallerWindow
     {
-        private Grid BuildLayout()
+        private FrameworkElement BuildLayout()
         {
+            var stage = new Grid { Width = 680, Height = 600 };
             var layout = new Grid { Margin = new Thickness(32, 8, 32, 28) };
             layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -24,23 +25,21 @@ namespace AgentSwitchboard.Installer
 
             layout.Children.Add(BuildHeader());
             var body = BuildBody();
-            body.Width = 536;
-            var scroll = new ScrollViewer
-            {
-                Content = body,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            };
-            scroll.SizeChanged += delegate { body.Width = Math.Min(536, scroll.ActualWidth); };
-            Grid.SetRow(scroll, 1);
-            layout.Children.Add(scroll);
+            Grid.SetRow(body, 1);
+            layout.Children.Add(body);
 
             var footer = BuildFooter();
             footer.HorizontalAlignment = HorizontalAlignment.Center;
-            footer.SetBinding(FrameworkElement.WidthProperty, new Binding("ActualWidth") { Source = body });
+            footer.Width = 536;
             Grid.SetRow(footer, 2);
             layout.Children.Add(footer);
-            return layout;
+            stage.Children.Add(layout);
+            return new Viewbox
+            {
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                Child = stage,
+            };
         }
 
         private Grid BuildHeader()
@@ -93,12 +92,13 @@ namespace AgentSwitchboard.Installer
         {
             var body = new StackPanel
             {
+                Width = 536,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                MaxWidth = 536,
                 Margin = new Thickness(0, 22, 0, 20),
             };
             body.Children.Add(BuildHero());
-            body.Children.Add(BuildLocationCard());
+            locationCard = BuildLocationCard();
+            body.Children.Add(locationCard);
             body.Children.Add(BuildProgressArea());
             return body;
         }
@@ -108,12 +108,8 @@ namespace AgentSwitchboard.Installer
             var hero = new StackPanel
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 30),
+                Margin = new Thickness(0, 0, 0, 24),
             };
-            var mark = CreateBrandMark(54);
-            mark.Margin = new Thickness(0, 0, 0, 18);
-            hero.Children.Add(mark);
-
             title = Text(copy.ReadyTitle, "TitleSize");
             title.FontFamily = Font("DisplayFont");
             title.FontWeight = FontWeights.SemiBold;
@@ -121,7 +117,7 @@ namespace AgentSwitchboard.Installer
             title.HorizontalAlignment = HorizontalAlignment.Center;
             hero.Children.Add(title);
 
-            var summary = Text(copy.ReadySummary, "LeadSize");
+            summary = Text(copy.ReadySummary, "LeadSize");
             summary.Foreground = Brush("Muted");
             summary.LineHeight = 23;
             summary.TextAlignment = TextAlignment.Center;
@@ -129,7 +125,9 @@ namespace AgentSwitchboard.Installer
             summary.Margin = new Thickness(0, 10, 0, 0);
             hero.Children.Add(summary);
 
-            var version = Text(copy.Version(InstallerProductMetadata.Version), "CaptionSize");
+            AutomationProperties.SetLiveSetting(summary, AutomationLiveSetting.Polite);
+
+            version = Text(copy.Version(InstallerProductMetadata.Version), "CaptionSize");
             version.Foreground = Brush("Muted");
             version.TextAlignment = TextAlignment.Center;
             version.Margin = new Thickness(0, 10, 0, 0);
@@ -185,12 +183,6 @@ namespace AgentSwitchboard.Installer
             var content = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
             progress = new ProgressBar { Visibility = Visibility.Collapsed };
             content.Children.Add(progress);
-
-            status = Text(String.Empty, "BodySize");
-            status.Visibility = Visibility.Collapsed;
-            status.Margin = new Thickness(0, 13, 0, 0);
-            AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
-            content.Children.Add(status);
 
             diagnostic = Text(String.Empty, "CaptionSize");
             diagnostic.Foreground = Brush("Muted");
@@ -251,7 +243,12 @@ namespace AgentSwitchboard.Installer
                         BitmapCreateOptions.None,
                         BitmapCacheOption.OnLoad);
                     if (decoder.Frames.Count == 0) return Brush("Surface");
-                    var image = new ImageBrush(decoder.Frames[0]) { Stretch = Stretch.Fill };
+                    var image = new ImageBrush(decoder.Frames[0])
+                    {
+                        Stretch = Stretch.UniformToFill,
+                        AlignmentX = AlignmentX.Center,
+                        AlignmentY = AlignmentY.Center,
+                    };
                     image.Freeze();
                     return image;
                 }

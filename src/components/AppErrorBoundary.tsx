@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { useI18n } from "../i18n";
 
 interface Props {
   children: ReactNode;
@@ -24,13 +25,18 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.failed) {
-      return (
-        <section className="asb-panel asb-recovery-panel" role="alert" aria-label="界面恢复">
-          <h2 className="asb-recovery-title">界面未能加载</h2>
-          <p className="asb-scope-note">可关闭窗口后从系统托盘重新打开应用。</p>
-        </section>
-      );
+      return <RecoveryMessage />;
     }
     return this.props.children;
   }
+}
+
+function RecoveryMessage() {
+  const { t } = useI18n();
+  return (
+    <section className="asb-panel asb-recovery-panel" role="alert" aria-label={t("recovery.aria")}>
+      <h2 className="asb-recovery-title">{t("recovery.title")}</h2>
+      <p className="asb-scope-note">{t("recovery.body")}</p>
+    </section>
+  );
 }

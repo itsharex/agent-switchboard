@@ -1,3 +1,4 @@
+import type { LocalizedMessage } from "./switching";
 import { invoke } from "./client";
 import type { AppKind, UpstreamProtocol } from "./shared";
 import type { SettingsValues } from "./settings";
@@ -8,7 +9,7 @@ export type RuntimeLogAction =
   | "appStarted"
   | "appSettingsSaved"
   | "appSettingsRepaired"
-  | "profileStoreReset"
+  | "profileStoreRepaired"
   | "profileCreated"
   | "profileUpdated"
   | "profileDeleted"
@@ -189,7 +190,7 @@ export interface GatewayPortChangeResult {
   fromPort: number;
   toPort: number;
   clients: GatewayPortChangeClientPlan[];
-  warnings: string[];
+  warnings: LocalizedMessage[];
 }
 
 export function getConfigStatus(): Promise<ConfigFileStatus[]> {

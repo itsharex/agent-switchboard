@@ -5,6 +5,7 @@ import {
   ExtensionRemoveSheet,
   SkillDisableScopeSheet,
 } from "../../components/extensions/ExtensionPlanSheet";
+import { useI18n } from "../../i18n";
 import { ExtensionManagementDialog } from "./ExtensionManagementDialog";
 import { McpEditorDialog, SkillEditorDialog } from "./ExtensionEditorDialogs";
 import {
@@ -18,6 +19,7 @@ import { PortableExportSheet } from "./PortableExportSheet";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWorkspace; suspended: boolean }) {
+  const { t } = useI18n();
   const dialog = w.nav.dialog;
   if (!dialog) return null;
   const content = (() => {
@@ -50,10 +52,10 @@ function WorkspaceDialog({ workspace: w, suspended }: { workspace: ExtensionWork
       const item = w.items.find((entry) => entry.id === dialog.definitionId);
       if (!item)
         return (
-          <AppDialog title="读取扩展" busy={w.busy} onClose={w.nav.closeDialog}>
-            <p>暂时无法读取这个扩展，请刷新扩展库。</p>
+          <AppDialog title={t("extensions.workspace.readTitle")} busy={w.busy} onClose={w.nav.closeDialog}>
+            <p>{t("extensions.workspace.readFailed")}</p>
             <Button variant="secondary" onClick={() => void w.ext.runExclusive(w.ext.refresh)}>
-              重新加载
+              {t("extensions.library.reload")}
             </Button>
           </AppDialog>
         );

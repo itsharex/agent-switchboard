@@ -2,7 +2,8 @@
  * Codex 项目方案（E06）：供应商 + MCP + Skills + 指令预设的命名联动快照。
  * 本模块只做类型化调用；真实写入由后端逐项交回各资源域所有者完成。
  */
-import { invoke } from "./client";
+import { invoke, type LocalizedMessage } from "./client";
+import { tr } from "../i18n/current";
 
 /** 槽位语义：`null` = 从未拍过快照（应用时不动）；空数组/空串 = 拍到的就是空。 */
 export interface CodexProjectSlot {
@@ -50,14 +51,14 @@ export interface CodexProjectApplyStep {
 export interface CodexProjectApplyPreview {
   planId: string;
   steps: CodexProjectApplyStep[];
-  warnings: string[];
+  warnings: LocalizedMessage[];
   /** 应用前会自动回拍的那个项目；`null` 表示没有需要补拍的旧项目。 */
   autosavePlanId: string | null;
 }
 
 export interface CodexProjectApplyOutcome {
   steps: CodexProjectApplyStep[];
-  warnings: string[];
+  warnings: LocalizedMessage[];
   view: CodexProjectPlansView;
 }
 
@@ -115,16 +116,18 @@ export function describeCodexProjectSlot(
 ): string {
   const parts: string[] = [];
   if (slot.providers !== null) {
-    parts.push(`供应商：${slot.providers ? label(slot.providers) : "无激活供应商"}`);
+    parts.push(tr("codex.plans.slotProvider",
+      { name: slot.providers ? label(slot.providers) : tr("codex.plans.noActiveProvider") }));
   }
   if (slot.mcp !== null) {
-    parts.push(`MCP ${slot.mcp.length} 项`);
+    parts.push(tr("codex.plans.slotMcp", { count: slot.mcp.length }));
   }
   if (slot.skills !== null) {
-    parts.push(`Skill ${slot.skills.length} 项`);
+    parts.push(tr("codex.plans.slotSkill", { count: slot.skills.length }));
   }
   if (slot.prompts !== null) {
-    parts.push(`指令：${slot.prompts ? label(slot.prompts) : "无激活指令"}`);
+    parts.push(tr("codex.plans.slotPrompt",
+      { name: slot.prompts ? label(slot.prompts) : tr("codex.plans.noActivePrompt") }));
   }
-  return parts.length ? parts.join(" · ") : "尚未拍过快照";
+  return parts.length ? parts.join(" · ") : tr("codex.plans.slotEmpty");
 }

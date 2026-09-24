@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import type { ClaudeModelSettings, ProviderModel } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { Checkbox } from "../Checkbox";
 import { ChevronDownIcon } from "../icons";
 import { Input } from "../Input";
@@ -21,6 +22,7 @@ interface TierProps extends Props {
 }
 
 function ModelTierField({ label, field, contextFlag, busy, models, claudeSettings, setDraft }: TierProps) {
+  const { t } = useI18n();
   const currentModel = claudeSettings?.[field] ?? null;
   const setModel = (model: string | null) => setDraft((current) => ({
     ...current,
@@ -35,10 +37,10 @@ function ModelTierField({ label, field, contextFlag, busy, models, claudeSetting
       <div className="asb-input-with-picker">
         <Input code aria-label={label} value={currentModel ?? ""} disabled={busy}
           onChange={(event) => setModel(optional(event.target.value))} />
-        {models && <ModelPicker models={models.map(({ id, ownedBy }) => ({ value: id, label: id, group: ownedBy }))} current={currentModel} ariaLabel={`选择 ${label}模型`}
+        {models && <ModelPicker models={models.map(({ id, ownedBy }) => ({ value: id, label: id, group: ownedBy }))} current={currentModel} ariaLabel={t("providers.editor.tier.pickAria", { tier: label })}
           disabled={busy} onSelect={setModel} />}
         {contextFlag && (
-          <Checkbox label="1M" ariaLabel={`${label}启用 1M 上下文`}
+          <Checkbox label="1M" ariaLabel={t("providers.editor.tier.oneMAria", { tier: label })}
             checked={claudeSettings?.[contextFlag] ?? false} disabled={busy || !currentModel?.trim()}
             onChange={(enabled) => setDraft((current) => ({
               ...current, modelOptions: claudeOptions(current.modelOptions, { [contextFlag]: enabled }),
@@ -50,9 +52,10 @@ function ModelTierField({ label, field, contextFlag, busy, models, claudeSetting
 }
 
 function AvailableModelsField({ claudeSettings, busy, setDraft }: Props) {
+  const { t } = useI18n();
   return (
     <label className="asb-field">
-      <span>可选模型列表（每行一个）</span>
+      <span>{t("providers.editor.availableModels")}</span>
       <Textarea code rows={3} value={(claudeSettings?.availableModels ?? []).join("\n")} disabled={busy}
         onChange={(event) => {
           const lines = event.target.value.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -66,17 +69,18 @@ function AvailableModelsField({ claudeSettings, busy, setDraft }: Props) {
 
 /** Claude tiers keep their model-specific context flags in the connection draft. */
 export function ClaudeModelMapping(props: Props) {
+  const { t } = useI18n();
   const values = props.claudeSettings;
   const hasMapping = Boolean(values && (values.haikuModel || values.sonnetModel || values.opusModel || values.availableModels?.length));
   const [expanded, setExpanded] = useState(hasMapping);
   return (
     <details className="asb-provider-disclosure" open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary><span>模型映射</span><span className="asb-provider-disclosure-value">{hasMapping ? "已配置" : "按档位覆盖"}</span><ChevronDownIcon /></summary>
+      <summary><span>{t("providers.editor.mapping")}</span><span className="asb-provider-disclosure-value">{hasMapping ? t("providers.editor.mapping.configured") : t("providers.editor.mapping.byTier")}</span><ChevronDownIcon /></summary>
       <div className="asb-provider-disclosure-body asb-provider-field-grid">
-        <ModelTierField {...props} label="Haiku 档" field="haikuModel" />
-        <ModelTierField {...props} label="Sonnet 档" field="sonnetModel" contextFlag="sonnetOneM" />
-        <ModelTierField {...props} label="Opus 档" field="opusModel" contextFlag="opusOneM" />
+        <ModelTierField {...props} label={t("providers.editor.tier.haiku")} field="haikuModel" />
+        <ModelTierField {...props} label={t("providers.editor.tier.sonnet")} field="sonnetModel" contextFlag="sonnetOneM" />
+        <ModelTierField {...props} label={t("providers.editor.tier.opus")} field="opusModel" contextFlag="opusOneM" />
         <AvailableModelsField {...props} />
       </div>
     </details>

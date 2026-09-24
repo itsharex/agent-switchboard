@@ -3,9 +3,10 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { SessionMessage } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { Time } from "../Time";
 import { Button } from "../Button";
-import { toast } from "../use-toast";
+import { toast, toastMessage } from "../use-toast";
 import { copyText, messageRole } from "./session-content";
 
 const MESSAGE_COLLAPSE_THRESHOLD = 3000;
@@ -31,59 +32,74 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
 
 interface Props {
   message: SessionMessage;
-  index: number;
   targeted: boolean;
   expanded: boolean;
-  onToggleExpanded: (index: number) => void;
+  onToggleExpanded?: (id: string) => void;
+  onBookmark?: () => void;
+  bookmarked?: boolean;
+  bookmarkBusy?: boolean;
+}
+
+function MessageHeader({ message, onBookmark, bookmarked, bookmarkBusy }: Pick<Props,
+  "message" | "onBookmark" | "bookmarked" | "bookmarkBusy">) {
+  const { t } = useI18n();
+  const copy = async () => {
+    try {
+      await copyText(message.content);
+      toast({ kind: "success", title: toastMessage("sessions.message.copied") });
+    } catch {
+      toast({ kind: "error", title: toastMessage("sessions.message.copyFailed") });
+    }
+  };
+  return <header>
+    <span>{messageRole(message.role)}</span>
+    <span className="asb-session-message-time">{message.at ? <Time iso={message.at} /> : null}</span>
+    {onBookmark && (bookmarked
+      ? <span className="asb-session-message-saved">{t("sessions.bookmarks.saved")}</span>
+      : <Button variant="unstyled" className="asb-session-message-bookmark" disabled={bookmarkBusy}
+        onClick={onBookmark}>{t("sessions.bookmarks.save")}</Button>)}
+    <Button variant="unstyled" className="asb-session-message-copy" onClick={() => void copy()}>
+      {t("sessions.message.copy")}
+    </Button>
+  </header>;
 }
 
 /** Renders one read-only transcript entry and owns its local copy feedback. */
 export function SessionMessageView({
   message,
-  index,
   targeted,
   expanded,
   onToggleExpanded,
+  onBookmark,
+  bookmarked,
+  bookmarkBusy,
 }: Props) {
+  const { t } = useI18n();
   const isLong = message.content.length > MESSAGE_COLLAPSE_THRESHOLD;
   const collapsed = isLong && !expanded;
-
-  const copy = async () => {
-    try {
-      await copyText(message.content);
-      toast({ kind: "success", title: "已复制消息内容" });
-    } catch {
-      toast({ kind: "error", title: "无法复制消息内容" });
-    }
-  };
 
   return (
     <article
       className={`asb-session-message is-${message.role.toLowerCase()}${targeted ? " is-target" : ""}`}
-      data-index={index}
+      data-message-id={message.id}
+      tabIndex={targeted ? -1 : undefined}
     >
-      <header>
-        <span>{messageRole(message.role)}</span>
-        <span className="asb-session-message-time">
-          {message.at ? <Time iso={message.at} /> : null}
-        </span>
-        <Button variant="unstyled" className="asb-session-message-copy" onClick={() => void copy()}>
-          复制
-        </Button>
-      </header>
+      <MessageHeader message={message} onBookmark={onBookmark} bookmarked={bookmarked} bookmarkBusy={bookmarkBusy} />
       <div className={`asb-session-message-body${collapsed ? " is-collapsed" : ""}`}>
         <Markdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink }}>
           {message.content}
         </Markdown>
       </div>
-      {isLong && (
+      {isLong && onToggleExpanded && (
         <Button
           variant="unstyled"
           className="asb-session-message-toggle"
           aria-expanded={expanded}
-          onClick={() => onToggleExpanded(index)}
+          onClick={() => onToggleExpanded(message.id)}
         >
-          {expanded ? "收起" : `展开完整内容（约 ${Math.round(message.content.length / 1000)}k 字符）`}
+          {expanded
+            ? t("sessions.message.collapse")
+            : t("sessions.message.expand", { size: Math.round(message.content.length / 1000) })}
         </Button>
       )}
     </article>

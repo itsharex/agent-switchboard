@@ -130,7 +130,7 @@ pub struct RestoreOutcome {
     pub restored_hash: String,
     /// Observable non-rollback warnings, such as a failed lock release after
     /// the state record has committed.
-    pub warnings: Vec<String>,
+    pub warnings: Vec<asb_core::contracts::LocalizedMessage>,
 }
 
 fn read_verified_restore_source<Io: SwitchIo>(

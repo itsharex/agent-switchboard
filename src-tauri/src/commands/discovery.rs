@@ -36,14 +36,26 @@ pub(super) fn codex_import_source() -> Result<CodexImportSource, CommandError> {
         .map_err(|error| CommandError::new("config-path-unavailable", error))?;
     let config = read_discovery_file(&paths.codex)
         .map_err(|error| CommandError::new("codex-import-unavailable", error))?
-        .ok_or_else(|| CommandError::new("import-unavailable", "当前没有可读取的 Codex 配置"))?;
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "import-unavailable",
+                "errors.misc.noReadableCodexConfig",
+                "当前没有可读取的 Codex 配置",
+            )
+        })?;
     let auth = read_discovery_file(&paths.codex_auth)
         .map_err(|error| CommandError::new("codex-import-unavailable", error))?;
     discovery::codex_import_proposal(&paths.codex, &config, auth.as_deref(), |path| {
         read_discovery_file(&path.to_string_lossy())
     })
     .map_err(|error| CommandError::new("import-unavailable", error))?
-    .ok_or_else(|| CommandError::new("import-unavailable", "当前配置没有可导入的 Codex 供应商"))
+    .ok_or_else(|| {
+        CommandError::keyed(
+            "import-unavailable",
+            "errors.misc.noImportableCodexProviders",
+            "当前配置没有可导入的 Codex 供应商",
+        )
+    })
 }
 
 pub(super) fn discovery_report() -> Result<DiscoveryReport, CommandError> {
@@ -80,79 +92,6 @@ pub async fn discover_cached(
         state
             .load_discovery_cache()
             .map_err(|error| CommandError::new("discovery-cache-unavailable", error))
-    })
-    .await
-}
-
-/// Read-only scan of the local Codex and Claude Code JSONL session stores.
-/// The session manager never receives a source path from the renderer, so it
-/// cannot be redirected to unrelated user files.
-#[tauri::command]
-pub async fn list_sessions() -> Result<crate::session_manager::SessionScan, CommandError> {
-    blocking(move || Ok(crate::session_manager::scan_sessions())).await
-}
-
-/// Loads one transcript after resolving its source from the approved session
-/// roots. No session file is created, modified, or deleted by this command.
-#[tauri::command]
-pub async fn get_session_messages(
-    app: AppKind,
-    session_id: String,
-) -> Result<Vec<crate::session_manager::SessionMessage>, CommandError> {
-    blocking(move || {
-        crate::session_manager::load_messages(app, &session_id)
-            .map_err(|message| CommandError::new("session-unavailable", message))
-    })
-    .await
-}
-
-/// Starts the selected session in the platform terminal. The session source
-/// is resolved by the backend; the renderer never submits a path or
-/// executable command.
-#[tauri::command]
-pub async fn resume_session(
-    app: AppKind,
-    session_id: String,
-) -> Result<crate::session_manager::SessionResume, CommandError> {
-    observe(RuntimeLogAction::SessionResumed, async move {
-        blocking(move || {
-            crate::session_manager::resume_session(app, &session_id)
-                .map_err(|message| CommandError::new("session-resume-failed", message))
-        })
-        .await
-    })
-    .await
-}
-
-/// Permanently removes the one local session record the backend resolves from
-/// the approved roots. Irreversible by contract; the confirmation sheet in
-/// the renderer is the only gate.
-#[tauri::command]
-pub async fn delete_session(app: AppKind, session_id: String) -> Result<(), CommandError> {
-    observe(RuntimeLogAction::SessionDeleted, async move {
-        blocking(move || {
-            crate::session_manager::delete_session(app, &session_id)
-                .map_err(|message| CommandError::new("session-delete-failed", message))
-        })
-        .await
-    })
-    .await
-}
-
-/// Batch counterpart of `delete_session`: one scan resolves every requested
-/// record and each item reports its own outcome, so an unresolved or
-/// undeletable id never blocks the rest. Only an unreadable root set fails
-/// the whole call.
-#[tauri::command]
-pub async fn delete_sessions(
-    requests: Vec<crate::session_manager::SessionDeleteRequest>,
-) -> Result<Vec<crate::session_manager::SessionDeleteOutcome>, CommandError> {
-    observe(RuntimeLogAction::SessionDeleted, async move {
-        blocking(move || {
-            crate::session_manager::delete_sessions(&requests)
-                .map_err(|message| CommandError::new("session-delete-failed", message))
-        })
-        .await
     })
     .await
 }
@@ -195,8 +134,9 @@ pub async fn import_ccswitch_claude_profiles(
         blocking(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.has_active_routes() {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "gateway-route-active",
+                    "errors.misc.gatewayRouteActiveBlockImport",
                     "本机协议网关正在使用供应商；请先切换到直连或官方登录后再导入供应商",
                 ));
             }
@@ -261,11 +201,20 @@ pub async fn export_providers_sql(
         let exported_count = claude.len() + codex_official.len() + codex_custom.len();
         if exported_count == 0 {
             let detail = if skipped.is_empty() {
-                "没有可导出的供应商档案".to_string()
+                CommandError::keyed(
+                    "provider-export-empty",
+                    "errors.misc.noExportableProviders",
+                    "没有可导出的供应商档案",
+                )
             } else {
-                format!("没有可导出的供应商档案；{} 项无法导出", skipped.len())
+                CommandError::localized(
+                    "provider-export-empty",
+                    "errors.misc.noExportableProvidersWithSkipped",
+                    format!("没有可导出的供应商档案；{} 项无法导出", skipped.len()),
+                    serde_json::json!({ "count": skipped.len() }),
+                )
             };
-            return Err(CommandError::new("provider-export-empty", detail));
+            return Err(detail);
         }
         let sql = asb_core::provider_transfer::write_transfer_sql(
             &claude,
@@ -275,21 +224,28 @@ pub async fn export_providers_sql(
         .map_err(|error| CommandError::new("provider-export-failed", error))?;
         let path = std::path::PathBuf::from(&target_path);
         if path.is_dir() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "provider-export-invalid",
+                "errors.misc.exportTargetIsDirectory",
                 "导出目标是一个目录，请提供文件路径",
             ));
         }
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() && !parent.is_dir() {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "provider-export-invalid",
+                    "errors.misc.exportParentDirMissing",
                     "导出目标的父目录不存在",
                 ));
             }
         }
         std::fs::write(&path, sql).map_err(|error| {
-            CommandError::new("provider-export-failed", format!("无法写入导出文件：{error}"))
+            CommandError::localized(
+                "provider-export-failed",
+                "errors.misc.exportWriteFailed",
+                format!("无法写入导出文件：{error}"),
+                serde_json::json!({ "error": error.to_string() }),
+            )
         })?;
         Ok(ProviderSqlExport {
             exported_count,
@@ -335,8 +291,9 @@ pub async fn import_providers_sql(
         blocking(move || {
             switching::ensure_profile_save_recovered(&app)?;
             if gateway.has_active_routes() {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "gateway-route-active",
+                    "errors.misc.gatewayRouteActiveBlockImport",
                     "本机协议网关正在使用供应商；请先切换到直连或官方登录后再导入供应商",
                 ));
             }

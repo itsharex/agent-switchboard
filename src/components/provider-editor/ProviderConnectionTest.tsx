@@ -6,6 +6,7 @@ import type {
   UpstreamProtocol,
 } from "../../api/client";
 import { usesClaudeManagedAuth } from "../../api/claude-accounts";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { ConnectivityIcon } from "../icons";
 import { ProviderTestPanel } from "../ProviderTestPanel";
@@ -27,6 +28,7 @@ interface Props {
 export function ProviderConnectionTest({
   app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, busy, active,
 }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -46,18 +48,18 @@ export function ProviderConnectionTest({
       },
     } : null,
   [app, baseUrl, connection, apiKey, authentication, upstreamProtocol, responsesOptions, defaultModel, valid]);
-  return <section className="asb-editor-section" aria-label="连接测试">
-    <h3 className="asb-section-title">连接测试</h3>
+  return <section className="asb-editor-section" aria-label={t("providers.editor.section.connectionTest")}>
+    <h3 className="asb-section-title">{t("providers.editor.section.connectionTest")}</h3>
     <div className="asb-editor-section-fields">
       <div className="asb-editor-action-row">
         <Button ref={trigger} variant="secondary" disabled={busy} aria-expanded={open && active}
           aria-controls={id} onClick={() => setOpen((value) => !value)}>
-          <ConnectivityIcon />{open ? "收起测试" : "测试供应商"}
+          <ConnectivityIcon />{open ? t("providers.editor.test.collapse") : t("providers.editor.test.open")}
         </Button>
-        <span className="asb-field-help">{open ? "测试工具已展开" : target ? "准备就绪" : "请先完成连接字段"}</span>
+        <span className="asb-field-help">{open ? t("providers.editor.test.expanded") : target ? t("providers.editor.test.ready") : t("providers.editor.test.needFields")}</span>
       </div>
       {active && <div className={`asb-provider-test-disclosure${open ? " is-open" : ""}`} aria-hidden={!open}>
-        <ProviderTestPanel id={id} name="当前草稿" url={baseUrl?.trim() || null} target={target}
+        <ProviderTestPanel id={id} name={t("providers.test.draftName")} url={baseUrl?.trim() || null} target={target}
           onClose={() => { setOpen(false); trigger.current?.focus(); }} />
       </div>}
     </div>

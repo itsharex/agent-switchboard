@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ExtensionsDeps } from "../app/extensions/extension-ops";
 import { pickDirectory, pickFile } from "../api/client";
+import { useI18n } from "../i18n";
 import { EXTENSION_SECTIONS, type ExtensionSection } from "../app/navigation";
 import { Button } from "../components/Button";
 import { SkillSourceBrowser } from "../components/extensions/SkillSourceBrowser";
@@ -30,19 +31,20 @@ function ExtensionContentPanel({ section, active, children }: {
  * whole workspace, mirroring the provider editor's mounting pattern; only the
  * library keeps the toolbar-and-tabs workspace. */
 export function ExtensionsPage(props: ExtensionsPageProps) {
+  const { t } = useI18n();
   const workspace = useExtensionWorkspace(props);
   const recovery = workspace.ext.workspace?.recoveryRequired ?? [];
   const section = workspace.nav.section;
   const dialogs = <ExtensionWorkspaceDialogs workspace={workspace} />;
   const recoveryBanner = recovery.length > 0 ? (
-    <div className="asb-banner asb-banner-error" role="alert" aria-label="扩展恢复告警">
-      <span>存在未能自动恢复的扩展操作，扩展写入已暂停：{recovery.join("；")}</span>
+    <div className="asb-banner asb-banner-error" role="alert" aria-label={t("extensions.recoveryBanner.aria")}>
+      <span>{t("extensions.recoveryBanner.text", { detail: recovery.join(t("extensions.join.semicolon")) })}</span>
       <Button
         variant="secondary"
         disabled={workspace.busy}
         onClick={() => void workspace.ext.recoverTransactions()}
       >
-        尝试恢复
+        {t("extensions.recoveryBanner.recover")}
       </Button>
     </div>
   ) : null;
@@ -69,7 +71,7 @@ export function ExtensionsPage(props: ExtensionsPageProps) {
   return (
     <section
       className="asb-ext"
-      aria-label="扩展"
+      aria-label={t("nav.page.extensions")}
       data-view={section}
     >
       <ExtensionToolbar workspace={workspace} />

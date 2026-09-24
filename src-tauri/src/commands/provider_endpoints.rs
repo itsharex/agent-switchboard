@@ -26,13 +26,20 @@ pub(crate) struct ProviderEndpointsView {
 fn write_gate(app: &AppHandle) -> Result<ConfigWriteGate, CommandError> {
     app.try_state::<ConfigWriteGate>()
         .map(|gate| gate.inner().clone())
-        .ok_or_else(|| CommandError::new("provider-endpoint-unavailable", "写入闸门尚未初始化"))
+        .ok_or_else(|| {
+            CommandError::keyed(
+                "provider-endpoint-unavailable",
+                "errors.misc.writeGateNotInitialized",
+                "写入闸门尚未初始化",
+            )
+        })
 }
 
 fn view(record: ProviderRecord) -> Result<ProviderEndpointsView, CommandError> {
     if record.profile.route_mode != RouteMode::Custom {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "provider-endpoint-invalid",
+            "errors.misc.officialProviderNoCustomEndpoints",
             "官方登录供应商不支持自定义服务端点",
         ));
     }
@@ -61,8 +68,9 @@ fn reject_active_provider(app: &AppHandle, provider_id: &str) -> Result<(), Comm
         return Ok(());
     };
     if gateway.active_profile_id_for(AppKind::Claude).as_deref() == Some(provider_id) {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "provider-endpoint-active",
+            "errors.misc.activeProviderEndpointChangeBlocked",
             "当前 Claude 供应商正在使用，请重新应用后再修改服务端点",
         ));
     }

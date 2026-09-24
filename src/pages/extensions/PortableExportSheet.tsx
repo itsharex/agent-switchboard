@@ -3,6 +3,7 @@ import type { ExtensionListItem } from "../../api/client";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { AppDialog } from "../../components/AppDialog";
+import { useI18n } from "../../i18n";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 export function PortableExportSheet({
@@ -12,9 +13,10 @@ export function PortableExportSheet({
   workspace: ExtensionWorkspace;
   item: ExtensionListItem;
 }) {
+  const { t } = useI18n();
   const [path, setPath] = useState("");
   return (
-    <AppDialog title={`导出便携包 ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog}>
+    <AppDialog title={t("extensions.export.title", { name: item.name })} busy={w.busy} onClose={w.nav.closeDialog}>
       <form
         className="asb-form"
         onSubmit={(event) => {
@@ -25,9 +27,9 @@ export function PortableExportSheet({
             });
         }}
       >
-        <p className="asb-scope-note">便携包只包含库内容与非敏感来源信息；不含密钥、服务地址或本机路径。</p>
+        <p className="asb-scope-note">{t("extensions.export.note")}</p>
         <label className="asb-field">
-          <span>导出文件路径</span>
+          <span>{t("extensions.export.pathLabel")}</span>
           <Input
             required
             placeholder="D:\skills\docs-portable.json"
@@ -38,10 +40,10 @@ export function PortableExportSheet({
         </label>
         <div className="asb-form-actions">
           <Button variant="secondary" disabled={w.busy} onClick={w.nav.closeDialog}>
-            取消
+            {t("confirm.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={w.writeBlocked || !path.trim()}>
-            导出到文件
+            {t("extensions.export.submit")}
           </Button>
         </div>
       </form>

@@ -131,7 +131,7 @@ pub(crate) fn report_from_roots(
     let mut seen_sessions = HashSet::new();
 
     for (app, root) in roots {
-        match crate::session_manager::collect_session_jsonl_files(root) {
+        match crate::session_manager::collect_session_jsonl_files(*app, root) {
             Ok(paths) => {
                 for path in paths {
                     match crate::session_manager::parser::session_id_in_session_file(&path) {

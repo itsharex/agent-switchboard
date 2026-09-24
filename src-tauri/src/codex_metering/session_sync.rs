@@ -377,7 +377,7 @@ pub(super) fn sync_with_roots(root: &Path, roots: &[PathBuf]) -> CodexSessionSyn
     let mut report = CodexSessionSyncReport::default();
     let mut files = Vec::new();
     for session_root in roots {
-        match crate::session_manager::collect_session_jsonl_files(&session_root) {
+        match crate::session_manager::collect_session_jsonl_files(asb_core::contracts::AppKind::Codex, &session_root) {
             Ok(mut paths) => files.append(&mut paths),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => report.errors.push("无法读取 Codex 会话目录".into()),

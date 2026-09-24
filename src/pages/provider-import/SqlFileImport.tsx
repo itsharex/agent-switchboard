@@ -5,12 +5,15 @@ import { Checkbox } from "../../components/Checkbox";
 import { Table, type TableColumn } from "../../components/Table";
 import { ModuleHeader } from "../../components/WorkspaceHeader";
 import { SearchIcon } from "../../components/icons";
+import { useI18n, type TFunction } from "../../i18n";
 
-const KIND_LABELS: Record<ProviderSqlScanItem["kind"], string> = {
-  claude: "Claude",
-  codex_official: "Codex 官方登录",
-  codex_custom: "Codex 第三方",
-};
+function kindLabel(kind: ProviderSqlScanItem["kind"], t: TFunction): string {
+  switch (kind) {
+    case "claude": return "Claude";
+    case "codex_official": return t("importDiscovery.sql.kind.codexOfficial");
+    case "codex_custom": return t("importDiscovery.sql.kind.codexCustom");
+  }
+}
 
 interface SqlImportRow {
   key: string;
@@ -31,48 +34,49 @@ interface SqlFileImportProps {
   onImport: () => void;
 }
 
-function providerDetail(item: ProviderSqlScanItem): string {
-  return [KIND_LABELS[item.kind], item.model, item.baseUrl].filter(Boolean).join(" · ");
+function providerDetail(item: ProviderSqlScanItem, t: TFunction): string {
+  return [kindLabel(item.kind, t), item.model, item.baseUrl].filter(Boolean).join(" · ");
 }
 
-function importRows(scan: ProviderSqlScan | null): SqlImportRow[] {
+function importRows(scan: ProviderSqlScan | null, t: TFunction): SqlImportRow[] {
   if (!scan) return [];
   return [
     ...scan.providers.map((item) => ({
-      key: item.key, item, name: item.name, detail: providerDetail(item),
-      status: item.existing ? "已存在，导入将覆盖更新" : "新增",
+      key: item.key, item, name: item.name, detail: providerDetail(item, t),
+      status: item.existing ? t("importDiscovery.sql.exists") : t("importDiscovery.sql.new"),
       warnings: item.warnings,
     })),
     ...scan.skipped.map((skip) => ({ key: skip.name, item: null, name: skip.name, detail: null,
-      status: `无法导入：${skip.reason}`, warnings: [],
+      status: t("importDiscovery.status.skipped", { reason: skip.reason }), warnings: [],
     })),
   ];
 }
 
-function importColumns({ selected, busy, onSelect }: Omit<SqlFileImportProps, "scan" | "result" | "onApply" | "onImport">): Array<TableColumn<SqlImportRow>> {
+function importColumns({ selected, busy, onSelect }: Omit<SqlFileImportProps, "scan" | "result" | "onApply" | "onImport">, t: TFunction): Array<TableColumn<SqlImportRow>> {
   return [
-    { key: "provider", header: "供应商", render: (row) => {
+    { key: "provider", header: t("importDiscovery.label.provider"), render: (row) => {
       const item = row.item;
       if (!item) return row.name;
       return <Checkbox label={row.name} checked={Boolean(selected[item.key])}
         disabled={busy} onChange={(checked) => onSelect(item.key, checked)} />;
     } },
-    { key: "detail", header: "详情", render: (row) => row.detail },
-    { key: "status", header: "状态", render: (row) => <>{row.status}
+    { key: "detail", header: t("importDiscovery.label.detail"), render: (row) => row.detail },
+    { key: "status", header: t("importDiscovery.label.status"), render: (row) => <>{row.status}
       {row.warnings.map((warning) => <div key={warning} className="asb-warn-text">{warning}</div>)}
     </> },
   ];
 }
 
 function ImportResult({ result }: { result: ProviderSqlImportOutcome | null }) {
+  const { t } = useI18n();
   if (!result) return null;
   return (
     <>
       <div className={`asb-banner ${result.notImported.length > 0 ? "asb-banner-warning" : "asb-banner-ok"}`}
-        role="status" aria-label="导入结果">
-        <span>已导入 {result.importedCount} 项
-          {result.updatedCount > 0 && ` · 覆盖更新 ${result.updatedCount} 项`}
-          {result.notImported.length > 0 && ` · 未导入 ${result.notImported.length} 项`}
+        role="status" aria-label={t("importDiscovery.result.aria")}>
+        <span>{t("importDiscovery.result.imported", { count: result.importedCount })}
+          {result.updatedCount > 0 && ` · ${t("importDiscovery.result.updated", { count: result.updatedCount })}`}
+          {result.notImported.length > 0 && ` · ${t("importDiscovery.result.notImported", { count: result.notImported.length })}`}
         </span>
       </div>
       {result.notImported.length > 0 && <div className="asb-ccscan">
@@ -89,26 +93,27 @@ function ImportResult({ result }: { result: ProviderSqlImportOutcome | null }) {
  * and imports the selection. Existing records with the same id are explicit
  * opt-in overwrites; the file itself stays backend-read only. */
 export function SqlFileImport(props: SqlFileImportProps) {
-  const rows = importRows(props.scan);
+  const { t } = useI18n();
+  const rows = importRows(props.scan, t);
   const selectedCount = rows.filter(({ item }) => item && props.selected[item.key]).length;
   const pickSqlFile = async () => {
     if (props.busy) return;
-    const picked = await pickFile("SQL 文件", ["sql"]);
+    const picked = await pickFile(t("importDiscovery.sql.sqlFile"), ["sql"]);
     if (picked) props.onApply(picked);
   };
   return (
     <>
       <ModuleHeader
-        title="导入 SQL"
+        title={t("importDiscovery.tab.sqlImport")}
         primaryActions={
           <Button variant="secondary" disabled={props.busy} onClick={() => void pickSqlFile()}>
-            选择导出的 SQL 文件
+            {t("importDiscovery.sql.pickFile")}
           </Button>
         }
       />
       {props.scan ? <div className="asb-ccscan">
         <div className="asb-kv">
-          <span className="asb-kv-label">SQL 文件</span>
+          <span className="asb-kv-label">{t("importDiscovery.sql.sqlFile")}</span>
           <span className="asb-kv-value asb-code">{props.scan.sqlPath}</span>
         </div>
         {rows.length === 0 ? (
@@ -116,12 +121,12 @@ export function SqlFileImport(props: SqlFileImportProps) {
             <span className="asb-empty-state-icon" aria-hidden="true">
               <SearchIcon />
             </span>
-            <h3 className="asb-section-title">导出文件中没有供应商。</h3>
+            <h3 className="asb-section-title">{t("importDiscovery.sql.empty")}</h3>
           </div>
-        ) : <Table columns={importColumns(props)} rows={rows} rowKey={(row) => row.key} ariaLabel="导出文件预览" />}
+        ) : <Table columns={importColumns(props, t)} rows={rows} rowKey={(row) => row.key} ariaLabel={t("importDiscovery.sql.tableAria")} />}
         <div className="asb-form-actions">
           <Button variant="primary" disabled={props.busy || selectedCount === 0} onClick={props.onImport}>
-            导入所选 {selectedCount} 项
+            {t("importDiscovery.action.importSelected", { count: selectedCount })}
           </Button>
         </div>
       </div> : (
@@ -129,7 +134,7 @@ export function SqlFileImport(props: SqlFileImportProps) {
           <span className="asb-empty-state-icon" aria-hidden="true">
             <SearchIcon />
           </span>
-          <h3 className="asb-section-title">选择在其他设备导出的 SQL 文件，即可预览并导入全部供应商的完整配置。</h3>
+          <h3 className="asb-section-title">{t("importDiscovery.sql.emptyHint")}</h3>
         </div>
       )}
       <ImportResult result={props.result} />

@@ -1,3 +1,4 @@
+import { uiMessage } from "../../i18n/errors";
 import { useState } from "react";
 import { scanSkillZip } from "../../api/extensions/skill-sources";
 import type { SkillSourceActions, SkillSourceResult } from "./skill-source-model";
@@ -14,13 +15,13 @@ export function useSkillSourceFiles(actions: SkillSourceActions & { busy: boolea
   };
   const read = async (kind: FileSource, path: string): Promise<SkillSourceResult> => {
     const candidates = kind === "local" ? await actions.onScanLocal(path) : await scanSkillZip(path);
-    if (candidates === null) throw new Error("来源读取失败；详细原因见操作通知");
+    if (candidates === null) throw uiMessage("extensions.sources.readFailed");
     return { kind, candidates, label: path };
   };
   const scan = async (kind: FileSource) => {
     const path = paths[kind].trim();
     if (!path) {
-      requests.setError(kind === "zip" ? "请输入 ZIP 文件路径" : "请输入本地来源目录");
+      requests.setError(kind === "zip" ? uiMessage("extensions.sources.enterZipPath") : uiMessage("extensions.sources.enterLocalPath"));
       return;
     }
     await requests.run(() => read(kind, path));

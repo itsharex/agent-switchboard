@@ -1,36 +1,45 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { TrayUsage as Usage, UsageReading } from "../api/client";
-import { compactUsageName, formatTrayReading, officialQuotaReadings, usageTone } from "../lib/usage-format";
+import { formatTrayReading, officialQuotaReadings, usageTone } from "../lib/usage-format";
+import { useI18n } from "../i18n";
+import type { MessageKey } from "../i18n/messages";
 
-export function trayUsageContent(usage: Usage | null) {
-  if (!usage) return { readings: [], stale: false, state: null };
+interface TrayUsageState {
+  readings: UsageReading[];
+  stale: boolean;
+  stateKey: MessageKey | null;
+}
+
+export function trayUsageContent(usage: Usage | null): TrayUsageState {
+  if (!usage) return { readings: [], stale: false, stateKey: null };
   if (usage.kind === "script") {
     const readings = usage.reading.summary?.readings ?? [];
     return { readings, stale: readings.length > 0 && Boolean(usage.reading.error),
-      state: readings.length === 0 && usage.reading.error ? "查询失败" : null };
+      stateKey: readings.length === 0 && usage.reading.error ? "tray.state.queryFailed" : null };
   }
-  const readings = officialQuotaReadings(usage.reading);
+  const readings = officialQuotaReadings(usage.reading, true);
   const status = usage.reading.status;
-  const state = status === "signInRequired" ? "待登录"
-    : status === "reauthenticationRequired" ? "需重新登录"
-    : status === "unavailable" ? "查询失败" : null;
-  return { readings, stale: readings.length > 0 && (usage.reading.stale || Boolean(state)), state };
+  const stateKey: MessageKey | null = status === "signInRequired" ? "tray.state.signInRequired"
+    : status === "reauthenticationRequired" ? "tray.state.reauthRequired"
+    : status === "unavailable" ? "tray.state.queryFailed" : null;
+  return { readings, stale: readings.length > 0 && (usage.reading.stale || Boolean(stateKey)), stateKey };
 }
 
 function Reading({ reading }: { reading: UsageReading }) {
   return <span className="tray-usage-reading" data-tone={usageTone(reading)}>
-    {reading.planName && <span className="tray-usage-name">{compactUsageName(reading.planName)}</span>}
+    {reading.planName && <span className="tray-usage-name">{reading.planName}</span>}
     <span className="tray-usage-value">{formatTrayReading(reading)}</span>
   </span>;
 }
 
 export function TrayUsage({ usage }: { usage: Usage | null }) {
-  const { readings, stale, state } = trayUsageContent(usage);
+  const { t } = useI18n();
+  const { readings, stale, stateKey } = trayUsageContent(usage);
   const host = useRef<HTMLSpanElement>(null);
   const measure = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(2);
   const total = readings.length;
-  const signature = JSON.stringify({ readings, stale, state });
+  const signature = JSON.stringify({ readings, stale, stateKey });
   useLayoutEffect(() => {
     const element = host.current;
     const ruler = measure.current;
@@ -58,9 +67,9 @@ export function TrayUsage({ usage }: { usage: Usage | null }) {
     observer.observe(ruler);
     return () => observer.disconnect();
   }, [signature, total]);
-  if (readings.length === 0 && !state) return null;
-  const states = <>{state && <span className="tray-usage-state">{state}</span>}
-    {stale && <span className="tray-usage-state">上次读数</span>}</>;
+  if (readings.length === 0 && !stateKey) return null;
+  const states = <>{stateKey && <span className="tray-usage-state">{t(stateKey)}</span>}
+    {stale && <span className="tray-usage-state">{t("tray.state.stale")}</span>}</>;
   return <span ref={host} className="tray-provider-balance">
     {readings.slice(0, visible).map((reading, index) => <Reading key={index} reading={reading} />)}
     {readings.length > visible && <span className="tray-usage-more">+{readings.length - visible}</span>}

@@ -207,6 +207,34 @@ pub struct KeyChange {
     pub after: Option<String>,
 }
 
+/// One user-facing warning with renderer translation coordinates. `text`
+/// keeps the product-language rendering as the diagnostic detail and the
+/// fallback when the renderer does not know `key`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedMessage {
+    pub key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
+    pub text: String,
+}
+
+impl std::fmt::Display for LocalizedMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+impl LocalizedMessage {
+    pub fn new(key: &'static str, params: serde_json::Value, text: impl Into<String>) -> Self {
+        Self {
+            key: key.to_string(),
+            params: (params != serde_json::Value::Null).then_some(params),
+            text: text.into(),
+        }
+    }
+}
+
 /// The non-mutating result of planning a switch. Every value the UI shows in
 /// a diff is already redacted here.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -217,7 +245,7 @@ pub struct SwitchPreview {
     /// replaces it with the resolved local path before returning it to the UI.
     pub target: String,
     pub changes: Vec<KeyChange>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<LocalizedMessage>,
     /// Directory where the pre-switch backup will be written.
     pub backup_dir: String,
 }
@@ -275,7 +303,7 @@ pub struct RouteState {
     pub available_models: Option<Vec<String>>,
     /// Scope-of-effect warnings: facts in this file that may be overridden by
     /// profiles, project-level configuration, or command-line flags.
-    pub scope_warnings: Vec<String>,
+    pub scope_warnings: Vec<LocalizedMessage>,
 }
 
 /// What kind of client-file write a persisted history record describes.

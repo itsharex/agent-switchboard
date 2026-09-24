@@ -3,7 +3,8 @@ import type { SkillUpdatePreparation } from "../../app/extensions/extension-ops"
 import { AppDialog } from "../../components/AppDialog";
 import { McpEditForm } from "../../components/extensions/McpEditForm";
 import { SkillWorkbench } from "../../components/extensions/SkillWorkbench";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage } from "../../components/use-toast";
+import { useI18n } from "../../i18n";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
 async function deployUpdatedDefinition(w: ExtensionWorkspace, saved: SkillUpdatePreparation | null) {
@@ -11,8 +12,8 @@ async function deployUpdatedDefinition(w: ExtensionWorkspace, saved: SkillUpdate
   if (saved.deployment === "unverified") {
     toast({
       kind: "warning",
-      title: "定义已保存，客户端部署未验证",
-      description: "可从列表的“部署与诊断”操作重新部署当前版本。",
+      title: toastMessage("extensions.editor.savedUnverifiedTitle"),
+      description: toastMessage("extensions.editor.redeployHint"),
     });
     return true;
   }
@@ -22,8 +23,8 @@ async function deployUpdatedDefinition(w: ExtensionWorkspace, saved: SkillUpdate
   });
   if (result.status === "cancelled") toast({
     kind: "info",
-    title: "定义已保存，已取消本次客户端变更",
-    description: "可从列表的“部署与诊断”操作重新部署当前版本。",
+    title: toastMessage("extensions.editor.savedCancelledTitle"),
+    description: toastMessage("extensions.editor.redeployHint"),
   });
   return true;
 }
@@ -35,8 +36,9 @@ export function McpEditorDialog({
   workspace: ExtensionWorkspace;
   envelope: McpEditViewEnvelope;
 }) {
+  const { t } = useI18n();
   return (
-    <AppDialog title={`编辑 MCP · ${envelope.name}`} busy={w.busy} onClose={w.nav.closeDialog} wide>
+    <AppDialog title={t("extensions.editor.editMcp", { name: envelope.name })} busy={w.busy} onClose={w.nav.closeDialog} wide>
       <McpEditForm
         envelope={envelope}
         busy={w.writeBlocked}
@@ -59,8 +61,9 @@ export function SkillEditorDialog({
   workspace: ExtensionWorkspace;
   item: Extract<ExtensionListItem, { kind: "skill" }>;
 }) {
+  const { t } = useI18n();
   return (
-    <AppDialog title={`编辑 Skill · ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog} wide>
+    <AppDialog title={t("extensions.editor.editSkill", { name: item.name })} busy={w.busy} onClose={w.nav.closeDialog} wide>
       <SkillWorkbench
         item={item}
         mcpOptions={w.items

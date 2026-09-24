@@ -27,12 +27,24 @@ impl Planner<'_> {
             .map_err(store_error)?
             .into_iter()
             .find(|binding| binding.id == binding_id)
-            .ok_or_else(|| CommandError::new("extension-not-found", "绑定不存在或已被移除"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-not-found",
+                    "errors.extops.bindingNotFound",
+                    "绑定不存在或已被移除",
+                )
+            })?;
         let definition = self
             .store
             .get_definition(&binding.resource_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展定义不存在"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-not-found",
+                    "errors.extops.definitionRecordMissing",
+                    "扩展定义不存在",
+                )
+            })?;
         validate_binding(&definition, &binding)
             .map_err(|error| CommandError::new("extension-invalid", error.message))?;
         self.require_write_capabilities(&definition, &binding, operation)?;
@@ -159,7 +171,13 @@ impl Planner<'_> {
                 });
                 let _ = new_baseline;
             }
-            _ => return Err(CommandError::new("extension-invalid", "不支持的操作")),
+            _ => {
+                return Err(CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.unsupportedOperation",
+                    "不支持的操作",
+                ))
+            }
         }
         Ok(plan)
     }

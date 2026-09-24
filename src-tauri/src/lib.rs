@@ -84,20 +84,27 @@ fn apply_hardware_acceleration(
 }
 
 #[cfg(windows)]
-fn configure_hardware_acceleration<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
-    let identifier = context.config().identifier.clone();
-    let hardware_acceleration = local_state::LocalState::from_identifier(&identifier)
-        .and_then(|state| state.get_app_settings())
-        // A missing or malformed app setting must not stop the recovery shell;
-        // retain WebView2's current GPU-enabled default in that case.
-        .map(|settings| settings.hardware_acceleration)
-        .unwrap_or(true);
+struct StartupHardwareAcceleration(bool);
 
-    apply_hardware_acceleration(&mut context.config_mut().app.windows, hardware_acceleration);
+#[cfg(windows)]
+pub(crate) fn apply_startup_hardware_acceleration(
+    app: &tauri::AppHandle,
+    windows: &mut [tauri::utils::config::WindowConfig],
+) {
+    use tauri::Manager;
+    apply_hardware_acceleration(windows, app.state::<StartupHardwareAcceleration>().inner().0);
 }
 
-#[cfg(not(windows))]
-fn configure_hardware_acceleration<R: tauri::Runtime>(_: &mut tauri::Context<R>) {}
+#[cfg(windows)]
+fn initialize_window_preferences(app: &tauri::AppHandle, local: &local_state::LocalState) {
+    use tauri::Manager;
+    // This creation-time preference requires a restart. Recreated tray windows
+    // must use the same WebView2 environment arguments as the main window.
+    let enabled = local.get_app_settings()
+        .map(|settings| settings.hardware_acceleration)
+        .unwrap_or(true);
+    app.manage(StartupHardwareAcceleration(enabled));
+}
 
 /// The main window is created hidden so startup owns its visibility in one
 /// place. It stays hidden only for an explicit start-minimized preference; a
@@ -114,7 +121,6 @@ pub fn run() {
     let mut context = tauri::generate_context!();
     let log_directory =
         app_paths::log_directory(&context.config().identifier).expect("无法定位应用日志目录");
-    configure_hardware_acceleration(&mut context);
     #[cfg(windows)]
     let startup_windows = app_paths::prepare_windows(&mut context);
 
@@ -137,10 +143,19 @@ pub fn run() {
             None,
         ))
         .setup(move |app| {
+            let local = local_state::LocalState::from_app(app.handle())
+                .map_err(std::io::Error::other)?;
+            // Upgrade after the single-instance guard, before creating Windows WebViews
+            // or reading any saved startup preference.
+            if let Err(error) = local.upgrade_app_settings() {
+                log::error!("应用设置升级失败，已保留原始文件：{error}");
+            }
+            #[cfg(windows)]
+            initialize_window_preferences(app.handle(), &local);
             #[cfg(windows)]
             app_paths::build_windows(app.handle(), &startup_windows)
                 .map_err(std::io::Error::other)?;
-            let local = initialize_local_services(app)?;
+            let local = initialize_local_services(app, local)?;
             apply_startup_settings(app);
             start_background_services(app, &local)
         })
@@ -151,10 +166,11 @@ pub fn run() {
         .run(handle_run_event);
 }
 
-fn initialize_local_services(app: &mut tauri::App) -> Result<local_state::LocalState, Box<dyn std::error::Error>> {
+fn initialize_local_services(
+    app: &mut tauri::App,
+    local: local_state::LocalState,
+) -> Result<local_state::LocalState, Box<dyn std::error::Error>> {
     use tauri::Manager;
-    let local =
-        local_state::LocalState::from_app(app.handle()).map_err(std::io::Error::other)?;
     // Outbound proxy settings gate every gateway-side HTTP client;
     // load them before any client is built. A malformed file defaults
     // to direct egress instead of blocking startup.
@@ -167,14 +183,12 @@ fn initialize_local_services(app: &mut tauri::App) -> Result<local_state::LocalS
     // is published. Hold the same gate as every later client-config
     // transaction so that recovery has one write boundary.
     let _write_guard = write_gate.lock().map_err(std::io::Error::other)?;
-    // Invalid or no-longer-convertible application configuration must
-    // leave the shell alive so the existing reset flow can present a
-    // deliberate recovery choice. The store remains unreadable to all
-    // runtime commands until that recovery is confirmed.
-    let configuration_ready = match local.initialize_configuration_schema() {
+    // Invalid application configuration leaves the shell alive so the
+    // repair entry can explain the failure without touching client files.
+    let configuration_ready = match local.initialize_configuration_store() {
         Ok(()) => true,
         Err(error) => {
-            log::error!("供应商配置升级失败，已进入恢复状态: {error}");
+            log::error!("供应商存储不可用，已进入修复状态: {error}");
             false
         }
     };
@@ -193,6 +207,7 @@ fn initialize_local_services(app: &mut tauri::App) -> Result<local_state::LocalS
     app.manage(commands::switching::CodexProfileSavePreparations::default());
     app.manage(commands::switching::CodexPolicyPreparations::default());
     app.manage(provider_request::ProviderRequests::default());
+    app.manage(commands::provider_diagnostics::ProviderRepairPreparations::default());
     app.manage(codex_probe::ProbeRegistry::new());
     // A batch left running by an abrupt exit is closed as interrupted before
     // any command can read it; finished results and saved session usage stay.
@@ -216,7 +231,10 @@ fn apply_startup_settings(app: &tauri::App) {
     if let Err(error) = app.handle().plugin(desktop_shortcut::plugin()) {
         log::error!("全局快捷键服务初始化失败：{error}");
         app.state::<desktop_shortcut::DesktopSettingsState>()
-            .set_error(Some(format!("全局快捷键服务不可用：{error}")));
+            .set_error(Some(commands::error::CommandError::localized(
+                "shortcut-service-unavailable", "errors.shortcut.serviceUnavailable",
+                error.to_string(), serde_json::Value::Null,
+            )));
     }
     // A malformed settings file is rejected by the typed settings
     // surface, but must never prevent the tray/window recovery shell
@@ -229,7 +247,7 @@ fn apply_startup_settings(app: &tauri::App) {
             let applied = commands::apply_desktop_settings(app.handle(), &settings);
             if let Err(error) = &applied {
                 log::error!("桌面偏好应用失败：{}", error.message);
-                app.state::<desktop_shortcut::DesktopSettingsState>().set_error(Some(error.message.clone()));
+                app.state::<desktop_shortcut::DesktopSettingsState>().set_error(Some(error.clone()));
             }
             if !settings.start_minimized || applied.is_err() {
                 reveal_main_window(app.handle());

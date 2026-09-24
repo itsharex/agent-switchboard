@@ -1,9 +1,11 @@
+import { useMessageState } from "../i18n/use-message-state";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getAppSettings, onDesktopSettingsError, repairAppSettings, restartApplication, setAppSettings,
   type AppSettings, type AppSettingsSnapshot, type CommandError,
 } from "../api/client";
 import { applyAppAppearance } from "../lib/app-appearance";
+import { applyLanguagePreference } from "../i18n/current";
 import { isBrowserDevelopment } from "../lib/runtime";
 
 interface AppSettingsDeps {
@@ -15,34 +17,38 @@ interface AppSettingsDeps {
 
 function useLoadedAppSettings(onError: AppSettingsDeps["onError"]) {
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [desktopError, setDesktopError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useMessageState();
+  const [desktopError, setDesktopError] = useMessageState();
   const [reload, setReload] = useState(0);
   const acceptSnapshot = useCallback((snapshot: AppSettingsSnapshot) => {
+    applyLanguagePreference(snapshot.settings.language);
     setAppSettingsState(snapshot.settings);
     setDesktopError(snapshot.desktopError);
     setLoadError(null);
-    if (snapshot.desktopError) onError({ code: "desktop-settings-apply-failed", message: snapshot.desktopError });
+    if (snapshot.desktopError) onError(snapshot.desktopError);
   }, [onError]);
   useEffect(() => {
     let disposed = false;
     void getAppSettings().then((snapshot) => {
       if (!disposed) acceptSnapshot(snapshot);
     }).catch((caught: CommandError) => {
-      if (!disposed) { onError(caught); setLoadError(caught.message); }
+      if (!disposed) { onError(caught); setLoadError(caught); }
     });
     return () => { disposed = true; };
   }, [onError, reload, acceptSnapshot]);
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
-    void onDesktopSettingsError((message) => {
-      setDesktopError(message);
-      onError({ code: "desktop-settings-apply-failed", message });
+    void onDesktopSettingsError((error) => {
+      setDesktopError(error);
+      onError(error);
     }).then((unlisten) => {
       if (disposed) unlisten(); else stop = unlisten;
     }).catch((error: unknown) => {
-      if (!disposed) setDesktopError(`无法接收桌面偏好状态：${String(error)}`);
+      if (!disposed) {
+        setDesktopError(error);
+        onError({ code: "desktop-settings-listen-failed", message: String(error) });
+      }
     });
     return () => { disposed = true; stop?.(); };
   }, [onError]);
@@ -88,11 +94,13 @@ export function useAppSettings(deps: AppSettingsDeps) {
     setBusy(true);
     clearError();
     try {
-      setAppSettingsState(await setAppSettings(next));
+      const saved = await setAppSettings(next);
+      applyLanguagePreference(saved.language);
+      setAppSettingsState(saved);
       setDesktopError(null);
       return true;
     } catch (caught) {
-      setDesktopError((caught as CommandError).message);
+      setDesktopError(caught);
       onError(caught as CommandError);
       return false;
     } finally {

@@ -51,11 +51,11 @@ pub(super) struct SwitchIntent {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct AuthIntent {
-    pub(super) before_hash: String,
-    pub(super) before_existed: bool,
-    pub(super) after_hash: String,
-    pub(super) after_existed: bool,
+pub(in crate::commands) struct AuthIntent {
+    pub(in crate::commands) before_hash: String,
+    pub(in crate::commands) before_existed: bool,
+    pub(in crate::commands) after_hash: String,
+    pub(in crate::commands) after_existed: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -119,7 +119,12 @@ pub(in crate::commands) fn finish<T>(
                 None => return Err(CommandError::from(failure)),
             };
             if current != before.0 || !before.1 {
-                return Err(error(format!("{failure}；配置补偿未完成，保留事务和备份")));
+                return Err(CommandError::localized(
+                    "config-recovery-required",
+                    "errors.sw.configCompensationIncomplete",
+                    format!("{failure}；配置补偿未完成，保留事务和备份"),
+                    serde_json::json!({ "failure": failure.to_string() }),
+                ));
             }
             // An active profile save restores its profile before restoring the route snapshot.
             if state
@@ -403,7 +408,11 @@ pub(super) fn restore_pending_backup(
     }
     validate_pending(&intent, &pending).map_err(error)?;
     if Path::new(&intent.target) != state.target(intent.app).map_err(error)? {
-        return Err(error("事务目标不属于当前客户端"));
+        return Err(CommandError::keyed(
+            "config-recovery-required",
+            "errors.sw.transactionTargetClientMismatch",
+            "事务目标不属于当前客户端",
+        ));
     }
     if let Some(save) = state
         .configuration()
@@ -411,7 +420,11 @@ pub(super) fn restore_pending_backup(
         .map_err(|e| error(e.to_string()))?
     {
         if save.app != intent.app || intent.profile_id.as_deref() != Some(save.projection_profile_id.as_str()) {
-            return Err(error("供应商保存与配置事务不匹配"));
+            return Err(CommandError::keyed(
+                "config-recovery-required",
+                "errors.sw.saveTransactionMismatch",
+                "供应商保存与配置事务不匹配",
+            ));
         }
         let revision = profile_revision(state, save.app, &save.profile_id).map_err(error)?;
         if revision != save.previous_file_hash {

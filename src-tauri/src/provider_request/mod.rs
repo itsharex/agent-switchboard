@@ -123,6 +123,8 @@ pub(crate) async fn fetch_models(
         .map_err(|message| CommandError {
             code: "models-fetch-failed",
             message,
+            message_key: None,
+            params: None,
         })
     })
     .await
@@ -144,8 +146,9 @@ async fn execute_with_client(
 ) -> Result<ProviderRequestResult, CommandError> {
     let model = input.model.trim().to_string();
     if model.is_empty() || model.chars().count() > 256 || model.chars().any(char::is_control) {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "provider-request-model-invalid",
+            "errors.misc.providerRequestModelInvalid",
             "请填写有效的模型 ID（1–256 个字符，不含控制字符）",
         ));
     }
@@ -172,13 +175,18 @@ fn profile_error(error: StoreOperationError) -> CommandError {
 }
 
 fn profile_changed() -> CommandError {
-    CommandError::new(
+    CommandError::keyed(
         "provider-request-profile-changed",
+        "errors.misc.providerRequestProfileChanged",
         "供应商档案已变化，请重新准备并核对请求目标后再发送",
     )
 }
 
 fn interrupted() -> CommandError {
-    CommandError::new("provider-request-interrupted", "真实请求任务中断，请重试")
+    CommandError::keyed(
+        "provider-request-interrupted",
+        "errors.misc.providerRequestInterrupted",
+        "真实请求任务中断，请重试",
+    )
 }
 

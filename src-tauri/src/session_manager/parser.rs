@@ -2,6 +2,7 @@ use super::{SessionMessage, SessionMeta, TITLE_LIMIT};
 use asb_core::contracts::AppKind;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
@@ -21,12 +22,12 @@ pub(super) fn parse_session(app: AppKind, path: &Path) -> Result<SessionMeta, io
     let mut first_user_message = None;
 
     let reader = BufReader::new(File::open(path)?);
-    for value in reader
-        .lines()
-        .filter_map(Result::ok)
-        .take(METADATA_LINE_LIMIT)
-        .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
-    {
+    for (index, line) in reader.lines().take(METADATA_LINE_LIMIT).enumerate() {
+        let line = line?;
+        if line.trim().is_empty() { continue; }
+        let value = serde_json::from_str::<Value>(&line).map_err(|error| {
+            io::Error::new(io::ErrorKind::InvalidData, format!("第 {} 行 JSON 无效: {error}", index + 1))
+        })?;
         session_id = session_id.or_else(|| session_id_from(&value));
         project_dir = project_dir.or_else(|| project_dir_from(&value));
         created_at = created_at.or_else(|| timestamp_from(&value));
@@ -71,6 +72,9 @@ pub(super) fn parse_session(app: AppKind, path: &Path) -> Result<SessionMeta, io
         project_dir,
         created_at,
         last_active_at,
+        alias: None,
+        pinned: false,
+        tags: Vec::new(),
     })
 }
 
@@ -89,19 +93,46 @@ pub(crate) fn session_id_in_session_file(path: &Path) -> io::Result<Option<Strin
 }
 
 pub(super) fn read_messages(path: &Path) -> Result<Vec<SessionMessage>, String> {
-    let file = File::open(path).map_err(|_| "无法读取会话记录".to_string())?;
-    let reader = BufReader::new(file);
-    Ok(reader
-        .lines()
-        .filter_map(Result::ok)
-        .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
-        .filter_map(|value| message_from(&value))
-        .collect())
+    let file = File::open(path)
+        .map_err(|error| format!("无法读取会话记录 {}: {error}", path.display()))?;
+    let mut reader = BufReader::new(file);
+    let mut messages = Vec::new();
+    let mut prefix = Sha256::new();
+    let mut line = String::new();
+    let mut line_number = 0;
+    loop {
+        line.clear();
+        let read = reader.read_line(&mut line)
+            .map_err(|error| format!("无法读取 {} 第 {} 行: {error}", path.display(), line_number + 1))?;
+        if read == 0 { break; }
+        line_number += 1;
+        // Hash the complete prefix: appending preserves IDs; edits cannot
+        // redirect an old search hit to a different occurrence of a message.
+        prefix.update(line.trim_end_matches(['\r', '\n']).as_bytes());
+        prefix.update(b"\n");
+        if line.trim().is_empty() { continue; }
+        let value = serde_json::from_str::<Value>(&line)
+            .map_err(|error| format!("会话 {} 第 {line_number} 行 JSON 无效: {error}", path.display()))?;
+        if let Some(mut message) = message_from(&value) {
+            message.id = format!("{:x}", prefix.clone().finalize());
+            messages.push(message);
+        }
+    }
+    Ok(messages)
 }
 
 fn message_from(value: &Value) -> Option<SessionMessage> {
     let envelope = if value.get("type").and_then(Value::as_str) == Some("response_item") {
-        value.get("payload").unwrap_or(value)
+        let payload = value.get("payload").unwrap_or(value);
+        if matches!(payload.get("type").and_then(Value::as_str),
+            Some("function_call_output" | "custom_tool_call_output")) {
+            let content = payload.get("output").and_then(content_text)?;
+            if content.trim().is_empty() { return None; }
+            return Some(SessionMessage {
+                id: String::new(), role: "tool".into(), content, at: timestamp_from(value),
+            });
+        }
+        payload
     } else {
         value
     };
@@ -124,6 +155,7 @@ fn message_from(value: &Value) -> Option<SessionMessage> {
         return None;
     }
     Some(SessionMessage {
+        id: String::new(),
         role: role.to_string(),
         content,
         at: timestamp_from(value),

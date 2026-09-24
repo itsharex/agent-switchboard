@@ -1,4 +1,5 @@
 import type { SkillRepository } from "../../api/extensions/skill-sources";
+import { tr } from "../../i18n/current";
 
 export function skillRepositoryName(value: string): string | null {
   let path = value.trim();
@@ -16,7 +17,7 @@ export function skillRepositoryName(value: string): string | null {
 }
 
 export function skillRepositoryLabel(source: { repo: string; refName?: string | null; subpath: string }) {
-  const repo = skillRepositoryName(source.repo) ?? "GitHub 仓库";
+  const repo = skillRepositoryName(source.repo) ?? tr("extensions.repo.fallbackName");
   return [repo, source.refName ? `@${source.refName}` : "", source.subpath].filter(Boolean).join(" · ");
 }
 

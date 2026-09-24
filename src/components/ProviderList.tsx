@@ -1,6 +1,7 @@
 import type { ActivationCandidate } from "../app/useProviderSwitchFlow";
-import type { ProviderProfile, ProviderRequestTarget } from "../api/client";
+import type { ProviderProfile, ProviderRequestTarget, LocalizedMessage } from "../api/client";
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useI18n } from "../i18n";
 import { OfficialLoginPanel } from "./OfficialLoginPanel";
 import { ProviderRowShell, SortableProviderRows } from "./ProviderWorkspaceShell";
 import { ProviderUsagePanel } from "./ProviderUsagePanel";
@@ -18,7 +19,7 @@ interface Props {
   /** Model read from the displayed client's user-level configuration file. */
   userConfigModel: string | null;
   /** Known conditions that can override the user-level configuration. */
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
   busy: boolean;
   /** Persisted profile ids whose usage details are expanded; all other
    * configured panels stay collapsed. */
@@ -63,6 +64,7 @@ function ConfiguredProviderRow(props: RowProps) {
 
 /** The model rail stays fixed while complete usage facts live below it. */
 function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
+  const { t } = useI18n();
   const { profile, active, userConfigModel, usageOpen, sortable, confirmation, usage } = props;
   const [reloginOpen, setReloginOpen] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
@@ -70,8 +72,8 @@ function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
   const target = useMemo<ProviderRequestTarget>(() => ({ kind: "saved", profileId: profile.id }),
     [profile.id, profile.baseUrl, profile.apiKey, profile.upstreamProtocol, profile.model, profile.responsesOptions?.requestMode]);
   const official = profile.routeMode === "official";
-  const modelText = (active ? userConfigModel : profile.model) ?? "默认模型";
-  const modelTitle = active ? `从实际用户级配置读取：${modelText}` : `档案模型：${modelText}`;
+  const modelText = (active ? userConfigModel : profile.model) ?? t("providers.label.defaultModel");
+  const modelTitle = active ? t("providers.row.modelFromConfig", { model: modelText }) : t("providers.row.modelFromProfile", { model: modelText });
   const hasUsageQuery = Boolean(profile.usageQuery);
   const testId = `provider-test-${profile.id}`;
   const usageId = `provider-usage-${profile.id}`;
@@ -79,7 +81,7 @@ function ProviderRow(props: RowProps & { usage?: ProviderUsage }) {
   return <ProviderRowShell id={profile.id} name={profile.name} active={active}
     confirmationOpen={confirmation !== undefined} sortable={sortable}
     model={<span title={modelTitle}>{modelText}</span>}
-    endpoint={profile.websiteUrl ? <ProviderEndpoint url={profile.websiteUrl} link /> : official ? <span>官方登录</span> : undefined}
+    endpoint={profile.websiteUrl ? <ProviderEndpoint url={profile.websiteUrl} link /> : official ? <span>{t("providers.label.officialLogin")}</span> : undefined}
     summary={usage ? <ProviderUsageSummary name={profile.name} usage={usage} /> : undefined}
     primaryAction={!active && props.onActivate ? <ProviderActivateButton name={profile.name} onActivate={() => props.onActivate?.(profile)} /> : undefined}
     secondaryAction={official ? <ProviderLoginButton name={profile.name} open={reloginOpen} onToggle={() => setReloginOpen((open) => !open)} /> : undefined}

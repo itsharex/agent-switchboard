@@ -2,10 +2,14 @@
   box-sizing: border-box;
 }
 
-/* Focus keeps native interaction semantics without adding a visual state. */
-:focus,
-:focus-visible {
+/* Keep pointer focus quiet while keyboard focus remains visible. */
+:focus:not(:focus-visible) {
   outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--asb-action);
+  outline-offset: 2px;
 }
 
 /* The `hidden` attribute owns route-level visibility (App.tsx session panel).

@@ -1,6 +1,7 @@
 import { FileJson } from "lucide-react";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
+import { useI18n } from "../../i18n";
 
 interface Props {
   busy: boolean;
@@ -18,17 +19,18 @@ export function PortableImportForm({
   browsePortable,
   submitPortableImport,
 }: Props) {
+  const { t } = useI18n();
   return (
     <form
       className="asb-form"
-      aria-label="导入便携包"
+      aria-label={t("extensions.toolbar.importPortable")}
       onSubmit={(event) => {
         event.preventDefault();
         void submitPortableImport();
       }}
     >
       <label className="asb-field">
-        <span>便携包文件路径（.json，导出的内容不含任何密钥）</span>
+        <span>{t("extensions.import.pathLabel")}</span>
         <div className="asb-field-input-row">
           <Input
             required
@@ -39,13 +41,13 @@ export function PortableImportForm({
           />
           <Button variant="secondary" disabled={busy} onClick={() => void browsePortable()}>
             <FileJson size={16} />
-            选择 JSON
+            {t("extensions.import.pick")}
           </Button>
         </div>
       </label>
       <div className="asb-form-actions">
         <Button type="submit" variant="primary" disabled={busy}>
-          导入便携包
+          {t("extensions.import.submit")}
         </Button>
       </div>
     </form>

@@ -94,8 +94,9 @@ pub(in super::super) fn apply_catalog_artifact(
         None => match std::fs::remove_file(&catalog.path) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(_) => Err(CommandError::new(
+            Err(_) => Err(CommandError::keyed(
                 "codex-catalog-remove-failed",
+                "errors.sw.ownedCodexCatalogRemoveFailed",
                 "无法清理 ASB 管理的 Codex 模型目录文件",
             )),
         },

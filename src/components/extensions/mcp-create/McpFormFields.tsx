@@ -1,4 +1,5 @@
 import { WandSparkles } from "lucide-react";
+import { useI18n } from "../../../i18n";
 import type { AppKind } from "../../../api/client";
 import { clientName } from "../../../lib/client-name";
 import { Button } from "../../Button";
@@ -9,7 +10,7 @@ import { Textarea } from "../../Textarea";
 import { Tooltip } from "../../Tooltip";
 import { CheckIcon } from "../../icons";
 import { MANAGEMENT_CLIENTS } from "../client-presentation";
-import { MCP_PRESET_OPTIONS } from "./presets";
+import { mcpPresetOptions } from "./presets";
 
 interface IdentityProps {
   name: string;
@@ -20,16 +21,17 @@ interface IdentityProps {
 }
 
 export function McpIdentityFields({ name, preset, busy, onNameChange, onPresetChange }: IdentityProps) {
+  const { t } = useI18n();
   return (
     <div className="asb-mcp-identity">
       <label className="asb-field">
-        <span>服务名称</span>
-        <Input code aria-label="服务名称" value={name} placeholder="docs-search" disabled={busy}
-          title="1–64 位字母、数字、下划线或连字符" onChange={(event) => onNameChange(event.target.value)} />
+        <span>{t("mcp.field.name")}</span>
+        <Input code aria-label={t("mcp.field.name")} value={name} placeholder="docs-search" disabled={busy}
+          title={t("mcp.field.nameHint")} onChange={(event) => onNameChange(event.target.value)} />
       </label>
       <div className="asb-field">
-        <span>预设</span>
-        <Select ariaLabel="MCP 常用预设" value={preset} options={MCP_PRESET_OPTIONS}
+        <span>{t("mcp.field.preset")}</span>
+        <Select ariaLabel={t("mcp.field.presetAria")} value={preset} options={mcpPresetOptions()}
           disabled={busy} onChange={onPresetChange} />
       </div>
     </div>
@@ -43,16 +45,18 @@ interface ClientProps {
 }
 
 export function McpClientFields({ clients, busy, onToggle }: ClientProps) {
+  const { t } = useI18n();
   return (
-    <div className="asb-mcp-client-field" role="group" aria-label="启用到客户端">
-      <span>启用到</span>
+    <div className="asb-mcp-client-field" role="group" aria-label={t("mcp.clients.aria")}>
+      <span>{t("mcp.clients.label")}</span>
       <div className="asb-mcp-clients">
         {MANAGEMENT_CLIENTS.map((client) => {
           const selected = clients.includes(client);
           return (
-            <Tooltip key={client} label={`${clientName(client)}：${selected ? "保存后启用" : "不启用"}`}>
+            <Tooltip key={client} label={t("mcp.client.tooltip", { client: clientName(client),
+              state: selected ? t("mcp.client.stateOn") : t("mcp.client.stateOff") })}>
               <Button variant="unstyled" className="asb-mcp-client" role="checkbox"
-                aria-label={`保存后启用 ${clientName(client)}`} aria-checked={selected}
+                aria-label={t("mcp.client.enableAria", { client: clientName(client) })} aria-checked={selected}
                 data-selected={selected} data-client={client} disabled={busy} onClick={() => onToggle(client)}>
                 <ClientLogo app={client} className="asb-mcp-client-logo" />
                 <span>{clientName(client)}</span>
@@ -76,15 +80,16 @@ interface JsonProps {
 }
 
 export function McpJsonField({ value, busy, focus, invalid, onChange, onWizard }: JsonProps) {
+  const { t } = useI18n();
   return (
     <div className="asb-mcp-json-field">
       <div className="asb-mcp-field-heading">
-        <span>JSON 配置</span>
+        <span>{t("mcp.field.json")}</span>
         <Button variant="secondary" disabled={busy} onClick={onWizard}>
-          <WandSparkles size={16} aria-hidden="true" />配置向导
+          <WandSparkles size={16} aria-hidden="true" />{t("mcp.field.wizard")}
         </Button>
       </div>
-      <Textarea code aria-label="MCP JSON 配置" value={value} rows={12} spellCheck={false}
+      <Textarea code aria-label={t("mcp.field.jsonAria")} value={value} rows={12} spellCheck={false}
         autoComplete="off" autoFocus={focus} disabled={busy} aria-invalid={invalid}
         placeholder={'{\n  "command": "uvx",\n  "args": ["mcp-server-fetch"]\n}'}
         onChange={(event) => onChange(event.target.value)} />

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { CodexCapabilities, CodexChatReasoning } from "../../api/client";
+import type { MessageKey } from "../../i18n";
+import { useI18n } from "../../i18n";
 import { Checkbox } from "../Checkbox";
 import { ChevronDownIcon } from "../icons";
 import { RadioOption } from "../RadioOption";
@@ -11,20 +13,21 @@ type ConfiguredChatReasoning = Extract<CodexChatReasoning, { kind: "configured" 
 
 interface Props { editor: CodexEditorState; busy: boolean }
 
-const CAPABILITY_LABELS: Array<{ key: keyof Omit<CodexCapabilities, "chatReasoning">; label: string; help?: string }> = [
-  { key: "compact", label: "可压缩" },
-  { key: "models", label: "模型操作" },
-  { key: "chatCompletions", label: "Chat 兼容" },
-  { key: "alphaSearch", label: "网页搜索（alpha）" },
-  { key: "imageGeneration", label: "图像生成" },
-  { key: "imageEdit", label: "图像编辑" },
-  { key: "functionTools", label: "函数工具" },
-  { key: "customTools", label: "自定义工具" },
-  { key: "toolSearch", label: "工具搜索" },
-  { key: "reasoning", label: "推理" },
+const CAPABILITY_LABELS: Array<{ key: keyof Omit<CodexCapabilities, "chatReasoning">; labelKey: MessageKey }> = [
+  { key: "compact", labelKey: "codex.capability.compact" },
+  { key: "models", labelKey: "codex.capability.models" },
+  { key: "chatCompletions", labelKey: "codex.capability.chatCompletions" },
+  { key: "alphaSearch", labelKey: "codex.capability.alphaSearch" },
+  { key: "imageGeneration", labelKey: "codex.capability.imageGeneration" },
+  { key: "imageEdit", labelKey: "codex.capability.imageEdit" },
+  { key: "functionTools", labelKey: "codex.capability.functionTools" },
+  { key: "customTools", labelKey: "codex.capability.customTools" },
+  { key: "toolSearch", labelKey: "codex.capability.toolSearch" },
+  { key: "reasoning", labelKey: "codex.capability.reasoning" },
 ];
 
 function ChatReasoningControls({ editor, busy }: Props) {
+  const { t } = useI18n();
   const { draft, setDraft } = editor;
   const chatReasoning = draft.capabilities.chatReasoning;
   const configured = chatReasoning.kind === "configured";
@@ -35,53 +38,53 @@ function ChatReasoningControls({ editor, busy }: Props) {
       : current);
   return (
     <div className="asb-field">
-      <span>Chat 推理参数</span>
-      <div className="asb-segments" role="radiogroup" aria-label="Chat 推理参数">
-        <RadioOption name="chat-reasoning" checked={!configured} disabled={busy} label="不使用"
+      <span>{t("codex.chatReasoning.title")}</span>
+      <div className="asb-segments" role="radiogroup" aria-label={t("codex.chatReasoning.title")}>
+        <RadioOption name="chat-reasoning" checked={!configured} disabled={busy} label={t("codex.chatReasoning.unused")}
           onChange={() => setDraft((current) => reconcileCodexCapabilities(current,
             { ...current.capabilities, chatReasoning: { kind: "unsupported" } }))} />
-        <RadioOption name="chat-reasoning" checked={configured} disabled={busy} label="配置"
+        <RadioOption name="chat-reasoning" checked={configured} disabled={busy} label={t("codex.chatReasoning.configure")}
           onChange={() => setDraft((current) => ({ ...current, capabilities: { ...current.capabilities,
             chatReasoning: { kind: "configured", thinkingParameter: "none", effortParameter: "none", effortMode: "passthrough" } } }))} />
       </div>
       {chatReasoning.kind === "configured" && (
         <div className="asb-provider-field-grid asb-provider-chat-reasoning">
           <label className="asb-field">
-            <span>思考开关参数</span>
-            <Select ariaLabel="思考开关参数" value={chatReasoning.thinkingParameter} disabled={busy}
+            <span>{t("codex.chatReasoning.thinkingParam")}</span>
+            <Select ariaLabel={t("codex.chatReasoning.thinkingParam")} value={chatReasoning.thinkingParameter} disabled={busy}
               options={[
-                { value: "none", label: "不映射" },
+                { value: "none", label: t("codex.chatReasoning.noMapping") },
                 { value: "thinking", label: "thinking" },
                 { value: "enableThinking", label: "enable_thinking" },
-                { value: "reasoningSplit", label: "推理拆分" },
+                { value: "reasoningSplit", label: t("codex.chatReasoning.reasoningSplit") },
               ]}
               onChange={(value) => patch({ thinkingParameter: value as ConfiguredChatReasoning["thinkingParameter"] })} />
           </label>
           <label className="asb-field">
-            <span>推理力度参数</span>
-            <Select ariaLabel="推理力度参数" value={chatReasoning.effortParameter} disabled={busy}
+            <span>{t("codex.chatReasoning.effortParam")}</span>
+            <Select ariaLabel={t("codex.chatReasoning.effortParam")} value={chatReasoning.effortParameter} disabled={busy}
               options={[
-                { value: "none", label: "不映射" },
+                { value: "none", label: t("codex.chatReasoning.noMapping") },
                 { value: "reasoningEffort", label: "reasoning_effort" },
-                { value: "reasoningObject", label: "推理对象" },
+                { value: "reasoningObject", label: t("codex.chatReasoning.reasoningObject") },
               ]}
               onChange={(value) => patch({ effortParameter: value as ConfiguredChatReasoning["effortParameter"] })} />
           </label>
           <label className="asb-field">
-            <span>力度映射</span>
-            <Select ariaLabel="力度映射" value={chatReasoning.effortMode} disabled={busy}
+            <span>{t("codex.chatReasoning.effortMode")}</span>
+            <Select ariaLabel={t("codex.chatReasoning.effortMode")} value={chatReasoning.effortMode} disabled={busy}
               options={[
-                { value: "passthrough", label: "直通" },
-                { value: "lowHigh", label: "低-高" },
+                { value: "passthrough", label: t("codex.chatReasoning.passthrough") },
+                { value: "lowHigh", label: t("codex.chatReasoning.lowHigh") },
                 { value: "deepSeek", label: "DeepSeek" },
                 { value: "openRouter", label: "OpenRouter" },
-                { value: "catalog", label: "按模型目录档位" },
+                { value: "catalog", label: t("codex.chatReasoning.catalogLevels") },
               ]}
               onChange={(value) => patch({ effortMode: value as ConfiguredChatReasoning["effortMode"] })} />
           </label>
         </div>
       )}
-      <p className="asb-scope-note">仅 Chat Completions 上游且启用推理时可用；描述上游如何接收 Codex 的推理档位。</p>
+      <p className="asb-scope-note">{t("codex.chatReasoning.note")}</p>
     </div>
   );
 }
@@ -89,31 +92,32 @@ function ChatReasoningControls({ editor, busy }: Props) {
 /** Explicit capability declaration; entries generated from /models only ever
  * narrow against what is declared here. */
 export function CodexCapabilitiesSection({ editor, busy }: Props) {
+  const { t } = useI18n();
   const { draft, setDraft } = editor;
   const [expanded, setExpanded] = useState(false);
   const enabledCount = CAPABILITY_LABELS.filter(({ key }) => draft.capabilities[key]).length;
   return (
     <details className="asb-provider-disclosure" open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary><span>供应商能力</span><span className="asb-provider-disclosure-value">
-        {enabledCount} 项已启用
+      <summary><span>{t("codex.capabilities.title")}</span><span className="asb-provider-disclosure-value">
+        {t("codex.capabilities.enabledCount", { count: enabledCount })}
       </span><ChevronDownIcon /></summary>
       <div className="asb-provider-disclosure-body">
-        <p className="asb-scope-note">能力按操作逐项声明，不会被模型列表推断；关闭某项能力会同步收窄模型目录。</p>
+        <p className="asb-scope-note">{t("codex.capabilities.note")}</p>
         <div className="asb-provider-field-grid">
           <div className="asb-field">
-            <span>基础能力</span>
-            <div className="asb-catalog-levels-options" role="group" aria-label="基础能力">
+            <span>{t("codex.capabilities.basic")}</span>
+            <div className="asb-catalog-levels-options" role="group" aria-label={t("codex.capabilities.basic")}>
               <Checkbox label="Responses" checked disabled
                 onChange={() => undefined} />
             </div>
-            <p className="asb-scope-note">固定开启：Codex 客户端只说 Responses 协议。</p>
+            <p className="asb-scope-note">{t("codex.capabilities.alwaysOn")}</p>
           </div>
           <div className="asb-field">
-            <span>操作能力</span>
-            <div className="asb-catalog-levels-options" role="group" aria-label="操作能力">
-              {CAPABILITY_LABELS.map(({ key, label }) => (
-                <Checkbox key={key} label={label} checked={draft.capabilities[key]} disabled={busy}
+            <span>{t("codex.capabilities.operations")}</span>
+            <div className="asb-catalog-levels-options" role="group" aria-label={t("codex.capabilities.operations")}>
+              {CAPABILITY_LABELS.map(({ key, labelKey }) => (
+                <Checkbox key={key} label={t(labelKey)} checked={draft.capabilities[key]} disabled={busy}
                   onChange={(checked) => setDraft((current) => reconcileCodexCapabilities(current,
                     { ...current.capabilities, [key]: checked }))} />
               ))}
@@ -122,7 +126,7 @@ export function CodexCapabilitiesSection({ editor, busy }: Props) {
         </div>
         {draft.upstream === "chatCompletions" && draft.capabilities.reasoning
           ? <ChatReasoningControls editor={editor} busy={busy} />
-          : <p className="asb-scope-note">Chat 推理参数仅 Chat Completions 上游且启用推理时可配置。</p>}
+          : <p className="asb-scope-note">{t("codex.capabilities.chatReasoningOffNote")}</p>}
       </div>
     </details>
   );

@@ -32,14 +32,14 @@ fn candidate(
             AppKind::Codex => String::new(),
             AppKind::Claude => "{}".to_string(),
         },
-        Err(_) => return Err(CommandError::new("client-configuration-unreadable", "无法读取真实客户端配置文件")),
+        Err(_) => return Err(CommandError::keyed("client-configuration-unreadable", "errors.cfg.clientConfigUnreadable", "无法读取真实客户端配置文件")),
     };
     if sha256_hex(&current) != expected_source_hash {
-        return Err(CommandError::new("client-configuration-preview-stale", "真实配置已变化，请重新读取后再编辑"));
+        return Err(CommandError::keyed("client-configuration-preview-stale", "errors.cfg.manualPreviewStale", "真实配置已变化，请重新读取后再编辑"));
     }
     let source = if current.is_empty() && target == AppKind::Claude { "{}" } else { &current };
     if display_content == asb_switch::display_content(target, source) {
-        return Err(CommandError::new("manual-configuration-no-change", "手动配置没有变更"));
+        return Err(CommandError::keyed("manual-configuration-no-change", "errors.cfg.manualNoChange", "手动配置没有变更"));
     }
     let manual = rehydrate_display_content(target, &current, display_content).map_err(CommandError::from)?;
     let baseline = source;
@@ -47,9 +47,11 @@ fn candidate(
         .map_err(|error| CommandError::new("manual-configuration-rejected", error.message))?;
     if !manually_changed_owned.is_empty() {
         let paths = manually_changed_owned.into_iter().map(|change| change.key).collect::<Vec<_>>().join("、");
-        return Err(CommandError::new(
+        return Err(CommandError::localized(
             "manual-configuration-rejected",
+            "errors.cfg.manualOwnedFieldRejected",
             format!("手动配置只能修改界面未拥有的字段；请在对应界面修改：{paths}"),
+            serde_json::json!({ "paths": paths }),
         ));
     }
     let rendered = render_client_configuration(target, &manual, &settings, subagent_settings.as_ref())?;
@@ -110,7 +112,7 @@ pub async fn commit_manual_client_configuration(
     require_write_confirmation(confirm_write, "应用手动客户端配置")?;
     let state = state(&app)?;
     let gate = app.try_state::<ConfigWriteGate>()
-        .ok_or_else(|| CommandError::new("app-state-unavailable", "写入闸门尚未初始化"))?
+        .ok_or_else(|| CommandError::keyed("app-state-unavailable", "errors.cfg.writeGateNotInitialized", "写入闸门尚未初始化"))?
         .inner().clone();
     blocking(move || {
         let _guard = gate.lock().map_err(|error| CommandError::new("config-write-gate-unavailable", error))?;

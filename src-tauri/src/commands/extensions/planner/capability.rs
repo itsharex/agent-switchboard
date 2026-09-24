@@ -43,9 +43,11 @@ impl Planner<'_> {
                 .iter()
                 .find(|entry| entry.code == code)
                 .ok_or_else(|| {
-                    CommandError::new(
+                    CommandError::localized(
                         "extension-capability",
+                        "errors.extops.capabilityMissingInReport",
                         format!("当前客户端能力表缺少 {code}，无法安全写入"),
+                        serde_json::json!({ "code": code }),
                     )
                 })?;
             if !entry.supported {
@@ -53,9 +55,11 @@ impl Planner<'_> {
                     CapabilityVerification::Open { condition } => condition.as_str(),
                     CapabilityVerification::Verified { .. } => "当前环境不支持该能力",
                 };
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "extension-capability",
+                    "errors.extops.resourceNotWritable",
                     format!("{} 当前不可写入：{reason}", entry.resource),
+                    serde_json::json!({ "resource": entry.resource, "reason": reason }),
                 ));
             }
         }
@@ -93,18 +97,22 @@ impl Planner<'_> {
             return Ok(false);
         };
         let bytes = fs::read(document).map_err(|_| {
-            CommandError::new(
+            CommandError::localized(
                 "extension-external-change",
+                "errors.extops.documentReadFailedExternalChange",
                 format!("无法读取 {}；请先解决外部变更", document.display()),
+                serde_json::json!({ "path": document.display().to_string() }),
             )
         })?;
         let external_change = || {
-            CommandError::new(
+            CommandError::localized(
                 "extension-external-change",
+                "errors.extops.documentExternallyChanged",
                 format!(
                     "{} 已在本应用上次写入后发生外部变更；请先解决冲突",
                     document.display()
                 ),
+                serde_json::json!({ "path": document.display().to_string() }),
             )
         };
         let text = String::from_utf8(bytes).map_err(|_| external_change())?;
@@ -199,9 +207,11 @@ impl Planner<'_> {
             )
         });
         if owns_document && !self.document_baseline_is_current(binding, document)? {
-            return Err(CommandError::new(
+            return Err(CommandError::localized(
                 "extension-baseline",
+                "errors.extops.documentBaselineNotVerifiableForModify",
                 format!("{} 缺少可验证的部署基线，不能安全修改", document.display()),
+                serde_json::json!({ "path": document.display().to_string() }),
             ));
         }
         Ok(())
@@ -249,18 +259,22 @@ impl Planner<'_> {
     ) -> Result<Option<Vec<ContentEntry>>, CommandError> {
         let io = FsIo;
         match io.path_kind(target_dir).map_err(|_| {
-            CommandError::new(
+            CommandError::localized(
                 "extension-external-change",
+                "errors.extops.pathKindReadFailed",
                 format!("无法读取 {} 的文件类型", target_dir.display()),
+                serde_json::json!({ "path": target_dir.display().to_string() }),
             )
         })? {
             PathKind::Absent => Ok(None),
             PathKind::Directory => asb_switch::extensions::walk_content_entries(&io, target_dir)
                 .map(Some)
                 .map_err(|error| CommandError::new("extension-external-change", error.to_string())),
-            PathKind::File { .. } | PathKind::Other => Err(CommandError::new(
+            PathKind::File { .. } | PathKind::Other => Err(CommandError::localized(
                 "extension-external-change",
+                "errors.extops.notManagedPlainDirectory",
                 format!("{} 不是可由扩展管理的普通目录", target_dir.display()),
+                serde_json::json!({ "path": target_dir.display().to_string() }),
             )),
         }
     }
@@ -292,20 +306,24 @@ impl Planner<'_> {
             {
                 Ok(())
             }
-            (Some(_), _) => Err(CommandError::new(
+            (Some(_), _) => Err(CommandError::localized(
                 "extension-external-change",
+                "errors.extops.skillContentMismatchExternalChange",
                 format!(
                     "{} 与本应用记录的 Skill 内容不一致；请先解决外部变更",
                     target_dir.display()
                 ),
+                serde_json::json!({ "path": target_dir.display().to_string() }),
             )),
             (None, None) => Ok(()),
-            (None, Some(_)) => Err(CommandError::new(
+            (None, Some(_)) => Err(CommandError::localized(
                 "extension-conflict",
+                "errors.extops.unmanagedSkillContent",
                 format!(
                     "{} 已有未受本应用管理的 Skill 内容；请先显式导入并接管",
                     target_dir.display()
                 ),
+                serde_json::json!({ "path": target_dir.display().to_string() }),
             )),
         }
     }

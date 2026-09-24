@@ -207,6 +207,7 @@
 .asb-select-item {
   position: relative;
   display: flex;
+  flex: none;
   align-items: center;
   min-height: var(--asb-touch-target);
   padding: var(--asb-space-1) var(--asb-space-4) var(--asb-space-1) var(--asb-space-2);

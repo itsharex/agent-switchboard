@@ -1,5 +1,6 @@
 import { SubagentModelRow } from "./SubagentModelRow";
 import type { CodexSubagentRoute, SettingSpec, SettingValue } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { SettingsFields, SettingsRow } from "../SettingsFields";
 import { ParametersLoadStatus } from "../provider-editor/ProviderParametersPage";
@@ -26,14 +27,15 @@ function SubagentSettingsGroup({ specs, baselineValues, baselineRoute, selfId, e
   busy: boolean;
   onChange: (key: string, value: SettingValue) => void;
 }) {
+  const { t } = useI18n();
   if (!editor.draft.parameters) return null;
   const settings = editor.draft.parameters.settings;
   return (
     <section className="asb-toggle-group">
       <div className="asb-toggle-group-head">
-        <h3 className="asb-section-title">子 agent</h3>
+        <h3 className="asb-section-title">{t("codex.params.subagent")}</h3>
       </div>
-      <p className="asb-field-help">默认模型与推理强度随此供应商保存，并在切换到它时应用。</p>
+      <p className="asb-field-help">{t("codex.params.subagentNote")}</p>
       <SubagentModelRow baselineRoute={baselineRoute} selfId={selfId} editor={editor} busy={busy} />
       {specs.map((spec) => (
         <SettingsRow key={spec.key} spec={spec} value={settings[spec.key]}
@@ -45,6 +47,7 @@ function SubagentSettingsGroup({ specs, baselineValues, baselineRoute, selfId, e
 }
 
 export function CodexParametersPage({ editor, busy, baselineValues, baselineRoute, selfId }: Props) {
+  const { t } = useI18n();
   const { draft, setDraft, parameters } = editor;
   const catalog = parameters.catalog;
   if (!catalog || !draft.parameters) return <ParametersLoadStatus busy={busy}
@@ -53,22 +56,22 @@ export function CodexParametersPage({ editor, busy, baselineValues, baselineRout
     ? { ...current, parameters: { settings: { ...catalog.defaults.settings } } }
     : current);
   const baseline = baselineValues ?? catalog.defaults.settings;
-  const subagentSpecs = catalog.specs.filter((spec) => spec.group === "子 agent");
-  const parameterSpecs = catalog.specs.filter((spec) => spec.group !== "子 agent");
-  const parameterGroups = catalog.groups.filter((group) => group !== "子 agent");
+  const subagentSpecs = catalog.specs.filter((spec) => spec.group === "ownership.group.subagent");
+  const parameterSpecs = catalog.specs.filter((spec) => spec.group !== "ownership.group.subagent");
+  const parameterGroups = catalog.groups.filter((group) => group !== "ownership.group.subagent");
   const change = (key: string, value: SettingValue) => setDraft((current) => current.parameters
     ? { ...current, parameters: { settings: { ...current.parameters.settings, [key]: value } } }
     : current);
   return (
-    <div className="asb-form asb-provider-parameters" aria-label="供应商运行参数">
-      <p className="asb-field-help">运行参数随此供应商保存；当前设置来自已保存的供应商档案，新建供应商从默认值开始。模型的上下文窗口在「模型」分区的目录行中配置。</p>
+    <div className="asb-form asb-provider-parameters" aria-label={t("codex.params.pageAria")}>
+      <p className="asb-field-help">{t("codex.params.pageNote")}</p>
       <SettingsFields specs={parameterSpecs} groups={parameterGroups} values={draft.parameters.settings}
         baselineValues={baseline} busy={busy} showGroupReset={false} presentation="provider" onChange={change} />
       <SubagentSettingsGroup specs={subagentSpecs} baselineValues={baseline}
         baselineRoute={baselineRoute} selfId={selfId}
         editor={editor} busy={busy} onChange={change} />
       <div className="asb-settings-actions">
-        <Button variant="secondary" disabled={busy} onClick={resetAll}>恢复运行参数默认值</Button>
+        <Button variant="secondary" disabled={busy} onClick={resetAll}>{t("codex.params.reset")}</Button>
       </div>
     </div>
   );

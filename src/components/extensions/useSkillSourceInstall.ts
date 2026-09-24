@@ -1,3 +1,5 @@
+import { uiMessage } from "../../i18n/errors";
+import { useMessageState } from "../../i18n/use-message-state";
 import { useEffect, useRef, useState } from "react";
 import type { ExtensionListItem, SkillCandidateDto } from "../../api/client";
 import { skillCandidateHost, skillCandidateInstalled, sourceErrorMessage, type SkillSourceActions } from "./skill-source-model";
@@ -8,7 +10,7 @@ export function useSkillSourceInstall(actions: SkillSourceActions, items: Extens
   latest.current = { actions, items, busy };
   const mounted = useRef(true);
   const [active, setActive] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useMessageState();
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const install = async (candidate: SkillCandidateDto) => {
@@ -21,14 +23,14 @@ export function useSkillSourceInstall(actions: SkillSourceActions, items: Extens
     try {
       const saved = await current.actions.onImport(candidate.digest, candidate.name, skillCandidateHost(candidate));
       if (!mounted.current) return;
-      if (!saved) setError(`${candidate.name} 安装未完成；详细原因见操作通知`);
+      if (!saved) setError(uiMessage("extensions.sources.installIncomplete", { name: candidate.name }));
     } catch (reason) {
       lock.current = null;
-      if (mounted.current) setError(sourceErrorMessage(reason, `${candidate.name} 安装失败，请重试`));
+      if (mounted.current) setError(reason);
     } finally {
       lock.current = null;
       if (mounted.current) setActive(null);
     }
   };
-  return { install, active, busy: active !== null, isLocked: () => lock.current !== null, error };
+  return { install, active, busy: active !== null, isLocked: () => lock.current !== null, error: error ? sourceErrorMessage(error, "") : null };
 }

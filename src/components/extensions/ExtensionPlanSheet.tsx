@@ -5,6 +5,7 @@ import type {
   PlanChangeView,
   PlannedTargetView,
 } from "../../api/client";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { DiffView } from "../DiffView";
 import { Select } from "../Select";
@@ -30,21 +31,24 @@ function toKeyChange(change: PlanChangeView): KeyChange {
 }
 
 function TargetPreview({ target, label }: { target: PlannedTargetView; label: string }) {
+  const { t } = useI18n();
   return (
     <div className="asb-ext-plan-target">
       <h4 className="asb-section-title">{label}</h4>
       {target.warnings.map((warning) => (
         <p key={warning} className="asb-warn-text">
-          警告：{warning}
+          {t("extensions.plan.warning", { warning })}
         </p>
       ))}
       {target.changes.length > 0 && (
-        <DiffView changes={target.changes.map(toKeyChange)} label={`${label}变更预览`} />
+        <DiffView changes={target.changes.map(toKeyChange)} label={t("extensions.plan.diffLabel", { target: label })} />
       )}
       {target.files && target.files.length > 0 && (
         <div>
           <p className="asb-scope-note">
-            {target.files.some((file) => file.action === "remove") ? "将移除以下文件：" : "将部署以下文件："}
+            {target.files.some((file) => file.action === "remove")
+              ? t("extensions.plan.filesRemove")
+              : t("extensions.plan.filesDeploy")}
           </p>
           <ul className="asb-ext-file-list">
             {target.files.map((file) => (
@@ -63,6 +67,7 @@ function TargetPreview({ target, label }: { target: PlannedTargetView; label: st
  * prepared plan would write sensitive connection data. Every other write
  * applies immediately through the shared pipeline. */
 export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, onConfirm, onCancel }: Props) {
+  const { t } = useI18n();
   const operation =
     view.operations.find((entry) => entry.operation === "install" || entry.operation === "remove")
       ?.operation ??
@@ -70,34 +75,34 @@ export function ExtensionPlanSheet({ view, busy, projectNames, resourceNames, on
     "update";
   return (
     <AppDialog
-      title={`确认${OPERATION_LABELS[operation]}（写入敏感数据）`}
+      title={t("extensions.plan.confirmTitle", { operation: t(OPERATION_LABELS[operation]) })}
       busy={busy}
       onClose={onCancel}
       wide
       footer={
         <>
           <Button variant="secondary" autoFocus disabled={busy} onClick={onCancel}>
-            取消
+            {t("confirm.cancel")}
           </Button>
           <Button
             variant={operation === "remove" || operation === "restore" ? "danger" : "primary"}
             disabled={busy}
             onClick={onConfirm}
           >
-            确认写入
+            {t("extensions.plan.confirmWrite")}
           </Button>
         </>
       }
     >
       <p className="asb-scope-note">
-        本次变更会向客户端配置写入连接地址、参数或凭据值；预览中的值已脱敏。
-        {view.operations.length > 1 && " 本预览包含多个资源，确认后将在同一事务中一起应用或一起回滚。"}
+        {t("extensions.plan.note")}
+        {view.operations.length > 1 && ` ${t("extensions.plan.multiNote")}`}
       </p>
       {view.operations.map((entry, index) => (
         <section key={index} className="asb-ext-section">
           <h3 className="asb-section-title">
             {resourceNames.get(entry.definitionId) ?? entry.definitionId}
-            <span className="asb-scope-note"> · {OPERATION_LABELS[entry.operation]}</span>
+            <span className="asb-scope-note"> · {t(OPERATION_LABELS[entry.operation])}</span>
           </h3>
           {entry.targets.map((target, targetIndex) => (
             <TargetPreview
@@ -125,30 +130,29 @@ export function ExtensionRemoveSheet({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const bound = item.bindings.length > 0;
   return (
     <AppDialog
-      title="删除扩展定义"
+      title={t("extensions.remove.title")}
       busy={busy}
       onClose={onCancel}
       footer={
         <>
           <Button variant="secondary" autoFocus disabled={busy} onClick={onCancel}>
-            取消
+            {t("confirm.cancel")}
           </Button>
           <Button variant="danger" disabled={busy} onClick={onConfirm}>
-            {bound ? "删除并撤销部署" : "确认删除"}
+            {t(bound ? "extensions.remove.confirmUnbind" : "extensions.remove.confirm")}
           </Button>
         </>
       }
     >
-      <p>将「{item.name}」从扩展库删除。</p>
+      <p>{t("extensions.remove.body", { name: item.name })}</p>
       {bound ? (
-        <p>
-          该扩展仍有 {item.bindings.length} 个客户端安装，将先一并撤销；客户端配置会恢复到部署前的内容，也可随时在操作历史中恢复。
-        </p>
+        <p>{t("extensions.remove.boundBody", { count: item.bindings.length })}</p>
       ) : (
-        <p>此操作不改动任何客户端配置文件。</p>
+        <p>{t("extensions.remove.unboundBody")}</p>
       )}
     </AppDialog>
   );
@@ -167,34 +171,35 @@ export function SkillDisableScopeSheet({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <AppDialog
-      title="选择 Claude 项目 Skill 停用范围"
+      title={t("extensions.disableScope.title")}
       busy={busy}
       onClose={onCancel}
       footer={
         <>
           <Button variant="secondary" autoFocus disabled={busy} onClick={onCancel}>
-            取消
+            {t("confirm.cancel")}
           </Button>
           <Button variant="primary" disabled={busy || sharedSettings === null} onClick={onConfirm}>
-            执行停用
+            {t("extensions.disableScope.confirm")}
           </Button>
         </>
       }
     >
-      <p>Claude 的项目 Skill 可见性规则可写入项目共享设置或个人本地设置。请选择本次规则的作用范围。</p>
+      <p>{t("extensions.disableScope.body")}</p>
       <label className="asb-field">
-        <span>停用规则写入位置</span>
+        <span>{t("extensions.disableScope.field")}</span>
         <Select
           value={sharedSettings === null ? null : sharedSettings ? "shared" : "local"}
           options={[
-            { value: "local", label: "个人本地设置" },
-            { value: "shared", label: "项目共享设置" },
+            { value: "local", label: t("extensions.disableScope.local") },
+            { value: "shared", label: t("extensions.disableScope.shared") },
           ]}
           onChange={(value) => onSharedSettingsChange(value === "shared")}
-          placeholder="选择写入位置"
-          ariaLabel="Claude 项目 Skill 停用规则写入位置"
+          placeholder={t("extensions.disableScope.placeholder")}
+          ariaLabel={t("extensions.disableScope.selectAria")}
           disabled={busy}
         />
       </label>

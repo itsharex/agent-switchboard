@@ -3,7 +3,7 @@ import type {
   ExtensionMutation,
   ExtensionsWorkspace,
 } from "../../api/client";
-import { toast } from "../../components/use-toast";
+import { toast, toastMessage, type ToastContent } from "../../components/use-toast";
 
 export interface ExtensionsDeps {
   busy: boolean;
@@ -22,7 +22,7 @@ export interface SkillUpdatePreparation {
  * versions: the ids that advanced and the per-item failures. */
 export interface SkillBatchAdvance {
   advanced: string[];
-  failed: Array<{ definitionId: string; message: string }>;
+  failed: Array<{ definitionId: string; error: unknown }>;
   workspace: ExtensionsWorkspace | null;
 }
 
@@ -40,14 +40,18 @@ export type WorkspaceRefresher = () => Promise<ExtensionsWorkspace | null>;
 
 export async function refreshLibraryWrite(
   refresh: WorkspaceRefresher,
-  notification: { title: string; description?: string; kind?: "info" | "success" },
+  notification: {
+    title: ToastContent;
+    description?: ToastContent;
+    kind?: "info" | "success";
+  },
 ): Promise<ExtensionsWorkspace | null> {
   const workspace = await refresh();
   toast(workspace === null
     ? {
         kind: "warning",
-        title: `${notification.title}，状态刷新失败`,
-        description: "未能读取最新扩展状态，请刷新扩展库后确认结果。",
+        title: toastMessage("extensions.ops.refreshFailedTitle"),
+        description: toastMessage("extensions.ops.refreshFailedBody"),
       }
     : { kind: "success", ...notification });
   return workspace;
@@ -61,14 +65,14 @@ export function definitionUpdatePreparation(
   if (!item) {
     toast({
       kind: "warning",
-      title: "定义已保存，部署状态未确认",
-      description: "未能读取保存后的扩展，请刷新扩展库后重新部署当前版本。",
+      title: toastMessage("extensions.ops.savedUnconfirmed"),
+      description: toastMessage("extensions.ops.savedUnconfirmedBody"),
     });
     return { definition, deployment: "unverified" };
   }
   const required = item.kind === "mcp"
     ? item.bindings.length > 0
     : item.bindings.some((binding) => binding.desired === "enabled" && !binding.lockedDigest);
-  if (!required) toast({ kind: "success", title: "定义已保存，没有需要更新的客户端部署" });
+  if (!required) toast({ kind: "success", title: toastMessage("extensions.ops.savedNoDeployment") });
   return { definition, deployment: required ? "required" : "notRequired" };
 }

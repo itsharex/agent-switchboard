@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useI18n } from "../i18n";
 import { countdownLabel, relativeLabel, timeLabel } from "../lib/time";
 
 /** All timestamp views share local-time formatting. Relative views tick only while visible. */
 export function Time({ iso, mode = "absolute" }: { iso: string; mode?: "absolute" | "relative" | "reset" }) {
+  useI18n();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (mode === "absolute") return;

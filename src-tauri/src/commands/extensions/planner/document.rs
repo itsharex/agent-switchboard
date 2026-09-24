@@ -77,8 +77,9 @@ impl Planner<'_> {
                         scope: McpScope::ClaudeProjectPrivate { project_path: root },
                     })
                 }
-                AppKind::Codex => Err(CommandError::new(
+                AppKind::Codex => Err(CommandError::keyed(
                     "extension-unsupported-target",
+                    "errors.extops.codexNoPrivateProjectDoc",
                     "Codex 没有项目私有配置文件，不能建立项目私有 MCP 绑定",
                 )),
             },
@@ -90,9 +91,11 @@ pub(super) fn read_document(path: &std::path::Path) -> Result<Option<String>, Co
     match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(CommandError::new(
+        Err(_) => Err(CommandError::localized(
             "extension-external-change",
+            "errors.extops.fileReadFailedExternalState",
             format!("无法读取 {}；请先解决外部文件状态", path.display()),
+            serde_json::json!({ "path": path.display().to_string() }),
         )),
     }
 }
@@ -101,9 +104,11 @@ pub(super) fn document_hash_of(path: &std::path::Path) -> Result<Option<String>,
     match fs::read(path) {
         Ok(bytes) => Ok(Some(sha_hex(&bytes))),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(CommandError::new(
+        Err(_) => Err(CommandError::localized(
             "extension-external-change",
+            "errors.extops.fileReadFailedExternalState",
             format!("无法读取 {}；请先解决外部文件状态", path.display()),
+            serde_json::json!({ "path": path.display().to_string() }),
         )),
     }
 }
@@ -160,9 +165,11 @@ impl DocumentWork {
     /// target of a document becomes its writer.
     pub(super) fn claim(&mut self, pointer: &str, writer: usize) -> Result<(), CommandError> {
         if !self.claimed.insert(pointer.to_string()) {
-            return Err(CommandError::new(
+            return Err(CommandError::localized(
                 "extension-conflict",
+                "errors.extops.entryPointerClaimedBySibling",
                 format!("条目 {pointer} 已被同一批量计划中的另一绑定使用"),
+                serde_json::json!({ "pointer": pointer }),
             ));
         }
         if self.writer.is_none() {
@@ -297,8 +304,9 @@ pub(super) fn restore_claude_entry(
     pointer: &str,
 ) -> Result<(String, Vec<asb_core::extensions::mcp::EntryChange>), CommandError> {
     let original_json: serde_json::Value = serde_json::from_str(original).map_err(|_| {
-        CommandError::new(
+        CommandError::keyed(
             "extension-baseline",
+            "errors.extops.adoptedEntryUnparseable",
             "记录的原始 MCP 条目无法解析，不能恢复接管内容",
         )
     })?;
@@ -356,12 +364,14 @@ pub(super) fn synchronize_document_baselines(
         let next = (expected_content_hash.clone(), sha_hex(rendered.as_bytes()));
         if let Some(existing) = hashes.insert(path.clone(), next.clone()) {
             if existing != next {
-                return Err(CommandError::new(
+                return Err(CommandError::localized(
                     "extension-invalid",
+                    "errors.extops.conflictingDocContentInPlan",
                     format!(
                         "同一计划为 {} 生成了相互冲突的文档内容",
                         std::path::Path::new(path).display()
                     ),
+                    serde_json::json!({ "path": std::path::Path::new(path).display().to_string() }),
                 ));
             }
         }

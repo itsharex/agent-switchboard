@@ -88,8 +88,9 @@ pub(super) fn mcp_edit_view_of(
     definition: &ExtensionDefinition,
 ) -> Result<McpEditViewDto, CommandError> {
     let ExtensionPayload::Mcp(mcp) = &definition.payload else {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-invalid",
+            "errors.extlib.notAnMcpDefinition",
             "该扩展不是 MCP 定义",
         ));
     };
@@ -113,7 +114,7 @@ pub async fn get_mcp_edit_view(
         let definition = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         mcp_edit_view_of(&definition)
     })
     .await
@@ -145,16 +146,18 @@ fn update_mcp(
     let mut definition = store
         .get_definition(id)
         .map_err(store_error)?
-        .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+        .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
     if definition.revision != edit.expected_revision {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-conflict",
+            "errors.extlib.extensionConflictRefresh",
             "扩展已被其他窗口修改；请刷新后重试",
         ));
     }
     let ExtensionPayload::Mcp(current) = &definition.payload else {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "extension-invalid",
+            "errors.extlib.notAnMcpDefinition",
             "该扩展不是 MCP 定义",
         ));
     };
@@ -219,14 +222,15 @@ pub async fn set_binding_lock(
             .map_err(store_error)?
             .into_iter()
             .find(|binding| binding.id == binding_id)
-            .ok_or_else(|| CommandError::new("extension-not-found", "绑定不存在或已被移除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.bindingNotFound", "绑定不存在或已被移除"))?;
         let definition = store
             .get_definition(&binding.resource_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展定义不存在"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionDefinitionMissing", "扩展定义不存在"))?;
         let ExtensionPayload::Skill(skill) = &definition.payload else {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.bindingLockOnlySkill",
                 "版本固定只适用于 Skill 绑定",
             ));
         };
@@ -237,8 +241,9 @@ pub async fn set_binding_lock(
             if binding_file_state(&binding, &definition, baseline.as_ref(), &projects)
                 != FileState::InSync
             {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-conflict",
+                    "errors.extlib.bindingLockRequiresSync",
                     "只有内容与当前版本一致的目标才能固定；请先更新部署或恢复同步",
                 ));
             }
@@ -280,10 +285,19 @@ pub async fn register_project(
         let state = state(&app)?;
         let store = extension_store(&state);
         let canonical = fs::canonicalize(&root).map_err(|error| {
-            CommandError::new("extension-invalid", format!("项目目录无法解析：{error}"))
+            CommandError::localized(
+                "extension-invalid",
+                "errors.extlib.projectRootUnresolvable",
+                format!("项目目录无法解析：{error}"),
+                serde_json::json!({ "detail": error.to_string() }),
+            )
         })?;
         if !canonical.is_dir() {
-            return Err(CommandError::new("extension-invalid", "项目路径不是目录"));
+            return Err(CommandError::keyed(
+                "extension-invalid",
+                "errors.extlib.projectPathNotDirectory",
+                "项目路径不是目录",
+            ));
         }
         let existing = store.list_projects().map_err(store_error)?;
         if let Some(found) = existing
@@ -323,7 +337,7 @@ pub async fn put_extension_secret(
 ) -> Result<SecretRefDto, CommandError> {
     blocking(move || {
         if value.trim().is_empty() {
-            return Err(CommandError::new("extension-invalid", "凭据值不能为空"));
+            return Err(CommandError::keyed("extension-invalid", "errors.extlib.secretValueEmpty", "凭据值不能为空"));
         }
         let reference = format!("secret-{}", uuid::Uuid::new_v4().simple());
         SystemSecrets

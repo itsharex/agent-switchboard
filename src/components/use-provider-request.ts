@@ -1,3 +1,6 @@
+import { useI18n } from "../i18n";
+import { errorText, uiMessage } from "../i18n/errors";
+import { useMessageState } from "../i18n/use-message-state";
 import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import {
   cancelProviderRequest,
@@ -9,6 +12,7 @@ import {
   type ProviderRequestPreparation,
   type ProviderRequestResult,
 } from "../api/client";
+import { tr } from "../i18n/current";
 
 export interface RequestView {
   phase: "preparing" | "ready" | "sending" | "cancelling" | "complete" | "failed" | "cancelled";
@@ -26,22 +30,23 @@ interface Session {
   attempt: number;
 }
 
-type UpdateView = Dispatch<SetStateAction<RequestView>>;
+type RequestState = Omit<RequestView, "error"> & { error: unknown };
+type UpdateView = Dispatch<SetStateAction<RequestState>>;
 interface ModelListingControls {
   version: MutableRefObject<number>;
   busy: MutableRefObject<boolean>;
   setModels: Dispatch<SetStateAction<ProviderModel[] | null>>;
   setBusy: Dispatch<SetStateAction<boolean>>;
-  setError: Dispatch<SetStateAction<string | null>>;
+  setError: (error: unknown) => void;
 }
 
-const INITIAL_VIEW: RequestView = { phase: "preparing", preparation: null, result: null, error: null };
+const INITIAL_VIEW: RequestState = { phase: "preparing", preparation: null, result: null, error: null };
 
 function failureMessage(caught: unknown): string {
   if (typeof caught === "object" && caught !== null && "message" in caught && typeof caught.message === "string") {
     return caught.message;
   }
-  return typeof caught === "string" ? caught : "请求未完成，请重试。";
+  return typeof caught === "string" ? caught : tr("providers.request.phase.failed");
 }
 
 function release(session: Session) {
@@ -65,7 +70,7 @@ async function prepare(session: Session, attempt = session.attempt): Promise<Pro
   return preparation;
 }
 
-async function send(session: Session, model: string, previous: RequestView, update: UpdateView) {
+async function send(session: Session, model: string, previous: RequestState, update: UpdateView) {
   if (session.busy || session.disposed || !model.trim()) return;
   session.busy = true;
   session.cancelled = false;
@@ -76,7 +81,7 @@ async function send(session: Session, model: string, previous: RequestView, upda
     if (!preparation || session.disposed || session.attempt !== attempt) return;
     const before = previous.preparation;
     if (before && (before.endpoint !== preparation.endpoint || before.upstreamProtocol !== preparation.upstreamProtocol)) {
-      update({ phase: "ready", preparation, result: null, error: "供应商连接已更新，请确认当前地址与 API 格式后再次发送。" });
+      update({ phase: "ready", preparation, result: null, error: uiMessage("providers.request.connectionChanged") });
       return;
     }
     update({ phase: "sending", preparation, result: null, error: null });
@@ -93,7 +98,7 @@ async function send(session: Session, model: string, previous: RequestView, upda
         console.warn("释放供应商请求失败：", failureMessage(error));
       });
     }
-    update((current) => ({ ...current, phase: "failed", result: null, error: failureMessage(caught) }));
+    update((current) => ({ ...current, phase: "failed", result: null, error: caught }));
   } finally {
     if (session.attempt === attempt) {
       session.busy = false;
@@ -125,7 +130,7 @@ async function cancel(session: Session, update: UpdateView) {
   } catch (caught) {
     if (session.disposed || session.attempt !== attempt || !session.busy) return;
     session.cancelled = false;
-    update((current) => ({ ...current, phase: "sending", error: `取消失败：${failureMessage(caught)}` }));
+    update((current) => ({ ...current, phase: "sending", error: caught }));
   }
 }
 
@@ -154,14 +159,14 @@ async function loadModels(
           && (current.preparation.endpoint !== preparation.endpoint
             || current.preparation.upstreamProtocol !== preparation.upstreamProtocol);
         return changed
-          ? { phase: "ready", preparation, result: null, error: "供应商连接已更新，请确认当前地址与 API 格式后再发送。" }
+          ? { phase: "ready", preparation, result: null, error: uiMessage("providers.request.connectionChanged") }
           : { ...current, preparation };
       });
     }
     const fetched = await fetchProviderRequestModels(preparation.requestId);
     if (isCurrent()) controls.setModels(fetched);
   } catch (caught) {
-    if (isCurrent()) controls.setError(failureMessage(caught));
+    if (isCurrent()) controls.setError(caught);
   } finally {
     if (isCurrent()) {
       controls.busy.current = false;
@@ -171,11 +176,12 @@ async function loadModels(
 }
 
 export function useProviderRequest(target: ProviderRequestTarget) {
+  const { t } = useI18n();
   const [view, setView] = useState(INITIAL_VIEW);
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ProviderModel[] | null>(null);
   const [modelsBusy, setModelsBusy] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelsError, setModelsError] = useMessageState();
   const [revision, setRevision] = useState(0);
   const sessionRef = useRef<Session | null>(null);
   const modelsVersion = useRef(0);
@@ -208,7 +214,7 @@ export function useProviderRequest(target: ProviderRequestTarget) {
         return;
       }
       setModel("");
-      setView({ ...INITIAL_VIEW, phase: "failed", error: failureMessage(caught) });
+      setView({ ...INITIAL_VIEW, phase: "failed", error: caught });
     });
     return () => {
       modelsVersion.current += 1;
@@ -219,7 +225,7 @@ export function useProviderRequest(target: ProviderRequestTarget) {
 
   const busy = view.phase === "sending" || view.phase === "cancelling";
   return {
-    view,
+    view: { ...view, error: view.error == null ? null : errorText(view.error, t) },
     model,
     busy,
     models,

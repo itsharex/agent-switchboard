@@ -1,3 +1,5 @@
+import { errorText, localizedMessageText, uiMessage } from "../i18n/errors";
+import type { LocalizedMessage } from "../api/client";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelGatewayPortChange,
@@ -6,6 +8,7 @@ import {
   type AppKind,
   type GatewayPortChangePlan,
 } from "../api/client";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { Input } from "./Input";
 
@@ -18,8 +21,8 @@ export interface PortSheetState {
   port?: string;
   plan?: GatewayPortChangePlan;
   resultToPort?: number;
-  warnings?: string[];
-  error?: string | null;
+  warnings?: LocalizedMessage[];
+  error?: unknown;
 }
 
 interface Props {
@@ -31,6 +34,7 @@ interface Props {
 
 /** Input, preview, and confirmation for one backend-held port reservation. */
 export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefreshed }: Props) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const completed = useRef(new Set<string>());
   const preparationId = state.plan?.preparationId;
@@ -48,11 +52,11 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
     if (busy) return;
     const port = Number(state.port ?? "");
     if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
-      onState({ ...state, error: `监听端口必须是 ${MIN_PORT}–${MAX_PORT} 之间的整数` });
+      onState({ ...state, error: uiMessage("gateway.errorPortRange", { min: MIN_PORT, max: MAX_PORT }) });
       return;
     }
     if (port === configuredPort) {
-      onState({ ...state, error: "新端口与当前监听端口相同" });
+      onState({ ...state, error: uiMessage("gateway.errorSamePort") });
       return;
     }
     setBusy(true);
@@ -60,7 +64,7 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
       const plan = await prepareGatewayPortChange(port);
       onState({ stage: "preview", port: state.port, plan, error: null });
     } catch (cause) {
-      onState({ ...state, error: messageFor(cause) });
+      onState({ ...state, error: cause });
     } finally {
       setBusy(false);
     }
@@ -82,7 +86,7 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
     } catch (cause) {
       // A commit consumes the one-shot server preparation even on failure.
       // Return to input instead of offering a misleading retry for that id.
-      onState({ stage: "input", port: state.port, error: messageFor(cause) });
+      onState({ stage: "input", port: state.port, error: cause });
     } finally {
       setBusy(false);
     }
@@ -101,15 +105,15 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
       className="asb-dialog-backdrop is-inline"
       onClick={(event) => event.target === event.currentTarget && cancel()}
     >
-      <div className="asb-dialog is-narrow" role="dialog" aria-modal="true" aria-label="修改监听端口">
+      <div className="asb-dialog is-narrow" role="dialog" aria-modal="true" aria-label={t("gateway.sheetTitle")}>
         <header className="asb-dialog-heading">
-          <h2 className="asb-dialog-title">修改监听端口</h2>
+          <h2 className="asb-dialog-title">{t("gateway.sheetTitle")}</h2>
         </header>
         <div className="asb-dialog-body">
           {state.stage === "input" && (
             <>
               <label className="asb-field is-narrow">
-                <span>新监听端口（当前 {configuredPort}）</span>
+                <span>{t("gateway.newPortLabel", { port: configuredPort })}</span>
                 <Input
                   type="number"
                   min={MIN_PORT}
@@ -127,7 +131,7 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
                 />
               </label>
               <p className="asb-scope-note">
-                允许 {MIN_PORT}–{MAX_PORT} 之间的整数；冲突或被系统拒绝时不会改动任何配置。
+                {t("gateway.portRangeNote", { min: MIN_PORT, max: MAX_PORT })}
               </p>
             </>
           )}
@@ -135,38 +139,37 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
           {state.stage === "done" && (
             <>
               <p className="asb-scope-note" role="status">
-                监听端口已改为 {state.resultToPort}。配置文件已更新，但正在运行的客户端不会自动重新读取；
-                请重新启动相关客户端或会话，使新地址生效。
+                {t("gateway.doneCopy", { port: state.resultToPort! })}
               </p>
-              {state.warnings?.map((warning) => (
-                <p key={warning} className="asb-warn-text" role="status">{warning}</p>
+              {state.warnings?.map((warning, index) => (
+                <p key={`${index}:${warning.key}`} className="asb-warn-text" role="status">{localizedMessageText(warning, t)}</p>
               ))}
             </>
           )}
-          {state.error && (
+          {state.error != null && (
             <p className="asb-scope-note asb-fail-text" role="alert">
-              {state.error}
+              {errorText(state.error, t)}
             </p>
           )}
         </div>
         <div className="asb-dialog-footer">
           {state.stage === "input" && (
             <>
-              <Button variant="secondary" onClick={cancel}>取消</Button>
+              <Button variant="secondary" onClick={cancel}>{t("gateway.cancel")}</Button>
               <Button variant="primary" disabled={busy} onClick={() => void prepare()}>
-                {busy ? "正在校验…" : "下一步：预览变更"}
+                {busy ? t("gateway.validating") : t("gateway.nextPreview")}
               </Button>
             </>
           )}
           {state.stage === "preview" && (
             <>
-              <Button variant="secondary" onClick={cancel}>取消</Button>
+              <Button variant="secondary" onClick={cancel}>{t("gateway.cancel")}</Button>
               <Button variant="primary" disabled={busy} onClick={() => void commit()}>
-                {busy ? "正在应用…" : "确认修改并应用"}
+                {busy ? t("gateway.applying") : t("gateway.confirmApply")}
               </Button>
             </>
           )}
-          {state.stage === "done" && <Button variant="secondary" onClick={cancel}>关闭</Button>}
+          {state.stage === "done" && <Button variant="secondary" onClick={cancel}>{t("gateway.close")}</Button>}
         </div>
       </div>
     </div>
@@ -174,32 +177,20 @@ export function GatewayPortChangeSheet({ state, configuredPort, onState, onRefre
 }
 
 function Preview({ plan }: { plan: GatewayPortChangePlan }) {
+  const { t } = useI18n();
   return (
     <ul className="asb-dialog-details">
-      <li>监听端口：{plan.fromPort} → {plan.toPort}</li>
+      <li>{t("gateway.previewPort", { from: plan.fromPort, to: plan.toPort })}</li>
       {plan.clients.length === 0 ? (
-        <li>没有客户端正在使用本网关，仅更新网关监听端口。</li>
+        <li>{t("gateway.previewNoClients")}</li>
       ) : plan.clients.map((client) => (
         <li key={`${client.app}:${client.profileId}`}>
-          {client.profileName}（{APP_LABELS[client.app]}）服务地址：<br />
+          {t("gateway.previewClientAddress", { name: client.profileName, app: APP_LABELS[client.app] })}<br />
           <span className="asb-num">{client.currentBaseUrl}</span><br />
           → <span className="asb-num">{client.newBaseUrl}</span>
         </li>
       ))}
-      <li>上游地址、API 密钥与供应商参数保持不变；本机能力令牌不轮换。</li>
+      <li>{t("gateway.previewUnchanged")}</li>
     </ul>
   );
-}
-
-function messageFor(cause: unknown): string {
-  if (cause instanceof Error) return cause.message;
-  if (
-    typeof cause === "object"
-    && cause !== null
-    && "message" in cause
-    && typeof cause.message === "string"
-  ) {
-    return cause.message;
-  }
-  return String(cause);
 }

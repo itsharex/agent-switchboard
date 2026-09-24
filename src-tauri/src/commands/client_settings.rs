@@ -235,7 +235,7 @@ pub async fn get_current_client_configuration(
                 false,
                 match target { AppKind::Codex => String::new(), AppKind::Claude => "{}".to_string() },
             ),
-            Err(_) => return Err(CommandError::new("client-configuration-unreadable", "无法读取真实客户端配置文件")),
+            Err(_) => return Err(CommandError::keyed("client-configuration-unreadable", "errors.cfg.clientConfigUnreadable", "无法读取真实客户端配置文件")),
         };
         let source = if raw.is_empty() && target == AppKind::Claude { "{}" } else { &raw };
         let syntax = asb_core::adapter::validate_syntax(target, source);

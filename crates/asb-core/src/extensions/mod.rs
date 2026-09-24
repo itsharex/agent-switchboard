@@ -50,98 +50,98 @@ pub fn capability_report(
         AppKind::Codex => {
             entries.push(entry(
                 "skill-user",
-                "用户级 Skills：~/.agents/skills/<name>/SKILL.md（原生共享目录，其他工具也可能读取）",
+                "extcap.codex.skillUser.resource",
                 true,
-                open("以选定 Codex 发行版在隔离目录实测清单加载"),
+                open("extcap.codex.skillUser.verification"),
             ));
             entries.push(entry(
                 "skill-project",
-                "项目 Skills：<project>/.agents/skills/<name>/SKILL.md（含 CWD 相关发现层级）",
+                "extcap.codex.skillProject.resource",
                 true,
-                open("以选定 Codex 发行版实测仓库层级发现"),
+                open("extcap.codex.skillProject.verification"),
             ));
             entries.push(entry(
                 "skill-toggle",
-                "Skill 停用：config.toml 的 [[skills.config]] 路径规则（canonical document path 匹配）",
+                "extcap.codex.skillToggle.resource",
                 true,
-                open("以选定 Codex 发行版实测停用后不可调用"),
+                open("extcap.codex.skillToggle.verification"),
             ));
             entries.push(entry(
                 "mcp-user",
-                "用户级 MCP：$CODEX_HOME/config.toml 的 mcp_servers.<key>",
+                "extcap.codex.mcpUser.resource",
                 true,
-                open("以选定 Codex 发行版实测服务加载"),
+                open("extcap.codex.mcpUser.verification"),
             ));
             entries.push(entry(
                 "mcp-project-shared",
-                "项目共享 MCP：<project>/.codex/config.toml 的 mcp_servers.<key>",
+                "extcap.codex.mcpProjectShared.resource",
                 true,
-                open("以选定 Codex 发行版实测项目信任与服务加载"),
+                open("extcap.codex.mcpProjectShared.verification"),
             ));
             entries.push(entry(
                 "mcp-disable",
-                "MCP 停用：服务条目内的 enabled = false",
+                "extcap.codex.mcpDisable.resource",
                 true,
-                open("以选定 Codex 发行版实测停用效果"),
+                open("extcap.codex.mcpDisable.verification"),
             ));
             entries.push(entry(
                 "mcp-project-private",
-                "项目私有 MCP：Codex 没有私有项目文件格式，不支持",
+                "extcap.codex.mcpProjectPrivate.resource",
                 false,
-                open("Codex 官方提供私有项目文档后重新评估"),
+                open("extcap.codex.mcpProjectPrivate.verification"),
             ));
         }
         AppKind::Claude => {
             entries.push(entry(
                 "skill-user",
-                "用户级 Skills：~/.claude/skills/<name>/SKILL.md",
+                "extcap.claude.skillUser.resource",
                 true,
-                open("以选定 Claude Code 发行版在隔离目录实测清单加载"),
+                open("extcap.claude.skillUser.verification"),
             ));
             entries.push(entry(
                 "skill-project",
-                "项目 Skills：<project>/.claude/skills/<name>/SKILL.md（含父级与嵌套发现规则）",
+                "extcap.claude.skillProject.resource",
                 true,
-                open("以选定 Claude Code 发行版实测发现层级"),
+                open("extcap.claude.skillProject.verification"),
             ));
             entries.push(entry(
                 "skill-toggle",
-                "Skill 可见性：settings 的 skillOverrides.<name>（on / name-only / user-invocable-only / off）",
+                "extcap.claude.skillToggle.resource",
                 true,
-                open("以选定 Claude Code 发行版实测四态语义"),
+                open("extcap.claude.skillToggle.verification"),
             ));
             if environment.claude_config_dir_custom {
                 entries.push(entry(
                     "mcp-user",
-                    "用户级 MCP：~/.claude.json 的 mcpServers（自定义 CLAUDE_CONFIG_DIR 下状态文件位置未核实）",
+                    "extcap.claude.mcpUser.resource",
                     false,
-                    open("以官方 CLI 在隔离 CLAUDE_CONFIG_DIR 中创建无凭据假服务核实状态文件位置"),
+                    open("extcap.claude.mcpUser.verification"),
                 ));
             } else {
                 entries.push(entry(
                     "mcp-user",
-                    "用户级 MCP：~/.claude.json 的 mcpServers.<key>",
+                    "extcap.claude.mcpUserStandard.resource",
                     true,
-                    open("以选定 Claude Code 发行版实测服务加载"),
+                    open("extcap.claude.mcpUserStandard.verification"),
                 ));
             }
             entries.push(entry(
                 "mcp-project-shared",
-                "项目共享 MCP：<project>/.mcp.json 的 mcpServers.<key>（受项目信任限制）",
+                "extcap.claude.mcpProjectShared.resource",
                 true,
-                open("以选定 Claude Code 发行版实测项目信任交互"),
+                open("extcap.claude.mcpProjectShared.verification"),
             ));
             entries.push(entry(
                 "mcp-project-private",
-                "项目私有 MCP：~/.claude.json 的 projects[<绝对路径>].mcpServers.<key>",
+                "extcap.claude.mcpProjectPrivate.resource",
                 true,
-                open("以选定 Claude Code 发行版实测私有作用域优先级"),
+                open("extcap.claude.mcpProjectPrivate.verification"),
             ));
             entries.push(entry(
                 "mcp-disable",
-                "项目级停用：projects[<路径>].disabledMcpServers 成员（用户级停用为撤下条目）",
+                "extcap.claude.mcpDisable.resource",
                 true,
-                open("以选定 Claude Code 发行版实测 /mcp 停用状态对应字段"),
+                open("extcap.claude.mcpDisable.verification"),
             ));
         }
     }

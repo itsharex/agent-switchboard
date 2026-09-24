@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ExtensionListItem } from "../../api/client";
 import { ExtensionManagement } from "../../components/extensions/ExtensionManagement";
 import { AppDialog } from "../../components/AppDialog";
+import { useI18n } from "../../i18n";
 import { parseTargetValue } from "../../components/extensions/labels";
 import type { ExtensionWorkspace } from "./useExtensionWorkspace";
 
@@ -12,10 +13,11 @@ export function ExtensionManagementDialog({
   workspace: ExtensionWorkspace;
   item: ExtensionListItem;
 }) {
+  const { t } = useI18n();
   const [targets, setTargets] = useState<string[]>([]);
   const updateReport = w.updates.reportMap.get(item.id) ?? null;
   return (
-    <AppDialog title={`部署与诊断 · ${item.name}`} busy={w.busy} onClose={w.nav.closeDialog} wide>
+    <AppDialog title={t("extensions.management.dialogTitle", { name: item.name })} busy={w.busy} onClose={w.nav.closeDialog} wide>
       <ExtensionManagement
         item={item}
         projects={w.ext.workspace?.projects ?? []}

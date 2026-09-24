@@ -17,8 +17,9 @@ pub(super) fn resolve(
         return Ok(connection);
     }
     if connection.connection.claude_native.is_some() {
-        return Err(CommandError::new(
+        return Err(CommandError::keyed(
             "claude-native-sdk-only",
+            "errors.misc.claudeNativeSdkOnly",
             "此 Claude 档案使用原生云 SDK，请通过 Claude Code 验证，不能发送普通 HTTP 测试请求",
         ));
     }
@@ -35,8 +36,9 @@ pub(super) fn resolve(
                 || expected.upstream_account_id != account.upstream_account_id
                 || expected.endpoint != account.endpoint
         }) {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "claude-account-changed",
+                "errors.misc.claudeAccountChanged",
                 "Claude 托管账号或目标已变化，请重新准备请求",
             ));
         }

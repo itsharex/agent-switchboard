@@ -10,6 +10,7 @@ mod dispatch;
 mod extensions_dispatch;
 mod http;
 mod settings_dispatch;
+mod provider_diagnostics_dispatch;
 
 
 

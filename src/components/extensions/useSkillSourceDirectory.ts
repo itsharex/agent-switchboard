@@ -1,3 +1,4 @@
+import { uiMessage } from "../../i18n/errors";
 import { useEffect, useRef, useState } from "react";
 import type { SkillCandidateDto } from "../../api/client";
 import {
@@ -33,7 +34,7 @@ export function useSkillSourceDirectory(busy: boolean) {
   const changeInput = (value: string) => { setInput(value); cancel(); };
   const search = async () => {
     const query = input.trim();
-    if (query.length < 2) { searchRequests.setError("搜索词至少需要 2 个字符"); return; }
+    if (query.length < 2) { searchRequests.setError(uiMessage("extensions.directory.queryTooShort")); return; }
     cancelResolution();
     const next = await searchRequests.run(async () => {
       const result = await searchSkillDirectory(query, 0);

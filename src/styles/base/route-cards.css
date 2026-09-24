@@ -87,8 +87,9 @@
 
 .asb-route-values {
   display: grid;
-  /* Model name and host are the long values; access mode is always short. */
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr);
+  /* Model name and host are the long values; access mode and the website
+     host are always short. */
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--asb-space-2);
   width: 100%;
   margin: 0;
@@ -112,7 +113,11 @@
 
 .asb-route-value {
   margin: 0;
-  overflow-wrap: anywhere;
+  /* One line per value: long model names and hosts elide instead of
+     wrapping; the full text stays reachable through the title tooltip. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: var(--asb-text-code);
   color: var(--asb-text);
 }

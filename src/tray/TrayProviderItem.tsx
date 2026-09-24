@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import type { TraySnapshot } from "../api/client";
+import { useI18n } from "../i18n";
 import { formatTrayReading } from "../lib/usage-format";
 import { TrayUsage, trayUsageContent } from "./TrayUsage";
 import { cx } from "../utils/cx";
@@ -17,12 +18,16 @@ interface Props {
  * visual property. The shared Button is deliberately not used here: its
  * geometry contract targets global action controls, not list rows. */
 export function TrayProviderItem({ provider, busy, switchingId, onSwitch }: Props) {
-  const { readings, stale, state } = trayUsageContent(provider.usage);
-  const balance = [...readings.map((reading) => `${reading.planName ?? ""} ${formatTrayReading(reading)}`),
-    state, stale ? "上次读数" : null].filter(Boolean).join("，");
+  const { t } = useI18n();
+  const { readings, stale, stateKey } = trayUsageContent(provider.usage);
+  const balance = [
+    ...readings.map((reading) => `${reading.planName ?? ""} ${formatTrayReading(reading)}`),
+    stateKey ? t(stateKey) : null,
+    stale ? t("tray.state.stale") : null,
+  ].filter(Boolean).join("，");
   const action = provider.active
-    ? `${provider.name}，当前供应商`
-    : `切换到 ${provider.name}`;
+    ? t("tray.provider.active", { name: provider.name })
+    : t("tray.provider.switchTo", { name: provider.name });
 
   return (
     <button
@@ -36,7 +41,7 @@ export function TrayProviderItem({ provider, busy, switchingId, onSwitch }: Prop
       <span className="tray-provider-name">{provider.name}</span>
       <TrayUsage usage={provider.usage} />
       <span className="tray-provider-switch">
-        {provider.active ? null : switchingId === provider.id ? "切换中" : "切换"}
+        {provider.active ? null : switchingId === provider.id ? t("tray.provider.switching") : t("tray.provider.switch")}
       </span>
     </button>
   );

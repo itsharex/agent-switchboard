@@ -1,8 +1,10 @@
 import { useId } from "react";
-import type { AppKind, CodexProviderDraft, ProviderDraft, ProviderRecord } from "../../api/client";
+import type { AppKind, CodexProviderDraft, ProviderDraft, ProviderRecord, LocalizedMessage } from "../../api/client";
 import type { CodexEditorSource } from "../../app/useProviders";
+import { useI18n } from "../../i18n";
 import { Button } from "../Button";
 import { ProviderConnectionTest } from "../provider-editor/ProviderConnectionTest";
+import { ProviderDiagnosticsEntry } from "../provider-diagnostics/ProviderDiagnosticsEntry";
 import { ProviderEditorFrame } from "../provider-editor/ProviderEditorFrame";
 import { ProviderAdvancedSettings } from "../provider-editor/ProviderAdvancedSettings";
 import { ProviderNotesField } from "../provider-editor/ProviderIdentityFields";
@@ -23,7 +25,7 @@ interface Props {
   source: CodexEditorSource | null;
   busy: boolean;
   userConfigModel: string | null;
-  userConfigWarnings: string[];
+  userConfigWarnings: LocalizedMessage[];
   onSave: (draft: CodexProviderDraft) => void;
   /** The official-login arm saves a generic draft: an official record is not
    * a third-party profile and never migrates into one. */
@@ -41,11 +43,12 @@ type OfficialProps = Omit<Props, "source"> & {
 };
 
 function CodexProviderForm({ editor, formId, ...props }: Props & { editor: CodexEditorState; formId: string }) {
+  const { t } = useI18n();
   const { draft, setDraft, parameters, setParametersOpen, triggerRef } = editor;
   const { busy, onSave } = props;
   const editing = props.source?.kind === "record";
   return (
-    <form id={formId} className="asb-provider-form" aria-label={editing ? "编辑 Codex 供应商" : "新建 Codex 供应商"}
+    <form id={formId} className="asb-provider-form" aria-label={editing ? t("codex.editor.editTitle") : t("codex.editor.newTitle")}
       onSubmit={(event) => { event.preventDefault(); editor.save(onSave); }}>
       {!editing && <CodexAccessMode busy={busy}
         onSwitchAccessMode={(official) => props.onSwitchAccessMode(official, null)} />}
@@ -65,9 +68,9 @@ function CodexProviderForm({ editor, formId, ...props }: Props & { editor: Codex
           onChange={(next) => setDraft((current) => ({ ...current, requestMode: next.requestMode }))} />}
         <CodexCapabilitiesSection editor={editor} busy={busy} />
         <div className="asb-provider-advanced-action">
-          <div><strong>运行参数</strong><span>随此供应商保存，不直接写入客户端配置。</span></div>
+          <div><strong>{t("codex.editor.runtimeParams")}</strong><span>{t("codex.editor.runtimeParamsNote")}</span></div>
           <Button ref={triggerRef} variant="secondary" disabled={busy || !parameters.ready}
-            onClick={() => setParametersOpen(true)}>配置运行参数 <span aria-hidden="true">→</span></Button>
+            onClick={() => setParametersOpen(true)}>{t("codex.editor.configureParams")} <span aria-hidden="true">→</span></Button>
         </div>
         <ParametersLoadStatus busy={busy} ready={parameters.ready}
           error={parameters.error} retry={parameters.retry} />
@@ -82,16 +85,22 @@ function CodexProviderForm({ editor, formId, ...props }: Props & { editor: Codex
 }
 
 function CodexProviderEditorSession(props: Props) {
+  const { t } = useI18n();
   const editor = useCodexProviderEditor(props.source, props.busy);
   const formId = useId();
   const parametersOpen = editor.parametersOpen;
   const editing = props.source?.kind === "record";
-  const title = parametersOpen ? "运行参数" : editing ? "编辑 Codex 供应商" : "新建 Codex 供应商";
-  const backLabel = parametersOpen ? "返回编辑" : "返回供应商";
+  const title = parametersOpen ? t("codex.editor.runtimeParams")
+    : editing ? t("codex.editor.editTitle") : t("codex.editor.newTitle");
+  const backLabel = parametersOpen ? t("codex.editor.backToEdit") : t("codex.editor.backToProviders");
   const goBack = () => parametersOpen ? editor.setParametersOpen(false) : props.onCancel();
   return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel}
     busy={props.busy} onBack={goBack} onCancel={props.onCancel} formId={formId} canSave={editor.canSave}>
-    <div hidden={parametersOpen}><CodexProviderForm {...props} editor={editor} formId={formId} /></div>
+    <div hidden={parametersOpen}>
+      <CodexProviderForm {...props} editor={editor} formId={formId} />
+      {props.source?.kind === "record" && <ProviderDiagnosticsEntry profileId={props.source.record.profile.id}
+        name={props.source.record.profile.name} active={props.active && !parametersOpen} disabled={props.busy} />}
+    </div>
     {parametersOpen && <CodexParametersPage editor={editor} busy={props.busy}
       baselineValues={props.source?.kind === "record" ? props.source.record.parameters.settings : undefined}
       baselineRoute={props.source?.kind === "record" ? props.source.record.profile.subagentRoute ?? null : null}
@@ -100,12 +109,14 @@ function CodexProviderEditorSession(props: Props) {
 }
 
 function CodexOfficialSession(props: OfficialProps) {
+  const { t } = useI18n();
   const record = props.source.record;
   const editor = useCodexOfficialEditor(record?.profile ?? null, props.busy);
   const formId = useId();
   const { parametersOpen } = editor;
-  const title = parametersOpen ? "运行参数" : record ? "编辑 Codex 官方登录" : "新建 Codex 官方登录";
-  const backLabel = parametersOpen ? "返回编辑" : "返回供应商";
+  const title = parametersOpen ? t("codex.editor.runtimeParams")
+    : record ? t("codex.official.editTitle") : t("codex.official.newTitle");
+  const backLabel = parametersOpen ? t("codex.editor.backToEdit") : t("codex.editor.backToProviders");
   const goBack = () => parametersOpen ? editor.setParametersOpen(false) : props.onCancel();
   return <ProviderEditorFrame title={title} titleRef={editor.headingRef} backLabel={backLabel} busy={props.busy}
     onBack={goBack} onCancel={props.onCancel} formId={formId} canSave={editor.canSave}>
@@ -113,6 +124,8 @@ function CodexOfficialSession(props: OfficialProps) {
       <CodexOfficialProviderForm formId={formId} busy={props.busy} editing={Boolean(record)} editor={editor}
         onSubmit={() => editor.save(props.onSaveOfficial)}
         onSwitchAccessMode={() => props.onSwitchAccessMode(false, record)} />
+      {record && <ProviderDiagnosticsEntry profileId={record.profile.id} name={record.profile.name}
+        active={props.active && !parametersOpen} disabled={props.busy} />}
     </div>
     {parametersOpen && <ProviderParametersPage value={editor.draft.parameters} parameters={editor.parameters}
       onChange={(parameters) => editor.setDraft((current) => ({ ...current, parameters }))} busy={props.busy}

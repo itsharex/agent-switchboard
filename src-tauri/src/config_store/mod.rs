@@ -21,12 +21,14 @@
 pub mod client_settings;
 mod codex_providers;
 pub mod history;
-pub mod migration;
 pub mod providers;
+mod repair;
 pub mod snapshot;
+pub use repair::RepairReport;
 
 pub(crate) const SWITCH_INTENT_FILE: &str = "switch-intent.json";
 pub(crate) const PROFILE_PREIMAGE_FILE: &str = "save-before.json";
+const RETIRED_UPGRADE_JOURNAL_FILE: &str = "configuration-upgrade.json";
 pub(crate) const PROVIDER_POSITION_STEP: u64 = 100;
 
 use asb_core::contracts::AppKind;
@@ -47,7 +49,7 @@ impl std::fmt::Display for ProfileStoreError {
         match self {
             Self::Unreadable => formatter.write_str("配置存储不可读"),
             Self::Unsupported => formatter
-                .write_str("配置存储格式无效或来自已不受支持的旧版本；请重置或重新创建供应商数据"),
+                .write_str("配置存储格式无效或来自已不受支持的旧版本；请使用智能修复查看原因"),
         }
     }
 }
@@ -172,7 +174,7 @@ impl ConfigStore {
     /// The directory marks an initialized current layout even when neither
     /// client has saved preferences yet. Missing provider fields in that
     /// layout are corruption, never evidence of a predecessor schema.
-    fn initialize_current_layout(&self) -> Result<(), StoreOperationError> {
+    pub(crate) fn initialize_current_layout(&self) -> Result<(), StoreOperationError> {
         self.ensure_layout()?;
         fs::create_dir_all(self.client_dir("client-settings")).map_err(|error| {
             StoreOperationError::Invalid(format!("无法初始化客户端设置目录：{error}"))
@@ -188,12 +190,9 @@ impl ConfigStore {
             .join(format!("{}.json", app.dir_name()))
     }
 
-    /// Runtime readers never interpret predecessor data. Startup completes
-    /// the offline conversion before any command can observe this store.
+    /// Startup and runtime readers accept only the current layout.
     pub fn ensure_layout(&self) -> Result<(), ProfileStoreError> {
-        if self.legacy_store_path().exists()
-            || self.configuration_dir().join("common").exists()
-            || migration::journal_path(self).exists()
+        if self.retired_layout_markers().into_iter().any(|path| path.exists())
             || (self.client_dir("client-settings").exists()
                 && !self.client_dir("client-settings").is_dir())
         {
@@ -202,26 +201,16 @@ impl ConfigStore {
         Ok(())
     }
 
-    /// Removes every persisted provider, client setting, history record, and
-    /// retired layout marker, leaving [`Self::ensure_layout`] clean. The reset
-    /// is the recovery path for store states the typed readers reject.
-    pub fn reset(&self) -> Result<(), String> {
-        if let Err(error) = fs::remove_dir_all(self.configuration_dir()) {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                return Err("无法删除配置存储目录".to_string());
-            }
-        }
-        if let Err(error) = fs::remove_file(self.legacy_store_path()) {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                return Err("无法删除旧版配置数据".to_string());
-            }
-        }
-        if let Err(error) = fs::remove_file(migration::journal_path(self)) {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                return Err("无法删除旧版迁移记录".to_string());
-            }
-        }
-        Ok(())
+    pub(crate) fn retired_upgrade_journal_path(&self) -> PathBuf {
+        self.state_root.join(RETIRED_UPGRADE_JOURNAL_FILE)
+    }
+
+    pub(crate) fn retired_layout_markers(&self) -> [PathBuf; 3] {
+        [
+            self.legacy_store_path(),
+            self.configuration_dir().join("common"),
+            self.retired_upgrade_journal_path(),
+        ]
     }
 }
 
@@ -302,45 +291,6 @@ mod tests {
     }
 
     #[test]
-    fn reset_clears_every_layout_rejection_marker() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        let store = ConfigStore::new(directory.path().join("state"));
-        fs::create_dir_all(store.configuration_dir().join("common")).expect("legacy common dir");
-        fs::write(
-            store.configuration_dir().join("client-settings"),
-            b"not a directory",
-        )
-        .expect("corrupt client-settings file");
-        fs::write(migration::journal_path(&store), b"{}").expect("retired migration journal");
-        fs::write(store.legacy_store_path(), b"{}").expect("legacy store file");
-
-        assert_eq!(
-            store
-                .ensure_layout()
-                .expect_err("markers reject the layout"),
-            ProfileStoreError::Unsupported
-        );
-
-        store.reset().expect("reset");
-
-        store.ensure_layout().expect("layout is clean after reset");
-    }
-
-    #[test]
-    fn reset_removes_current_layout_and_legacy_file_without_requiring_them() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        let store = ConfigStore::new(directory.path().join("state"));
-        fs::create_dir_all(store.providers_dir(AppKind::Codex)).expect("provider dir");
-        fs::write(store.legacy_store_path(), b"{}").expect("legacy file");
-
-        store.reset().expect("reset");
-
-        assert!(!store.configuration_dir().exists());
-        assert!(!store.legacy_store_path().exists());
-        store.reset().expect("reset of an absent layout is fine");
-    }
-
-    #[test]
     fn ensure_layout_accepts_a_clean_state_and_rejects_both_present() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let store = ConfigStore::new(directory.path().join("state"));
@@ -352,6 +302,12 @@ mod tests {
         fs::write(store.legacy_store_path(), b"{}").expect("legacy file");
         assert_eq!(
             store.ensure_layout().expect_err("both present must fail"),
+            ProfileStoreError::Unsupported
+        );
+        fs::remove_file(store.legacy_store_path()).expect("remove retired profile marker");
+        fs::write(store.retired_upgrade_journal_path(), b"{}").expect("retired journal");
+        assert_eq!(
+            store.ensure_layout().expect_err("retired journal must fail"),
             ProfileStoreError::Unsupported
         );
     }

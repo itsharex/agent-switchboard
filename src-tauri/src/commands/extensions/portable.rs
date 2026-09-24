@@ -37,7 +37,7 @@ pub async fn export_extension_portable(
         let definition = store
             .get_definition(&definition_id)
             .map_err(store_error)?
-            .ok_or_else(|| CommandError::new("extension-not-found", "扩展不存在或已被删除"))?;
+            .ok_or_else(|| CommandError::keyed("extension-not-found", "errors.extlib.extensionNotFound", "扩展不存在或已被删除"))?;
         let package = match &definition.payload {
             ExtensionPayload::Skill(skill) => {
                 let entries = store
@@ -53,24 +53,36 @@ pub async fn export_extension_portable(
         };
         let path = std::path::PathBuf::from(&target_path);
         if path.is_dir() {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extlib.exportTargetIsDirectory",
                 "导出目标是一个目录，请提供文件路径",
             ));
         }
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() && !parent.is_dir() {
-                return Err(CommandError::new(
+                return Err(CommandError::keyed(
                     "extension-invalid",
+                    "errors.extlib.exportParentMissing",
                     "导出目标的父目录不存在",
                 ));
             }
         }
         let json = serde_json::to_string_pretty(&package).map_err(|error| {
-            CommandError::new("extension-store", format!("便携包序列化失败：{error}"))
+            CommandError::localized(
+                "extension-store",
+                "errors.extlib.portableSerializeFailed",
+                format!("便携包序列化失败：{error}"),
+                serde_json::json!({ "detail": error.to_string() }),
+            )
         })?;
         fs::write(&path, json).map_err(|error| {
-            CommandError::new("extension-store", format!("无法写入便携包：{error}"))
+            CommandError::localized(
+                "extension-store",
+                "errors.extlib.portableWriteFailed",
+                format!("无法写入便携包：{error}"),
+                serde_json::json!({ "detail": error.to_string() }),
+            )
         })?;
         Ok(())
     })
@@ -99,10 +111,15 @@ pub async fn import_extension_portable(
         let state = state(&app)?;
         let store = extension_store(&state);
         let text = fs::read_to_string(&package_path)
-            .map_err(|_| CommandError::new("extension-invalid", "便携包文件无法读取"))?;
+            .map_err(|_| CommandError::keyed("extension-invalid", "errors.extlib.portableUnreadable", "便携包文件无法读取"))?;
         let package: asb_core::extensions::portable::PortablePackage = serde_json::from_str(&text)
             .map_err(|error| {
-                CommandError::new("extension-invalid", format!("便携包不是有效格式：{error}"))
+                CommandError::localized(
+                    "extension-invalid",
+                    "errors.extlib.portableInvalidFormat",
+                    format!("便携包不是有效格式：{error}"),
+                    serde_json::json!({ "detail": error.to_string() }),
+                )
             })?;
         let material =
             asb_core::extensions::portable::prepare_import(&package).map_err(portable_error)?;

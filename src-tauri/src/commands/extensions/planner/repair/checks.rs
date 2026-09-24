@@ -35,8 +35,9 @@ pub(super) fn entry_present(
             .servers
         }
         _ => {
-            return Err(CommandError::new(
+            return Err(CommandError::keyed(
                 "extension-invalid",
+                "errors.extops.repairClientScopeMismatch",
                 "修复目标的客户端与配置作用域不匹配",
             ))
         }

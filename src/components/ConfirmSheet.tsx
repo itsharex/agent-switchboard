@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 
 interface Props {
@@ -27,6 +28,7 @@ export function ConfirmSheet({
 }: Props) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     cancelRef.current?.focus();
@@ -71,7 +73,7 @@ export function ConfirmSheet({
         <div className="asb-dialog-body">{children}</div>
         <div className="asb-dialog-footer">
           <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
-            取消
+            {t("confirm.cancel")}
           </Button>
           <Button
             variant={destructive ? "danger" : "primary"}

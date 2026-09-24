@@ -56,8 +56,9 @@ impl Planner<'_> {
                 let target = self.mcp_document(binding)?;
                 let document = target.path.clone();
                 if !self.document_baseline_is_current(binding, &document)? {
-                    return Err(CommandError::new(
+                    return Err(CommandError::keyed(
                         "extension-baseline",
+                        "errors.extops.mcpBaselineMissingForDisable",
                         "MCP 绑定缺少可验证的部署基线，不能安全停用",
                     ));
                 }
@@ -196,17 +197,28 @@ impl Planner<'_> {
         CommandError,
     > {
         let ExtensionPayload::Skill(_) = &definition.payload else {
-            return Err(CommandError::new("extension-invalid", "不是 Skill 定义"));
+            return Err(CommandError::keyed(
+                "extension-invalid",
+                "errors.extops.notSkillDefinition",
+                "不是 Skill 定义",
+            ));
         };
         let name = binding
             .deploy_name
             .as_deref()
-            .ok_or_else(|| CommandError::new("extension-invalid", "Skill 绑定缺少部署名"))?;
+            .ok_or_else(|| {
+                CommandError::keyed(
+                    "extension-invalid",
+                    "errors.extops.skillBindingMissingDeployName",
+                    "Skill 绑定缺少部署名",
+                )
+            })?;
         match binding.target.client() {
             AppKind::Codex => {
                 if shared_settings.is_some() {
-                    return Err(CommandError::new(
+                    return Err(CommandError::keyed(
                         "extension-invalid",
+                        "errors.extops.codexSkillDisableNoClaudeScope",
                         "Codex Skill 停用不接受 Claude 设置作用域",
                     ));
                 }
@@ -254,8 +266,9 @@ impl Planner<'_> {
                 let document = match &binding.target {
                     ExtensionTarget::App { .. } => {
                         if shared_settings.is_some() {
-                            return Err(CommandError::new(
+                            return Err(CommandError::keyed(
                                 "extension-invalid",
+                                "errors.extops.userSkillDisableNoProjectScope",
                                 "用户级 Claude Skill 停用不接受项目设置作用域",
                             ));
                         }
@@ -266,8 +279,9 @@ impl Planner<'_> {
                     }
                     ExtensionTarget::ProjectShared { .. } => {
                         let shared = shared_settings.ok_or_else(|| {
-                            CommandError::new(
+                            CommandError::keyed(
                                 "extension-invalid",
+                                "errors.extops.projectSkillDisableScopeRequired",
                                 "请明确选择将 Claude 项目 Skill 停用写入共享设置还是个人设置",
                             )
                         })?;
@@ -284,8 +298,9 @@ impl Planner<'_> {
                     }
                     ExtensionTarget::ProjectPrivate { .. } => {
                         if shared_settings.is_some() {
-                            return Err(CommandError::new(
+                            return Err(CommandError::keyed(
                                 "extension-invalid",
+                                "errors.extops.privateSkillDisableNoSharedScope",
                                 "项目私有 Claude Skill 停用不接受共享设置选择",
                             ));
                         }

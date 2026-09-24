@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { Area, ComposedChart, Line, Tooltip, XAxis, YAxis } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
+import { useI18n, type TFunction } from "../../i18n";
 import { ChartFrame } from "./ChartFrame";
 import {
   chartSeriesColor,
@@ -45,14 +46,17 @@ export function UsageTrendChart({
   valueKind,
   size = "default",
 }: Props) {
-  const prepared = useMemo(() => prepareTrendSeries(series), [series]);
+  const { t } = useI18n();
+  // `t` re-creates per language change; including it re-resolves the series
+  // labels (via the shared prepareTrendSeries) instead of keeping stale ones.
+  const prepared = useMemo(() => prepareTrendSeries(series), [series, t]);
 
   if (prepared.length === 0) {
-    return <p className="asb-chart-empty" role="status">{emptyMessage || "暂无可用趋势数据。"}</p>;
+    return <p className="asb-chart-empty" role="status">{emptyMessage || t("usage.trend.noData")}</p>;
   }
 
   if (!trendSeriesShareUnit(prepared)) {
-    return <p className="asb-chart-empty" role="alert">无法将不同单位的数据放在同一趋势图中。</p>;
+    return <p className="asb-chart-empty" role="alert">{t("usage.trend.mixedUnits")}</p>;
   }
 
   return (
@@ -79,6 +83,7 @@ function TrendCard({
   title?: string;
   size: "default" | "compact";
 }) {
+  const { t } = useI18n();
   const gradientId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const compact = size === "compact";
@@ -91,15 +96,15 @@ function TrendCard({
   // is available only for local-token series when every series recorded the
   // same timestamp.
   const activeRow = activeIndex !== null && activeIndex < rows.length ? rows[activeIndex] : null;
-  const figure = resolveTrendFigure(rows, prepared, activeRow, valueKind === "local-token");
+  const figure = resolveTrendFigure(rows, prepared, activeRow, valueKind === "local-token", t);
   const display = useCountUp(figure.value);
 
   const label = activeRow ? formatChartAxisTime(figure.timestamp) : figure.label;
   const caption = activeRow
-    ? `${figure.label} · ${formatChartTimestamp(figure.timestamp)}`
+    ? t("usage.chart.pointAtTime", { label: figure.label, time: formatChartTimestamp(figure.timestamp) })
     : unit
-      ? `单位：${unit}`
-      : `${pointCount} 个真实读数`;
+      ? t("usage.chart.unitCaption", { unit })
+      : t("usage.chart.pointCount", { count: pointCount });
 
   return (
     <figure
@@ -307,12 +312,13 @@ function resolveTrendFigure(
   series: PreparedTrendSeries[],
   activeRow: TrendRow | null,
   aggregateSeries: boolean,
+  t: TFunction,
 ): TrendFigure {
-  if (activeRow) return figureForRow(activeRow, series, aggregateSeries);
+  if (activeRow) return figureForRow(activeRow, series, aggregateSeries, t);
 
   if (aggregateSeries) {
     const latestCompleteRow = [...rows].reverse().find((row) => rowHasEverySeries(row, series));
-    if (latestCompleteRow) return aggregateFigure(latestCompleteRow, series);
+    if (latestCompleteRow) return aggregateFigure(latestCompleteRow, series, t);
   }
 
   return latestObservedFigure(series);
@@ -322,8 +328,9 @@ function figureForRow(
   row: TrendRow,
   series: PreparedTrendSeries[],
   aggregateSeries: boolean,
+  t: TFunction,
 ): TrendFigure {
-  if (aggregateSeries && rowHasEverySeries(row, series)) return aggregateFigure(row, series);
+  if (aggregateSeries && rowHasEverySeries(row, series)) return aggregateFigure(row, series, t);
 
   const observedSeries = series.find((entry) => typeof row[entry.id] === "number");
   if (!observedSeries) return latestObservedFigure(series);
@@ -335,9 +342,9 @@ function figureForRow(
   };
 }
 
-function aggregateFigure(row: TrendRow, series: PreparedTrendSeries[]): TrendFigure {
+function aggregateFigure(row: TrendRow, series: PreparedTrendSeries[], t: TFunction): TrendFigure {
   return {
-    label: "合计",
+    label: t("usage.chart.total"),
     value: series.reduce((sum, entry) => sum + row[entry.id]!, 0),
     timestamp: row.timestamp,
   };

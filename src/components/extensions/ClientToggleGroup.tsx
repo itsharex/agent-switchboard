@@ -3,10 +3,11 @@ import {
   clientBindingState,
   itemSupportsClient,
 } from "../../app/extensions/deployment-state";
+import { useI18n } from "../../i18n";
 import { clientName } from "../../lib/client-name";
-import { ClientLogo } from "../ClientLogo";
 import { Button } from "../Button";
 import { Tooltip } from "../Tooltip";
+import { CheckIcon, DashIcon } from "../icons";
 import { clientSummary } from "./labels";
 import { MANAGEMENT_CLIENTS } from "./client-presentation";
 
@@ -21,19 +22,19 @@ interface Props {
 /** Mixed means some existing scopes are disabled. The accessible name also
  * carries the file state, independently of the enable/disable intent. */
 export function ClientToggleGroup({ item, busy, pendingClients = [], onToggle }: Props) {
+  const { t } = useI18n();
   return (
-    <div className="asb-ext-clienttoggles" role="group" aria-label="客户端部署开关">
+    <div className="asb-ext-clienttoggles" role="group" aria-label={t("extensions.clientToggles.aria")}>
       {MANAGEMENT_CLIENTS.map((client) => {
         const supported = itemSupportsClient(item, client);
         const state = clientBindingState(item, client);
         const label = supported
-          ? `${clientName(client)}：${clientSummary(item, client)}`
-          : `${clientName(client)}：不支持当前类型`;
+          ? t("extensions.clientToggle.supported", { client: clientName(client), state: clientSummary(item, client) })
+          : t("extensions.clientToggle.unsupported", { client: clientName(client) });
         return (
           <Tooltip key={client} label={label} side="bottom">
             <Button
               variant="unstyled"
-              data-client={client}
               className="asb-ext-clienttoggle"
               data-state={state.all ? "all" : state.partial ? "partial" : "none"}
               aria-pressed={state.partial ? "mixed" : state.all}
@@ -45,7 +46,10 @@ export function ClientToggleGroup({ item, busy, pendingClients = [], onToggle }:
                 onToggle(client);
               }}
             >
-              <ClientLogo app={client} className="asb-ext-clienttoggle-logo" />
+              <span className="asb-ext-clienttoggle-mark" aria-hidden="true">
+                {state.all ? <CheckIcon /> : state.partial ? <DashIcon /> : <span className="asb-ext-clienttoggle-empty" />}
+              </span>
+              <span>{clientName(client)}</span>
             </Button>
           </Tooltip>
         );

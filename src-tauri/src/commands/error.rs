@@ -1,7 +1,10 @@
 //! The typed command error and the shared command guards.
 //!
 //! Every command maps its failures onto [`CommandError`] so the UI receives
-//! a stable code plus a scrubbed, user-readable message.
+//! a stable code plus a scrubbed, user-readable message. App-owned
+//! explanations additionally carry a `message_key` (+ structured `params`)
+//! so the renderer can present them in the current interface language;
+//! `message` remains the scrubbed raw diagnostic and the fallback rendering.
 
 use crate::config_store::{ProfileStoreError, StoreOperationError};
 use crate::local_state::LocalState;
@@ -13,9 +16,19 @@ use tauri::AppHandle;
 
 /// Structured command error surfaced to the UI as a typed object.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CommandError {
     pub code: &'static str,
     pub message: String,
+    /// App-owned explanation key; external diagnostics without a catalog
+    /// entry retain their scrubbed `message`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_key: Option<&'static str>,
+    /// Interpolation values for `message_key`. Parameters whose name ends in
+    /// `Key` carry catalog keys themselves and are resolved recursively by
+    /// the renderer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
 }
 
 impl CommandError {
@@ -23,7 +36,61 @@ impl CommandError {
         Self {
             code,
             message: adapter::scrub_message(message.into()),
+            message_key: None,
+            params: None,
         }
+    }
+
+    /// A structured, translatable failure: `key` names the renderer-side
+    /// template, `message` stays the scrubbed diagnostic detail/fallback.
+    /// `params` may carry user values and nested catalog keys (`*Key`).
+    /// Every string parameter is scrubbed individually before it crosses
+    /// the boundary.
+    pub(crate) fn localized(
+        code: &'static str,
+        key: &'static str,
+        message: impl Into<String>,
+        params: serde_json::Value,
+    ) -> Self {
+        Self {
+            code,
+            message: adapter::scrub_message(message.into()),
+            message_key: Some(key),
+            params: scrub_params(params),
+        }
+    }
+
+    /// Convenience for `localized` without parameters.
+    pub(crate) fn keyed(code: &'static str, key: &'static str, message: impl Into<String>) -> Self {
+        Self::localized(code, key, message, serde_json::Value::Null)
+    }
+}
+
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+/// Scrubs every string leaf of a flat parameters object; non-object params
+/// pass through untouched (callers only build flat objects here).
+fn scrub_params(params: serde_json::Value) -> Option<serde_json::Value> {
+    match params {
+        serde_json::Value::Null => None,
+        serde_json::Value::Object(map) => {
+            let scrubbed = map
+                .into_iter()
+                .map(|(name, value)| {
+                    let value = match value {
+                        serde_json::Value::String(text) => serde_json::Value::String(adapter::scrub_message(text)),
+                        other => other,
+                    };
+                    (name, value)
+                })
+                .collect::<serde_json::Map<String, serde_json::Value>>();
+            Some(serde_json::Value::Object(scrubbed))
+        }
+        other => Some(other),
     }
 }
 
@@ -33,6 +100,13 @@ pub(crate) fn store_error(error: ProfileStoreError) -> CommandError {
         ProfileStoreError::Unsupported => "profile-store-unsupported",
     };
     CommandError::new(code, error.to_string())
+}
+
+/// Maps one structured validation failure onto its renderer translation
+/// coordinates; the `Display` text stays the diagnostic detail.
+pub(crate) fn validation_error(code: &'static str, error: asb_core::validate::ValidationError) -> CommandError {
+    let (key, params) = error.message_parts();
+    CommandError::localized(code, key, error.to_string(), params)
 }
 
 /// Maps one store operation failure: store-level state errors keep the
@@ -48,21 +122,82 @@ pub(crate) fn operation_error(code: &'static str, error: StoreOperationError) ->
 
 impl From<asb_switch::SwitchError> for CommandError {
     fn from(error: asb_switch::SwitchError) -> Self {
-        let code = match &error {
-            asb_switch::SwitchError::ReadCurrent { .. } => "read-current",
-            asb_switch::SwitchError::PlanRejected { .. } => "plan-rejected",
-            asb_switch::SwitchError::BlockedByLock { .. } => "blocked-by-lock",
-            asb_switch::SwitchError::ExternalChange { .. } => "external-change",
-            asb_switch::SwitchError::PlanChanged => "preview-stale",
-            asb_switch::SwitchError::CommitFailed { .. } => "commit-failed",
-            asb_switch::SwitchError::LockReleaseFailed { .. } => "lock-release-failed",
+        use asb_core::lock::LockStatus;
+        use asb_switch::executor::{RecoveryOutcome, SwitchError};
+        let command = |code, key, params: serde_json::Value| {
+            CommandError::localized(code, key, error.to_string(), params)
         };
-        CommandError::new(code, error.to_string())
+        match &error {
+            SwitchError::ReadCurrent { message } => command(
+                "read-current",
+                "errors.switch.readCurrent",
+                serde_json::json!({ "detail": message }),
+            ),
+            SwitchError::PlanRejected { message, line } => command(
+                "plan-rejected",
+                "errors.switch.planRejected",
+                serde_json::json!({ "detail": message, "line": line.map(|l| l as u64) }),
+            ),
+            SwitchError::BlockedByLock { status } => match status {
+                LockStatus::Free => command("blocked-by-lock", "errors.switch.blockedFree", serde_json::json!({})),
+                LockStatus::Held(holder) => command(
+                    "blocked-by-lock",
+                    "errors.switch.blockedHeld",
+                    serde_json::json!({
+                        "pid": holder.pid.map(|pid| pid as u64),
+                        "process": holder.process_name,
+                    }),
+                ),
+                LockStatus::Stale(holder) => command(
+                    "blocked-by-lock",
+                    "errors.switch.blockedStale",
+                    serde_json::json!({
+                        "pid": holder.pid.map(|pid| pid as u64),
+                        "process": holder.process_name,
+                    }),
+                ),
+                LockStatus::Indeterminate { reason } => command(
+                    "blocked-by-lock",
+                    "errors.switch.blockedIndeterminate",
+                    serde_json::json!({ "detail": reason }),
+                ),
+            },
+            SwitchError::ExternalChange { .. } => {
+                command("external-change", "errors.switch.externalChange", serde_json::json!({}))
+            }
+            SwitchError::PlanChanged => {
+                command("preview-stale", "errors.switch.planChanged", serde_json::json!({}))
+            }
+            SwitchError::CommitFailed { stage, message: _, recovery } => {
+                let recovery_key = match recovery {
+                    RecoveryOutcome::NotNeeded => "errors.switch.recoveryNotNeeded",
+                    RecoveryOutcome::Restored { .. } => "errors.switch.recoveryRestored",
+                    RecoveryOutcome::RestoreFailed { .. } => "errors.switch.recoveryRestoreFailed",
+                };
+                command(
+                    "commit-failed",
+                    "errors.switch.commitFailed",
+                    serde_json::json!({ "stageKey": format!("errors.switch.stage.{stage}"), "recoveryKey": recovery_key }),
+                )
+            }
+            SwitchError::LockReleaseFailed { prior, .. } => command(
+                "lock-release-failed",
+                "errors.switch.lockReleaseFailed",
+                serde_json::json!({ "detail": prior.to_string() }),
+            ),
+        }
     }
 }
 
 pub(crate) fn state(app: &AppHandle) -> Result<LocalState, CommandError> {
-    LocalState::from_app(app).map_err(|error| CommandError::new("app-state-unavailable", error))
+    LocalState::from_app(app).map_err(|error| {
+        CommandError::localized(
+            "app-state-unavailable",
+            "errors.appStateUnavailable",
+            error.clone(),
+            serde_json::json!({ "detail": error }),
+        )
+    })
 }
 
 /// Runs one blocking unit of command work on the dedicated blocking pool.
@@ -77,7 +212,7 @@ where
 {
     tauri::async_runtime::spawn_blocking(task)
         .await
-        .map_err(|_| CommandError::new("task-interrupted", "后台任务已中断".to_string()))?
+        .map_err(|_| CommandError::keyed("task-interrupted", "errors.taskInterrupted", "后台任务已中断"))?
 }
 
 /// Records the result of one explicit application action without allowing a
@@ -102,9 +237,11 @@ pub(crate) fn require_write_confirmation(
     if confirm_write {
         return Ok(());
     }
-    Err(CommandError::new(
+    Err(CommandError::localized(
         "write-not-confirmed",
+        "errors.writeNotConfirmed",
         format!("{operation}前必须进行显式确认"),
+        serde_json::json!({ "operation": operation }),
     ))
 }
 
@@ -140,6 +277,7 @@ mod tests {
         );
         assert_eq!(invalid.code, "codex-profile-create-failed");
         assert_eq!(invalid.message, "该客户端已有官方登录入口");
+        assert!(invalid.message_key.is_none());
     }
 
     #[test]
@@ -147,7 +285,29 @@ mod tests {
         let error = require_write_confirmation(false, "写入配置").expect_err("must reject");
         assert_eq!(error.code, "write-not-confirmed");
         assert!(error.message.contains("显式确认"));
+        assert_eq!(error.message_key, Some("errors.writeNotConfirmed"));
         assert!(require_write_confirmation(true, "写入配置").is_ok());
-        assert!(require_write_confirmation(false, "重置供应商数据").is_err());
+        assert!(require_write_confirmation(false, "写入客户端配置").is_err());
+    }
+
+    #[test]
+    fn localized_errors_carry_their_key_and_scrubbed_params() {
+        let error = CommandError::localized(
+            "read-current",
+            "errors.switch.readCurrent",
+            "无法读取当前配置",
+            serde_json::json!({ "detail": "boom" }),
+        );
+        assert_eq!(error.message_key, Some("errors.switch.readCurrent"));
+        assert_eq!(error.params.as_ref().unwrap()["detail"], "boom");
+        // A secret-looking value never survives into params.
+        let redacted = CommandError::localized(
+            "plan-rejected",
+            "errors.switch.planRejected",
+            "bad plan",
+            serde_json::json!({ "detail": "sk-secret-value-abc123" }),
+        );
+        let rendered = redacted.params.unwrap().to_string();
+        assert!(!rendered.contains("sk-secret-value-abc123"));
     }
 }

@@ -9,35 +9,35 @@ pub const CODEX_SUBAGENT_REASONING_EFFORT_KEY: &str = "agents.default_subagent_r
 const CODEX_REASONING_EFFORT_OPTIONS: &[ChoiceOption] = &[
     ChoiceOption {
         value: "none",
-        label: "无",
+        label: "ownership.option.reasoningEffort.none",
     },
     ChoiceOption {
         value: "minimal",
-        label: "极低",
+        label: "ownership.option.reasoningEffort.minimal",
     },
     ChoiceOption {
         value: "low",
-        label: "低",
+        label: "ownership.option.reasoningEffort.low",
     },
     ChoiceOption {
         value: "medium",
-        label: "中",
+        label: "ownership.option.reasoningEffort.medium",
     },
     ChoiceOption {
         value: "high",
-        label: "高",
+        label: "ownership.option.reasoningEffort.high",
     },
     ChoiceOption {
         value: "xhigh",
-        label: "极高",
+        label: "ownership.option.reasoningEffort.xhigh",
     },
     ChoiceOption {
         value: "max",
-        label: "最高",
+        label: "ownership.option.reasoningEffort.max",
     },
     ChoiceOption {
         value: "ultra",
-        label: "超极高",
+        label: "ownership.option.reasoningEffort.ultra",
     },
 ];
 
@@ -45,238 +45,238 @@ pub const CODEX_CHOICES: &[ChoiceSpec] = &[
     ChoiceSpec {
         key: "model_reasoning_effort",
         owner: SettingOwner::Provider,
-        label: "推理强度",
-        group: "模型行为",
+        label: "ownership.label.model_reasoning_effort",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Slider,
         options: CODEX_REASONING_EFFORT_OPTIONS,
     },
     ChoiceSpec {
         key: CODEX_SUBAGENT_REASONING_EFFORT_KEY,
         owner: SettingOwner::Provider,
-        label: "默认推理强度",
-        group: "子 agent",
+        label: "ownership.label.agentsDefault_subagent_reasoning_effort",
+        group: "ownership.group.subagent",
         control: ChoiceControl::Slider,
         options: CODEX_REASONING_EFFORT_OPTIONS,
     },
     ChoiceSpec {
         key: "plan_mode_reasoning_effort",
         owner: SettingOwner::Provider,
-        label: "计划模式推理强度",
-        group: "模型行为",
+        label: "ownership.label.plan_mode_reasoning_effort",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Slider,
         options: CODEX_REASONING_EFFORT_OPTIONS,
     },
     ChoiceSpec {
         key: "model_reasoning_summary",
         owner: SettingOwner::Provider,
-        label: "推理摘要",
-        group: "模型行为",
+        label: "ownership.label.model_reasoning_summary",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "auto",
-                label: "自动摘要",
+                label: "ownership.option.model_reasoning_summary.auto",
             },
             ChoiceOption {
                 value: "concise",
-                label: "简要",
+                label: "ownership.option.model_reasoning_summary.concise",
             },
             ChoiceOption {
                 value: "detailed",
-                label: "详细",
+                label: "ownership.option.model_reasoning_summary.detailed",
             },
             ChoiceOption {
                 value: "none",
-                label: "关闭",
+                label: "ownership.option.model_reasoning_summary.none",
             },
         ],
     },
     ChoiceSpec {
         key: "model_verbosity",
         owner: SettingOwner::Provider,
-        label: "回复详细度",
-        group: "模型行为",
+        label: "ownership.label.model_verbosity",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "low",
-                label: "简洁",
+                label: "ownership.option.model_verbosity.low",
             },
             ChoiceOption {
                 value: "medium",
-                label: "标准",
+                label: "ownership.option.model_verbosity.medium",
             },
             ChoiceOption {
                 value: "high",
-                label: "详细",
+                label: "ownership.option.model_verbosity.high",
             },
         ],
     },
     ChoiceSpec {
         key: "personality",
         owner: SettingOwner::Provider,
-        label: "助手个性",
-        group: "模型行为",
+        label: "ownership.label.personality",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "none",
-                label: "中性",
+                label: "ownership.option.personality.none",
             },
             ChoiceOption {
                 value: "friendly",
-                label: "友好",
+                label: "ownership.option.personality.friendly",
             },
             ChoiceOption {
                 value: "pragmatic",
-                label: "务实",
+                label: "ownership.option.personality.pragmatic",
             },
         ],
     },
     ChoiceSpec {
         key: CODEX_WEB_SEARCH_KEY,
         owner: SettingOwner::Provider,
-        label: "网页搜索",
-        group: "模型行为",
+        label: "ownership.label.webSearch",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "disabled",
-                label: "禁用",
+                label: "ownership.option.webSearch.disabled",
             },
             ChoiceOption {
                 value: "cached",
-                label: "仅缓存",
+                label: "ownership.option.webSearch.cached",
             },
             ChoiceOption {
                 value: "indexed",
-                label: "索引",
+                label: "ownership.option.webSearch.indexed",
             },
             ChoiceOption {
                 value: "live",
-                label: "实时",
+                label: "ownership.option.webSearch.live",
             },
         ],
     },
     ChoiceSpec {
         key: "sandbox_mode",
         owner: SettingOwner::Client,
-        label: "沙箱模式",
-        group: "安全与审批",
+        label: "ownership.label.sandbox_mode",
+        group: "ownership.group.safetyAndApprovals",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "read-only",
-                label: "只读",
+                label: "ownership.option.sandbox_mode.read-only",
             },
             ChoiceOption {
                 value: "workspace-write",
-                label: "工作区可写",
+                label: "ownership.option.sandbox_mode.workspace-write",
             },
             ChoiceOption {
                 value: "danger-full-access",
-                label: "完全访问",
+                label: "ownership.option.sandbox_mode.danger-full-access",
             },
         ],
     },
     ChoiceSpec {
         key: "approval_policy",
         owner: SettingOwner::Client,
-        label: "批准策略",
-        group: "安全与审批",
+        label: "ownership.label.approval_policy",
+        group: "ownership.group.safetyAndApprovals",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "untrusted",
-                label: "仅信任白名单代码",
+                label: "ownership.option.approval_policy.untrusted",
             },
             ChoiceOption {
                 value: "on-request",
-                label: "按请求",
+                label: "ownership.option.approval_policy.on-request",
             },
             ChoiceOption {
                 value: "never",
-                label: "从不",
+                label: "ownership.option.approval_policy.never",
             },
         ],
     },
     ChoiceSpec {
         key: "approvals_reviewer",
         owner: SettingOwner::Client,
-        label: "审批复核方式",
-        group: "安全与审批",
+        label: "ownership.label.approvals_reviewer",
+        group: "ownership.group.safetyAndApprovals",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "user",
-                label: "用户",
+                label: "ownership.option.approvals_reviewer.user",
             },
             ChoiceOption {
                 value: "auto_review",
-                label: "自动复核",
+                label: "ownership.option.approvals_reviewer.auto_review",
             },
         ],
     },
     ChoiceSpec {
         key: "windows.sandbox",
         owner: SettingOwner::Client,
-        label: "Windows 沙箱权限",
-        group: "安全与审批",
+        label: "ownership.label.windowsSandbox",
+        group: "ownership.group.safetyAndApprovals",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "unelevated",
-                label: "非提升",
+                label: "ownership.option.windowsSandbox.unelevated",
             },
             ChoiceOption {
                 value: "elevated",
-                label: "提升权限",
+                label: "ownership.option.windowsSandbox.elevated",
             },
         ],
     },
     ChoiceSpec {
         key: "history.persistence",
         owner: SettingOwner::Client,
-        label: "会话历史",
-        group: "隐私与数据",
+        label: "ownership.label.historyPersistence",
+        group: "ownership.group.privacyAndData",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "save-all",
-                label: "保存全部",
+                label: "ownership.option.historyPersistence.save-all",
             },
             ChoiceOption {
                 value: "none",
-                label: "不保存",
+                label: "ownership.option.historyPersistence.none",
             },
         ],
     },
     ChoiceSpec {
         key: "file_opener",
         owner: SettingOwner::Client,
-        label: "文件打开方式",
-        group: "工具与功能",
+        label: "ownership.label.file_opener",
+        group: "ownership.group.toolsAndFeatures",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "vscode",
-                label: "VS Code",
+                label: "ownership.option.file_opener.vscode",
             },
             ChoiceOption {
                 value: "vscode-insiders",
-                label: "VS Code Insiders",
+                label: "ownership.option.file_opener.vscode-insiders",
             },
             ChoiceOption {
                 value: "windsurf",
-                label: "Windsurf",
+                label: "ownership.option.file_opener.windsurf",
             },
             ChoiceOption {
                 value: "cursor",
-                label: "Cursor",
+                label: "ownership.option.file_opener.cursor",
             },
             ChoiceOption {
                 value: "none",
-                label: "不打开",
+                label: "ownership.option.file_opener.none",
             },
         ],
     },
@@ -285,91 +285,91 @@ pub const CLAUDE_CHOICES: &[ChoiceSpec] = &[
     ChoiceSpec {
         key: "effortLevel",
         owner: SettingOwner::Provider,
-        label: "推理强度",
-        group: "模型行为",
+        label: "ownership.label.effortLevel",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Slider,
         options: &[
             ChoiceOption {
                 value: "low",
-                label: "低",
+                label: "ownership.option.effortLevel.low",
             },
             ChoiceOption {
                 value: "medium",
-                label: "中",
+                label: "ownership.option.effortLevel.medium",
             },
             ChoiceOption {
                 value: "high",
-                label: "高",
+                label: "ownership.option.effortLevel.high",
             },
             ChoiceOption {
                 value: "xhigh",
-                label: "极高",
+                label: "ownership.option.effortLevel.xhigh",
             },
             ChoiceOption {
                 value: "max",
-                label: "满载",
+                label: "ownership.option.effortLevel.max",
             },
         ],
     },
     ChoiceSpec {
         key: "outputStyle",
         owner: SettingOwner::Provider,
-        label: "输出风格",
-        group: "模型行为",
+        label: "ownership.label.outputStyle",
+        group: "ownership.group.modelBehavior",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "Proactive",
-                label: "主动",
+                label: "ownership.option.outputStyle.Proactive",
             },
             ChoiceOption {
                 value: "Concise",
-                label: "简洁",
+                label: "ownership.option.outputStyle.Concise",
             },
             ChoiceOption {
                 value: "Explanatory",
-                label: "讲解",
+                label: "ownership.option.outputStyle.Explanatory",
             },
             ChoiceOption {
                 value: "Learning",
-                label: "学习",
+                label: "ownership.option.outputStyle.Learning",
             },
         ],
     },
     ChoiceSpec {
         key: "preferredNotifChannel",
         owner: SettingOwner::Client,
-        label: "通知渠道",
-        group: "界面与交互",
+        label: "ownership.label.preferredNotifChannel",
+        group: "ownership.group.interfaceAndInteraction",
         control: ChoiceControl::Segment,
         options: &[
             ChoiceOption {
                 value: "auto",
-                label: "自动选择渠道",
+                label: "ownership.option.preferredNotifChannel.auto",
             },
             ChoiceOption {
                 value: "terminal_bell",
-                label: "终端铃声",
+                label: "ownership.option.preferredNotifChannel.terminal_bell",
             },
             ChoiceOption {
                 value: "iterm2",
-                label: "iTerm2",
+                label: "ownership.option.preferredNotifChannel.iterm2",
             },
             ChoiceOption {
                 value: "iterm2_with_bell",
-                label: "iTerm2 + 铃声",
+                label: "ownership.option.preferredNotifChannel.iterm2_with_bell",
             },
             ChoiceOption {
                 value: "kitty",
-                label: "Kitty",
+                label: "ownership.option.preferredNotifChannel.kitty",
             },
             ChoiceOption {
                 value: "ghostty",
-                label: "Ghostty",
+                label: "ownership.option.preferredNotifChannel.ghostty",
             },
             ChoiceOption {
                 value: "notifications_disabled",
-                label: "关闭通知",
+                label: "ownership.option.preferredNotifChannel.notifications_disabled",
             },
         ],
     },

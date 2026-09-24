@@ -24,7 +24,7 @@ pub use manual_configuration::{rehydrate_display_content, repair_invalid_configu
 pub use executor::{
     execute, execute_codex, execute_rendered, preview_rendered, preview_repair_rendered, read_preview, restore, restore_projected,
     sha256_digest, sha256_hex, FilePreview, RecoveryOutcome, RenderedWriteOutcome,
-    RenderedWriteRequest, RestoreOutcome, SwitchError, SwitchOutcome, SwitchRequest,
+    RenderedWriteRequest, RestoreExpectation, RestoreOutcome, SwitchError, SwitchOutcome, SwitchRequest,
 };
 pub use extensions::{
     apply_extension_plan, journal_lock_targets, recover_pending, ExtensionApplyRequest,

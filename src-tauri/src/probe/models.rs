@@ -6,15 +6,12 @@ use serde::Serialize;
 use std::{io::Read, time::Duration};
 
 /// One model from the provider's configured API root: the requestable
-/// id plus the optional `owned_by` vendor used to group the picker menu. When
-/// a source explicitly reports input modalities, image_input preserves that
-/// fact; absent metadata stays unknown rather than being inferred from the id.
+/// id plus the optional `owned_by` vendor used to group the picker menu.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderModel {
     pub id: String,
     pub owned_by: Option<String>,
-    pub image_input: Option<bool>,
 }
 
 pub(super) fn diagnostic_secrets(
@@ -145,20 +142,11 @@ pub(crate) fn provider_auth_headers(
     })
 }
 
-/// Reads only the explicit OpenAI-style `input_modalities` model fact. An
-/// absent or malformed field means the source did not establish support; it
-/// must not be guessed from a model id or vendor name.
-fn image_input_from_entry(entry: &serde_json::Value) -> Option<bool> {
-    let modalities = entry.get("input_modalities")?.as_array()?;
-    Some(modalities.iter().any(|value| value.as_str() == Some("image")))
-}
-
 /// The single owner of the upstream model-catalog parsing contract. Accepts
 /// the three real wire shapes served beneath a profile's API root:
 /// OpenAI-compatible and Anthropic `data[].id` (+ `owned_by`), Codex-style
 /// catalogs' `models[].slug` (ChatGPT backend, 智谱 Responses), and Copilot's
-/// `vendor`. Only an explicit `input_modalities` entry fact confirms image
-/// input. Blank or control-character ids are skipped, vendors are trimmed
+/// `vendor`. Blank or control-character ids are skipped, vendors are trimmed
 /// (blank stays `None` so the picker groups them under "其他"), duplicates
 /// collapse, and an empty catalog is an error rather than a silent picker.
 pub(crate) fn parse_models_value(value: &serde_json::Value) -> Result<Vec<ProviderModel>, String> {
@@ -186,7 +174,6 @@ pub(crate) fn parse_models_value(value: &serde_json::Value) -> Result<Vec<Provid
                 models.push(ProviderModel {
                     id: id.to_string(),
                     owned_by,
-                    image_input: image_input_from_entry(entry),
                 });
             }
         }
@@ -231,40 +218,6 @@ mod tests {
                 "override-secret".to_string(),
             ],
         );
-    }
-
-    #[test]
-    fn parses_explicit_image_input_without_guessing_missing_facts() {
-        let models = parse_models(
-            r#"{"data":[
-                {"id":"vision","input_modalities":["text","image"]},
-                {"id":"text","input_modalities":["text"]},
-                {"id":"unknown"}
-            ]}"#,
-        )
-        .unwrap();
-
-        assert_eq!(models[0].image_input, Some(true));
-        assert_eq!(models[1].image_input, Some(false));
-        assert_eq!(models[2].image_input, None);
-    }
-
-    #[test]
-    fn parses_codex_style_model_catalog_slugs() {
-        let models = parse_models(
-            r#"{"models":[
-                {"slug":"glm-5.3","input_modalities":["text"]},
-                {"slug":"glm-5.3"},
-                {"slug":"glm-5.3-flash","input_modalities":["text","image"]}
-            ]}"#,
-        )
-        .unwrap();
-
-        assert_eq!(models.len(), 2);
-        assert_eq!(models[0].id, "glm-5.3");
-        assert_eq!(models[0].image_input, Some(false));
-        assert_eq!(models[1].id, "glm-5.3-flash");
-        assert_eq!(models[1].image_input, Some(true));
     }
 
     #[test]

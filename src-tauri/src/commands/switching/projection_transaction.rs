@@ -19,8 +19,9 @@ pub(super) fn auth_intent(
             after_hash: after.into(),
             after_existed: true,
         })),
-        _ => Err(CommandError::new(
+        _ => Err(CommandError::keyed(
             "codex-auth-preview-invalid",
+            "errors.sw.codexAuthPreviewIncomplete",
             "Codex 认证预览字段不完整，请重新查看差异",
         )),
     }
@@ -64,9 +65,11 @@ pub(super) fn begin(
         if let Err(error) = super::codex_backfill::apply(state, backfill) {
             return match super::transaction::recover(state, gateway) {
                 Ok(()) => Err(error),
-                Err(recovery) => Err(CommandError::new(
+                Err(recovery) => Err(CommandError::localized(
                     "codex-live-backfill-recovery-required",
+                    "errors.sw.codexBackfillRecoveryFailed",
                     format!("{}；Codex 回填未能恢复：{recovery}", error.message),
+                    serde_json::json!({ "detail": error.message, "recovery": recovery }),
                 )),
             };
         }

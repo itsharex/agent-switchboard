@@ -1,0 +1,147 @@
+import type { MessageEntry } from "../types";
+
+/** Domain dictionary for importDiscovery (zh-CN / en-US pairs). Keys are prefixed with
+ * "importDiscovery." and must never collide with another domain file. */
+export const messages = {
+	// Page frame and tabs (ProviderImportPage; tab texts reuse as module titles).
+	"importDiscovery.page.title": ["导入与导出供应商", "Import & export providers"],
+	"importDiscovery.page.back": ["返回供应商", "Back to providers"],
+	"importDiscovery.page.tabsAria": ["导入与导出", "Import & export"],
+	"importDiscovery.tab.local": ["本机配置", "Local config"],
+	"importDiscovery.tab.database": ["CC Switch 数据库", "CC Switch database"],
+	"importDiscovery.tab.sqlImport": ["导入 SQL", "Import SQL"],
+	"importDiscovery.tab.sqlExport": ["导出 SQL", "Export SQL"],
+
+	// Shared labels across the provider import tables and fact rows.
+	"importDiscovery.label.provider": ["供应商", "Provider"],
+	"importDiscovery.label.detail": ["详情", "Details"],
+	"importDiscovery.label.status": ["状态", "Status"],
+	"importDiscovery.label.official": ["官方登录", "Official login"],
+
+	// Local config scan (LocalConfigImport).
+	"importDiscovery.local.scan": ["扫描配置", "Scan config"],
+	"importDiscovery.local.scanRefresh": ["重新扫描", "Rescan"],
+	"importDiscovery.local.notScanned": ["尚未扫描 {client} 配置。", "No scan of the {client} config yet."],
+	"importDiscovery.local.cardAria": ["{client} 扫描结果", "{client} scan results"],
+	"importDiscovery.local.state.ok": ["配置可读取", "Config readable"],
+	"importDiscovery.local.state.missing": ["未找到配置文件", "Config file not found"],
+	"importDiscovery.local.state.readError": ["读取失败", "Read failed"],
+	"importDiscovery.local.state.parseError": ["语法错误", "Syntax error"],
+	"importDiscovery.local.configFile": ["配置文件", "Config file"],
+	"importDiscovery.local.errorDetail": ["错误详情", "Error detail"],
+	"importDiscovery.local.errorLine": ["第 {line} 行 · ", "Line {line} · "],
+	"importDiscovery.local.currentService": ["当前服务", "Current service"],
+	"importDiscovery.local.customService": ["自定义服务", "Custom service"],
+	"importDiscovery.local.defaultModel": ["默认模型", "Default model"],
+	"importDiscovery.local.serviceUrl": ["服务地址", "Service URL"],
+	"importDiscovery.local.credentialVar": ["凭据变量", "Credential variable"],
+	"importDiscovery.local.managedState": ["管理状态", "Management"],
+	"importDiscovery.local.managed": ["已由本应用管理", "Managed by this app"],
+	"importDiscovery.local.unmanaged": ["未由本应用管理", "Not managed by this app"],
+	"importDiscovery.local.warnings": ["警告", "Warnings"],
+	"importDiscovery.local.unimportable": ["当前配置包含无法安全导入的设置。", "The current config contains settings that cannot be imported safely."],
+	"importDiscovery.local.importProvider": ["导入供应商", "Import provider"],
+
+	// cc-switch database import (CcSwitchImport).
+	"importDiscovery.cc.usagePatch": ["将补充用量查询脚本", "Will update the usage script"],
+	"importDiscovery.cc.usageImport": ["将导入用量查询脚本", "Will import the usage script"],
+	"importDiscovery.cc.endpointCandidates": ["备选服务地址 {count}", "{count} alternative endpoints"],
+	"importDiscovery.cc.existsRoute": ["已存在相同路由，导入将跳过", "Same route already exists; the import will skip it"],
+	"importDiscovery.cc.existsProfile": ["已存在相同档案，导入将跳过", "Same profile already exists; the import will skip it"],
+	"importDiscovery.cc.pickFolder": ["选择数据库文件夹", "Choose database folder"],
+	"importDiscovery.cc.scanPicked": ["扫描所选文件夹（只读）", "Scan chosen folder (read-only)"],
+	"importDiscovery.cc.scanDefault": ["扫描本机 cc-switch.db（只读）", "Scan local cc-switch.db (read-only)"],
+	"importDiscovery.cc.chosenFolder": ["所选文件夹", "Chosen folder"],
+	"importDiscovery.cc.resetFolder": ["恢复默认位置", "Restore default location"],
+	"importDiscovery.cc.dbFile": ["数据库文件", "Database file"],
+	"importDiscovery.cc.empty": ["导入源中没有供应商。", "No providers in the import source."],
+	"importDiscovery.cc.emptyHint": ["扫描后选择可导入的供应商档案；默认读取本机 CC Switch 数据库，也可选择其他包含 cc-switch.db 的文件夹。", "Scan, then pick the provider profiles to import. The local CC Switch database is read by default; you can also choose another folder that contains cc-switch.db."],
+	"importDiscovery.cc.tableAria": ["CC Switch 数据库扫描结果", "CC Switch database scan results"],
+
+	// SQL file import (SqlFileImport).
+	"importDiscovery.sql.kind.codexOfficial": ["Codex 官方登录", "Codex official login"],
+	"importDiscovery.sql.kind.codexCustom": ["Codex 第三方", "Codex third-party"],
+	"importDiscovery.sql.exists": ["已存在，导入将覆盖更新", "Already exists; importing overwrites it"],
+	"importDiscovery.sql.new": ["新增", "New"],
+	"importDiscovery.sql.pickFile": ["选择导出的 SQL 文件", "Choose an exported SQL file"],
+	"importDiscovery.sql.sqlFile": ["SQL 文件", "SQL file"],
+	"importDiscovery.sql.empty": ["导出文件中没有供应商。", "No providers in the export file."],
+	"importDiscovery.sql.emptyHint": ["选择在其他设备导出的 SQL 文件，即可预览各供应商的完整配置并按需导入。", "Pick a SQL file exported on another device to preview every provider's complete configuration and import what you choose."],
+	"importDiscovery.sql.tableAria": ["导出文件预览", "Export file preview"],
+
+	// Shared scan rows, import actions and result banners.
+	"importDiscovery.status.skipped": ["无法导入：{reason}", "Cannot import: {reason}"],
+	"importDiscovery.action.importSelected": ["导入所选 {count} 项", "Import {count} selected"],
+	"importDiscovery.result.aria": ["导入结果", "Import result"],
+	"importDiscovery.result.imported": ["已导入 {count} 项", "Imported {count} items"],
+	"importDiscovery.result.usageScripts": ["已导入用量脚本 {count} 项", "Imported {count} usage scripts"],
+	"importDiscovery.result.endpointCandidates": ["已导入备选服务地址 {count} 项", "Imported {count} alternative endpoints"],
+	"importDiscovery.result.skippedExisting": ["跳过已存在 {count} 项", "Skipped {count} existing"],
+	"importDiscovery.result.notImported": ["未导入 {count} 项", "{count} not imported"],
+	"importDiscovery.result.updated": ["覆盖更新 {count} 项", "Overwrote {count} existing"],
+
+	// SQL export (SqlExport).
+	"importDiscovery.export.aria": ["导出结果", "Export result"],
+	"importDiscovery.export.exported": ["已导出 {count} 项", "Exported {count} items"],
+	"importDiscovery.export.notExported": ["未导出 {count} 项", "{count} not exported"],
+	"importDiscovery.export.note": ["将全部供应商（Claude、Codex 第三方与官方登录记录）的完整配置导出为一个 SQL 文件；在其他设备打开「导入 / 导出 → 导入 SQL」选择该文件即可导入，配置完整还原，无需命令行。文件包含 API 密钥，请妥善保管。", "Exports the complete configuration of every provider (Claude, third-party Codex, and the official Codex login record) into one SQL file. On another device, open \"Import / Export → Import SQL\" and pick the file; the full configuration is restored with no command line. The file contains API keys — keep it safe."],
+	"importDiscovery.export.pathLabel": ["导出文件路径", "Export file path"],
+	"importDiscovery.export.pickFolder": ["选择文件夹", "Choose folder"],
+	"importDiscovery.export.working": ["正在导出…", "Exporting…"],
+	"importDiscovery.export.toFile": ["导出到文件", "Export to file"],
+
+	// Toasts built in the import hooks.
+	"importDiscovery.toast.notImported": ["{count} 项未导入，请查看导入结果", "{count} items were not imported; see the import result"],
+	"importDiscovery.toast.importedProvider": ["已导入供应商「{name}」", "Imported provider \"{name}\""],
+
+	// Extension discovery panel and scan toolbar (DiscoverPanel).
+	"importDiscovery.panel.aria": ["扫描已有扩展", "Scan existing extensions"],
+	"importDiscovery.scan.scanning": ["正在扫描…", "Scanning…"],
+	"importDiscovery.scan.stale": ["上次扫描失败，结果未更新", "Last scan failed; results were not refreshed"],
+	"importDiscovery.scan.scannedAt": ["扫描于 {time}", "Scanned at {time}"],
+	"importDiscovery.scan.idle": ["读取本机扩展", "Reading local extensions"],
+	"importDiscovery.scan.rescan": ["重新扫描", "Rescan"],
+	"importDiscovery.importBar.selectAll": ["全选", "Select all"],
+	"importDiscovery.importBar.selected": ["已选 {count} 项", "{count} selected"],
+	"importDiscovery.importBar.importSelected": ["导入所选（{count}）", "Import selected ({count})"],
+	"importDiscovery.panel.emptyFiltered": ["没有符合搜索条件的本机扩展", "No local extensions match the search"],
+	"importDiscovery.panel.empty": ["没有发现本机扩展", "No local extensions found"],
+	"importDiscovery.panel.failedItem": ["{name}：{message}", "{name}: {message}"],
+
+	// Discovery diagnostics surface (DiscoveryWarnings).
+	"importDiscovery.warn.aria": ["发现警告", "Discovery warnings"],
+	"importDiscovery.warn.subjectEntry": ["已发现的条目", "Discovered entry"],
+	"importDiscovery.warn.subjectManaged": ["已托管的扩展", "Managed extension"],
+	"importDiscovery.warn.remediationLine": ["{label}：{reason}", "{label}: {reason}"],
+	"importDiscovery.warn.summary": ["当前结果有 {warnings} 条警告，{repairable} 条可修复", "The current results have {warnings} warnings, {repairable} of them fixable"],
+	"importDiscovery.warn.summaryInfo": ["，{count} 条提示", ", {count} informational"],
+	"importDiscovery.warn.collapseAria": ["收起警告详情", "Collapse warning details"],
+	"importDiscovery.warn.expandAria": ["展开警告详情：{summary}", "Expand warning details: {summary}"],
+	"importDiscovery.warn.staleSuffix": ["（上次扫描未更新）", " (last scan not refreshed)"],
+	"importDiscovery.warn.repairAria": ["修复这 {count} 项可修复警告", "Fix these {count} fixable warnings"],
+	"importDiscovery.warn.repair": ["修复这 {count} 项", "Fix these {count}"],
+	"importDiscovery.warn.preparing": ["正在准备…", "Preparing…"],
+	"importDiscovery.warn.noAuto": ["没有可自动修复项，展开查看各项处理方式", "Nothing can be fixed automatically; expand to see how each item is handled"],
+	"importDiscovery.warn.staleNote": ["上次扫描结果生成于 {time}；本次扫描失败，结果未更新。", "The last scan result was generated at {time}; this scan failed and the results were not refreshed."],
+
+	// Discovery import list rows (DiscoveryImportList).
+	"importDiscovery.row.listAria": ["本机发现的扩展", "Extensions discovered on this machine"],
+	"importDiscovery.origin.project": ["项目 {name}", "Project {name}"],
+	"importDiscovery.origin.registeredProject": ["已登记项目", "registered project"],
+	"importDiscovery.origin.legacyRoot": ["历史目录（只读）", "Legacy folder (read-only)"],
+	"importDiscovery.origin.managed": ["托管安装（只读）", "Managed install (read-only)"],
+	"importDiscovery.origin.userScope": ["{client} 用户级目录", "{client} user-level folder"],
+	"importDiscovery.row.selectAria": ["选择 {name} 的 {client} 安装", "Select the {client} install of {name}"],
+	"importDiscovery.row.managed": ["已管理", "Managed"],
+	"importDiscovery.row.copyOnly": ["仅复制", "Copy only"],
+	"importDiscovery.row.keepInstall": ["保留现有安装", "Keep existing install"],
+	"importDiscovery.row.inLibrary": ["已在扩展库", "Already in library"],
+	"importDiscovery.row.warnings": ["{count} 条警告", "{count} warnings"],
+	"importDiscovery.row.warningsAria": ["查看 {name} 的 {count} 条警告", "View {count} warnings for {name}"],
+	"importDiscovery.row.detailsAria": ["查看 {name} 的管理详情", "View management details for {name}"],
+
+	// Extension batch import toast (useDiscoveryImport).
+	"importDiscovery.extToast.imported": ["已导入本机扩展", "Imported local extensions"],
+	"importDiscovery.extToast.partial": ["导入已完成，列表未完全更新", "Import finished; the list was not fully refreshed"],
+	"importDiscovery.extToast.description": ["{count} 项；客户端原有文件保持不变", "{count} items; the clients' original files stay untouched"],
+} as const satisfies Record<string, MessageEntry>;

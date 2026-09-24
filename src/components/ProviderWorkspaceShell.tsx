@@ -19,9 +19,10 @@ import type {
   AppKind,
   ConfigFileStatus,
   LockStatus,
-  ProviderProfile,
 } from "../api/client";
 import type { ReactNode } from "react";
+import type { ActiveProfileRef } from "../lib/current-provider-name";
+import { useI18n } from "../i18n";
 import { Button } from "./Button";
 import { ClientPicker } from "./ClientPicker";
 import { DualRelay } from "./DualRelay";
@@ -38,7 +39,9 @@ interface ProviderWorkspaceShellProps {
   onSelectApp: (app: AppKind) => void;
   busy: boolean;
   statuses: ConfigFileStatus[] | null;
-  profiles: ProviderProfile[];
+  /** Every stored profile across both clients; the route cards' sole lookup
+   * source for the active profile's name and website. */
+  profiles: readonly ActiveProfileRef[];
   locks: Partial<Record<AppKind, LockStatus>>;
   onImport: () => void;
   onNew: () => void;
@@ -64,29 +67,30 @@ export function ProviderWorkspaceShell({
   extraActions,
   children,
 }: ProviderWorkspaceShellProps) {
+  const { t } = useI18n();
   return (
     <section className="asb-provider-workspace" aria-label={ariaLabel}>
       <DualRelay statuses={statuses} profiles={profiles} locks={locks} />
-      <section className="asb-panel asb-provider-list-panel" aria-label="供应商列表">
+      <section className="asb-panel asb-provider-list-panel" aria-label={t("providers.list.aria")}>
         <WorkspaceHeader
-          title="供应商切换"
+          title={t("nav.page.providers")}
           primary={
             <ClientPicker
               app={app}
               onChange={onSelectApp}
               disabled={busy}
-              label="供应商客户端"
+              label={t("providers.workspace.clientPicker")}
             />
           }
           primaryActions={
             <>
               <Button variant="secondary" disabled={busy} onClick={onImport}>
-                导入 / 导出
+                {t("providers.workspace.importExport")}
               </Button>
               {extraActions}
               <Button variant="plus" disabled={busy} onClick={onNew}>
                 <PlusIcon />
-                新建供应商
+                {t("providers.workspace.newProvider")}
               </Button>
             </>
           }
@@ -110,10 +114,11 @@ interface SortableProviderRowsProps {
 export function SortableProviderRows({
   ids,
   onReorder,
-  emptyLabel = "尚无供应商",
-  ariaLabel = "供应商列表",
+  emptyLabel,
+  ariaLabel,
   children,
 }: SortableProviderRowsProps) {
+  const { t } = useI18n();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -132,12 +137,12 @@ export function SortableProviderRows({
         <span className="asb-empty-state-icon" aria-hidden="true">
           <PlusIcon />
         </span>
-        <h3 className="asb-section-title">{emptyLabel}</h3>
+        <h3 className="asb-section-title">{emptyLabel ?? t("providers.list.empty")}</h3>
       </div>
     );
   }
   return (
-    <ul className="asb-rows" role="list" aria-label={ariaLabel}>
+    <ul className="asb-rows" role="list" aria-label={ariaLabel ?? t("providers.list.aria")}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {children}
@@ -188,12 +193,14 @@ export function ProviderRowShell({
   actions,
   children,
 }: ProviderRowShellProps) {
+  const { t } = useI18n();
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id,
     disabled: !sortable,
   });
   const initial = name.trim().charAt(0).toUpperCase() || "?";
   const hasSummary = summary !== undefined && summary !== null;
+  const dragLabel = t("providers.row.dragAria", { name });
   return (
     <li
       ref={setNodeRef}
@@ -202,11 +209,11 @@ export function ProviderRowShell({
     >
       <div className="asb-row-line">
         {sortable ? (
-          <Tooltip label={`拖动调整 ${name} 的顺序`}>
+          <Tooltip label={dragLabel}>
             <Button
               variant="unstyled"
               className="asb-row-grip"
-              aria-label={`拖动调整 ${name} 的顺序`}
+              aria-label={dragLabel}
               {...attributes}
               {...listeners}
             >
@@ -221,14 +228,14 @@ export function ProviderRowShell({
           </span>
         </div>
         <span className="asb-row-model">
-          <span className="asb-row-model-value" title={typeof model === "string" ? model : undefined}>{model ?? "默认模型"}</span>
-          {active && <span className="asb-row-applied">已应用</span>}
+          <span className="asb-row-model-value" title={typeof model === "string" ? model : undefined}>{model ?? t("providers.label.defaultModel")}</span>
+          {active && <span className="asb-row-applied">{t("providers.label.applied")}</span>}
         </span>
         <span className="asb-row-endpoint">{endpoint}</span>
         <span className="asb-row-controls">
           {primaryAction}
           {secondaryAction}
-          {actions && <span className="asb-iconcluster" role="group" aria-label={`${name} 操作`}>{actions}</span>}
+          {actions && <span className="asb-iconcluster" role="group" aria-label={t("providers.row.actionsAria", { name })}>{actions}</span>}
         </span>
       </div>
       {hasSummary && <div className="asb-row-summary">{summary}</div>}

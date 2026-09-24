@@ -99,10 +99,7 @@
     border-left: 0;
   }
 
-  .asb-session-detail-head,
-  .asb-session-actions {
-    align-items: flex-start;
-    flex-direction: column;
-  }
+  .asb-session-detail-head { grid-template-columns: 1fr; }
+  .asb-session-actions { justify-content: flex-start; flex-wrap: wrap; }
 }
 
