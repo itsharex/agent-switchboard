@@ -1,5 +1,7 @@
+import { Fragment } from "react";
 import type { SessionSearchHit, SessionMeta } from "../../api/client";
 import { useI18n } from "../../i18n";
+import { clientFullName } from "../../lib/client-name";
 import { Button } from "../Button";
 import { ClientLogo } from "../ClientLogo";
 import { Pagination } from "../Pagination";
@@ -19,9 +21,9 @@ interface Props {
   onToggleMode: () => void;
 }
 
-function SearchRow({ hit, active, picked, selecting, disabled, onClick, onProject }: {
+function SearchRow({ hit, active, picked, selecting, disabled, onClick }: {
   hit: SessionSearchHit; active: boolean; picked: boolean; selecting: boolean;
-  disabled: boolean; onClick: () => void; onProject: () => void;
+  disabled: boolean; onClick: () => void;
 }) {
   const { t } = useI18n();
   const { session } = hit;
@@ -41,9 +43,6 @@ function SearchRow({ hit, active, picked, selecting, disabled, onClick, onProjec
     <span className="asb-session-item-time">
       {session.lastActiveAt ? <Time iso={session.lastActiveAt} /> : t("sessions.time.unknown")}
     </span>
-  </Button><Button variant="unstyled" className="asb-session-result-project" disabled={disabled} onClick={onProject}
-    title={t("sessions.projects.openHint", { dir: session.projectDir ?? t("sessions.projects.none") })}>
-    {session.projectDir ?? t("sessions.projects.none")}
   </Button></div>;
 }
 
@@ -64,11 +63,22 @@ export function SessionSearchList({ search, selected, selecting, chosen, disable
     {error && <p className="asb-warn-text" role="alert">{error}</p>}
     {result?.total === 0 && <p className="asb-empty-state">{t("sessions.list.empty")}</p>}
     <div className="asb-session-items">
-      {result?.results.map((hit) => <SearchRow key={`${sessionKey(hit.session)}:${hit.messageId ?? "metadata"}`}
-        hit={hit} active={selected !== null && sessionKey(selected) === sessionKey(hit.session)}
-        picked={chosen.has(sessionKey(hit.session))} selecting={selecting} disabled={disabled}
-        onProject={() => search.openProject({ app: hit.session.app, projectDir: hit.session.projectDir })}
-        onClick={() => selecting ? onToggle(hit.session) : onSelect(hit)} />)}
+      {result?.results.map((hit, index) => {
+        const previous = result.results[index - 1]?.session;
+        const firstInProject = !search.project && (!previous || previous.app !== hit.session.app
+          || previous.projectDir !== hit.session.projectDir);
+        const dir = hit.session.projectDir ?? t("sessions.projects.none");
+        return <Fragment key={`${sessionKey(hit.session)}:${hit.messageId ?? "metadata"}`}>
+          {firstInProject && <Button variant="unstyled" className="asb-session-project-heading"
+            disabled={disabled} onClick={() => search.openProject({ app: hit.session.app, projectDir: hit.session.projectDir })}
+            title={t("sessions.projects.openHint", { dir })}>
+            {clientFullName(hit.session.app)} · {dir}
+          </Button>}
+          <SearchRow hit={hit} active={selected !== null && sessionKey(selected) === sessionKey(hit.session)}
+            picked={chosen.has(sessionKey(hit.session))} selecting={selecting} disabled={disabled}
+            onClick={() => selecting ? onToggle(hit.session) : onSelect(hit)} />
+        </Fragment>;
+      })}
     </div>
     {result && <Pagination total={result.total} page={search.page} pageSize={SESSION_PAGE_SIZE}
       onPageChange={search.setPage} label={t("sessions.search.pagination")} />}

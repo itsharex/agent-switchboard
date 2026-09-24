@@ -54,11 +54,18 @@ function SessionFacts({ session, copy }: { session: SessionMeta; copy: (text: st
         title={t("sessions.projectDir.copyHint", { dir: session.projectDir })}
         onClick={() => void copy(session.projectDir!, "sessions.label.projectDir")}>{session.projectDir}</Button>
     </dd></>}
+    <dt>{t("sessions.label.resumeCommand")}</dt><dd className="asb-session-resume-fact">
+      <code className="asb-code" title={session.resumeCommand}>{session.resumeCommand}</code>
+      <Button variant="icon" aria-label={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
+        title={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
+        onClick={() => void copy(session.resumeCommand, "sessions.label.resumeCommand")}><Copy aria-hidden="true" /></Button>
+    </dd>
   </dl>;
 }
 
-function SessionMoreActions({ session, organization, disabled, onDelete }: {
-  session: SessionMeta; organization: SessionOrganization; disabled: boolean; onDelete: () => void;
+function SessionMoreActions({ session, organization, disabled, onExport, onOrganize, onDelete }: {
+  session: SessionMeta; organization: SessionOrganization; disabled: boolean;
+  onExport: () => void; onOrganize: () => void; onDelete: () => void;
 }) {
   const { t } = useI18n();
   return <MenuTrigger>
@@ -66,6 +73,10 @@ function SessionMoreActions({ session, organization, disabled, onDelete }: {
       aria-label={t("sessions.actions.moreAria")}>{t("sessions.actions.more")}</MenuButton>
     <Popover placement="bottom end" className="asb-session-more-menu">
       <Menu aria-label={t("sessions.actions.moreAria")} className="asb-session-more-items">
+        <MenuItem id="export" className="asb-session-more-item" isDisabled={disabled}
+          onAction={onExport}>{t("sessions.export.action")}</MenuItem>
+        <MenuItem id="organize" className="asb-session-more-item" isDisabled={disabled}
+          onAction={onOrganize}>{t("sessions.organize.heading")}</MenuItem>
         <MenuItem id="pin" className="asb-session-more-item" isDisabled={disabled}
           onAction={() => void organization.save([session], { kind: "pin", pinned: !session.pinned })}>
           {t(session.pinned ? "sessions.organize.unpin" : "sessions.organize.pin")}
@@ -84,6 +95,7 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
 }) {
   const { t } = useI18n();
   const actions = useDetailActions(session);
+  const [organizing, setOrganizing] = useState(false);
   return <section className="asb-session-detail" aria-label={t("sessions.detail.aria")}>
     <header className="asb-session-detail-head">
       <div className="asb-session-detail-title">
@@ -92,20 +104,15 @@ export function SessionDetail({ detail, session, bookmarks, deleting, onDelete, 
       </div>
       <div className="asb-session-actions">
         <Button variant="primary" disabled={actions.busy || deleting} onClick={() => void actions.run("resume")}>{t("sessions.resume.action")}</Button>
-        <Button variant="secondary" disabled={actions.busy || deleting} onClick={() => void actions.run("export")}>{t("sessions.export.action")}</Button>
         <SessionMoreActions session={session} organization={organization}
           disabled={actions.busy || organization.busy || deleting || detail.busy}
+          onExport={() => void actions.run("export")} onOrganize={() => setOrganizing(true)}
           onDelete={() => onDelete(session)} />
       </div>
     </header>
     <SessionFacts session={session} copy={actions.copy} />
-    <SessionOrganizationEditor session={session} organization={organization} disabled={deleting || detail.busy} />
-    <div className="asb-session-command">
-      <code className="asb-code" title={session.resumeCommand}>{session.resumeCommand}</code>
-      <Button variant="icon" aria-label={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
-        title={t("sessions.action.copy", { label: t("sessions.label.resumeCommand") })}
-        onClick={() => void actions.copy(session.resumeCommand, "sessions.label.resumeCommand")}><Copy aria-hidden="true" /></Button>
-    </div>
+    {organizing && <SessionOrganizationEditor session={session} organization={organization}
+      disabled={deleting || detail.busy} onClose={() => setOrganizing(false)} />}
     {actions.status && <p className="asb-scope-note" role="status">{actions.status}</p>}
     {actions.error && <p className="asb-warn-text" role="alert">{actions.error}</p>}
     {detail.busy && <p role="status">{t("sessions.transcript.loading.aria")}</p>}

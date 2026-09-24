@@ -10,6 +10,11 @@
   min-height: 0;
 }
 
+.asb-main:has(> .asb-panel:not([hidden]) .asb-sessions) {
+  min-height: 0;
+  overflow-y: hidden;
+}
+
 .asb-sessions {
   display: flex;
   flex-direction: column;
@@ -154,6 +159,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--asb-space-3);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .asb-session-empty-detail {
@@ -183,9 +190,11 @@
 
 /* The step comes from .asb-section-title; this rule owns only truncation. */
 .asb-session-detail-head h3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .asb-session-client {
@@ -223,16 +232,13 @@
   font: var(--asb-text-body);
 }
 
-.asb-session-command {
+.asb-session-resume-fact {
   display: flex;
   align-items: center;
-  padding: var(--asb-space-1) var(--asb-space-2);
-  border: 1px solid var(--asb-hairline);
-  border-radius: var(--asb-radius);
-  background: var(--asb-code-bg);
+  gap: var(--asb-space-1);
 }
 
-.asb-session-command .asb-code {
+.asb-session-resume-fact .asb-code {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -240,7 +246,7 @@
   white-space: nowrap;
 }
 
-.asb-session-command .asb-btn-icon { flex: none; }
+.asb-session-resume-fact .asb-btn-icon { flex: none; }
 
 /* Conversation column plus the user-message outline; the outline is a
    resident detail column at one fixed width for the whole window range
@@ -250,7 +256,7 @@
 .asb-session-body {
   display: flex;
   flex: 1;
-  min-height: 0;
+  min-height: calc(5 * var(--asb-control-height));
   gap: var(--asb-space-3);
 }
 

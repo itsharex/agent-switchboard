@@ -41,16 +41,10 @@
     max-height: 40vh;
   }
 
-  /* Stacked mode trades the fixed detail chrome for a taller list: the whole
-     detail pane scrolls instead of only the transcript, so the header and
-     meta travel with the content instead of starving the transcript. */
+  /* In stacked mode the detail uses its own scroll surface, including the
+     transcript, so the header and facts travel with the content. */
   .asb-session-body {
     flex: none;
-  }
-
-  .asb-session-detail {
-    overflow-y: auto;
-    scrollbar-gutter: stable;
   }
 
   .asb-session-transcript {

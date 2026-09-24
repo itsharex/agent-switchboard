@@ -183,13 +183,23 @@
 .asb-session-project-menu .asb-select-item > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asb-session-result-row { border-bottom: 1px solid var(--asb-hairline); padding-bottom: var(--asb-space-1); }
 .asb-session-result-row > .asb-session-item { width: 100%; }
-.asb-session-result-project { width: 100%; padding: var(--asb-space-1) var(--asb-space-2); border: 0; background: transparent; color: var(--asb-text-muted); font: var(--asb-text-code); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.asb-session-result-project:hover { text-decoration: underline; }
+.asb-session-project-heading {
+  width: 100%;
+  min-height: var(--asb-control-height-compact);
+  padding: 0 var(--asb-space-2);
+  border: 0;
+  background: transparent;
+  color: var(--asb-text-muted);
+  font: var(--asb-text-code);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asb-session-project-heading:hover { text-decoration: underline; }
 .asb-session-labels { font: var(--asb-text-label); color: var(--asb-text-muted); }
 .asb-session-labels > span { overflow-wrap: anywhere; }
-.asb-session-organize { border-block: 1px solid var(--asb-hairline); padding-block: var(--asb-space-2); }
-.asb-session-organize summary { cursor: pointer; font: var(--asb-text-label); }
-.asb-session-organize[open] { display: flex; flex-direction: column; gap: var(--asb-space-2); }
+.asb-session-original-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--asb-text-muted); font: var(--asb-text-label); }
 .asb-session-organization-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--asb-space-2); align-items: end; }
 .asb-session-more-menu { z-index: 60; min-width: var(--asb-menu-min-width); padding: var(--asb-space-1); border: 1px solid var(--asb-hairline); border-radius: var(--asb-radius); background: var(--asb-surface-menu); box-shadow: var(--asb-shadow-modal); }
 .asb-session-more-items { outline: none; }
