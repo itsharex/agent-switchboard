@@ -131,6 +131,7 @@
 
 .asb-input:focus-visible {
   border-color: var(--asb-action);
+  outline: none;
 }
 
 .asb-input:disabled {
